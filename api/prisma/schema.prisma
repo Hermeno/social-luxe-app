@@ -1,0 +1,151 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+enum FriendshipDuration {
+  ONE_DAY
+  THREE_DAYS
+  SEVEN_DAYS
+  THIRTY_DAYS
+  PERMANENT
+}
+
+model User {
+  id          String   @id @default(cuid())
+  name        String
+  phone       String   @unique
+  countryCode String
+  password    String
+  avatar       String?
+  bio          String?
+  availability String?  @default("Disponível")
+  createdAt    DateTime @default(now())
+
+  posts            Post[]
+  friendshipsA     Friendship[]        @relation("FriendA")
+  friendshipsB     Friendship[]        @relation("FriendB")
+  historyA         FriendshipHistory[] @relation("HistoryA")
+  historyB         FriendshipHistory[] @relation("HistoryB")
+  likes            Like[]
+  comments         Comment[]
+  shares           Share[]
+  views            View[]
+  sentMessages     Message[]           @relation("Sender")
+  receivedMessages Message[]           @relation("Receiver")
+}
+
+model Post {
+  id        String    @id @default(cuid())
+  userId    String
+  mediaUrl  String
+  mediaType MediaType
+  caption   String?
+  expiresAt DateTime
+  extended  Boolean   @default(false)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user     User      @relation(fields: [userId], references: [id])
+  likes    Like[]
+  comments Comment[]
+  shares   Share[]
+  views    View[]
+}
+
+model Friendship {
+  id        String             @id @default(cuid())
+  userAId   String
+  userBId   String
+  duration  FriendshipDuration
+  expiresAt DateTime?
+  renewedAt DateTime?
+  createdAt DateTime           @default(now())
+
+  userA User @relation("FriendA", fields: [userAId], references: [id])
+  userB User @relation("FriendB", fields: [userBId], references: [id])
+
+  @@unique([userAId, userBId])
+}
+
+model FriendshipHistory {
+  id        String             @id @default(cuid())
+  userAId   String
+  userBId   String
+  duration  FriendshipDuration
+  startedAt DateTime
+  endedAt   DateTime
+
+  userA User @relation("HistoryA", fields: [userAId], references: [id])
+  userB User @relation("HistoryB", fields: [userBId], references: [id])
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  post Post @relation(fields: [postId], references: [id])
+
+  @@unique([userId, postId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  userId    String
+  postId    String
+  content   String
+  parentId  String?
+  createdAt DateTime @default(now())
+
+  user    User      @relation(fields: [userId], references: [id])
+  post    Post      @relation(fields: [postId], references: [id])
+  parent  Comment?  @relation("Replies", fields: [parentId], references: [id])
+  replies Comment[] @relation("Replies")
+}
+
+model Share {
+  id        String   @id @default(cuid())
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  post Post @relation(fields: [postId], references: [id])
+}
+
+model View {
+  id        String   @id @default(cuid())
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  post Post @relation(fields: [postId], references: [id])
+
+  @@unique([userId, postId])
+}
+
+model Message {
+  id         String    @id @default(cuid())
+  senderId   String
+  receiverId String
+  content    String?
+  mediaUrl   String?
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  sender   User @relation("Sender", fields: [senderId], references: [id])
+  receiver User @relation("Receiver", fields: [receiverId], references: [id])
+}

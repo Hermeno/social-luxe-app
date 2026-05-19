@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "Luxe",
+    "slug": "luxe",
+    "version": "1.0.0",
+    "sdkVersion": "54.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.luxe.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      },
+      "package": "com.luxe.app"
+    },
+    "plugins": [
+      "expo-video",
+      ["expo-image-picker", { "photosPermission": "Allow Luxe to access your photos." }]
+    ]
+  }
+}
