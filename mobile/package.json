@@ -9,6 +9,7 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "@expo-google-fonts/plus-jakarta-sans": "^0.4.2",
     "@expo/vector-icons": "^15.1.1",
     "@gluestack-style/react": "^1.0.57",
     "@gluestack-ui/themed": "^1.1.73",
@@ -18,6 +19,7 @@
     "@react-navigation/stack": "^6.4.1",
     "axios": "^1.7.2",
     "expo": "~54.0.6",
+    "expo-font": "~14.0.11",
     "expo-image-picker": "~17.0.11",
     "expo-linear-gradient": "~15.0.8",
     "expo-status-bar": "~3.0.9",

@@ -3,6 +3,18 @@ import { ApiResponse, Friendship, FriendshipDuration } from '../types'
 
 export interface UserSummary { id: string; name: string; avatar: string | null; bio: string | null }
 
+export interface FriendshipLevel {
+  isFriend: boolean
+  level: number
+  tier: number
+  friendshipId?: string
+}
+
+export async function getFriendshipLevel(targetUserId: string): Promise<FriendshipLevel> {
+  const res = await api.get<ApiResponse<FriendshipLevel>>(`/friendships/level/${targetUserId}`)
+  return res.data.data
+}
+
 export async function getAllUsers(): Promise<UserSummary[]> {
   const res = await api.get<ApiResponse<UserSummary[]>>('/users')
   return res.data.data

@@ -1,15 +1,35 @@
-import React, { useState } from 'react'
-import { View, Text, TouchableOpacity, Image, StyleSheet } from 'react-native'
+import React, { useState, useRef } from 'react'
+import { View, Text, TouchableOpacity, Image, StyleSheet, Animated } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { Ionicons } from '@expo/vector-icons'
 import { useAuthStore } from '../../store/auth.store'
 import { AppStackParams } from '../../navigation/AppNavigator'
-import { colors, spacing } from '../../theme'
+import { colors, spacing, fonts } from '../../theme'
 
 type Nav = StackNavigationProp<AppStackParams>
 interface Props { onTabChange: (tab: 'following' | 'forYou') => void }
+
+const TABS = [
+  { key: 'following' as const, label: 'Following' },
+  { key: 'forYou'   as const, label: 'For You'  },
+]
+
+function SearchButton() {
+  const pressAnim = useRef(new Animated.Value(1)).current
+
+  function onIn()  { Animated.spring(pressAnim, { toValue: 0.85, useNativeDriver: true, speed: 50, bounciness: 0 }).start() }
+  function onOut() { Animated.spring(pressAnim, { toValue: 1,    useNativeDriver: true, speed: 25, bounciness: 10 }).start() }
+
+  return (
+    <TouchableOpacity onPressIn={onIn} onPressOut={onOut} activeOpacity={1}>
+      <Animated.View style={[s.searchBtn, { transform: [{ scale: pressAnim }] }]}>
+        <Ionicons name="search-outline" size={24} color="rgba(255,255,255,0.92)" />
+      </Animated.View>
+    </TouchableOpacity>
+  )
+}
 
 export default function FeedHeader({ onTabChange }: Props) {
   const [active, setActive] = useState<'following' | 'forYou'>('forYou')
@@ -32,18 +52,18 @@ export default function FeedHeader({ onTabChange }: Props) {
       </TouchableOpacity>
 
       <View style={s.tabs}>
-        <TouchableOpacity onPress={() => select('following')} style={s.tabBtn}>
-          <Text style={[s.tabText, active !== 'following' && s.tabDim]}>Following</Text>
-          {active === 'following' && <View style={s.underline} />}
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => select('forYou')} style={[s.tabBtn, active === 'forYou' && s.activePill]}>
-          <Text style={s.tabText}>For You</Text>
-        </TouchableOpacity>
+        {TABS.map(({ key, label }) => {
+          const isActive = active === key
+          return (
+            <TouchableOpacity key={key} onPress={() => select(key)} style={s.tabBtn} activeOpacity={0.75}>
+              <Text style={[s.tabText, !isActive && s.tabDim]}>{label}</Text>
+              {isActive && <View style={s.dot} />}
+            </TouchableOpacity>
+          )
+        })}
       </View>
 
-      <TouchableOpacity style={s.searchBtn} activeOpacity={0.8}>
-        <Ionicons name="search" size={26} color={colors.white} />
-      </TouchableOpacity>
+      <SearchButton />
     </View>
   )
 }
@@ -54,12 +74,15 @@ const s = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: spacing.md, paddingBottom: spacing.sm,
   },
-  avatar:    { width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: colors.white },
-  tabs:      { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  tabBtn:    { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, position: 'relative' },
-  tabText:   { color: colors.white, fontWeight: '700', fontSize: 15 },
-  tabDim:    { color: 'rgba(255,255,255,0.6)', fontWeight: '500' },
-  activePill:{ backgroundColor: colors.primary },
-  underline: { position: 'absolute', bottom: 3, left: '20%', right: '20%', height: 2, backgroundColor: colors.white, borderRadius: 1 },
-  searchBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(0,0,0,0.3)', alignItems: 'center', justifyContent: 'center' },
+  avatar:    { width: 36, height: 36, borderRadius: 18, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.8)' },
+  tabs:      { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  tabBtn:    { paddingHorizontal: 12, paddingVertical: 8, alignItems: 'center', gap: 5 },
+  tabText:   { color: colors.white, fontFamily: fonts.bold, fontSize: 16, letterSpacing: -0.3 },
+  tabDim:    { color: 'rgba(255,255,255,0.38)', fontFamily: fonts.medium },
+  dot:       { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.white },
+  searchBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center', justifyContent: 'center',
+  },
 })

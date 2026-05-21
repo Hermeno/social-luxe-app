@@ -1,10 +1,14 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { View, Image, TouchableOpacity, StyleSheet } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { Post } from '../../types'
 import { colors } from '../../theme'
+import { useAuthStore } from '../../store/auth.store'
 import * as postService from '../../services/post.service'
+import * as friendshipService from '../../services/friendship.service'
+import { FriendshipLevel } from '../../services/friendship.service'
 import ActionItem from './ActionItem'
+import FriendshipRing from '../../components/FriendshipRing'
 
 interface Props { post: Post; onCommentPress: () => void }
 
@@ -14,9 +18,22 @@ function fmt(n: number) {
   return String(n)
 }
 
+const RING_SIZE = 64
+const AVATAR_SIZE = 50
+
 export default function ActionBar({ post, onCommentPress }: Props) {
-  const [liked, setLiked] = useState(false)
-  const [likeCount, setLikeCount] = useState(post._count.likes)
+  const [liked, setLiked]           = useState(false)
+  const [likeCount, setLikeCount]   = useState(post._count.likes)
+  const [friendship, setFriendship] = useState<FriendshipLevel | null>(null)
+  const { user } = useAuthStore()
+
+  useEffect(() => {
+    // Só busca nível se o post não é do próprio usuário
+    if (!user || post.user.id === user.id) return
+    friendshipService.getFriendshipLevel(post.user.id)
+      .then(setFriendship)
+      .catch(() => {})
+  }, [post.user.id, user?.id])
 
   async function handleLike() {
     try {
@@ -26,28 +43,65 @@ export default function ActionBar({ post, onCommentPress }: Props) {
     } catch {}
   }
 
+  const avatarUri = post.user.avatar ??
+    `https://ui-avatars.com/api/?name=${post.user.name}&background=FF4B6E&color=fff`
+
+  const showRing = friendship?.isFriend && friendship.level > 0
+
   return (
     <View style={s.container}>
-      <TouchableOpacity style={s.item} onPress={() => {}}>
+      {/* Avatar do autor com anel de amizade */}
+      <TouchableOpacity style={s.avatarItem} onPress={() => {}} activeOpacity={0.85}>
         <View style={s.avatarWrap}>
-          <Image source={{ uri: post.user.avatar ?? `https://ui-avatars.com/api/?name=${post.user.name}&background=FF4B6E&color=fff` }} style={s.avatar} />
-          <View style={s.addBtn}><Ionicons name="add" size={12} color={colors.white} /></View>
+          {showRing && (
+            <FriendshipRing
+              level={friendship!.level}
+              tier={friendship!.tier}
+              size={RING_SIZE}
+              strokeWidth={3}
+            />
+          )}
+          <Image source={{ uri: avatarUri }} style={s.avatar} />
+          <View style={s.addBtn}>
+            <Ionicons name="add" size={12} color={colors.white} />
+          </View>
         </View>
       </TouchableOpacity>
-      <ActionItem icon={liked ? 'heart' : 'heart-outline'} size={28} count={fmt(likeCount)}
-        onPress={handleLike} circleStyle={liked ? s.circleActive : undefined} />
-      <ActionItem icon="chatbubble-ellipses" count={fmt(post._count.comments)} onPress={onCommentPress} />
-      <ActionItem icon="paper-plane" count={fmt(post._count.shares)} />
-      <ActionItem icon="musical-notes" size={24} />
+
+      <ActionItem
+        icon={liked ? 'heart' : 'heart-outline'}
+        size={30}
+        count={fmt(likeCount)}
+        onPress={handleLike}
+        circleStyle={liked ? s.circleActive : undefined}
+        spinOnPress
+      />
+      <ActionItem icon="chatbubble-ellipses" size={28} count={fmt(post._count.comments)} onPress={onCommentPress} />
+      <ActionItem icon="paper-plane"         size={28} count={fmt(post._count.shares)} />
+      <ActionItem icon="musical-notes"       size={26} continuousSpin />
     </View>
   )
 }
 
 const s = StyleSheet.create({
   container:   { position: 'absolute', right: 14, bottom: 110, alignItems: 'center', gap: 18 },
-  item:        { alignItems: 'center', gap: 5 },
-  avatarWrap:  { position: 'relative' },
-  avatar:      { width: 52, height: 52, borderRadius: 26, borderWidth: 2.5, borderColor: colors.white },
-  addBtn:      { position: 'absolute', bottom: -4, alignSelf: 'center', backgroundColor: colors.primary, borderRadius: 10, width: 20, height: 20, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: colors.white },
-  circleActive:{ backgroundColor: 'rgba(255,75,110,0.18)' },
+  avatarItem:  { alignItems: 'center' },
+  avatarWrap:  {
+    width: RING_SIZE, height: RING_SIZE,
+    alignItems: 'center', justifyContent: 'center',
+    position: 'relative',
+  },
+  avatar:      {
+    width: AVATAR_SIZE, height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
+    borderWidth: 2, borderColor: colors.white,
+  },
+  addBtn:      {
+    position: 'absolute', bottom: 0, alignSelf: 'center',
+    backgroundColor: colors.primary, borderRadius: 10,
+    width: 20, height: 20,
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1.5, borderColor: '#0D0D0D',
+  },
+  circleActive:{ backgroundColor: 'rgba(255,75,110,0.28)' },
 })

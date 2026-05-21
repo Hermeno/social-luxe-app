@@ -1,5 +1,13 @@
 export { colors, gradients } from './colors'
 
+export const fonts = {
+  regular: 'Jakarta-Regular',
+  medium: 'Jakarta-Medium',
+  semiBold: 'Jakarta-SemiBold',
+  bold: 'Jakarta-Bold',
+  extraBold: 'Jakarta-ExtraBold',
+}
+
 export const spacing = {
   xs: 4,
   sm: 8,

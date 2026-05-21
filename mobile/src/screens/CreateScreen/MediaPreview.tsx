@@ -2,7 +2,7 @@ import React from 'react'
 import { View, Image, StyleSheet, Dimensions, TouchableOpacity, Text } from 'react-native'
 import { VideoView, useVideoPlayer } from 'expo-video'
 import { Ionicons } from '@expo/vector-icons'
-import { colors, radius } from '../../theme'
+import { colors, radius, fonts } from '../../theme'
 
 const { width } = Dimensions.get('window')
 const PREVIEW_H = width * 1.2
@@ -26,8 +26,10 @@ export default function MediaPreview({ uri, type, onRemove }: Props) {
       ) : (
         <Image source={{ uri }} style={s.media} resizeMode="cover" />
       )}
-      <TouchableOpacity style={s.removeBtn} onPress={onRemove}>
-        <Ionicons name="close-circle" size={28} color={colors.white} />
+      <TouchableOpacity style={s.removeBtn} onPress={onRemove} activeOpacity={0.8}>
+        <View style={s.removeCircle}>
+          <Ionicons name="close" size={18} color={colors.white} />
+        </View>
       </TouchableOpacity>
       <View style={s.badge}>
         <Text style={s.badgeText}>{type === 'video' ? 'Vídeo' : 'Foto'}</Text>
@@ -37,12 +39,18 @@ export default function MediaPreview({ uri, type, onRemove }: Props) {
 }
 
 const s = StyleSheet.create({
-  container: { width, height: PREVIEW_H, backgroundColor: colors.black },
-  media: { width: '100%', height: '100%' },
-  removeBtn: { position: 'absolute', top: 12, right: 12 },
-  badge: {
-    position: 'absolute', bottom: 12, left: 12,
-    backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: radius.sm, paddingHorizontal: 10, paddingVertical: 4,
+  container:   { width, height: PREVIEW_H, backgroundColor: colors.black },
+  media:       { width: '100%', height: '100%' },
+  removeBtn:   { position: 'absolute', top: 14, right: 14 },
+  removeCircle:{
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    alignItems: 'center', justifyContent: 'center',
   },
-  badgeText: { color: colors.white, fontSize: 12, fontWeight: '600' },
+  badge:       {
+    position: 'absolute', bottom: 14, left: 14,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: radius.sm, paddingHorizontal: 10, paddingVertical: 5,
+  },
+  badgeText:   { color: colors.white, fontFamily: fonts.semiBold, fontSize: 12 },
 })

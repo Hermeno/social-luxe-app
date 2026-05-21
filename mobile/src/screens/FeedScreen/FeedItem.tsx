@@ -43,7 +43,7 @@ export default function FeedItem({ post, isActive, onCommentPress }: Props) {
       <LinearGradient colors={gradients.feedTop} style={s.topGradient} />
       <LinearGradient colors={gradients.feedBottom} style={s.bottomGradient} />
 
-      <PostInfo post={post} />
+      <PostInfo post={post} isActive={isActive} />
       <ActionBar post={post} onCommentPress={() => onCommentPress(post)} />
     </View>
   )
@@ -53,6 +53,6 @@ const s = StyleSheet.create({
   container: { width, height, backgroundColor: colors.black },
   imageContainer: { flex: 1, backgroundColor: colors.black, justifyContent: 'center' },
   media: { width, height },
-  topGradient: { position: 'absolute', top: 0, left: 0, right: 0, height: 120 },
-  bottomGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 200 },
+  topGradient: { position: 'absolute', top: 0, left: 0, right: 0, height: 170 },
+  bottomGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 300 },
 })
