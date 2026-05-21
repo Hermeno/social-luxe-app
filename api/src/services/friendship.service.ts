@@ -44,6 +44,45 @@ export async function removeFriendship(userId: string, friendshipId: string) {
   return prisma.friendship.delete({ where: { id: friendshipId } })
 }
 
+export async function getFriendshipLevel(currentUserId: string, targetUserId: string) {
+  const friendship = await prisma.friendship.findFirst({
+    where: {
+      OR: [
+        { userAId: currentUserId, userBId: targetUserId },
+        { userAId: targetUserId, userBId: currentUserId },
+      ],
+    },
+  })
+
+  if (!friendship) return { isFriend: false, level: 0, tier: 0 }
+
+  const [messages, myComments, theirComments, myLikes, theirLikes] = await Promise.all([
+    prisma.message.count({
+      where: {
+        OR: [
+          { senderId: currentUserId, receiverId: targetUserId },
+          { senderId: targetUserId, receiverId: currentUserId },
+        ],
+      },
+    }),
+    prisma.comment.count({ where: { userId: currentUserId, post: { userId: targetUserId } } }),
+    prisma.comment.count({ where: { userId: targetUserId, post: { userId: currentUserId } } }),
+    prisma.like.count({ where: { userId: currentUserId, post: { userId: targetUserId } } }),
+    prisma.like.count({ where: { userId: targetUserId, post: { userId: currentUserId } } }),
+  ])
+
+  // Messages: max 60 pts | Comments: max 30 pts | Likes: max 10 pts = 100 total
+  const score =
+    Math.min(messages, 30) * 2 +
+    Math.min(myComments + theirComments, 15) * 2 +
+    Math.min(myLikes + theirLikes, 10)
+
+  const level = Math.min(100, score)
+  const tier  = level === 0 ? 1 : Math.min(5, Math.ceil(level / 20))
+
+  return { isFriend: true, level, tier, friendshipId: friendship.id }
+}
+
 export async function getFriends(userId: string) {
   const friendships = await prisma.friendship.findMany({
     where: { OR: [{ userAId: userId }, { userBId: userId }] },

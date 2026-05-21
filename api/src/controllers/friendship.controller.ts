@@ -4,6 +4,15 @@ import { ok, created, badRequest, serverError } from '../utils/response'
 import { AuthRequest } from '../types'
 import { FriendshipDuration } from '@prisma/client'
 
+export async function getFriendshipLevel(req: AuthRequest, res: Response) {
+  try {
+    const result = await friendshipService.getFriendshipLevel(req.user!.userId, req.params.userId)
+    return ok(res, result)
+  } catch {
+    return serverError(res)
+  }
+}
+
 export async function sendRequest(req: AuthRequest, res: Response) {
   try {
     const { targetUserId, duration } = req.body
