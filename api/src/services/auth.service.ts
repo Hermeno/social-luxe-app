@@ -9,15 +9,15 @@ export async function register(body: RegisterBody) {
   if (password !== confirmPassword) throw new Error('Passwords do not match')
   if (password.length < 6) throw new Error('Password must be at least 6 characters')
 
-  const fullPhone = `${countryCode}${phone}`
-  const exists = await prisma.user.findUnique({ where: { phone: fullPhone } })
+  // phone already arrives as full international number (e.g. +244923456789)
+  const exists = await prisma.user.findUnique({ where: { phone } })
   if (exists) throw new Error('Phone number already registered')
 
   const hashed = await hashPassword(password)
 
   const user = await prisma.user.create({
-    data: { name, phone: fullPhone, countryCode, password: hashed },
-    select: { id: true, name: true, phone: true, countryCode: true, avatar: true, createdAt: true },
+    data: { name, phone, countryCode, password: hashed },
+    select: { id: true, name: true, phone: true, countryCode: true, avatar: true, bio: true, availability: true, ghostMode: true, coinBalance: true, createdAt: true },
   })
 
   const token = signToken({ userId: user.id, phone: user.phone })
@@ -41,7 +41,7 @@ export async function login(body: LoginBody) {
 export async function getProfile(userId: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, name: true, phone: true, countryCode: true, avatar: true, bio: true, availability: true, createdAt: true },
+    select: { id: true, name: true, phone: true, countryCode: true, avatar: true, bio: true, availability: true, ghostMode: true, coinBalance: true, createdAt: true },
   })
   if (!user) throw new Error('User not found')
   return user

@@ -76,3 +76,41 @@ export async function deletePost(req: AuthRequest, res: Response) {
     return badRequest(res, msg)
   }
 }
+
+export async function sharePost(req: AuthRequest, res: Response) {
+  try {
+    const share = await postService.sharePost(req.user!.userId, req.params.id)
+    return created(res, share)
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Failed'
+    return badRequest(res, msg)
+  }
+}
+
+export async function voteExtendPost(req: AuthRequest, res: Response) {
+  try {
+    const result = await postService.voteExtendPost(req.user!.userId, req.params.id)
+    return ok(res, result)
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Failed'
+    return badRequest(res, msg)
+  }
+}
+
+export async function getExtendVotes(req: AuthRequest, res: Response) {
+  try {
+    const result = await postService.getExtendVotes(req.params.id)
+    return ok(res, result)
+  } catch {
+    return serverError(res)
+  }
+}
+
+export async function getFlashback(req: AuthRequest, res: Response) {
+  try {
+    const post = await postService.getFlashback(req.user!.userId)
+    return ok(res, post)
+  } catch {
+    return serverError(res)
+  }
+}

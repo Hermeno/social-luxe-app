@@ -8,6 +8,7 @@ router.use(authMiddleware)
 
 router.get('/', friendshipController.getFriends)
 router.get('/level/:userId', friendshipController.getFriendshipLevel)
+router.get('/streak/:userId', friendshipController.getFriendshipStreak)
 router.post('/', friendshipController.sendRequest)
 router.put('/:id/renew', friendshipController.renewFriendship)
 router.delete('/:id', friendshipController.removeFriendship)

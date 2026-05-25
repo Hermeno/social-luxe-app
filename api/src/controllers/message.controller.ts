@@ -2,6 +2,7 @@ import { Response } from 'express'
 import * as messageService from '../services/message.service'
 import { ok, created, badRequest, serverError } from '../utils/response'
 import { AuthRequest } from '../types'
+import { emitToUser } from '../socket'
 
 export async function getConversations(req: AuthRequest, res: Response) {
   try {
@@ -29,6 +30,8 @@ export async function sendMessage(req: AuthRequest, res: Response) {
     if (!receiverId) return badRequest(res, 'receiverId required')
     const mediaUrl = req.file ? `/uploads/${req.file.filename}` : undefined
     const message = await messageService.sendMessage(req.user!.userId, receiverId, content, mediaUrl)
+    // Push to receiver in real-time
+    emitToUser(receiverId, 'message:new', message)
     return created(res, message)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Failed'

@@ -56,3 +56,12 @@ export async function removeFriendship(req: AuthRequest, res: Response) {
     return badRequest(res, msg)
   }
 }
+
+export async function getFriendshipStreak(req: AuthRequest, res: Response) {
+  try {
+    const result = await friendshipService.getFriendshipStreak(req.user!.userId, req.params.userId)
+    return ok(res, result)
+  } catch {
+    return serverError(res)
+  }
+}

@@ -51,3 +51,11 @@ export async function getUserPosts(userId: string) {
     orderBy: { createdAt: 'desc' },
   })
 }
+
+export async function toggleGhostMode(userId: string, ghostMode: boolean) {
+  return prisma.user.update({
+    where: { id: userId },
+    data: { ghostMode },
+    select: { id: true, ghostMode: true },
+  })
+}

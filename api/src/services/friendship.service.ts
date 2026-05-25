@@ -99,3 +99,42 @@ export async function getFriends(userId: string) {
     friend: f.userAId === userId ? f.userB : f.userA,
   }))
 }
+
+export async function getFriendshipStreak(userId: string, friendId: string): Promise<{ streakDays: number }> {
+  const now = new Date()
+  const thirtyDaysAgo = new Date(now)
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+  // Build an array of the last 30 days and check if both users had at least 1 interaction on each day
+  const [messages, comments] = await Promise.all([
+    prisma.message.findMany({
+      where: {
+        createdAt: { gte: thirtyDaysAgo },
+        OR: [
+          { senderId: userId, receiverId: friendId },
+          { senderId: friendId, receiverId: userId },
+        ],
+      },
+      select: { createdAt: true },
+    }),
+    prisma.comment.findMany({
+      where: {
+        createdAt: { gte: thirtyDaysAgo },
+        OR: [
+          { userId, post: { userId: friendId } },
+          { userId: friendId, post: { userId } },
+        ],
+      },
+      select: { createdAt: true },
+    }),
+  ])
+
+  // Collect all interaction dates as day strings (YYYY-MM-DD)
+  const interactionDays = new Set<string>()
+  const toDay = (d: Date) => d.toISOString().slice(0, 10)
+
+  messages.forEach((m) => interactionDays.add(toDay(m.createdAt)))
+  comments.forEach((c) => interactionDays.add(toDay(c.createdAt)))
+
+  return { streakDays: interactionDays.size }
+}
