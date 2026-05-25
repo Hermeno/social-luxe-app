@@ -1,32 +1,69 @@
 import React from 'react'
-import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { colors, spacing } from '../../theme'
+import { colors, fonts, spacing } from '../../theme'
+import AvatarImage from '../../components/AvatarImage'
 
-interface Props { userName: string; avatarUri: string; onBack: () => void }
+interface Props {
+  userName: string
+  avatarUri: string | null
+  isOnline: boolean
+  isTyping: boolean
+  onBack: () => void
+}
 
-export default function ChatHeader({ userName, avatarUri, onBack }: Props) {
+export default function ChatHeader({ userName, avatarUri, isOnline, isTyping, onBack }: Props) {
+  const statusText = isTyping ? 'digitando...' : isOnline ? 'online' : 'offline'
+  const statusColor = isTyping ? colors.primary : isOnline ? '#22C55E' : colors.gray400
+
   return (
     <View style={s.header}>
-      <TouchableOpacity onPress={onBack} style={s.back}>
-        <Ionicons name="chevron-back" size={26} color={colors.gray800} />
+      <TouchableOpacity onPress={onBack} style={s.back} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+        <Ionicons name="chevron-back" size={28} color={colors.gray800} />
       </TouchableOpacity>
-      <Image source={{ uri: avatarUri }} style={s.avatar} />
-      <View style={s.info}>
-        <Text style={s.name}>{userName}</Text>
-        <Ionicons name="checkmark-circle" size={14} color={colors.primary} />
+
+      <View style={s.avatarWrap}>
+        <AvatarImage uri={avatarUri} size={42} />
+        {isOnline && <View style={s.onlineDot} />}
       </View>
-      <TouchableOpacity>
-        <Ionicons name="ellipsis-horizontal" size={22} color={colors.gray800} />
+
+      <View style={s.info}>
+        <Text style={s.name} numberOfLines={1}>{userName}</Text>
+        <Text style={[s.status, { color: statusColor }]}>{statusText}</Text>
+      </View>
+
+      <TouchableOpacity style={s.menuBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+        <Ionicons name="ellipsis-vertical" size={20} color={colors.gray600} />
       </TouchableOpacity>
     </View>
   )
 }
 
 const s = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderColor: colors.gray200, gap: spacing.sm },
-  back:   { marginRight: 4 },
-  avatar: { width: 40, height: 40, borderRadius: 20 },
-  info:   { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 },
-  name:   { fontSize: 17, fontWeight: '600' as const, color: colors.gray800 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    backgroundColor: colors.white,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.gray200,
+    gap: 10,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+  },
+  back:      { marginRight: 2 },
+  avatarWrap:{ position: 'relative' },
+  onlineDot: {
+    position: 'absolute', bottom: 1, right: 1,
+    width: 11, height: 11, borderRadius: 6,
+    backgroundColor: '#22C55E', borderWidth: 2, borderColor: colors.white,
+  },
+  info:    { flex: 1 },
+  name:    { fontSize: 16, fontFamily: fonts.semiBold, color: colors.gray800, letterSpacing: -0.3 },
+  status:  { fontSize: 12, fontFamily: fonts.regular, marginTop: 1 },
+  menuBtn: { padding: 4 },
 })

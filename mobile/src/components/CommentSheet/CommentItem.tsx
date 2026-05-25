@@ -1,8 +1,9 @@
 import React from 'react'
-import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { Comment } from '../../types'
 import { colors, spacing } from '../../theme'
+import AvatarImage from '../AvatarImage'
 
 interface Props {
   comment: Comment
@@ -18,12 +19,9 @@ function timeAgo(date: string) {
 }
 
 export default function CommentItem({ comment, onReply }: Props) {
-  const avatarUri = comment.user.avatar ??
-    `https://ui-avatars.com/api/?name=${comment.user.name}&background=FF4B6E&color=fff&size=64`
-
   return (
     <View style={s.container}>
-      <Image source={{ uri: avatarUri }} style={s.avatar} />
+      <AvatarImage uri={comment.user.avatar} size={36} />
       <View style={s.body}>
         <Text style={s.name}>{comment.user.name}</Text>
         <Text style={s.text}>{comment.content}</Text>
@@ -46,7 +44,6 @@ export default function CommentItem({ comment, onReply }: Props) {
 
 const s = StyleSheet.create({
   container: { flexDirection: 'row', paddingVertical: spacing.sm, paddingHorizontal: spacing.md, gap: spacing.sm },
-  avatar: { width: 36, height: 36, borderRadius: 18 },
   body: { flex: 1, gap: 3 },
   name: { fontSize: 12, fontWeight: '600' as const, color: colors.gray800 },
   text: { fontSize: 14, color: colors.gray800, lineHeight: 18 },

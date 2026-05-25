@@ -10,6 +10,8 @@ export interface User {
   avatar: string | null
   bio: string | null
   availability: string | null
+  ghostMode: boolean
+  coinBalance: number
   createdAt: string
 }
 

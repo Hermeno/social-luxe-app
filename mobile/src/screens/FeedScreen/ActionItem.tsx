@@ -9,13 +9,14 @@ interface Props {
   size?: number
   count?: string
   onPress?: () => void
+  onLongPress?: () => void
   circleStyle?: any
   spinOnPress?: boolean
   continuousSpin?: boolean
 }
 
 export default function ActionItem({
-  icon, size = 28, count, onPress, circleStyle, spinOnPress, continuousSpin,
+  icon, size = 28, count, onPress, onLongPress, circleStyle, spinOnPress, continuousSpin,
 }: Props) {
   const containerScale = useRef(new Animated.Value(1)).current
   const iconRotation   = useRef(new Animated.Value(0)).current
@@ -80,7 +81,7 @@ export default function ActionItem({
     : '0deg'
 
   return (
-    <TouchableWithoutFeedback onPressIn={onPressIn} onPressOut={onPressOut}>
+    <TouchableWithoutFeedback onPressIn={onPressIn} onPressOut={onPressOut} onLongPress={onLongPress}>
       <Animated.View style={[s.item, { transform: [{ scale: containerScale }] }]}>
         <View style={[s.circle, circleStyle]}>
           {/* pressed highlight overlay */}
@@ -96,17 +97,16 @@ export default function ActionItem({
 }
 
 const s = StyleSheet.create({
-  item:         { alignItems: 'center', gap: 5 },
+  item:         { alignItems: 'center', gap: 2 },
   circle:       {
-    width: 54, height: 54, borderRadius: 27,
-    backgroundColor: 'rgba(0,0,0,0.30)',
+    width: 44, height: 44, borderRadius: 22,
     alignItems: 'center', justifyContent: 'center',
     overflow: 'hidden',
   },
   pressOverlay: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: 'rgba(255,255,255,0.14)',
-    borderRadius: 27,
+    borderRadius: 25,
   },
   count:        {
     color: colors.white,

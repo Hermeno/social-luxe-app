@@ -26,3 +26,14 @@ export async function sendMessage(receiverId: string, content?: string, mediaUri
   const res = await api.post<ApiResponse<Message>>('/messages', { receiverId, content })
   return res.data.data
 }
+
+export async function sendVoiceMessage(receiverId: string, audioUri: string): Promise<Message> {
+  const form = new FormData()
+  form.append('receiverId', receiverId)
+  const filename = audioUri.split('/').pop() ?? 'voice.m4a'
+  form.append('media', { uri: audioUri, name: filename, type: 'audio/m4a' } as unknown as Blob)
+  const res = await api.post<ApiResponse<Message>>('/messages', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return res.data.data
+}

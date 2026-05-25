@@ -8,13 +8,21 @@ import { useFriendsStore } from '../../store/friends.store'
 
 type IconName = React.ComponentProps<typeof Ionicons>['name']
 
+// Tab navigation moved into ActionBar pill (right side of feed viewer).
+// Original tab bar kept here commented out for reference.
+export default function TabBar(_props: BottomTabBarProps) {
+  return null
+}
+
+/* ── Original bottom tab bar (preserved for reference) ────────────────────────
+
 const TAB_ICONS: Record<string, [IconName, IconName]> = {
   Feed:     ['home',       'home-outline'],
   Messages: ['chatbubble', 'chatbubble-outline'],
   Friends:  ['people',     'people-outline'],
 }
 
-export default function TabBar({ state, navigation }: BottomTabBarProps) {
+function TabBarOriginal({ state, navigation }: BottomTabBarProps) {
   const { bottom } = useSafeAreaInsets()
   const badge = useFriendsStore((s) => s.badge)
 
@@ -59,8 +67,8 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
 }
 
 const s = StyleSheet.create({
-  outer:       { position: 'absolute', left: 72, right: 72 },
-  pill:        {
+  outer:         { position: 'absolute', left: 72, right: 72 },
+  pill:          {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
@@ -71,16 +79,16 @@ const s = StyleSheet.create({
     borderWidth: 0.5,
     borderColor: 'rgba(255,255,255,0.07)',
   },
-  tab:         { alignItems: 'center', justifyContent: 'center', position: 'relative', flex: 1 },
-  iconWrap:    { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
-  iconFocused: { backgroundColor: 'rgba(255,255,255,0.1)' },
-  create:      {
+  tab:           { alignItems: 'center', justifyContent: 'center', position: 'relative', flex: 1 },
+  iconWrap:      { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  iconFocused:   { backgroundColor: colors.primary },
+  create:        {
     width: 52, height: 52, borderRadius: 26,
     backgroundColor: colors.primary,
     alignItems: 'center', justifyContent: 'center',
   },
   createFocused: { backgroundColor: colors.primaryLight },
-  badge:       {
+  badge:         {
     position: 'absolute', top: 4, right: '10%',
     minWidth: 16, height: 16, borderRadius: 8,
     backgroundColor: colors.primary,
@@ -88,5 +96,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 3,
     borderWidth: 1.5, borderColor: '#0D0D0D',
   },
-  badgeTxt:    { color: colors.white, fontFamily: fonts.extraBold, fontSize: 9 },
+  badgeTxt:      { color: colors.white, fontFamily: fonts.extraBold, fontSize: 9 },
 })
+
+─────────────────────────────────────────────────────────────────────────── */

@@ -26,7 +26,14 @@
     },
     "plugins": [
       "expo-video",
-      ["expo-image-picker", { "photosPermission": "Allow Luxe to access your photos." }]
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Luxe to access your photos."
+        }
+      ],
+      "expo-audio",
+      "expo-sqlite"
     ]
   }
 }

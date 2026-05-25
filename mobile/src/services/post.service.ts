@@ -36,3 +36,21 @@ export async function addComment(postId: string, content: string, parentId?: str
   const res = await api.post<ApiResponse<Comment>>(`/posts/${postId}/comments`, { content, parentId })
   return res.data.data
 }
+
+export async function sharePost(postId: string) {
+  await api.post(`/posts/${postId}/share`)
+}
+
+export async function voteExtend(postId: string): Promise<{ votes: number; extended: boolean }> {
+  const res = await api.post<ApiResponse<{ votes: number; extended: boolean }>>(`/posts/${postId}/vote-extend`)
+  return res.data.data
+}
+
+export async function getFlashback(): Promise<Post | null> {
+  try {
+    const res = await api.get<ApiResponse<Post>>('/posts/flashback')
+    return res.data.data
+  } catch {
+    return null
+  }
+}
