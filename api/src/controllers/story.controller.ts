@@ -3,13 +3,14 @@ import * as storyService from '../services/story.service'
 import { ok, created, badRequest, serverError } from '../utils/response'
 import { AuthRequest } from '../types'
 import { MediaType } from '@prisma/client'
+import { uploadToCloudinary } from '../utils/cloudinary.util'
 
 export async function createStory(req: AuthRequest, res: Response) {
   try {
     const file = req.file
     if (!file) return badRequest(res, 'Media file required')
     const mediaType = file.mimetype.startsWith('video') ? MediaType.VIDEO : MediaType.IMAGE
-    const mediaUrl = `/uploads/${file.filename}`
+    const mediaUrl = await uploadToCloudinary(file.buffer, file.mimetype, 'luxe/stories')
     const story = await storyService.createStory(req.user!.userId, mediaUrl, mediaType)
     return created(res, story)
   } catch (err: unknown) {

@@ -10,5 +10,6 @@ router.use(authMiddleware)
 router.get('/conversations', messageController.getConversations)
 router.get('/:userId', messageController.getMessages)
 router.post('/', upload.single('media'), messageController.sendMessage)
+router.post('/:id/react', messageController.reactToMessage)
 
 export default router

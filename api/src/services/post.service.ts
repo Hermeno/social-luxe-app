@@ -2,26 +2,114 @@ import { prisma } from '../config/database'
 import { MediaType } from '@prisma/client'
 import { POST_INITIAL_HOURS, POST_EXTENDED_HOURS } from '../types'
 import { sendPush } from './notification.service'
+import { withThumbnail, withThumbnails } from '../utils/cloudinary.util'
 
 export async function createPost(userId: string, mediaUrl: string, mediaType: MediaType, caption?: string) {
   const expiresAt = new Date(Date.now() + POST_INITIAL_HOURS * 60 * 60 * 1000)
-  return prisma.post.create({
+  const post = await prisma.post.create({
     data: { userId, mediaUrl, mediaType, caption, expiresAt },
-    include: { user: { select: { id: true, name: true, avatar: true } } },
-  })
-}
-
-export async function getFeed(_userId: string, page = 1, limit = 10) {
-  return prisma.post.findMany({
-    where: { deletedAt: null, expiresAt: { gt: new Date() } },
     include: {
-      user: { select: { id: true, name: true, avatar: true } },
+      user:   { select: { id: true, name: true, avatar: true } },
       _count: { select: { likes: true, comments: true, shares: true, views: true } },
     },
+  })
+  return withThumbnail(post)
+}
+
+// Haversine distance in km between two lat/lng points
+function haversine(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const R = 6371
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLng = ((lng2 - lng1) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+export async function getFeed(userId: string, page = 1, limit = 10) {
+  const now = new Date()
+  const baseWhere = { deletedAt: null, expiresAt: { gt: now } }
+  const include = {
+    user: { select: { id: true, name: true, avatar: true } },
+    _count: { select: { likes: true, comments: true, shares: true, views: true } },
+  }
+
+  // Get blocked user IDs (both directions)
+  const [blocksGiven, blocksReceived, currentUser, followingRows] = await Promise.all([
+    prisma.block.findMany({ where: { blockerId: userId }, select: { blockedId: true } }),
+    prisma.block.findMany({ where: { blockedId: userId }, select: { blockerId: true } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { lat: true, lng: true } }),
+    prisma.follow.findMany({ where: { followerId: userId }, select: { followingId: true } }),
+  ])
+
+  const blockedIds = new Set([
+    ...blocksGiven.map((b) => b.blockedId),
+    ...blocksReceived.map((b) => b.blockerId),
+  ])
+  const followingIds = followingRows.map((f) => f.followingId)
+
+  // Users with posts the current user follows
+  const hasFollowing = followingIds.length > 0
+
+  if (hasFollowing) {
+    // Personalised feed: people I follow + own posts, excluding blocked
+    const allowedIds = [...followingIds, userId].filter((id) => !blockedIds.has(id))
+    const posts = await prisma.post.findMany({
+      where: { ...baseWhere, userId: { in: allowedIds } },
+      include,
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+    })
+    return withThumbnails(posts)
+  }
+
+  // New user: show posts from people within 40 km (or all if no location)
+  if (currentUser?.lat != null && currentUser?.lng != null) {
+    const { lat, lng } = currentUser
+    const RADIUS_KM = 40
+
+    // Rough bounding box first (cheap), then Haversine filter in JS
+    const degPerKm = 1 / 111
+    const latDelta = RADIUS_KM * degPerKm
+    const lngDelta = RADIUS_KM * degPerKm / Math.cos((lat * Math.PI) / 180)
+
+    const nearbyUsers = await prisma.user.findMany({
+      where: {
+        id: { notIn: [userId, ...blockedIds] },
+        lat: { gte: lat - latDelta, lte: lat + latDelta },
+        lng: { gte: lng - lngDelta, lte: lng + lngDelta },
+      },
+      select: { id: true, lat: true, lng: true },
+    })
+
+    const nearbyIds = nearbyUsers
+      .filter((u) => haversine(lat, lng, u.lat!, u.lng!) <= RADIUS_KM)
+      .map((u) => u.id)
+
+    if (nearbyIds.length > 0) {
+      const nearbyWithSelf = [...new Set([...nearbyIds, userId])].filter((id) => !blockedIds.has(id))
+      const posts = await prisma.post.findMany({
+        where: { ...baseWhere, userId: { in: nearbyWithSelf } },
+        include,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      })
+      return withThumbnails(posts)
+    }
+  }
+
+  // Fallback: global feed — own posts always included
+  const posts = await prisma.post.findMany({
+    where: { ...baseWhere, userId: { notIn: [...blockedIds] } },
+    include,
     orderBy: { createdAt: 'desc' },
     skip: (page - 1) * limit,
     take: limit,
   })
+  return withThumbnails(posts)
 }
 
 export async function likePost(userId: string, postId: string) {
@@ -103,7 +191,7 @@ export async function getFlashback(userId: string) {
   const rangeEnd = new Date(oneYearAgo)
   rangeEnd.setDate(rangeEnd.getDate() + 3)
 
-  return prisma.post.findFirst({
+  const post = await prisma.post.findFirst({
     where: {
       userId,
       deletedAt: null,
@@ -115,4 +203,5 @@ export async function getFlashback(userId: string) {
     },
     orderBy: { createdAt: 'desc' },
   })
+  return post ? withThumbnail(post) : null
 }

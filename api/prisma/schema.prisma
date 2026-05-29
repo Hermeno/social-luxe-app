@@ -51,6 +51,8 @@ model User {
   availability String?  @default("Disponível")
   ghostMode    Boolean  @default(false)
   coinBalance  Int      @default(0)
+  lat          Float?
+  lng          Float?
   createdAt    DateTime @default(now())
 
   posts            Post[]
@@ -64,6 +66,7 @@ model User {
   views            View[]
   sentMessages     Message[]           @relation("Sender")
   receivedMessages Message[]           @relation("Receiver")
+  msgReactions     MessageReaction[]
   stories          Story[]
   storyViews       StoryView[]         @relation("StoryViewer")
   reactions        Reaction[]
@@ -219,16 +222,33 @@ model Bookmark {
 // ─── Messages ─────────────────────────────────────────────────────────────────
 
 model Message {
-  id         String    @id @default(cuid())
-  senderId   String
-  receiverId String
-  content    String?
-  mediaUrl   String?
-  readAt     DateTime?
-  createdAt  DateTime  @default(now())
+  id          String    @id @default(cuid())
+  senderId    String
+  receiverId  String
+  content     String?
+  mediaUrl    String?
+  readAt      DateTime?
+  replyToId   String?
+  createdAt   DateTime  @default(now())
 
-  sender   User @relation("Sender",   fields: [senderId],   references: [id])
-  receiver User @relation("Receiver", fields: [receiverId], references: [id])
+  sender    User              @relation("Sender",   fields: [senderId],   references: [id])
+  receiver  User              @relation("Receiver", fields: [receiverId], references: [id])
+  replyTo   Message?          @relation("MessageReplies", fields: [replyToId], references: [id])
+  replies   Message[]         @relation("MessageReplies")
+  reactions MessageReaction[]
+}
+
+model MessageReaction {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId],    references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
 }
 
 model GroupChat {
@@ -459,4 +479,17 @@ model Follow {
   following User @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
 
   @@unique([followerId, followingId])
+}
+
+// ─── PasswordReset ────────────────────────────────────────────────────────────
+
+model PasswordReset {
+  id        String   @id @default(cuid())
+  phone     String
+  code      String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([phone])
 }

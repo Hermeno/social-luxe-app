@@ -3,6 +3,7 @@ import * as userService from '../services/user.service'
 import { ok, badRequest, serverError } from '../utils/response'
 import { AuthRequest } from '../types'
 import { prisma } from '../config/database'
+import { uploadToCloudinary } from '../utils/cloudinary.util'
 
 export async function getAllUsers(req: AuthRequest, res: Response) {
   try {
@@ -34,9 +35,13 @@ export async function getUserById(req: AuthRequest, res: Response) {
 
 export async function updateProfile(req: AuthRequest, res: Response) {
   try {
-    const { name, bio, availability } = req.body
-    const avatar = req.file ? `/uploads/${req.file.filename}` : undefined
-    const user = await userService.updateProfile(req.user!.userId, { name, bio, avatar, availability })
+    const { name, bio, availability, lat, lng } = req.body
+    let avatar: string | undefined
+    if (req.file) {
+      avatar = await uploadToCloudinary(req.file.buffer, req.file.mimetype, 'luxe/avatars')
+    }
+    const location = lat != null && lng != null ? { lat: parseFloat(lat), lng: parseFloat(lng) } : {}
+    const user = await userService.updateProfile(req.user!.userId, { name, bio, avatar, availability, ...location })
     return ok(res, user)
   } catch {
     return serverError(res)
@@ -117,6 +122,29 @@ export async function getConnections(req: AuthRequest, res: Response) {
     })
 
     return ok(res, connections)
+  } catch { return serverError(res) }
+}
+
+export async function getSuggestedUsers(req: AuthRequest, res: Response) {
+  try {
+    const userId = req.user!.userId
+    const alreadyFollowing = await prisma.follow.findMany({
+      where: { followerId: userId },
+      select: { followingId: true },
+    })
+    const excludeIds = [userId, ...alreadyFollowing.map((f) => f.followingId)]
+
+    // Users with most followers that I don't follow yet, limit 20
+    const users = await prisma.user.findMany({
+      where: { id: { notIn: excludeIds } },
+      select: {
+        id: true, name: true, avatar: true, bio: true,
+        _count: { select: { followers: true } },
+      },
+      orderBy: { followers: { _count: 'desc' } },
+      take: 20,
+    })
+    return ok(res, users)
   } catch { return serverError(res) }
 }
 

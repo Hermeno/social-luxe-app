@@ -24,7 +24,7 @@ export async function searchUsers(query: string, currentUserId: string) {
   })
 }
 
-export async function updateProfile(userId: string, data: { name?: string; bio?: string; avatar?: string; availability?: string }) {
+export async function updateProfile(userId: string, data: { name?: string; bio?: string; avatar?: string; availability?: string; lat?: number; lng?: number }) {
   return prisma.user.update({
     where: { id: userId },
     data,

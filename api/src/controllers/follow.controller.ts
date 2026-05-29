@@ -1,5 +1,7 @@
-import { Request, Response } from 'express'
+import { Response } from 'express'
 import { prisma } from '../config/database'
+import { AuthRequest as Request } from '../types'
+import { sendPush } from '../services/notification.service'
 
 export async function followUser(req: Request, res: Response) {
   const followerId  = req.user!.userId
@@ -17,6 +19,11 @@ export async function followUser(req: Request, res: Response) {
   }
 
   await prisma.follow.create({ data: { followerId, followingId } })
+
+  // Notify the followed user
+  const follower = await prisma.user.findUnique({ where: { id: followerId }, select: { name: true } })
+  sendPush(followingId, '👤 Novo seguidor', `${follower?.name} começou a seguir-te`, { type: 'follow', userId: followerId }).catch(() => {})
+
   return res.json({ following: true })
 }
 
@@ -48,6 +55,32 @@ export async function getMyFollowing(req: Request, res: Response) {
   const userId = req.user!.userId
   const rows = await prisma.follow.findMany({
     where: { followerId: userId },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      following: { select: { id: true, name: true, avatar: true, bio: true } },
+      createdAt: true,
+    },
+  })
+  return res.json(rows.map((r) => ({ ...r.following, followedAt: r.createdAt })))
+}
+
+export async function getUserFollowers(req: Request, res: Response) {
+  const { id } = req.params
+  const rows = await prisma.follow.findMany({
+    where: { followingId: id },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      follower: { select: { id: true, name: true, avatar: true, bio: true } },
+      createdAt: true,
+    },
+  })
+  return res.json(rows.map((r) => ({ ...r.follower, followedAt: r.createdAt })))
+}
+
+export async function getUserFollowing(req: Request, res: Response) {
+  const { id } = req.params
+  const rows = await prisma.follow.findMany({
+    where: { followerId: id },
     orderBy: { createdAt: 'desc' },
     select: {
       following: { select: { id: true, name: true, avatar: true, bio: true } },
