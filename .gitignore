@@ -3,3 +3,15 @@
 .expo
 dist
 build
+
+# Media uploads — guardados no Cloudinary, nunca no git
+api/uploads/
+uploads/
+
+# Expo / Metro
+**/.expo/
+**/expo-env.d.ts
+
+# OS
+.DS_Store
+Thumbs.db
