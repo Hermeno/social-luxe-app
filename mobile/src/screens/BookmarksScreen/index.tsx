@@ -15,10 +15,10 @@ import { Ionicons } from '@expo/vector-icons'
 import { getBookmarks } from '../../services/bookmark.service'
 import { Post } from '../../types'
 import { colors, fonts, spacing } from '../../theme'
+import { API_BASE } from '../../config'
 
 const { width } = Dimensions.get('window')
 const ITEM_SIZE = (width - 3) / 2
-const API_BASE = 'http://192.168.43.184:3000'
 
 export default function BookmarksScreen() {
   const nav = useNavigation()

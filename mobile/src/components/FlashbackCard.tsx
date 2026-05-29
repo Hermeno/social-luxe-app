@@ -9,13 +9,13 @@ import {
 } from 'react-native'
 import { Post } from '../types'
 import { colors, fonts, spacing, radius } from '../theme'
+import { API_BASE } from '../config'
 
 interface Props {
   post: Post
   onDismiss: () => void
 }
 
-const API_BASE = 'http://192.168.43.184:3000'
 
 export default function FlashbackCard({ post, onDismiss }: Props) {
   const fadeAnim = useRef(new Animated.Value(0)).current

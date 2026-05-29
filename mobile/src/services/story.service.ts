@@ -1,5 +1,6 @@
 import { api } from './api'
 import { ApiResponse } from '../types'
+import { API_BASE } from '../config'
 
 export interface Story {
   id: string
@@ -19,10 +20,8 @@ export interface StoryGroup {
   hasUnviewed: boolean
 }
 
-const BASE = 'http://192.168.43.184:3000'
-
 export function storyUrl(s: Story) {
-  return s.mediaUrl.startsWith('http') ? s.mediaUrl : `${BASE}${s.mediaUrl}`
+  return s.mediaUrl.startsWith('http') ? s.mediaUrl : `${API_BASE}${s.mediaUrl}`
 }
 
 export async function getFriendsStories(): Promise<StoryGroup[]> {

@@ -8,18 +8,28 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   db = await SQLite.openDatabaseAsync('luxe.db')
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
+
     CREATE TABLE IF NOT EXISTS posts_cache (
-      id TEXT PRIMARY KEY,
-      data TEXT NOT NULL,
-      cached_at INTEGER NOT NULL
+      id         TEXT PRIMARY KEY,
+      data       TEXT NOT NULL,
+      cached_at  INTEGER NOT NULL
     );
+
     CREATE TABLE IF NOT EXISTS viewed_posts (
-      post_id TEXT PRIMARY KEY,
+      post_id   TEXT PRIMARY KEY,
       viewed_at INTEGER NOT NULL
     );
+
     CREATE TABLE IF NOT EXISTS pending_likes (
       post_id TEXT PRIMARY KEY,
-      liked INTEGER NOT NULL
+      liked   INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS media_cache (
+      url        TEXT PRIMARY KEY,
+      local_path TEXT NOT NULL,
+      size_bytes INTEGER DEFAULT 0,
+      cached_at  INTEGER NOT NULL
     );
   `)
   return db
@@ -50,9 +60,54 @@ export async function getCachedPosts(): Promise<Post[]> {
 
 export async function clearStaleCache(): Promise<void> {
   const database = await getDb()
-  // Remove posts cached more than 24h ago
-  const cutoff = Date.now() - 86400000
-  await database.runAsync('DELETE FROM posts_cache WHERE cached_at < ?', [cutoff])
+  const cutoff = Date.now() - 86400000 // 24h
+
+  // Remove posts older than 24h AND any post with a local /uploads/ URL
+  // (pre-Cloudinary migration artefacts that will never load)
+  await database.runAsync(
+    `DELETE FROM posts_cache
+     WHERE cached_at < ?
+        OR json_extract(data, '$.mediaUrl') LIKE '/uploads/%'`,
+    [cutoff],
+  )
+}
+
+// ── Media file cache (Cloudinary → device storage) ────────────────────────────
+
+export async function getMediaCacheEntry(url: string): Promise<string | null> {
+  const database = await getDb()
+  const row = await database.getFirstAsync<{ local_path: string }>(
+    'SELECT local_path FROM media_cache WHERE url = ?', [url],
+  )
+  return row?.local_path ?? null
+}
+
+export async function saveMediaCacheEntry(
+  url: string, localPath: string, sizeBytes = 0,
+): Promise<void> {
+  const database = await getDb()
+  await database.runAsync(
+    'INSERT OR REPLACE INTO media_cache (url, local_path, size_bytes, cached_at) VALUES (?, ?, ?, ?)',
+    [url, localPath, sizeBytes, Date.now()],
+  )
+}
+
+export async function deleteMediaCacheEntry(url: string): Promise<void> {
+  const database = await getDb()
+  await database.runAsync('DELETE FROM media_cache WHERE url = ?', [url])
+}
+
+export async function getStaleMediaEntries(maxAgeMs: number): Promise<{ url: string; local_path: string }[]> {
+  const database = await getDb()
+  const cutoff = Date.now() - maxAgeMs
+  return database.getAllAsync<{ url: string; local_path: string }>(
+    'SELECT url, local_path FROM media_cache WHERE cached_at < ?', [cutoff],
+  )
+}
+
+export async function clearAllMediaCache(): Promise<void> {
+  const database = await getDb()
+  await database.runAsync('DELETE FROM media_cache')
 }
 
 // ── Viewed posts ───────────────────────────────────────────────────────────────

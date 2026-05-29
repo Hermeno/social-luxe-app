@@ -5,7 +5,6 @@ import FeedScreen from '../screens/FeedScreen'
 import MessagesScreen from '../screens/MessagesScreen'
 import CreateScreen from '../screens/CreateScreen'
 import ProfileScreen from '../screens/ProfileScreen'
-import FriendsScreen from '../screens/FriendsScreen'
 import ChatScreen from '../screens/MessagesScreen/ChatScreen'
 import TabBar from '../components/TabBar'
 import { StoryGroup } from '../services/story.service'
@@ -49,7 +48,6 @@ export type AppTabParams = {
   Feed: undefined
   Messages: undefined
   Create: undefined
-  Friends: undefined
 }
 
 const Stack = createStackNavigator<AppStackParams>()
@@ -61,7 +59,6 @@ function Tabs() {
       <Tab.Screen name="Feed" component={FeedScreen} />
       <Tab.Screen name="Messages" component={MessagesScreen} />
       <Tab.Screen name="Create" component={CreateScreen} />
-      <Tab.Screen name="Friends" component={FriendsScreen} />
     </Tab.Navigator>
   )
 }

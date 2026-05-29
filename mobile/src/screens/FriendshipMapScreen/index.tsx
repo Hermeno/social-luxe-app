@@ -15,6 +15,7 @@ import { getFriends } from '../../services/friendship.service'
 import { useAuthStore } from '../../store/auth.store'
 import { Friendship } from '../../types'
 import { colors, fonts, spacing } from '../../theme'
+import { API_BASE } from '../../config'
 
 const { width, height } = Dimensions.get('window')
 const CENTER_X = width / 2
@@ -23,7 +24,6 @@ const ORBIT_R = 130
 const CENTER_RADIUS = 36
 const NODE_RADIUS = 26
 
-const API_BASE = 'http://192.168.43.184:3000'
 
 const TIER_COLORS = ['#FF4B6E', '#FF8C42', '#FFD700', '#7EC8E3', '#B39DDB']
 

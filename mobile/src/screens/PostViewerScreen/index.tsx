@@ -22,9 +22,9 @@ import ActionBar from '../FeedScreen/ActionBar'
 import PostInfo from '../FeedScreen/PostInfo'
 import CommentSheet from '../../components/CommentSheet'
 import AvatarImage from '../../components/AvatarImage'
+import { API_BASE } from '../../config'
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window')
-const API_BASE       = 'http://192.168.43.184:3000'
 const IMAGE_DURATION = 30000
 const VIDEO_DURATION = 90000
 
@@ -196,7 +196,7 @@ export default function PostViewerScreen() {
             key={post.id}
             source={{ uri: resolveMedia(post.mediaUrl) }}
             style={videoStyle}
-            contentFit="cover"
+            contentFit="contain"
           />
         )}
       </View>

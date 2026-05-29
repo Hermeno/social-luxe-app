@@ -46,3 +46,13 @@ export async function getMyFollowing(): Promise<FollowUser[]> {
   const res = await api.get<FollowUser[]>('/users/following')
   return res.data
 }
+
+export async function getUserFollowers(userId: string): Promise<FollowUser[]> {
+  const res = await api.get<FollowUser[]>(`/users/${userId}/followers`)
+  return res.data
+}
+
+export async function getUserFollowing(userId: string): Promise<FollowUser[]> {
+  const res = await api.get<FollowUser[]>(`/users/${userId}/following`)
+  return res.data
+}

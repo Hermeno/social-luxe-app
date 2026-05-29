@@ -8,9 +8,9 @@ import { colors, gradients } from '../../theme'
 import ActionBar from './ActionBar'
 import PostInfo from './PostInfo'
 import * as postService from '../../services/post.service'
+import { API_BASE } from '../../config'
 
 const { width, height } = Dimensions.get('window')
-const API_BASE = 'http://192.168.43.184:3000'
 
 interface Props {
   post: Post

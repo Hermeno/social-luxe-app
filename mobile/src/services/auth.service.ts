@@ -35,6 +35,11 @@ export async function getMe(): Promise<User> {
   return res.data.data
 }
 
+export async function checkPhone(phone: string): Promise<{ exists: boolean }> {
+  const res = await api.post('/auth/check-phone', { phone })
+  return res.data.data ?? res.data
+}
+
 export async function logout() {
   await clearToken()
 }

@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import {
   View,
   Text,
+  TextInput,
   FlatList,
   TouchableOpacity,
   Pressable,
@@ -19,21 +20,22 @@ import { Ionicons } from '@expo/vector-icons'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { Post } from '../../types'
 import { useFeed } from '../../hooks/useFeed'
+import { useFeedStore } from '../../store/feed.store'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { markPostViewed, getViewedPostIds } from '../../db/database'
+import { getOrDownload, prefetchMedia } from '../../db/mediaCache'
 import { colors, fonts, spacing, gradients } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
 import SegmentedRing from '../../components/SegmentedRing'
 import ActionBar from './ActionBar'
 import PostInfo from './PostInfo'
 import CommentSheet from '../../components/CommentSheet'
+import { API_BASE } from '../../config'
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window')
 const RING_SIZE      = 62
 const AVATAR_SIZE    = 50
 const IMAGE_DURATION = 30000
-const VIDEO_DURATION = 90000
-const API_BASE       = 'http://192.168.43.184:3000'
 
 type Nav = StackNavigationProp<AppStackParams>
 
@@ -44,6 +46,90 @@ interface UserGroup {
 
 function resolveMedia(url: string) {
   return url.startsWith('http') ? url : `${API_BASE}${url}`
+}
+
+// ─── Bubble Item ──────────────────────────────────────────────────────────────
+function BubbleItem({
+  item,
+  isActive,
+  viewedCount,
+  index,
+  onPress,
+}: {
+  item: UserGroup
+  isActive: boolean
+  viewedCount: number
+  index: number
+  onPress: () => void
+}) {
+  const unviewedCount = item.posts.length - viewedCount
+
+  const opacity   = useRef(new Animated.Value(0)).current
+  const entryY    = useRef(new Animated.Value(14)).current
+  const scaleAnim = useRef(new Animated.Value(1)).current
+  const spinAnim  = useRef(new Animated.Value(0)).current
+
+  // Entrance stagger
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacity,  { toValue: 1, duration: 280, delay: index * 55, useNativeDriver: true }),
+      Animated.spring(entryY,   { toValue: 0, speed: 18, bounciness: 7, delay: index * 55, useNativeDriver: true } as any),
+    ]).start()
+  }, [])
+
+  // Active scale pulse
+  useEffect(() => {
+    Animated.spring(scaleAnim, {
+      toValue: isActive ? 1.10 : 1,
+      useNativeDriver: true,
+      speed: 20, bounciness: 8,
+    }).start()
+  }, [isActive])
+
+  function handlePress() {
+    // Ring jiggle on tap
+    spinAnim.setValue(0)
+    Animated.sequence([
+      Animated.timing(spinAnim, { toValue: 1, duration: 180, useNativeDriver: true }),
+      Animated.spring(spinAnim, { toValue: 0, speed: 22, bounciness: 10, useNativeDriver: true }),
+    ]).start()
+    onPress()
+  }
+
+  const rotate = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '22deg'],
+  })
+
+  return (
+    <Animated.View style={{ opacity, transform: [{ translateY: entryY }] }}>
+      <TouchableOpacity style={s.bubbleItem} onPress={handlePress} activeOpacity={0.75}>
+        <View style={s.ringContainer}>
+          <Animated.View style={[s.ringWrap, { transform: [{ scale: scaleAnim }, { rotate }] }]}>
+            <SegmentedRing
+              count={item.posts.length}
+              viewedCount={viewedCount}
+              size={RING_SIZE}
+              strokeWidth={3}
+            />
+            <View style={s.avatarCenter}>
+              <AvatarImage uri={item.user.avatar} size={AVATAR_SIZE} />
+            </View>
+          </Animated.View>
+
+          {unviewedCount > 0 && (
+            <View style={s.unviewedBadge}>
+              <Text style={s.unviewedBadgeTxt}>{unviewedCount > 9 ? '9+' : unviewedCount}</Text>
+            </View>
+          )}
+        </View>
+
+        <Text style={[s.bubbleName, isActive && s.bubbleNameActive]} numberOfLines={1}>
+          {item.user.name.split(' ')[0]}
+        </Text>
+      </TouchableOpacity>
+    </Animated.View>
+  )
 }
 
 // ─── Progress Bars ────────────────────────────────────────────────────────────
@@ -71,17 +157,31 @@ function ProgressBars({ count, current, progress }: {
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function FeedScreen() {
-  const { posts, refresh } = useFeed()
+  const { posts, refresh, loadMore, prependPost } = useFeed()
   const nav       = useNavigation<Nav>()
   const { top }   = useSafeAreaInsets()
   const isFocused = useIsFocused()
 
+  // Consume a post published from CreateScreen → prepend instantly
+  const pendingPost    = useFeedStore((s) => s.pendingPost)
+  const setPendingPost = useFeedStore((s) => s.setPendingPost)
+  useEffect(() => {
+    if (!pendingPost) return
+    prependPost(pendingPost)
+    setCurrentIndex(0)
+    setPendingPost(null)
+  }, [pendingPost])
+
   const [currentIndex, setCurrentIndex] = useState(0)
   const [commentPost, setCommentPost]   = useState<Post | null>(null)
   const [viewedIds, setViewedIds]       = useState<Set<string>>(new Set())
-  // Exact pixel size of viewer (measured via onLayout for reliable clipping)
+  const [searchMode, setSearchMode]     = useState(false)
+  const [searchQuery, setSearchQuery]   = useState('')
   const [viewerW, setViewerW] = useState(SCREEN_W)
-  const [viewerH, setViewerH] = useState(SCREEN_H) // over-estimate clipped by overflow:hidden; updated precisely by onLayout
+  const [viewerH, setViewerH] = useState(SCREEN_H)
+
+  // Thumbnail → full-media crossfade opacity
+  const mediaOpacity = useRef(new Animated.Value(0)).current
 
   const progressAnim     = useRef(new Animated.Value(0)).current
   const progressRef      = useRef<Animated.CompositeAnimation | null>(null)
@@ -100,12 +200,19 @@ export default function FeedScreen() {
     return () => progressAnim.removeListener(id)
   }, [])
 
+  // Safe wrapper — expo-video player can be released by native side during tab switches
+  const safePlayer = useCallback((fn: () => void) => {
+    try { fn() } catch { /* player already released — ignore */ }
+  }, [])
+
   // Load persisted viewed post IDs on mount
   useEffect(() => {
     getViewedPostIds().then(setViewedIds).catch(() => {})
   }, [])
 
-  const player = useVideoPlayer(null, (p) => { p.loop = true; p.muted = false })
+  const player = useVideoPlayer(null, (p) => { p.loop = false; p.muted = false })
+  // Stores the actual loaded video duration (seconds → ms) so progress and resume use the real length
+  const videoDurRef = useRef(0)
 
   // ── Data ──────────────────────────────────────────────────────────────────
   const userGroups = useMemo<UserGroup[]>(() => {
@@ -116,6 +223,13 @@ export default function FeedScreen() {
     })
     return Array.from(map.values())
   }, [posts])
+
+  const filteredGroups = useMemo(
+    () => searchQuery.trim()
+      ? userGroups.filter((g) => g.user.name.toLowerCase().includes(searchQuery.toLowerCase()))
+      : userGroups,
+    [userGroups, searchQuery],
+  )
 
   const flatPosts = useMemo(() => {
     const seen = new Set<string>()
@@ -141,8 +255,13 @@ export default function FeedScreen() {
   const currentPostInGroup = currentIndex - currentGroupFirstIdx
 
   const goNext = useCallback(() => {
-    setCurrentIndex((i) => (i < flatPosts.length - 1 ? i + 1 : 0))
-  }, [flatPosts.length])
+    setCurrentIndex((i) => {
+      // Stop at last post — no wrap-around
+      if (i >= flatPosts.length - 1) return i
+      if (flatPosts.length - i <= 3) loadMore()
+      return i + 1
+    })
+  }, [flatPosts.length, loadMore])
 
   const goPrev = useCallback(() => {
     setCurrentIndex((i) => (i > 0 ? i - 1 : 0))
@@ -161,8 +280,8 @@ export default function FeedScreen() {
   function resumeFromCurrent() {
     const p = postRef.current
     if (!p || !isFocusedRef.current || commentPost) return
-    if (p.mediaType === 'VIDEO') player.play()
-    const totalDur = p.mediaType === 'VIDEO' ? VIDEO_DURATION : IMAGE_DURATION
+    if (p.mediaType === 'VIDEO') safePlayer(() => player.play())
+    const totalDur = p.mediaType === 'VIDEO' ? (videoDurRef.current || IMAGE_DURATION) : IMAGE_DURATION
     const remaining = Math.max(400, (1 - progressValueRef.current) * totalDur)
     progressRef.current = Animated.timing(progressAnim, {
       toValue: 1, duration: remaining, useNativeDriver: false,
@@ -173,9 +292,11 @@ export default function FeedScreen() {
   // ── Main playback effect (new post or focus change) ───────────────────────
   useEffect(() => {
     progressRef.current?.stop()
-    player.pause()
+    safePlayer(() => player.pause())
     progressAnim.setValue(0)
     progressValueRef.current = 0
+    // Reset crossfade — thumbnail shows while full media loads
+    mediaOpacity.setValue(0)
 
     if (!post || !isFocused) return
 
@@ -185,40 +306,90 @@ export default function FeedScreen() {
       setViewedIds((prev) => new Set(prev).add(post.id))
     }
 
-    // Don't start playback if comment sheet is open
     if (commentPost) return
 
-    if (post.mediaType === 'VIDEO') {
-      player.replace({ uri: resolveMedia(post.mediaUrl) })
-      player.play()
+    function startProgress(durationMs: number) {
+      progressRef.current = Animated.timing(progressAnim, {
+        toValue: 1, duration: durationMs, useNativeDriver: false,
+      })
+      progressRef.current.start(({ finished }) => { if (finished) goNextRef.current() })
     }
 
-    const duration = post.mediaType === 'VIDEO' ? VIDEO_DURATION : IMAGE_DURATION
-    progressRef.current = Animated.timing(progressAnim, {
-      toValue: 1, duration, useNativeDriver: false,
-    })
-    progressRef.current.start(({ finished }) => { if (finished) goNext() })
+    function revealMedia() {
+      // Crossfade thumbnail → full media (300 ms)
+      Animated.timing(mediaOpacity, { toValue: 1, duration: 300, useNativeDriver: true }).start()
+    }
 
-    return () => { progressRef.current?.stop(); player.pause() }
+    if (post.mediaType === 'VIDEO') {
+      videoDurRef.current = 0
+      let started   = false
+      let cancelled = false
+
+      const remoteUrl = resolveMedia(post.mediaUrl)
+      const mountDelay = setTimeout(async () => {
+        if (cancelled) return
+        // Use local cached file if available, stream from Cloudinary otherwise
+        const localPath = await getOrDownload(remoteUrl)
+        if (cancelled) return
+        safePlayer(() => player.replace({ uri: localPath ?? remoteUrl }))
+      }, 60)
+
+      const sub = (player as any).addListener('statusChange', ({ status }: { status: string }) => {
+        if (started || cancelled) return
+        if (status === 'readyToPlay' && player.duration > 0) {
+          started = true
+          const dur = Math.round(player.duration * 1000)
+          videoDurRef.current = dur
+          safePlayer(() => player.play())
+          revealMedia()      // ← crossfade in the video
+          startProgress(dur)
+        }
+      })
+
+      return () => {
+        cancelled = true
+        clearTimeout(mountDelay)
+        sub?.remove?.()
+        progressRef.current?.stop()
+        safePlayer(() => player.pause())
+      }
+    }
+
+    // Image: reveal immediately (expo-image loads fast from disk cache)
+    // onLoadEnd in the Image component also calls revealMedia
+    startProgress(IMAGE_DURATION)
+    return () => { progressRef.current?.stop() }
   }, [currentIndex, isFocused])
 
   // ── Comment sheet pause / resume effect ──────────────────────────────────
   useEffect(() => {
     if (commentPost) {
-      // Pause everything when comment sheet opens
       progressRef.current?.stop()
-      player.pause()
+      safePlayer(() => player.pause())
     } else {
-      // Resume from where we left off when sheet closes
       resumeFromCurrent()
     }
   }, [!!commentPost])
 
   // ── Refresh and reset on screen focus ────────────────────────────────────
+  // Use a ref so useFocusEffect always calls the latest refresh (no stale closure)
+  const refreshRef = useRef(refresh)
+  refreshRef.current = refresh
+
   useFocusEffect(useCallback(() => {
-    refresh()
-    setCurrentIndex(0)
+    refreshRef.current()
+    // Only reset index when NOT arriving from a publish (pendingPost handles that)
+    if (!useFeedStore.getState().pendingPost) setCurrentIndex(0)
   }, []))
+
+  // Prefetch next 2 posts' media into device storage
+  useEffect(() => {
+    const urls = flatPosts
+      .slice(currentIndex + 1, currentIndex + 3)
+      .filter((p) => p.mediaType === 'VIDEO')
+      .map((p) => resolveMedia(p.mediaUrl))
+    if (urls.length > 0) prefetchMedia(urls)
+  }, [currentIndex])
 
   // Keep active bubble in view
   useEffect(() => {
@@ -233,7 +404,7 @@ export default function FeedScreen() {
   function handlePressIn() {
     pressStartRef.current = Date.now()
     progressRef.current?.stop()
-    player.pause()
+    safePlayer(() => player.pause())
   }
 
   function handlePressOut(navigate: () => void) {
@@ -256,66 +427,88 @@ export default function FeedScreen() {
   return (
     <View style={s.container}>
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <View style={[s.header, { paddingTop: top + 10 }]}>
-        <Text style={s.logo}>luxe</Text>
-        <View style={s.headerRight}>
-          <TouchableOpacity onPress={() => nav.navigate('Create' as any)} activeOpacity={0.75} style={s.headerBtn}>
-            <Ionicons name="search-outline" size={24} color={colors.gray800} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => nav.navigate('Profile', {})} activeOpacity={0.75} style={s.headerBtn}>
-            <Ionicons name="person-outline" size={24} color={colors.gray800} />
+      {searchMode ? (
+        <View style={[s.searchBar, { paddingTop: top + 10 }]}>
+          <View style={s.searchField}>
+            <Ionicons name="search" size={16} color={colors.gray400} />
+            <TextInput
+              autoFocus
+              placeholder="Pesquisar pessoas..."
+              placeholderTextColor={colors.gray400}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              style={s.searchFieldInput}
+            />
+          </View>
+          <TouchableOpacity
+            onPress={() => { setSearchMode(false); setSearchQuery('') }}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Text style={s.searchCancel}>Cancelar</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      ) : (
+        <View style={[s.header, { paddingTop: top + 10 }]}>
+          <Text style={s.logo}>luxe</Text>
+          <View style={s.headerRight}>
+            <TouchableOpacity onPress={() => setSearchMode(true)} activeOpacity={0.75} style={s.headerBtn}>
+              <View style={s.headerIconWrap}>
+                <Ionicons name="search" size={20} color={colors.white} />
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => nav.navigate('Profile', {})} activeOpacity={0.75} style={s.headerBtn}>
+              <View style={s.headerIconWrap}>
+                <Ionicons name="person" size={20} color={colors.white} />
+              </View>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* ── User bubble row ────────────────────────────────────────────────── */}
       <FlatList
         ref={bubblesRef}
         horizontal
-        data={userGroups}
+        data={filteredGroups}
         keyExtractor={(g) => g.user.id}
         showsHorizontalScrollIndicator={false}
         style={s.bubbleRow}
         contentContainerStyle={s.bubbleList}
         onScrollToIndexFailed={() => {}}
         ListHeaderComponent={
-          <TouchableOpacity
-            style={s.bubbleItem}
-            onPress={() => nav.navigate('Create' as any)}
-            activeOpacity={0.8}
-          >
-            <View style={s.ringWrap}>
-              <View style={s.createCircle}>
-                <Ionicons name="add" size={32} color={colors.white} />
-              </View>
-            </View>
-            <Text style={s.bubbleName}>Criar</Text>
-          </TouchableOpacity>
-        }
-        renderItem={({ item }) => {
-          const isActive = post?.user.id === item.user.id
-          return (
-            <TouchableOpacity style={s.bubbleItem} onPress={() => jumpToUser(item)} activeOpacity={0.8}>
-              <View style={[s.ringWrap, isActive && s.ringActive]}>
-                <SegmentedRing
-                  count={item.posts.length}
-                  viewedCount={viewedCountFor(item)}
-                  size={RING_SIZE}
-                  strokeWidth={3}
-                />
-                <View style={s.avatarCenter}>
-                  <AvatarImage uri={item.user.avatar} size={AVATAR_SIZE} />
+          !searchMode ? (
+            <TouchableOpacity
+              style={s.bubbleItem}
+              onPress={() => nav.navigate('Create' as any)}
+              activeOpacity={0.8}
+            >
+              <View style={s.ringWrap}>
+                <View style={s.createCircle}>
+                  <Ionicons name="add" size={32} color={colors.white} />
                 </View>
               </View>
-              <Text style={[s.bubbleName, isActive && s.bubbleNameActive]} numberOfLines={1}>
-                {item.user.name.split(' ')[0]}
-              </Text>
+              <Text style={s.bubbleName}>Criar</Text>
             </TouchableOpacity>
-          )
-        }}
+          ) : null
+        }
+        renderItem={({ item, index }) => (
+          <BubbleItem
+            item={item}
+            isActive={post?.user.id === item.user.id}
+            viewedCount={viewedCountFor(item)}
+            index={index}
+            onPress={() => {
+              jumpToUser(item)
+              setSearchMode(false)
+              setSearchQuery('')
+            }}
+          />
+        )}
         ListEmptyComponent={
           <View style={s.noBubbles}>
-            <Text style={s.noBubblesText}>Ainda não há publicações</Text>
+            <Text style={s.noBubblesText}>
+              {searchQuery ? 'Nenhum resultado' : 'Ainda não há publicações'}
+            </Text>
           </View>
         }
       />
@@ -329,27 +522,44 @@ export default function FeedScreen() {
             setViewerH(e.nativeEvent.layout.height)
           }}
         >
-          {/* ── Media: explicit pixel dimensions + hardware clipping ─────── */}
-          <View
-            style={s.mediaClip}
-            // Force hardware compositing on Android → proper native clipping
-            renderToHardwareTextureAndroid
-          >
-            {post.mediaType === 'VIDEO' ? (
-              <VideoView
-                player={player}
-                style={videoStyle}
-                contentFit="cover"
-                nativeControls={false}
-              />
-            ) : (
-              <Image
-                key={post.id}
-                source={{ uri: resolveMedia(post.mediaUrl) }}
-                style={videoStyle}
-                contentFit="cover"
-              />
-            )}
+          {/* ── Media: thumbnail → full-media crossfade ──────────────────── */}
+          <View style={s.mediaClip} renderToHardwareTextureAndroid>
+
+            {/* Layer 1: blurred thumbnail — tiny file, appears instantly */}
+            <Image
+              source={{ uri: post.thumbnailUrl ?? resolveMedia(post.mediaUrl) }}
+              style={[videoStyle, s.absLayer]}
+              contentFit="cover"
+              cachePolicy="disk"
+              recyclingKey={`thumb-${post.id}`}
+            />
+
+            {/* Layer 2: full-resolution media — fades in when ready */}
+            <Animated.View style={[s.absLayer, { opacity: mediaOpacity }]}>
+              {post.mediaType === 'VIDEO' ? (
+                <VideoView
+                  player={player}
+                  style={videoStyle}
+                  contentFit="cover"
+                  nativeControls={false}
+                />
+              ) : (
+                <Image
+                  key={post.id}
+                  source={{ uri: resolveMedia(post.mediaUrl) }}
+                  style={videoStyle}
+                  contentFit="contain"
+                  cachePolicy="disk"
+                  recyclingKey={post.id}
+                  onLoadEnd={() => {
+                    Animated.timing(mediaOpacity, {
+                      toValue: 1, duration: 280, useNativeDriver: true,
+                    }).start()
+                  }}
+                />
+              )}
+            </Animated.View>
+
           </View>
 
           <LinearGradient colors={gradients.feedTop}    style={s.topGradient} />
@@ -407,9 +617,45 @@ const s = StyleSheet.create({
     paddingHorizontal: spacing.md, paddingBottom: 4,
     backgroundColor: colors.white,
   },
-  logo:        { fontFamily: fonts.extraBold, fontSize: 26, color: colors.gray800, letterSpacing: -1 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  headerBtn:   { padding: 8 },
+  logo:        { fontFamily: fonts.extraBold, fontSize: 28, color: colors.gray800, letterSpacing: -1.2 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  headerBtn:   { padding: 4 },
+
+  searchBar: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: spacing.md, paddingBottom: 8, gap: 12,
+    backgroundColor: colors.white,
+  },
+  searchField: {
+    flex: 1, flexDirection: 'row', alignItems: 'center',
+    backgroundColor: colors.gray100, borderRadius: 12,
+    paddingHorizontal: 12, paddingVertical: 9, gap: 8,
+  },
+  searchFieldInput: {
+    flex: 1, fontFamily: fonts.regular, fontSize: 15,
+    color: colors.gray800, padding: 0,
+  },
+  searchCancel: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.primary },
+  headerIconWrap: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: colors.gray800,
+    alignItems: 'center', justifyContent: 'center',
+  },
+
+  // Ring container (positions badge on top of animated ring)
+  ringContainer: {
+    width: RING_SIZE, height: RING_SIZE,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  unviewedBadge: {
+    position: 'absolute', top: -1, right: -3,
+    minWidth: 18, height: 18, borderRadius: 9,
+    backgroundColor: colors.primary,
+    alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1.5, borderColor: colors.white,
+  },
+  unviewedBadgeTxt: { fontSize: 10, fontFamily: fonts.bold, color: colors.white },
 
   bubbleRow:        { flexGrow: 0, flexShrink: 0 },
   bubbleList:       { paddingHorizontal: 14, paddingVertical: 5, gap: 12 },
@@ -420,7 +666,6 @@ const s = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center', justifyContent: 'center',
   },
-  ringActive:       { transform: [{ scale: 1.06 }] },
   avatarCenter:     { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   bubbleName:       { color: colors.black, fontFamily: fonts.bold, fontSize: 11, textAlign: 'center' },
   bubbleNameActive: { color: colors.primary },
@@ -432,12 +677,16 @@ const s = StyleSheet.create({
     backgroundColor: colors.black,
     overflow: 'hidden',
   },
-  // Direct parent of VideoView/Image: explicit overflow + hardware layer = reliable clipping on both platforms
   mediaClip: {
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
     overflow: 'hidden',
     backgroundColor: colors.black,
+  },
+  // Fills the mediaClip container — used by both thumbnail and full-media layers
+  absLayer: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
   },
   topGradient:    { position: 'absolute', top: 0, left: 0, right: 0, height: 120 },
   bottomGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 320 },
@@ -452,8 +701,8 @@ const s = StyleSheet.create({
   progressFull:  { flex: 1, backgroundColor: colors.white },
   progressFill:  { height: '100%', backgroundColor: colors.white },
 
-  leftTap:  { position: 'absolute', left: 0, top: 0, bottom: 0, width: SCREEN_W * 0.35, zIndex: 10 },
-  rightTap: { position: 'absolute', left: SCREEN_W * 0.35, right: 80, top: 0, bottom: 0, zIndex: 10 },
+  leftTap:  { position: 'absolute', left: 0, top: 0, bottom: 155, width: SCREEN_W * 0.35, zIndex: 10 },
+  rightTap: { position: 'absolute', left: SCREEN_W * 0.35, right: 80, top: 0, bottom: 155, zIndex: 10 },
 
   emptyViewer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   emptyText:   { color: colors.gray600, fontFamily: fonts.semiBold, fontSize: 16 },

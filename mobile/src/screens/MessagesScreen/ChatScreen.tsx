@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
 import {
   View, Text, FlatList, Image, StyleSheet,
-  KeyboardAvoidingView, Platform, Animated, Pressable,
+  KeyboardAvoidingView, Platform, Animated, Pressable, TouchableOpacity, Modal,
 } from 'react-native'
+import * as Haptics from 'expo-haptics'
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Message } from '../../types'
+import { Message, MessageReaction } from '../../types'
 import * as msgService from '../../services/message.service'
 import { useAuthStore } from '../../store/auth.store'
 import { useOnlineStore } from '../../store/online.store'
@@ -14,12 +15,12 @@ import { AppStackParams } from '../../navigation/AppNavigator'
 import { colors, spacing, radius, fonts } from '../../theme'
 import ChatHeader from './ChatHeader'
 import ChatInputBar from './ChatInputBar'
+import { API_BASE } from '../../config'
 
 type Route = RouteProp<AppStackParams, 'Chat'>
-const API_BASE = 'http://192.168.43.184:3000'
-const CHAT_BG  = '#F0F2F5'
+const CHAT_BG  = '#FFFFFF'
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+const REACTION_EMOJIS = ['❤️', '😂', '😮', '😢', '🔥', '👏']
 
 function formatTime(dateStr: string) {
   const d = new Date(dateStr)
@@ -74,41 +75,95 @@ function TypingBubble() {
   )
 }
 
+// ── Reaction picker overlay ───────────────────────────────────────────────────
+function EmojiPicker({ onPick, onClose }: { onPick: (e: string) => void; onClose: () => void }) {
+  return (
+    <Pressable style={t.emojiOverlay} onPress={onClose}>
+      <View style={t.emojiRow}>
+        {REACTION_EMOJIS.map((emoji) => (
+          <TouchableOpacity key={emoji} style={t.emojiBtn} onPress={() => onPick(emoji)}>
+            <Text style={t.emojiText}>{emoji}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </Pressable>
+  )
+}
+
+// ── Reply quote ───────────────────────────────────────────────────────────────
+function ReplyQuote({ replyTo, mine }: { replyTo: NonNullable<Message['replyTo']>; mine: boolean }) {
+  return (
+    <View style={[t.replyQuote, mine ? t.replyQuoteMine : t.replyQuoteTheirs]}>
+      <Text style={t.replyQuoteName}>{replyTo.sender.name}</Text>
+      <Text style={t.replyQuoteText} numberOfLines={1}>{replyTo.content ?? '🎤 Voz'}</Text>
+    </View>
+  )
+}
+
 // ── Message bubble ────────────────────────────────────────────────────────────
 interface BubbleProps {
   msg: Message
   mine: boolean
-  isFirst: boolean  // first in a consecutive group from same sender
-  isLast: boolean   // last in a consecutive group
+  isFirst: boolean
+  isLast: boolean
+  myUserId: string
+  onLongPress: (msg: Message) => void
+  onReply: (msg: Message) => void
 }
 
-function MessageBubble({ msg, mine, isFirst, isLast }: BubbleProps) {
+function MessageBubble({ msg, mine, isFirst, isLast, myUserId, onLongPress, onReply }: BubbleProps) {
   const mediaUri = msg.mediaUrl
     ? (msg.mediaUrl.startsWith('http') ? msg.mediaUrl : `${API_BASE}${msg.mediaUrl}`)
     : null
 
+  const myReaction = msg.reactions?.find((r) => r.userId === myUserId)?.emoji
+  const allReactions = msg.reactions ?? []
+
   return (
     <View style={[t.row, mine ? t.rowRight : t.rowLeft, !isLast && t.rowCompact]}>
-      <View style={[
-        t.bubble,
-        mine ? t.bubbleMine : t.bubbleTheirs,
-        isFirst && mine  && t.bubbleMineFirst,
-        isFirst && !mine && t.bubbleTheirsFirst,
-        isLast  && mine  && t.bubbleMineLast,
-        isLast  && !mine && t.bubbleTheirsLast,
-      ]}>
-        {mediaUri && (
-          <Image source={{ uri: mediaUri }} style={t.mediaBubble} resizeMode="cover" />
+      <View style={{ alignItems: mine ? 'flex-end' : 'flex-start' }}>
+        <Pressable
+          onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); onLongPress(msg) }}
+          delayLongPress={350}
+        >
+          <View style={[
+            t.bubble,
+            mine ? t.bubbleMine : t.bubbleTheirs,
+            isFirst && mine  && t.bubbleMineFirst,
+            isFirst && !mine && t.bubbleTheirsFirst,
+            isLast  && mine  && t.bubbleMineLast,
+            isLast  && !mine && t.bubbleTheirsLast,
+          ]}>
+            {msg.replyTo && <ReplyQuote replyTo={msg.replyTo} mine={mine} />}
+            {mediaUri && (
+              <Image source={{ uri: mediaUri }} style={t.mediaBubble} resizeMode="cover" />
+            )}
+            {msg.content ? (
+              <Text style={[t.msgText, mine ? t.msgMine : t.msgTheirs]}>{msg.content}</Text>
+            ) : null}
+            <View style={t.metaRow}>
+              <Text style={[t.time, mine && t.timeMine]}>{formatTime(msg.createdAt)}</Text>
+              {mine && <Text style={t.tick}>{msg.readAt ? '✓✓' : '✓'}</Text>}
+            </View>
+          </View>
+        </Pressable>
+
+        {/* Reactions strip */}
+        {allReactions.length > 0 && (
+          <View style={[t.reactStrip, mine ? t.reactStripRight : t.reactStripLeft]}>
+            {[...new Set(allReactions.map((r) => r.emoji))].map((e) => (
+              <Text key={e} style={t.reactEmoji}>{e}</Text>
+            ))}
+            {allReactions.length > 1 && (
+              <Text style={t.reactCount}>{allReactions.length}</Text>
+            )}
+          </View>
         )}
-        {msg.content ? (
-          <Text style={[t.msgText, mine ? t.msgMine : t.msgTheirs]}>{msg.content}</Text>
-        ) : null}
-        <View style={t.metaRow}>
-          <Text style={[t.time, mine && t.timeMine]}>{formatTime(msg.createdAt)}</Text>
-          {mine && (
-            <Text style={t.tick}>{msg.readAt ? '✓✓' : '✓'}</Text>
-          )}
-        </View>
+
+        {/* Reply action — appears below bubble on long press */}
+        <TouchableOpacity style={t.replyBtn} onPress={() => onReply(msg)}>
+          <Text style={t.replyBtnText}>Responder</Text>
+        </TouchableOpacity>
       </View>
     </View>
   )
@@ -134,6 +189,8 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([])
   const [text, setText]         = useState('')
   const [isTyping, setIsTyping] = useState(false)
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null)
+  const [emojiTargetMsg, setEmojiTargetMsg] = useState<Message | null>(null)
   const listRef     = useRef<FlatList>(null)
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { bottom, top } = useSafeAreaInsets()
@@ -163,11 +220,21 @@ export default function ChatScreen() {
       if (fromUserId === userId) setIsTyping(t)
     }
 
+    function onReaction({ messageId, emoji, removed, userId: reactorId }: any) {
+      setMessages((prev) => prev.map((m) => {
+        if (m.id !== messageId) return m
+        const reactions = (m.reactions ?? []).filter((r) => r.userId !== reactorId)
+        return { ...m, reactions: removed ? reactions : [...reactions, { emoji, userId: reactorId }] }
+      }))
+    }
+
     socket.on('message:new', onNewMessage)
     socket.on('message:typing', onTyping)
+    socket.on('message:reaction', onReaction)
     return () => {
       socket.off('message:new', onNewMessage)
       socket.off('message:typing', onTyping)
+      socket.off('message:reaction', onReaction)
     }
   }, [userId, user?.id])
 
@@ -184,14 +251,31 @@ export default function ChatScreen() {
 
   async function handleSend() {
     if (!text.trim()) return
-    const msg = await msgService.sendMessage(userId, text.trim())
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    const replyToId = replyingTo?.id
+    const msg = await msgService.sendMessage(userId, text.trim(), undefined, replyToId)
     setMessages((prev) => [...prev, msg])
     setText('')
+    setReplyingTo(null)
     getSocket()?.emit('message:typing', { toUserId: userId, isTyping: false })
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80)
   }
 
-  // Build render items: insert date separators between messages from different days
+  async function handleReact(emoji: string) {
+    if (!emojiTargetMsg) return
+    const messageId = emojiTargetMsg.id
+    setEmojiTargetMsg(null)
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    try {
+      const result = await msgService.reactToMessage(messageId, emoji)
+      setMessages((prev) => prev.map((m) => {
+        if (m.id !== messageId) return m
+        const reactions = (m.reactions ?? []).filter((r) => r.userId !== user?.id)
+        return { ...m, reactions: result.removed ? reactions : [...reactions, { emoji, userId: user!.id }] }
+      }))
+    } catch {}
+  }
+
   type Item =
     | { kind: 'msg'; msg: Message; mine: boolean; isFirst: boolean; isLast: boolean }
     | { kind: 'date'; label: string; key: string }
@@ -242,6 +326,9 @@ export default function ChatScreen() {
                 mine={item.mine}
                 isFirst={item.isFirst}
                 isLast={item.isLast}
+                myUserId={user?.id ?? ''}
+                onLongPress={setEmojiTargetMsg}
+                onReply={setReplyingTo}
               />
         }
       />
@@ -254,68 +341,96 @@ export default function ChatScreen() {
         onSend={handleSend}
         paddingBottom={bottom + 4}
         otherUserId={userId}
+        replyingTo={replyingTo ? {
+          senderName: replyingTo.sender.name,
+          content: replyingTo.content,
+        } : null}
+        onCancelReply={() => setReplyingTo(null)}
       />
+
+      {/* Emoji reaction overlay */}
+      {emojiTargetMsg && (
+        <Modal transparent animationType="fade" visible onRequestClose={() => setEmojiTargetMsg(null)}>
+          <EmojiPicker onPick={handleReact} onClose={() => setEmojiTargetMsg(null)} />
+        </Modal>
+      )}
     </KeyboardAvoidingView>
   )
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
-const MINE_COLOR   = '#0A0A0A'   // dark bubble for my messages
-const THEIRS_COLOR = '#FFFFFF'   // white bubble for others
-const R = 18                     // base bubble radius
+const MINE_COLOR   = '#0A0A0A'
+const THEIRS_COLOR = '#FFFFFF'
+const R = 18
 
 const t = StyleSheet.create({
   screen:      { flex: 1, backgroundColor: CHAT_BG },
   list:        { flex: 1 },
   listContent: { paddingHorizontal: spacing.md, paddingVertical: spacing.md, gap: 2 },
 
-  // ── Row ──────────────────────────────────────────────────────────────────
   row:        { flexDirection: 'row', marginBottom: 2 },
   rowRight:   { justifyContent: 'flex-end' },
   rowLeft:    { justifyContent: 'flex-start' },
   rowCompact: { marginBottom: 1 },
 
-  // ── Bubble ───────────────────────────────────────────────────────────────
   bubble: {
     maxWidth: '78%',
     paddingHorizontal: 12,
     paddingVertical: 7,
-    // fully rounded by default; corners flatten per position in group
     borderRadius: R,
   },
   bubbleMine:         { backgroundColor: MINE_COLOR },
   bubbleTheirs:       { backgroundColor: THEIRS_COLOR },
-  // Flatten inner corner for group cohesion (WhatsApp style)
   bubbleMineFirst:    { borderTopRightRadius: 4 },
   bubbleMineLast:     { borderBottomRightRadius: 4 },
   bubbleTheirsFirst:  { borderTopLeftRadius: 4 },
   bubbleTheirsLast:   { borderBottomLeftRadius: 4 },
 
-  mediaBubble: {
-    width: 200, height: 200,
-    borderRadius: R - 4,
-    marginBottom: 4,
-  },
+  mediaBubble: { width: 200, height: 200, borderRadius: R - 4, marginBottom: 4 },
 
-  msgText:  { fontSize: 15, lineHeight: 21, fontFamily: fonts.regular },
-  msgMine:  { color: '#FFFFFF' },
-  msgTheirs:{ color: colors.gray800 },
+  msgText:   { fontSize: 15, lineHeight: 21, fontFamily: fonts.regular },
+  msgMine:   { color: '#FFFFFF' },
+  msgTheirs: { color: colors.gray800 },
 
-  metaRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 3, marginTop: 2 },
-  time:     { fontSize: 10, color: 'rgba(0,0,0,0.35)', fontFamily: fonts.regular },
-  timeMine: { color: 'rgba(255,255,255,0.5)' },
-  tick:     { fontSize: 10, color: '#4FC3F7', fontFamily: fonts.regular },
+  metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 3, marginTop: 2 },
+  time:    { fontSize: 10, color: 'rgba(0,0,0,0.35)', fontFamily: fonts.regular },
+  timeMine:{ color: 'rgba(255,255,255,0.5)' },
+  tick:    { fontSize: 10, color: '#4FC3F7', fontFamily: fonts.regular },
 
-  // ── Date separator ───────────────────────────────────────────────────────
+  // Reply quote inside bubble
+  replyQuote:       { borderLeftWidth: 3, paddingLeft: 8, marginBottom: 6 },
+  replyQuoteMine:   { borderLeftColor: 'rgba(255,255,255,0.5)' },
+  replyQuoteTheirs: { borderLeftColor: colors.primary },
+  replyQuoteName:   { fontSize: 11, fontFamily: fonts.semiBold, color: colors.primary, marginBottom: 1 },
+  replyQuoteText:   { fontSize: 12, fontFamily: fonts.regular, color: 'rgba(0,0,0,0.5)' },
+
+  // Reactions strip
+  reactStrip:      { flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 3, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: colors.white, borderRadius: 12, elevation: 1, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 2 },
+  reactStripRight: { alignSelf: 'flex-end' },
+  reactStripLeft:  { alignSelf: 'flex-start' },
+  reactEmoji:      { fontSize: 14 },
+  reactCount:      { fontSize: 11, color: colors.gray600, fontFamily: fonts.medium },
+
+  // Reply button (always visible but tiny so it doesn't clutter)
+  replyBtn:     { paddingVertical: 1, paddingHorizontal: 4, marginTop: 2 },
+  replyBtnText: { fontSize: 10, color: 'rgba(0,0,0,0.3)', fontFamily: fonts.regular },
+
+  // Emoji picker overlay
+  emojiOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
+  emojiRow:     { flexDirection: 'row', gap: 6, backgroundColor: colors.white, borderRadius: 40, paddingHorizontal: 16, paddingVertical: 12, elevation: 8 },
+  emojiBtn:     { padding: 6 },
+  emojiText:    { fontSize: 28 },
+
+  // Date separator
   dateSepWrap: { flexDirection: 'row', alignItems: 'center', marginVertical: 12, gap: 8 },
   dateLine:    { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(0,0,0,0.15)' },
   dateSepTxt:  {
-    fontSize: 11, color: 'rgba(0,0,0,0.45)', fontFamily: fonts.medium,
-    backgroundColor: '#DDE1E7', paddingHorizontal: 10, paddingVertical: 3,
+    fontSize: 11, color: 'rgba(0,0,0,0.4)', fontFamily: fonts.medium,
+    backgroundColor: '#EBEBEB', paddingHorizontal: 10, paddingVertical: 3,
     borderRadius: 10,
   },
 
-  // ── Typing bubble ─────────────────────────────────────────────────────────
+  // Typing bubble
   typingWrap:   { paddingHorizontal: spacing.md, paddingBottom: 4 },
   typingBubble: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
@@ -323,8 +438,5 @@ const t = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 12, borderRadius: R,
     borderTopLeftRadius: 4,
   },
-  dot: {
-    width: 7, height: 7, borderRadius: 4,
-    backgroundColor: colors.gray400,
-  },
+  dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.gray400 },
 })

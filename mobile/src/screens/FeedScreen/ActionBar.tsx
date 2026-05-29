@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react'
-import { View, TouchableOpacity, StyleSheet, Share, Modal, Alert, Text } from 'react-native'
+import { View, TouchableOpacity, StyleSheet, Share, Modal, Text } from 'react-native'
+import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
 import { Post } from '../../types'
-import { colors } from '../../theme'
+import { colors, fonts } from '../../theme'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -11,9 +12,7 @@ import * as postService from '../../services/post.service'
 import { ReactionType } from '../../services/reaction.service'
 import ActionItem from './ActionItem'
 import ReactionPicker from '../../components/ReactionPicker'
-import AvatarImage from '../../components/AvatarImage'
 import { useNotificationStore } from '../../store/notification.store'
-import { useFriendsStore } from '../../store/friends.store'
 
 interface Props {
   post: Post
@@ -28,48 +27,39 @@ function fmt(n: number) {
   return String(n)
 }
 
-const RING_SIZE   = 64
-const AVATAR_SIZE = 50
-
 const TAB_ITEMS = [
   { icon: 'home-outline',       screen: 'Feed'     },
   { icon: 'chatbubble-outline', screen: 'Messages' },
-  { icon: 'people-outline',     screen: 'Friends'  },
 ] as const
 
 export default function ActionBar({ post, onCommentPress, liked: likedProp = false, onLikeChange }: Props) {
-  const nav           = useNavigation<StackNavigationProp<AppStackParams>>()
-  const { bottom }    = useSafeAreaInsets()
-  const [liked, setLiked]             = useState(likedProp)
-  const [likeCount, setLikeCount]     = useState(post._count.likes)
-  const [shareCount, setShareCount]   = useState(post._count.shares)
+  const nav        = useNavigation<StackNavigationProp<AppStackParams>>()
+  const { bottom } = useSafeAreaInsets()
+  const [liked, setLiked]           = useState(likedProp)
+  const [likeCount, setLikeCount]   = useState(post._count?.likes ?? 0)
+  const [shareCount, setShareCount] = useState(post._count?.shares ?? 0)
   const [currentReaction, setCurrentReaction] = useState<ReactionType | undefined>()
   const [showReactions, setShowReactions]     = useState(false)
-  const messageBadge   = useNotificationStore((s) =>
+
+  const messageBadge = useNotificationStore((s) =>
     s.notifications.filter((n) => n.type === 'message' && !n.read).length
   )
-  const followersBadge = useFriendsStore((s) => s.newFollowersBadge)
 
   useEffect(() => { setLiked(likedProp) }, [likedProp])
 
   async function handleLike() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     const wasLiked = liked
     const prevCount = likeCount
-    // Optimistic update — instant feedback
     setLiked(!wasLiked)
     setLikeCount((c) => wasLiked ? c - 1 : c + 1)
     onLikeChange?.(!wasLiked)
     try {
       const res = await postService.likePost(post.id)
       setLiked(res.liked)
-      setLikeCount((c) => {
-        const diff = res.liked ? 1 : -1
-        // reconcile: if server disagrees with optimistic, adjust
-        return res.liked !== !wasLiked ? prevCount + diff : c
-      })
+      setLikeCount((c) => (res.liked !== !wasLiked ? prevCount + (res.liked ? 1 : -1) : c))
       onLikeChange?.(res.liked)
     } catch {
-      // Rollback on error
       setLiked(wasLiked)
       setLikeCount(prevCount)
       onLikeChange?.(wasLiked)
@@ -77,36 +67,26 @@ export default function ActionBar({ post, onCommentPress, liked: likedProp = fal
   }
 
   async function handleShare() {
-    try {
-      await postService.sharePost(post.id)
-      setShareCount((c) => c + 1)
-    } catch {}
-    Share.share({ message: `Confira este post no Luxe!` }).catch(() => {})
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    postService.sharePost(post.id)
+      .then(() => setShareCount((c) => c + 1))
+      .catch(() => {})
+
+    // Open native share sheet
+    const caption = post.caption ? `"${post.caption}" — ` : ''
+    Share.share({
+      message: `${caption}Veja o post de ${post.user.name} no Luxe antes que expire! 🔥`,
+      title: 'Luxe',
+    }).catch(() => {})
   }
 
   return (
     <>
-      {/* ── Unified vertical pill: post actions + nav icons ──────────────── */}
       <View style={[s.pill, { bottom: bottom + 52 }]}>
-
-        {/* Author avatar */}
-        <TouchableOpacity
-          style={s.avatarItem}
-          onPress={() => nav.navigate('Profile', { userId: post.user.id })}
-          activeOpacity={0.85}
-        >
-          <View style={s.avatarWrap}>
-            <AvatarImage uri={post.user.avatar} size={AVATAR_SIZE} borderColor={colors.white} borderWidth={2} />
-            <View style={s.addBtn}>
-              <Ionicons name="add" size={12} color={colors.white} />
-            </View>
-          </View>
-        </TouchableOpacity>
-
-        {/* Post actions */}
+        {/* ── Post actions ────────────────────────────────────────────── */}
         <ActionItem
           icon={liked ? 'heart' : 'heart-outline'}
-          size={30}
+          size={28}
           count={fmt(likeCount)}
           onPress={handleLike}
           onLongPress={() => setShowReactions(true)}
@@ -115,23 +95,29 @@ export default function ActionBar({ post, onCommentPress, liked: likedProp = fal
         />
         <ActionItem
           icon="chatbubble-ellipses"
-          size={28}
-          count={fmt(post._count.comments)}
+          size={26}
+          count={fmt(post._count?.comments ?? 0)}
           onPress={onCommentPress}
         />
         <ActionItem
           icon="paper-plane"
-          size={28}
+          size={26}
           count={fmt(shareCount)}
           onPress={handleShare}
         />
+        <ActionItem
+          icon="eye-outline"
+          size={26}
+          count={fmt(post._count?.views ?? 0)}
+          onPress={() => {}}
+        />
 
-        {/* Separator */}
+        {/* ── Separator ───────────────────────────────────────────────── */}
         <View style={s.separator} />
 
-        {/* Tab navigation icons */}
+        {/* ── Tab navigation ──────────────────────────────────────────── */}
         {TAB_ITEMS.map(({ icon, screen }) => {
-          const badge = screen === 'Messages' ? messageBadge : screen === 'Friends' ? followersBadge : 0
+          const badge = screen === 'Messages' ? messageBadge : 0
           return (
             <TouchableOpacity
               key={screen}
@@ -172,22 +158,8 @@ const s = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 6,
   },
-  avatarItem: { alignItems: 'center', marginBottom: 4 },
-  avatarWrap: {
-    width: RING_SIZE, height: RING_SIZE,
-    alignItems: 'center', justifyContent: 'center',
-    position: 'relative',
-  },
-  addBtn: {
-    position: 'absolute', bottom: 0, alignSelf: 'center',
-    backgroundColor: colors.primary, borderRadius: 10,
-    width: 20, height: 20,
-    justifyContent: 'center', alignItems: 'center',
-    borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.6)',
-  },
   separator: {
-    width: 28,
-    height: 1,
+    width: 28, height: 1,
     backgroundColor: 'rgba(255,255,255,0.2)',
     marginVertical: 4,
   },
@@ -203,6 +175,6 @@ const s = StyleSheet.create({
     paddingHorizontal: 3,
     borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.5)',
   },
-  badgeTxt: { color: colors.white, fontSize: 9, fontWeight: '800' },
-  circleActive: { backgroundColor: 'rgba(255,75,110,0.28)' },
+  badgeTxt:    { color: colors.white, fontSize: 9, fontFamily: fonts.bold },
+  circleActive:{ backgroundColor: 'rgba(255,75,110,0.28)' },
 })

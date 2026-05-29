@@ -17,11 +17,11 @@ import { Ionicons } from '@expo/vector-icons'
 import { getActiveChallenges, Challenge } from '../../services/challenge.service'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { colors, fonts, spacing, radius } from '../../theme'
+import { API_BASE } from '../../config'
 
 type Nav = StackNavigationProp<AppStackParams>
 
 const { width } = Dimensions.get('window')
-const API_BASE = 'http://192.168.43.184:3000'
 
 function timeLeft(endsAt: string) {
   const diff = new Date(endsAt).getTime() - Date.now()

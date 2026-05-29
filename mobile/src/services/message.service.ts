@@ -11,7 +11,12 @@ export async function getMessages(userId: string, page = 1): Promise<Message[]> 
   return res.data.data
 }
 
-export async function sendMessage(receiverId: string, content?: string, mediaUri?: string): Promise<Message> {
+export async function reactToMessage(messageId: string, emoji: string): Promise<{ removed: boolean; emoji: string }> {
+  const res = await api.post(`/messages/${messageId}/react`, { emoji })
+  return res.data
+}
+
+export async function sendMessage(receiverId: string, content?: string, mediaUri?: string, replyToId?: string): Promise<Message> {
   if (mediaUri) {
     const form = new FormData()
     form.append('receiverId', receiverId)
@@ -23,7 +28,7 @@ export async function sendMessage(receiverId: string, content?: string, mediaUri
     })
     return res.data.data
   }
-  const res = await api.post<ApiResponse<Message>>('/messages', { receiverId, content })
+  const res = await api.post<ApiResponse<Message>>('/messages', { receiverId, content, replyToId })
   return res.data.data
 }
 

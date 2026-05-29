@@ -2,8 +2,7 @@ import React from 'react'
 import { View, Image, StyleSheet, ViewStyle } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { colors } from '../theme'
-
-const API_BASE = 'http://192.168.43.184:3000'
+import { API_BASE } from '../config'
 
 interface Props {
   uri: string | null | undefined

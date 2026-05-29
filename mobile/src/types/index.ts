@@ -19,6 +19,7 @@ export interface Post {
   id: string
   userId: string
   mediaUrl: string
+  thumbnailUrl: string   // Cloudinary blurred thumbnail — tiny, loads instantly
   mediaType: MediaType
   caption: string | null
   expiresAt: string
@@ -47,6 +48,11 @@ export interface Friendship {
   friend: Pick<User, 'id' | 'name' | 'avatar'>
 }
 
+export interface MessageReaction {
+  emoji: string
+  userId: string
+}
+
 export interface Message {
   id: string
   senderId: string
@@ -54,9 +60,12 @@ export interface Message {
   content: string | null
   mediaUrl: string | null
   readAt: string | null
+  replyToId: string | null
   createdAt: string
   sender: Pick<User, 'id' | 'name' | 'avatar'>
   receiver: Pick<User, 'id' | 'name' | 'avatar'>
+  replyTo?: { id: string; content: string | null; sender: { name: string } } | null
+  reactions?: MessageReaction[]
 }
 
 export interface ApiResponse<T> {

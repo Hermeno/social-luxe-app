@@ -12,6 +12,7 @@ import {
   PlusJakartaSans_800ExtraBold,
 } from '@expo-google-fonts/plus-jakarta-sans'
 import * as Notifications from 'expo-notifications'
+import * as Location from 'expo-location'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import RootNavigator from './src/navigation/RootNavigator'
 import { connectSocket, disconnectSocket } from './src/socket'
@@ -19,6 +20,7 @@ import { useAuthStore } from './src/store/auth.store'
 import { useNotificationStore } from './src/store/notification.store'
 import { useFriendsStore } from './src/store/friends.store'
 import { getMyFollowers } from './src/services/follow.service'
+import { api, onTokenExpired } from './src/services/api'
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -72,6 +74,9 @@ function SocketManager() {
     registerForPushNotificationsAsync().then(async (pushToken) => {
       if (pushToken) {
         await AsyncStorage.setItem('push_token', pushToken).catch(() => {})
+        // Register token in backend so server can send pushes
+        const platform = require('react-native').Platform.OS
+        api.post('/notifications/token', { token: pushToken, platform }).catch(() => {})
       }
     })
 
@@ -95,6 +100,37 @@ function SocketManager() {
       }
     }
   }, [isAuthenticated, token])
+
+  return null
+}
+
+// Auto-logout when server returns 401 (expired token)
+function TokenExpiryWatcher() {
+  const { logout } = useAuthStore()
+  useEffect(() => {
+    return onTokenExpired(() => { logout() })
+  }, [])
+  return null
+}
+
+// Sends device location to backend once after login (for proximity feed)
+function LocationSync() {
+  const { isAuthenticated } = useAuthStore()
+
+  useEffect(() => {
+    if (!isAuthenticated) return
+    ;(async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync()
+        if (status !== 'granted') return
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+        await api.put('/users/profile', {
+          lat: loc.coords.latitude,
+          lng: loc.coords.longitude,
+        })
+      } catch {}
+    })()
+  }, [isAuthenticated])
 
   return null
 }
@@ -135,8 +171,10 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <StatusBar style="light" />
+        <TokenExpiryWatcher />
         <SocketManager />
         <FollowerPoller />
+        <LocationSync />
         <RootNavigator />
       </SafeAreaProvider>
     </GestureHandlerRootView>

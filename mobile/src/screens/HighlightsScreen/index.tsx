@@ -17,12 +17,12 @@ import { getUserHighlights, Highlight, HighlightPost } from '../../services/high
 import { useAuthStore } from '../../store/auth.store'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { colors, fonts, spacing, radius } from '../../theme'
+import { API_BASE } from '../../config'
 
 type Route = RouteProp<AppStackParams, 'Highlights'>
 
 const { width } = Dimensions.get('window')
 const ITEM_SIZE = (width - spacing.md * 2 - spacing.sm) / 2
-const API_BASE = 'http://192.168.43.184:3000'
 
 function mediaUri(url: string) {
   return url.startsWith('http') ? url : `${API_BASE}${url}`

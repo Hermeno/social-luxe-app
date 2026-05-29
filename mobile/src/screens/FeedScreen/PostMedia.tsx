@@ -2,8 +2,8 @@ import React, { useEffect } from 'react'
 import { Image, StyleSheet } from 'react-native'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { Post } from '../../types'
+import { API_BASE } from '../../config'
 
-const API_BASE = 'http://192.168.43.184:3000'
 
 function resolveMedia(url: string) {
   return url.startsWith('http') ? url : `${API_BASE}${url}`

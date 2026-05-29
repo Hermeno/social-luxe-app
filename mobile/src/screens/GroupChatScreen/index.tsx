@@ -20,8 +20,8 @@ import { colors, fonts, spacing, radius } from '../../theme'
 import VoiceRecorder from '../../components/VoiceRecorder'
 import VoicePlayer from '../../components/VoicePlayer'
 import AvatarImage from '../../components/AvatarImage'
+import { API_BASE } from '../../config'
 
-const API_BASE = 'http://192.168.43.184:3000'
 
 type Route = RouteProp<AppStackParams, 'GroupChat'>
 

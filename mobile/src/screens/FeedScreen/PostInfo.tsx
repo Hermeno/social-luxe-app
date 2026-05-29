@@ -5,6 +5,7 @@ import { Post } from '../../types'
 import { colors, fonts } from '../../theme'
 import { useAuthStore } from '../../store/auth.store'
 import { toggleFollow, getFollowStatus } from '../../services/follow.service'
+import AvatarImage from '../../components/AvatarImage'
 
 interface Props {
   post: Post
@@ -47,7 +48,6 @@ export default function PostInfo({ post, isActive }: Props) {
     }
   }, [isActive])
 
-  // Load initial follow status
   useEffect(() => {
     if (isSelf) return
     getFollowStatus(post.user.id)
@@ -74,26 +74,35 @@ export default function PostInfo({ post, isActive }: Props) {
 
   return (
     <Animated.View style={[s.container, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-      {/* Name + follow button on the same row */}
+      {/* Avatar + Name + follow button */}
       <View style={s.userRow}>
-        <Text style={s.username}>{post.user.name}</Text>
-        {post.extended && (
-          <View style={s.extBadge}>
-            <Text style={s.extBadgeText}>+24h</Text>
-          </View>
-        )}
-        {!isSelf && (
-          <TouchableOpacity
-            style={[s.followBtn, following && s.followBtnActive]}
-            onPress={handleFollow}
-            activeOpacity={0.75}
-            disabled={loadingFollow}
-          >
-            <Text style={[s.followTxt, following && s.followTxtActive]}>
-              {following ? 'Seguindo' : 'Seguir'}
-            </Text>
-          </TouchableOpacity>
-        )}
+        <AvatarImage
+          uri={post.user.avatar}
+          size={32}
+          borderColor="rgba(255,255,255,0.8)"
+          borderWidth={1}
+        />
+        {/* Name group: username truncates, button stays adjacent */}
+        <View style={s.nameGroup}>
+          {post.extended && (
+            <View style={s.extBadge}>
+              <Text style={s.extBadgeText}>+24h</Text>
+            </View>
+          )}
+          <Text style={s.username} numberOfLines={1}>{post.user.name}</Text>
+          {!isSelf && (
+            <TouchableOpacity
+              style={s.followBtn}
+              onPress={handleFollow}
+              activeOpacity={0.7}
+              disabled={loadingFollow}
+            >
+              <Text style={s.followTxt}>
+                {following ? 'Seguindo' : 'Seguir'}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {/* Caption */}
@@ -106,13 +115,14 @@ export default function PostInfo({ post, isActive }: Props) {
         </TouchableOpacity>
       )}
 
+      {/* Timer row */}
       <View style={s.timerRow}>
         <Animated.View style={{
           transform: [{
             rotate: clockAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }),
           }],
         }}>
-          <Ionicons name="time-outline" size={14} color="rgba(255,255,255,0.5)" />
+          <Ionicons name="time-outline" size={14} color="rgba(255,255,255,0.65)" />
         </Animated.View>
         <Text style={s.timer}> {timeLeft()}</Text>
       </View>
@@ -121,27 +131,33 @@ export default function PostInfo({ post, isActive }: Props) {
 }
 
 const s = StyleSheet.create({
-  container:       { position: 'absolute', left: 16, bottom: 120, right: 90, gap: 6, zIndex: 30 },
-  userRow:         { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  username:        { color: colors.white, fontFamily: fonts.extraBold, fontSize: 16, letterSpacing: -0.5 },
-  extBadge:        { backgroundColor: colors.primary, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
-  extBadgeText:    { color: colors.white, fontFamily: fonts.bold, fontSize: 10, letterSpacing: 0.3 },
+  container: { position: 'absolute', left: 16, bottom: 120, right: 90, gap: 8, zIndex: 30 },
+
+  userRow:   { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  nameGroup: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
+  username: {
+    color: colors.white, fontFamily: fonts.semiBold, fontSize: 13,
+    letterSpacing: -0.2, flexShrink: 1,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+
+  extBadge:     { backgroundColor: colors.primary, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
+  extBadgeText: { color: colors.white, fontFamily: fonts.bold, fontSize: 9, letterSpacing: 0.2 },
 
   followBtn: {
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.75)',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.85)',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
   },
-  followBtnActive: {
-    borderColor: 'rgba(255,255,255,0.35)',
-  },
-  followTxt:       { color: colors.white, fontFamily: fonts.semiBold, fontSize: 12 },
-  followTxtActive: { color: 'rgba(255,255,255,0.55)' },
+  followTxt: { color: colors.white, fontFamily: fonts.medium, fontSize: 11 },
 
-  caption:   { color: 'rgba(255,255,255,0.88)', fontFamily: fonts.medium, fontSize: 13.5, lineHeight: 20 },
-  seeMore:   { color: 'rgba(255,255,255,0.55)', fontFamily: fonts.semiBold },
-  timerRow:  { flexDirection: 'row', alignItems: 'center' },
-  timer:     { color: 'rgba(255,255,255,0.50)', fontFamily: fonts.regular, fontSize: 12, letterSpacing: 0.1 },
+  caption:  { color: 'rgba(255,255,255,0.88)', fontFamily: fonts.regular, fontSize: 13, lineHeight: 19 },
+  seeMore:  { color: 'rgba(255,255,255,0.50)', fontFamily: fonts.medium },
+
+  timerRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  timer:    { color: 'rgba(255,255,255,0.65)', fontFamily: fonts.medium, fontSize: 12, letterSpacing: 0.1 },
 })
