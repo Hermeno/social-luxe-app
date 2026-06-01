@@ -13,10 +13,10 @@ import { fonts } from '../../theme'
 
 type Nav = StackNavigationProp<AuthStackParams>
 
-const PRIMARY = '#FF4B6E'
+const PRIMARY = '#4C8CE4'
 const BG      = '#FFFFFF'
 const INPUT_BG = '#F5F5F7'
-const TEXT     = '#111111'
+const TEXT     = '#1A1A1A'
 const MUTED    = '#9CA3AF'
 
 export default function PhoneScreen() {

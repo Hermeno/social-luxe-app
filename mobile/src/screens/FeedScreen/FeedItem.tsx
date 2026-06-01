@@ -19,7 +19,7 @@ interface Props {
 }
 
 export default function FeedItem({ post, isActive, onCommentPress }: Props) {
-  const uri = post.mediaUrl.startsWith('http') ? post.mediaUrl : `${API_BASE}${post.mediaUrl}`
+  const uri = post.mediaUrl ?? ''.startsWith('http') ? post.mediaUrl ?? '' : `${API_BASE}${post.mediaUrl ?? ''}`
 
   const player = useVideoPlayer(
     post.mediaType === 'VIDEO' ? { uri } : null,

@@ -128,7 +128,7 @@ export default function PostViewerScreen() {
     if (commentPost) return
 
     if (post.mediaType === 'VIDEO') {
-      player.replace({ uri: resolveMedia(post.mediaUrl) })
+      player.replace({ uri: resolveMedia(post.mediaUrl ?? '') })
       player.play()
     }
 
@@ -194,7 +194,7 @@ export default function PostViewerScreen() {
         ) : (
           <Image
             key={post.id}
-            source={{ uri: resolveMedia(post.mediaUrl) }}
+            source={{ uri: resolveMedia(post.mediaUrl ?? '') }}
             style={videoStyle}
             contentFit="contain"
           />

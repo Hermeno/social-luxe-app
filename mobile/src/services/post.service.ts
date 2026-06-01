@@ -6,9 +6,20 @@ export async function getFeed(page = 1): Promise<Post[]> {
   return res.data.data
 }
 
-export async function createPost(mediaUri: string, mediaType: 'IMAGE' | 'VIDEO', caption?: string) {
+export async function createPost(
+  mediaUri: string | null,
+  mediaType: 'IMAGE' | 'VIDEO' | 'TEXT',
+  caption?: string,
+  bgColor?: string,
+) {
+  if (mediaType === 'TEXT') {
+    // Text post — JSON body, no multipart
+    const res = await api.post<ApiResponse<Post>>('/posts', { caption, bgColor })
+    return res.data.data
+  }
+
   const form = new FormData()
-  const filename = mediaUri.split('/').pop() ?? 'media'
+  const filename = mediaUri!.split('/').pop() ?? 'media'
   const type = mediaType === 'VIDEO' ? 'video/mp4' : 'image/jpeg'
   form.append('media', { uri: mediaUri, name: filename, type } as unknown as Blob)
   if (caption) form.append('caption', caption)

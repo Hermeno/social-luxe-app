@@ -33,8 +33,8 @@ import CommentSheet from '../../components/CommentSheet'
 import { API_BASE } from '../../config'
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window')
-const RING_SIZE      = 62
-const AVATAR_SIZE    = 50
+const RING_SIZE      = 72
+const AVATAR_SIZE    = 58
 const IMAGE_DURATION = 30000
 
 type Nav = StackNavigationProp<AppStackParams>
@@ -64,30 +64,28 @@ function BubbleItem({
 }) {
   const unviewedCount = item.posts.length - viewedCount
 
-  const opacity   = useRef(new Animated.Value(0)).current
-  const entryY    = useRef(new Animated.Value(14)).current
-  const scaleAnim = useRef(new Animated.Value(1)).current
-  const spinAnim  = useRef(new Animated.Value(0)).current
-
+  const opacity    = useRef(new Animated.Value(0)).current
+  const entryY     = useRef(new Animated.Value(14)).current
+  const scaleAnim  = useRef(new Animated.Value(1)).current
+  const spinAnim   = useRef(new Animated.Value(0)).current
   // Entrance stagger
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(opacity,  { toValue: 1, duration: 280, delay: index * 55, useNativeDriver: true }),
-      Animated.spring(entryY,   { toValue: 0, speed: 18, bounciness: 7, delay: index * 55, useNativeDriver: true } as any),
+      Animated.timing(opacity, { toValue: 1, duration: 280, delay: index * 55, useNativeDriver: true }),
+      Animated.spring(entryY,  { toValue: 0, speed: 18, bounciness: 7, delay: index * 55, useNativeDriver: true } as any),
     ]).start()
   }, [])
 
   // Active scale pulse
   useEffect(() => {
     Animated.spring(scaleAnim, {
-      toValue: isActive ? 1.10 : 1,
+      toValue: isActive ? 1.08 : 1,
       useNativeDriver: true,
       speed: 20, bounciness: 8,
     }).start()
   }, [isActive])
 
   function handlePress() {
-    // Ring jiggle on tap
     spinAnim.setValue(0)
     Animated.sequence([
       Animated.timing(spinAnim, { toValue: 1, duration: 180, useNativeDriver: true }),
@@ -96,14 +94,13 @@ function BubbleItem({
     onPress()
   }
 
-  const rotate = spinAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '22deg'],
-  })
+  const rotate = spinAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '20deg'] })
 
   return (
     <Animated.View style={{ opacity, transform: [{ translateY: entryY }] }}>
       <TouchableOpacity style={s.bubbleItem} onPress={handlePress} activeOpacity={0.75}>
+
+        {/* Ring + badge container */}
         <View style={s.ringContainer}>
           <Animated.View style={[s.ringWrap, { transform: [{ scale: scaleAnim }, { rotate }] }]}>
             <SegmentedRing
@@ -117,14 +114,9 @@ function BubbleItem({
             </View>
           </Animated.View>
 
-          {unviewedCount > 0 && (
-            <View style={s.unviewedBadge}>
-              <Text style={s.unviewedBadgeTxt}>{unviewedCount > 9 ? '9+' : unviewedCount}</Text>
-            </View>
-          )}
         </View>
 
-        <Text style={[s.bubbleName, isActive && s.bubbleNameActive]} numberOfLines={1}>
+        <Text style={s.bubbleName} numberOfLines={1}>
           {item.user.name.split(' ')[0]}
         </Text>
       </TouchableOpacity>
@@ -157,7 +149,7 @@ function ProgressBars({ count, current, progress }: {
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function FeedScreen() {
-  const { posts, refresh, loadMore, prependPost } = useFeed()
+  const { posts, refresh, loadMore, prependPost, removePost, updatePost } = useFeed()
   const nav       = useNavigation<Nav>()
   const { top }   = useSafeAreaInsets()
   const isFocused = useIsFocused()
@@ -243,6 +235,12 @@ export default function FeedScreen() {
   const post = flatPosts[currentIndex]
   postRef.current = post
 
+  // Total posts not yet viewed — shown as badge on Home icon in ActionBar
+  const newPostsCount = useMemo(
+    () => flatPosts.filter((p) => !viewedIds.has(p.id)).length,
+    [flatPosts, viewedIds],
+  )
+
   function viewedCountFor(group: UserGroup): number {
     return group.posts.filter((p) => viewedIds.has(p.id)).length
   }
@@ -316,8 +314,14 @@ export default function FeedScreen() {
     }
 
     function revealMedia() {
-      // Crossfade thumbnail → full media (300 ms)
       Animated.timing(mediaOpacity, { toValue: 1, duration: 300, useNativeDriver: true }).start()
+    }
+
+    // TEXT posts: show immediately, run timer like an image
+    if (post.mediaType === 'TEXT') {
+      mediaOpacity.setValue(1)
+      startProgress(IMAGE_DURATION)
+      return () => { progressRef.current?.stop() }
     }
 
     if (post.mediaType === 'VIDEO') {
@@ -325,7 +329,7 @@ export default function FeedScreen() {
       let started   = false
       let cancelled = false
 
-      const remoteUrl = resolveMedia(post.mediaUrl)
+      const remoteUrl = resolveMedia(post.mediaUrl ?? '')
       const mountDelay = setTimeout(async () => {
         if (cancelled) return
         // Use local cached file if available, stream from Cloudinary otherwise
@@ -387,7 +391,7 @@ export default function FeedScreen() {
     const urls = flatPosts
       .slice(currentIndex + 1, currentIndex + 3)
       .filter((p) => p.mediaType === 'VIDEO')
-      .map((p) => resolveMedia(p.mediaUrl))
+      .map((p) => resolveMedia(p.mediaUrl ?? ''))
     if (urls.length > 0) prefetchMedia(urls)
   }, [currentIndex])
 
@@ -448,20 +452,14 @@ export default function FeedScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        <View style={[s.header, { paddingTop: top + 10 }]}>
+        <View style={[s.header, { paddingTop: top + 8 }]}>
+          <TouchableOpacity onPress={() => setSearchMode(true)} activeOpacity={0.7} style={s.headerSideBtn}>
+            <Ionicons name="search-outline" size={22} color={colors.gray800} />
+          </TouchableOpacity>
           <Text style={s.logo}>luxe</Text>
-          <View style={s.headerRight}>
-            <TouchableOpacity onPress={() => setSearchMode(true)} activeOpacity={0.75} style={s.headerBtn}>
-              <View style={s.headerIconWrap}>
-                <Ionicons name="search" size={20} color={colors.white} />
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => nav.navigate('Profile', {})} activeOpacity={0.75} style={s.headerBtn}>
-              <View style={s.headerIconWrap}>
-                <Ionicons name="person" size={20} color={colors.white} />
-              </View>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity onPress={() => nav.navigate('Profile', {})} activeOpacity={0.7} style={s.headerSideBtn}>
+            <Ionicons name="person-outline" size={22} color={colors.gray800} />
+          </TouchableOpacity>
         </View>
       )}
 
@@ -480,11 +478,13 @@ export default function FeedScreen() {
             <TouchableOpacity
               style={s.bubbleItem}
               onPress={() => nav.navigate('Create' as any)}
-              activeOpacity={0.8}
+              activeOpacity={0.75}
             >
-              <View style={s.ringWrap}>
-                <View style={s.createCircle}>
-                  <Ionicons name="add" size={32} color={colors.white} />
+              <View style={s.ringContainer}>
+                <View style={s.createRing}>
+                  <View style={s.createCircle}>
+                    <Ionicons name="add" size={28} color={colors.white} />
+                  </View>
                 </View>
               </View>
               <Text style={s.bubbleName}>Criar</Text>
@@ -525,45 +525,58 @@ export default function FeedScreen() {
           {/* ── Media: thumbnail → full-media crossfade ──────────────────── */}
           <View style={s.mediaClip} renderToHardwareTextureAndroid>
 
-            {/* Layer 1: blurred thumbnail — tiny file, appears instantly */}
-            <Image
-              source={{ uri: post.thumbnailUrl ?? resolveMedia(post.mediaUrl) }}
-              style={[videoStyle, s.absLayer]}
-              contentFit="cover"
-              cachePolicy="disk"
-              recyclingKey={`thumb-${post.id}`}
-            />
-
-            {/* Layer 2: full-resolution media — fades in when ready */}
-            <Animated.View style={[s.absLayer, { opacity: mediaOpacity }]}>
-              {post.mediaType === 'VIDEO' ? (
-                <VideoView
-                  player={player}
-                  style={videoStyle}
-                  contentFit="cover"
-                  nativeControls={false}
-                />
-              ) : (
+            {post.mediaType === 'TEXT' ? (
+              /* TEXT post — full-screen colour card */
+              <View style={[s.absLayer, s.textCard, { backgroundColor: post.bgColor ?? '#FF4B6E' }]}>
+                <Text style={s.textCardContent}>{post.caption}</Text>
+              </View>
+            ) : (
+              <>
+                {/* Layer 1: blurred thumbnail — mesma proporção da imagem final */}
                 <Image
-                  key={post.id}
-                  source={{ uri: resolveMedia(post.mediaUrl) }}
-                  style={videoStyle}
-                  contentFit="contain"
+                  source={{ uri: post.thumbnailUrl ?? resolveMedia(post.mediaUrl ?? '') }}
+                  style={s.absLayer}
+                  contentFit={post.mediaType === 'VIDEO' ? 'cover' : 'contain'}
                   cachePolicy="disk"
-                  recyclingKey={post.id}
-                  onLoadEnd={() => {
-                    Animated.timing(mediaOpacity, {
-                      toValue: 1, duration: 280, useNativeDriver: true,
-                    }).start()
-                  }}
+                  recyclingKey={`thumb-${post.id}`}
                 />
-              )}
-            </Animated.View>
+
+                {/* Layer 2: media completa — vídeo cover, imagem contain (sem forçar) */}
+                <Animated.View style={[s.absLayer, { opacity: mediaOpacity }]}>
+                  {post.mediaType === 'VIDEO' ? (
+                    <VideoView
+                      player={player}
+                      style={StyleSheet.absoluteFill}
+                      contentFit="cover"
+                      nativeControls={false}
+                    />
+                  ) : (
+                    <Image
+                      key={post.id}
+                      source={{ uri: resolveMedia(post.mediaUrl ?? '') }}
+                      style={s.absLayer}
+                      contentFit="contain"
+                      cachePolicy="disk"
+                      recyclingKey={post.id}
+                      onLoadEnd={() => {
+                        Animated.timing(mediaOpacity, {
+                          toValue: 1, duration: 200, useNativeDriver: true,
+                        }).start()
+                      }}
+                    />
+                  )}
+                </Animated.View>
+              </>
+            )}
 
           </View>
 
-          <LinearGradient colors={gradients.feedTop}    style={s.topGradient} />
-          <LinearGradient colors={gradients.feedBottom} style={s.bottomGradient} />
+          {post.mediaType !== 'TEXT' && (
+            <>
+              <LinearGradient colors={gradients.feedTop}    style={s.topGradient} />
+              <LinearGradient colors={gradients.feedBottom} style={s.bottomGradient} />
+            </>
+          )}
 
           {currentGroup && (
             <View style={s.progressWrap} pointerEvents="none">
@@ -592,13 +605,26 @@ export default function FeedScreen() {
             key={`bar-${post.id}`}
             post={post}
             onCommentPress={() => setCommentPost(post)}
+            newPostsCount={newPostsCount}
+            onDeleted={(id) => { removePost(id); setCurrentIndex((i) => Math.max(0, i - 1)) }}
+            onEdited={(id, caption) => updatePost(id, caption)}
           />
         </View>
       ) : (
         <View style={s.emptyViewer}>
-          <Ionicons name="images-outline" size={52} color={colors.gray200} />
-          <Text style={s.emptyText}>Nenhuma publicação</Text>
-          <Text style={s.emptySub}>Siga pessoas para ver posts aqui</Text>
+          <View style={s.emptyIconWrap}>
+            <Ionicons name="people-outline" size={48} color="#4C8CE4" />
+          </View>
+          <Text style={s.emptyTitle}>O teu feed está vazio</Text>
+          <Text style={s.emptySub}>Segue pessoas para ver as publicações delas aqui.</Text>
+          <TouchableOpacity
+            style={s.emptyBtn}
+            onPress={() => nav.navigate('Search')}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="search" size={18} color="#fff" />
+            <Text style={s.emptyBtnText}>Encontrar pessoas a seguir</Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -614,12 +640,23 @@ const s = StyleSheet.create({
 
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.md, paddingBottom: 4,
+    paddingHorizontal: 16, paddingBottom: 10,
     backgroundColor: colors.white,
   },
-  logo:        { fontFamily: fonts.extraBold, fontSize: 28, color: colors.gray800, letterSpacing: -1.2 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  headerBtn:   { padding: 4 },
+  logo:          { fontFamily: fonts.extraBold, fontSize: 26, color: colors.gray800, letterSpacing: -1.2 },
+  headerSideBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  headerRight:   { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  headerBtn:     { padding: 4 },
+  headerIconGroup: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: colors.gray100,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.gray200,
+    overflow: 'hidden',
+  },
+  headerGroupBtn:     { paddingHorizontal: 13, paddingVertical: 9 },
+  headerGroupDivider: { width: 1, height: 18, backgroundColor: colors.gray200 },
 
   searchBar: {
     flexDirection: 'row', alignItems: 'center',
@@ -642,32 +679,34 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
 
-  // Ring container (positions badge on top of animated ring)
   ringContainer: {
     width: RING_SIZE, height: RING_SIZE,
     alignItems: 'center', justifyContent: 'center',
   },
-  unviewedBadge: {
-    position: 'absolute', top: -1, right: -3,
-    minWidth: 18, height: 18, borderRadius: 9,
-    backgroundColor: colors.primary,
-    alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: 4,
-    borderWidth: 1.5, borderColor: colors.white,
-  },
-  unviewedBadgeTxt: { fontSize: 10, fontFamily: fonts.bold, color: colors.white },
 
-  bubbleRow:        { flexGrow: 0, flexShrink: 0 },
-  bubbleList:       { paddingHorizontal: 14, paddingVertical: 5, gap: 12 },
-  bubbleItem:       { alignItems: 'center', gap: 4, width: RING_SIZE },
-  ringWrap:         { width: RING_SIZE, height: RING_SIZE, alignItems: 'center', justifyContent: 'center' },
-  createCircle:     {
+
+  bubbleRow:    { flexGrow: 0, flexShrink: 0, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.gray200 },
+  bubbleList:   { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 10, gap: 14 },
+  bubbleItem:   { alignItems: 'center', gap: 5, width: RING_SIZE },
+  ringWrap:     { width: RING_SIZE, height: RING_SIZE, alignItems: 'center', justifyContent: 'center' },
+
+  // "Criar" button — mesma dimensão que os avatares com anel
+  createRing: {
+    width: RING_SIZE, height: RING_SIZE,
+    borderRadius: RING_SIZE / 2,
+    borderWidth: 1.5,
+    borderColor: colors.gray200,
+    borderStyle: 'dashed',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  createCircle: {
     width: AVATAR_SIZE, height: AVATAR_SIZE, borderRadius: AVATAR_SIZE / 2,
     backgroundColor: colors.primary,
     alignItems: 'center', justifyContent: 'center',
   },
+
   avatarCenter:     { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
-  bubbleName:       { color: colors.black, fontFamily: fonts.bold, fontSize: 11, textAlign: 'center' },
+  bubbleName:       { color: '#1A1A1A', fontFamily: fonts.medium, fontSize: 11, textAlign: 'center', letterSpacing: -0.1 },
   bubbleNameActive: { color: colors.primary },
   noBubbles:        { paddingHorizontal: 20, paddingVertical: 30 },
   noBubblesText:    { color: colors.gray400, fontFamily: fonts.regular, fontSize: 13 },
@@ -688,6 +727,23 @@ const s = StyleSheet.create({
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
   },
+  textCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 36,
+    paddingVertical: 60,
+  },
+  textCardContent: {
+    fontSize: 30,
+    fontFamily: fonts.semiBold,
+    color: '#fff',
+    textAlign: 'center',
+    lineHeight: 42,
+    letterSpacing: -0.5,
+    textShadowColor: 'rgba(0,0,0,0.2)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
+  },
   topGradient:    { position: 'absolute', top: 0, left: 0, right: 0, height: 120 },
   bottomGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 320 },
 
@@ -704,7 +760,10 @@ const s = StyleSheet.create({
   leftTap:  { position: 'absolute', left: 0, top: 0, bottom: 155, width: SCREEN_W * 0.35, zIndex: 10 },
   rightTap: { position: 'absolute', left: SCREEN_W * 0.35, right: 80, top: 0, bottom: 155, zIndex: 10 },
 
-  emptyViewer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
-  emptyText:   { color: colors.gray600, fontFamily: fonts.semiBold, fontSize: 16 },
-  emptySub:    { color: colors.gray400, fontFamily: fonts.regular, fontSize: 13 },
+  emptyViewer:  { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 36, gap: 14 },
+  emptyIconWrap:{ width: 88, height: 88, borderRadius: 44, backgroundColor: 'rgba(255,75,110,0.1)', alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  emptyTitle:   { fontSize: 20, fontFamily: fonts.semiBold, color: colors.gray800, letterSpacing: -0.4, textAlign: 'center' },
+  emptySub:     { fontSize: 14, fontFamily: fonts.regular, color: colors.gray400, textAlign: 'center', lineHeight: 20 },
+  emptyBtn:     { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, backgroundColor: '#4C8CE4', paddingHorizontal: 24, paddingVertical: 14, borderRadius: 14 },
+  emptyBtnText: { color: '#fff', fontFamily: fonts.semiBold, fontSize: 15 },
 })

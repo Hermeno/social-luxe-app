@@ -18,10 +18,11 @@ export interface User {
 export interface Post {
   id: string
   userId: string
-  mediaUrl: string
-  thumbnailUrl: string   // Cloudinary blurred thumbnail — tiny, loads instantly
-  mediaType: MediaType
+  mediaUrl: string | null
+  thumbnailUrl: string
+  mediaType: 'IMAGE' | 'VIDEO' | 'TEXT'
   caption: string | null
+  bgColor: string | null   // background colour for TEXT posts
   expiresAt: string
   extended: boolean
   createdAt: string

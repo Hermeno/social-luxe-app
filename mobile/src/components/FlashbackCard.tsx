@@ -28,9 +28,9 @@ export default function FlashbackCard({ post, onDismiss }: Props) {
     }).start()
   }, [])
 
-  const thumbUri = post.mediaUrl.startsWith('http')
-    ? post.mediaUrl
-    : `${API_BASE}${post.mediaUrl}`
+  const thumbUri = post.mediaUrl ?? ''.startsWith('http')
+    ? post.mediaUrl ?? ''
+    : `${API_BASE}${post.mediaUrl ?? ''}`
 
   const caption = post.caption ?? ''
   const displayed = caption.length > 60 ? caption.slice(0, 60) + '…' : caption

@@ -34,7 +34,7 @@ function notifIcon(type: AppNotification['type']): string {
 
 function notifColor(type: AppNotification['type']): string {
   switch (type) {
-    case 'like':         return '#FF4B6E'
+    case 'like':         return '#4C8CE4'
     case 'comment':      return '#3B82F6'
     case 'reaction':     return '#F59E0B'
     case 'message':      return '#10B981'

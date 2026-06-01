@@ -34,7 +34,7 @@ export default function BookmarksScreen() {
   }, [])
 
   function mediaUri(post: Post) {
-    return post.mediaUrl.startsWith('http') ? post.mediaUrl : `${API_BASE}${post.mediaUrl}`
+    return post.mediaUrl ?? ''.startsWith('http') ? post.mediaUrl ?? '' : `${API_BASE}${post.mediaUrl ?? ''}`
   }
 
   return (

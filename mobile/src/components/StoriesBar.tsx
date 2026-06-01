@@ -120,7 +120,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: '#111111',
+    borderColor: '#1A1A1A',
   },
   label: {
     color: 'rgba(255,255,255,0.75)',

@@ -244,7 +244,7 @@ export default function ProfileScreen() {
         }
         renderItem={({ item }) => (
           <Image
-            source={{ uri: item.mediaUrl.startsWith('http') ? item.mediaUrl : `${API_BASE}${item.mediaUrl}` }}
+            source={{ uri: item.mediaUrl ?? ''.startsWith('http') ? item.mediaUrl ?? '' : `${API_BASE}${item.mediaUrl ?? ''}` }}
             style={s.grid}
             resizeMode="cover"
           />

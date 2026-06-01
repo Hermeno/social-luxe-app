@@ -359,7 +359,7 @@ export default function ChatScreen() {
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
-const MINE_COLOR   = '#0A0A0A'
+const MINE_COLOR   = '#1A1A1A'
 const THEIRS_COLOR = '#FFFFFF'
 const R = 18
 
@@ -426,7 +426,7 @@ const t = StyleSheet.create({
   dateLine:    { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(0,0,0,0.15)' },
   dateSepTxt:  {
     fontSize: 11, color: 'rgba(0,0,0,0.4)', fontFamily: fonts.medium,
-    backgroundColor: '#EBEBEB', paddingHorizontal: 10, paddingVertical: 3,
+    backgroundColor: '#EAEAEA', paddingHorizontal: 10, paddingVertical: 3,
     borderRadius: 10,
   },
 

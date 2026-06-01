@@ -15,7 +15,7 @@ interface Props {
 }
 
 export default function PostMedia({ post, isActive }: Props) {
-  const uri    = resolveMedia(post.mediaUrl)
+  const uri    = resolveMedia(post.mediaUrl ?? '')
   const player = useVideoPlayer(
     post.mediaType === 'VIDEO' ? { uri } : null,
     (p) => { p.loop = true; p.muted = false },

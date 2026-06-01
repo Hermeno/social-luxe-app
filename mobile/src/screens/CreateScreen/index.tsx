@@ -1,139 +1,293 @@
-import React, { useState } from 'react'
-import { Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, View } from 'react-native'
+import React, { useState, useRef } from 'react'
+import {
+  Text, TextInput, TouchableOpacity, StyleSheet,
+  Alert, ActivityIndicator, View, Dimensions,
+  KeyboardAvoidingView, Platform, ScrollView,
+} from 'react-native'
 import * as Haptics from 'expo-haptics'
 import * as ImagePicker from 'expo-image-picker'
-import * as ImageManipulator from 'expo-image-manipulator'
+import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { colors, spacing, radius, fonts } from '../../theme'
+import { fonts } from '../../theme'
 import MediaPreview from './MediaPreview'
-import PickButtons from './PickButtons'
 import { createPost } from '../../services/post.service'
 import { useFeedStore } from '../../store/feed.store'
 import { toast } from '../../utils/toast'
 
-type Media = { uri: string; type: 'image' | 'video' }
+const { width: W, height: H } = Dimensions.get('window')
+const PRIMARY = '#4C8CE4'
 
-async function compressImage(uri: string): Promise<string> {
-  const result = await ImageManipulator.manipulateAsync(
-    uri,
-    [{ resize: { width: 1080 } }],
-    { compress: 0.82, format: ImageManipulator.SaveFormat.JPEG },
-  )
-  return result.uri
-}
+const TEXT_BG_COLORS = [
+  '#FF4B6E',  // rosa luxe
+  '#4C8CE4',  // azul
+  '#1A1A2E',  // navy
+  '#6C3483',  // roxo
+  '#1E8449',  // verde
+  '#E67E22',  // laranja
+  '#17202A',  // preto
+  '#B7950B',  // dourado
+]
+
+type Tab   = 'photo' | 'text'
+type Media = { uri: string }
 
 export default function CreateScreen() {
-  const nav    = useNavigation()
-  const { top } = useSafeAreaInsets()
+  const nav        = useNavigation()
+  const { top, bottom } = useSafeAreaInsets()
+  const [tab,     setTab]     = useState<Tab>('photo')
   const [media,   setMedia]   = useState<Media | null>(null)
   const [caption, setCaption] = useState('')
+  const [textBg,  setTextBg]  = useState(TEXT_BG_COLORS[0])
   const [loading, setLoading] = useState(false)
+  const textRef = useRef<TextInput>(null)
 
   const setPendingPost = useFeedStore((s) => s.setPendingPost)
 
-  async function pickMedia(type: 'image' | 'video') {
+  async function pickPhoto() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (status !== 'granted') return Alert.alert('Permissão negada', 'Precisamos acesso à galeria.')
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: type === 'video' ? 'videos' : 'images',
-      quality: 0.85, videoMaxDuration: 60,
-    })
-    if (!result.canceled && result.assets[0]) {
-      const uri = result.assets[0].uri
-      const finalUri = type === 'image' ? await compressImage(uri) : uri
-      setMedia({ uri: finalUri, type })
-    }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', quality: 1 })
+    if (!result.canceled && result.assets[0]) setMedia({ uri: result.assets[0].uri })
   }
 
   async function handlePublish() {
-    if (!media) return Alert.alert('Aviso', 'Selecione uma foto ou vídeo')
+    if (tab === 'photo' && !media) return Alert.alert('', 'Escolhe uma foto primeiro')
+    if (tab === 'text'  && !caption.trim()) return Alert.alert('', 'Escreve alguma coisa')
     setLoading(true)
     try {
-      const newPost = await createPost(
-        media.uri,
-        media.type === 'video' ? 'VIDEO' : 'IMAGE',
-        caption.trim() || undefined,
-      )
-
-      // Inject post into feed immediately — no wait for refresh
+      const newPost = tab === 'photo'
+        ? await createPost(media!.uri, 'IMAGE', caption.trim() || undefined)
+        : await createPost(null, 'TEXT', caption.trim(), textBg)
       if (newPost) setPendingPost(newPost)
-
-      setMedia(null)
-      setCaption('')
+      setMedia(null); setCaption(''); setTextBg(TEXT_BG_COLORS[0])
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-      toast.success('Publicado! 🎉', 'Visível por 24 horas')
-
-      // Navigate to Feed tab straight away
+      toast.success('Publicado!', 'Visível por 24 horas')
       nav.navigate('Feed' as never)
     } catch (e: unknown) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
-      toast.error('Erro ao publicar', e instanceof Error ? e.message : 'Tenta novamente')
-    } finally {
-      setLoading(false)
-    }
+      toast.error('Erro', e instanceof Error ? e.message : 'Tenta novamente')
+    } finally { setLoading(false) }
   }
 
+  const canPublish = tab === 'photo' ? !!media : !!caption.trim()
+
   return (
-    <ScrollView style={s.container} contentContainerStyle={s.content}>
-      <View style={[s.header, { paddingTop: top + 16 }]}>
-        <Text style={s.title}>Nova{'\n'}Publicação</Text>
-        <View style={s.dot24h}>
-          <Text style={s.dot24hText}>24h</Text>
+    <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* ── Top bar ───────────────────────────────────────────────── */}
+      <View style={[s.topBar, { paddingTop: top + 4 }]}>
+        <TouchableOpacity onPress={() => nav.goBack()} style={s.backBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Ionicons name="chevron-back" size={26} color="#1A1A1A" />
+        </TouchableOpacity>
+
+        <View style={s.tabs}>
+          <TouchableOpacity onPress={() => { setTab('photo'); setMedia(null) }} style={[s.tab, tab === 'photo' && s.tabActive]}>
+            <Text style={[s.tabText, tab === 'photo' && s.tabTextActive]}>Foto</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => { setTab('text'); setTimeout(() => textRef.current?.focus(), 100) }} style={[s.tab, tab === 'text' && s.tabActive]}>
+            <Text style={[s.tabText, tab === 'text' && s.tabTextActive]}>Texto</Text>
+          </TouchableOpacity>
         </View>
+
+        <TouchableOpacity
+          onPress={handlePublish}
+          disabled={!canPublish || loading}
+          style={[s.publishBtn, (!canPublish || loading) && s.publishOff]}
+        >
+          {loading
+            ? <ActivityIndicator color="#fff" size="small" />
+            : <Text style={s.publishText}>Publicar</Text>
+          }
+        </TouchableOpacity>
       </View>
 
-      {media
-        ? <MediaPreview uri={media.uri} type={media.type} onRemove={() => setMedia(null)} />
-        : <PickButtons onPickImage={() => pickMedia('image')} onPickVideo={() => pickMedia('video')} />
-      }
+      {/* ── Photo tab ─────────────────────────────────────────────── */}
+      {tab === 'photo' && (
+        <ScrollView contentContainerStyle={s.photoContent} keyboardShouldPersistTaps="handled">
+          {media ? (
+            <MediaPreview uri={media.uri} type="image" onRemove={() => setMedia(null)} />
+          ) : (
+            <TouchableOpacity style={s.photoPlaceholder} onPress={pickPhoto} activeOpacity={0.7}>
+              <View style={s.photoIconWrap}>
+                <Ionicons name="image-outline" size={36} color="#C0C0C8" />
+              </View>
+              <Text style={s.photoLabel}>Toca para escolher uma foto</Text>
+              <Text style={s.photoSub}>da tua galeria</Text>
+            </TouchableOpacity>
+          )}
 
-      <TextInput
-        style={s.caption}
-        placeholder="Escreva uma legenda..."
-        placeholderTextColor="rgba(255,255,255,0.3)"
-        value={caption}
-        onChangeText={setCaption}
-        multiline
-        maxLength={200}
-      />
+          {/* Caption — clean, no border, just a line */}
+          <View style={s.captionWrap}>
+            <TextInput
+              style={s.captionInput}
+              placeholder="Escreve uma legenda..."
+              placeholderTextColor="#C0C0C8"
+              value={caption}
+              onChangeText={setCaption}
+              multiline
+              maxLength={200}
+            />
+          </View>
 
-      <TouchableOpacity
-        style={[s.publishBtn, (!media || loading) && s.disabled]}
-        onPress={handlePublish}
-        disabled={!media || loading}
-        activeOpacity={0.85}
-      >
-        {loading
-          ? <ActivityIndicator color={colors.white} />
-          : <Text style={s.publishText}>Publicar</Text>
-        }
-      </TouchableOpacity>
-    </ScrollView>
+          <View style={s.badge24h}>
+            <Ionicons name="time-outline" size={12} color={PRIMARY} />
+            <Text style={s.badge24hText}>Esta publicação expira em 24h</Text>
+          </View>
+        </ScrollView>
+      )}
+
+      {/* ── Text tab — o utilizador escreve DENTRO da cor ─────────── */}
+      {tab === 'text' && (
+        <View style={s.textTabWrap}>
+          {/* Card colorida — input directo dentro dela */}
+          <TouchableOpacity
+            style={[s.textCard, { backgroundColor: textBg }]}
+            activeOpacity={1}
+            onPress={() => textRef.current?.focus()}
+          >
+            <TextInput
+              ref={textRef}
+              style={s.textCardInput}
+              placeholder="Escreve aqui..."
+              placeholderTextColor="rgba(255,255,255,0.45)"
+              value={caption}
+              onChangeText={setCaption}
+              multiline
+              maxLength={280}
+              autoFocus
+              textAlign="center"
+              textAlignVertical="center"
+              selectionColor="rgba(255,255,255,0.6)"
+            />
+            <Text style={s.charCount}>{caption.length}/280</Text>
+          </TouchableOpacity>
+
+          {/* Selector de cor — na parte de baixo */}
+          <View style={[s.colorBar, { paddingBottom: bottom + 16 }]}>
+            <Text style={s.colorBarLabel}>COR DE FUNDO</Text>
+            <View style={s.colorRow}>
+              {TEXT_BG_COLORS.map((c) => (
+                <TouchableOpacity
+                  key={c}
+                  onPress={() => { setTextBg(c); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light) }}
+                  activeOpacity={0.8}
+                  style={[s.colorDot, { backgroundColor: c }, textBg === c && s.colorDotActive]}
+                />
+              ))}
+            </View>
+          </View>
+        </View>
+      )}
+    </KeyboardAvoidingView>
   )
 }
 
 const s = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: '#0A0A0A' },
-  content:     { paddingBottom: 120 },
-  header:      {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
-    paddingHorizontal: spacing.lg, paddingBottom: spacing.lg,
+  screen: { flex: 1, backgroundColor: '#fff' },
+
+  /* top bar */
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EAEAEA',
+    gap: 12,
   },
-  title:       { fontSize: 34, fontFamily: fonts.extraBold, color: colors.white, letterSpacing: -1.2, lineHeight: 38 },
-  dot24h:      { backgroundColor: colors.primary, borderRadius: radius.sm, paddingHorizontal: 10, paddingVertical: 5, marginTop: 6 },
-  dot24hText:  { color: colors.white, fontFamily: fonts.bold, fontSize: 12, letterSpacing: 0.5 },
-  caption:     {
-    marginHorizontal: spacing.lg, marginTop: spacing.sm,
-    backgroundColor: '#1A1A1A', borderRadius: radius.md,
-    padding: spacing.md, minHeight: 80,
-    fontSize: 15, fontFamily: fonts.medium, color: colors.white, textAlignVertical: 'top',
+  backBtn: { padding: 4 },
+
+  tabs:          { flex: 1, flexDirection: 'row', justifyContent: 'center', gap: 4 },
+  tab:           { paddingHorizontal: 18, paddingVertical: 7 },
+  tabActive:     { borderBottomWidth: 2, borderBottomColor: PRIMARY },
+  tabText:       { fontSize: 14, fontFamily: fonts.semiBold, color: '#ABABAB' },
+  tabTextActive: { color: '#1A1A1A' },
+
+  publishBtn:  { backgroundColor: PRIMARY, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 8 },
+  publishOff:  { opacity: 0.35 },
+  publishText: { color: '#fff', fontFamily: fonts.semiBold, fontSize: 14 },
+
+  /* photo tab */
+  photoContent: { paddingBottom: 40 },
+  photoPlaceholder: {
+    margin: 20,
+    height: W - 40,
+    borderRadius: 6,
+    backgroundColor: '#FAFAFA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#EAEAEA',
+    borderStyle: 'dashed',
   },
-  publishBtn:  {
-    marginHorizontal: spacing.lg, marginTop: spacing.md,
-    backgroundColor: colors.primary, borderRadius: radius.md,
-    padding: spacing.md + 2, alignItems: 'center',
+  photoIconWrap: {
+    width: 64, height: 64, borderRadius: 32,
+    backgroundColor: '#F0F0F3',
+    alignItems: 'center', justifyContent: 'center',
   },
-  disabled:    { opacity: 0.4 },
-  publishText: { color: colors.white, fontFamily: fonts.bold, fontSize: 16, letterSpacing: -0.2 },
+  photoLabel: { fontSize: 15, fontFamily: fonts.semiBold, color: '#444' },
+  photoSub:   { fontSize: 13, fontFamily: fonts.regular, color: '#ABABAB' },
+
+  captionWrap: {
+    marginHorizontal: 20,
+    marginTop: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EAEAEA',
+  },
+  captionInput: {
+    paddingVertical: 14,
+    fontSize: 15, fontFamily: fonts.regular, color: '#1A1A1A',
+    minHeight: 52,
+  },
+
+  badge24h:     { flexDirection: 'row', alignItems: 'center', gap: 5, marginHorizontal: 20, marginTop: 14 },
+  badge24hText: { fontSize: 12, fontFamily: fonts.regular, color: PRIMARY },
+
+  /* text tab */
+  textTabWrap: { flex: 1 },
+
+  textCard: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    paddingVertical: 40,
+  },
+  textCardInput: {
+    width: '100%',
+    fontSize: 26,
+    fontFamily: fonts.semiBold,
+    color: '#fff',
+    textAlign: 'center',
+    lineHeight: 38,
+    letterSpacing: -0.3,
+    minHeight: 80,
+  },
+  charCount: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    fontSize: 11,
+    fontFamily: fonts.regular,
+    color: 'rgba(255,255,255,0.45)',
+  },
+
+  colorBar: {
+    backgroundColor: '#fff',
+    paddingTop: 16,
+    paddingHorizontal: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#EAEAEA',
+    gap: 12,
+  },
+  colorBarLabel: {
+    fontSize: 11,
+    fontFamily: fonts.semiBold,
+    color: '#ABABAB',
+    letterSpacing: 1,
+  },
+  colorRow: { flexDirection: 'row', gap: 10 },
+  colorDot: { width: 34, height: 34, borderRadius: 17 },
+  colorDotActive: { borderWidth: 3, borderColor: '#1A1A1A' },
 })

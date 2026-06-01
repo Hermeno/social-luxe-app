@@ -14,10 +14,10 @@ import { fonts } from '../../theme'
 import { API_BASE } from '../../config'
 
 /* ─── constants ─────────────────────────────────────────── */
-const PRIMARY  = '#FF4B6E'
+const PRIMARY  = '#4C8CE4'
 const BG       = '#FFFFFF'
 const INPUT_BG = '#F5F5F7'
-const TEXT     = '#111111'
+const TEXT     = '#1A1A1A'
 const MUTED    = '#9CA3AF'
 const { width: W } = Dimensions.get('window')
 const CARD_GAP  = 12

@@ -81,12 +81,19 @@ export function useFeed() {
     }
   }, [hasMore, page])
 
-  // Prepend a single post — used by socket listener and optimistic update
   const prependPost = useCallback((post: Post) => {
     setPosts((prev) => {
       if (prev.find((p) => p.id === post.id)) return prev
       return [post, ...prev]
     })
+  }, [])
+
+  const removePost = useCallback((postId: string) => {
+    setPosts((prev) => prev.filter((p) => p.id !== postId))
+  }, [])
+
+  const updatePost = useCallback((postId: string, caption: string) => {
+    setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, caption } : p))
   }, [])
 
   // ── Real-time: listen for new posts pushed by the server ──────────────────
@@ -102,5 +109,5 @@ export function useFeed() {
     return () => { socket.off('post:new', onNewPost) }
   }, [prependPost])
 
-  return { posts, loading, loadMore, refresh, forceRefresh, prependPost }
+  return { posts, loading, loadMore, refresh, forceRefresh, prependPost, removePost, updatePost }
 }
