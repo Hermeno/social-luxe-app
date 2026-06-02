@@ -9,11 +9,28 @@ export function uploadToCloudinary(
   mimetype: string,
   folder: string = 'luxe',
 ): Promise<string> {
-  const resourceType = mimetype.startsWith('video') ? 'video' : 'image'
+  const isVideo      = mimetype.startsWith('video')
+  const resourceType = isVideo ? 'video' : 'image'
+
+  const options = isVideo
+    ? {
+        folder,
+        resource_type: 'video' as const,
+        // Keep original quality — no re-encoding quality loss
+        quality:     100,
+        // Copy original codec without re-encoding when possible
+        video_codec: 'auto',
+      }
+    : {
+        folder,
+        resource_type: 'image' as const,
+        // Preserve full image quality — no lossy compression on upload
+        quality: 100,
+      }
 
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
-      { folder, resource_type: resourceType },
+      options,
       (err: Error | undefined, result: UploadApiResponse | undefined) => {
         if (err || !result) return reject(err ?? new Error('Upload failed'))
         resolve(result.secure_url)
@@ -36,8 +53,8 @@ export function uploadToCloudinary(
 
 const THUMB_TRANSFORM = 'w_400,h_400,c_fill,e_blur:700,q_3'
 
-export function generateThumbnailUrl(mediaUrl: string, mediaType: MediaType): string {
-  if (!mediaUrl || !mediaUrl.includes('cloudinary.com')) return mediaUrl
+export function generateThumbnailUrl(mediaUrl: string | null, mediaType: MediaType): string {
+  if (mediaType === MediaType.TEXT || !mediaUrl || !mediaUrl.includes('cloudinary.com')) return mediaUrl ?? ''
 
   try {
     if (mediaType === MediaType.VIDEO) {
@@ -60,7 +77,7 @@ export function generateThumbnailUrl(mediaUrl: string, mediaType: MediaType): st
 // ── Attach thumbnailUrl to post objects ────────────────────────────────────────
 
 type WithCount = {
-  mediaUrl: string
+  mediaUrl: string | null
   mediaType: MediaType
   [key: string]: unknown
 }

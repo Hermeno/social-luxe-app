@@ -4,10 +4,16 @@ import { POST_INITIAL_HOURS, POST_EXTENDED_HOURS } from '../types'
 import { sendPush } from './notification.service'
 import { withThumbnail, withThumbnails } from '../utils/cloudinary.util'
 
-export async function createPost(userId: string, mediaUrl: string, mediaType: MediaType, caption?: string) {
+export async function createPost(
+  userId: string,
+  mediaUrl: string | null,
+  mediaType: MediaType,
+  caption?: string,
+  bgColor?: string,
+) {
   const expiresAt = new Date(Date.now() + POST_INITIAL_HOURS * 60 * 60 * 1000)
   const post = await prisma.post.create({
-    data: { userId, mediaUrl, mediaType, caption, expiresAt },
+    data: { userId, mediaUrl, mediaType, caption, bgColor, expiresAt },
     include: {
       user:   { select: { id: true, name: true, avatar: true } },
       _count: { select: { likes: true, comments: true, shares: true, views: true } },
@@ -137,7 +143,26 @@ export async function addView(userId: string, postId: string) {
 export async function deletePost(userId: string, postId: string) {
   const post = await prisma.post.findUnique({ where: { id: postId } })
   if (!post || post.userId !== userId) throw new Error('Post not found')
-  return prisma.post.update({ where: { id: postId }, data: { deletedAt: new Date() } })
+
+  // Hard delete — remove all relations first, then the post
+  await prisma.$transaction([
+    prisma.like.deleteMany({ where: { postId } }),
+    prisma.comment.deleteMany({ where: { postId } }),
+    prisma.view.deleteMany({ where: { postId } }),
+    prisma.share.deleteMany({ where: { postId } }),
+    prisma.bookmark.deleteMany({ where: { postId } }),
+    prisma.reaction.deleteMany({ where: { postId } }),
+    prisma.postExtendVote.deleteMany({ where: { postId } }),
+    prisma.post.delete({ where: { id: postId } }),
+  ])
+
+  return { mediaUrl: post.mediaUrl, mediaType: post.mediaType }
+}
+
+export async function updatePostCaption(userId: string, postId: string, caption: string) {
+  const post = await prisma.post.findUnique({ where: { id: postId } })
+  if (!post || post.userId !== userId) throw new Error('Post not found')
+  return prisma.post.update({ where: { id: postId }, data: { caption } })
 }
 
 export async function sharePost(userId: string, postId: string) {

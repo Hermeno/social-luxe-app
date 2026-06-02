@@ -13,6 +13,7 @@ enum MediaType {
   IMAGE
   VIDEO
   AUDIO
+  TEXT
 }
 
 enum FriendshipDuration {
@@ -95,9 +96,10 @@ model User {
 model Post {
   id        String    @id @default(cuid())
   userId    String
-  mediaUrl  String
+  mediaUrl  String?   // null for TEXT posts
   mediaType MediaType
   caption   String?
+  bgColor   String?   // background colour for TEXT posts
   expiresAt DateTime
   extended  Boolean   @default(false)
   deletedAt DateTime?

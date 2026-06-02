@@ -136,12 +136,7 @@ export async function deleteAccount(req: AuthRequest, res: Response) {
     const valid = await compareHash(password, user.password)
     if (!valid) return badRequest(res, 'Incorrect password')
 
-    // Delete media files from disk
-    const posts = await prisma.post.findMany({ where: { userId: user.id }, select: { mediaUrl: true } })
-    for (const post of posts) {
-      const filePath = path.join(process.cwd(), post.mediaUrl)
-      fs.unlink(filePath, () => {}) // fire-and-forget
-    }
+    // Media is on Cloudinary — no local file deletion needed
     if (user.avatar) {
       fs.unlink(path.join(process.cwd(), user.avatar), () => {})
     }

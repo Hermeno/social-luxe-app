@@ -11,11 +11,22 @@ import { emitToUser } from '../socket'
 
 export async function createPost(req: AuthRequest, res: Response) {
   try {
+    const { caption, bgColor } = req.body
     const file = req.file
-    if (!file) return badRequest(res, 'Media file required')
-    const mediaType = file.mimetype.startsWith('video') ? MediaType.VIDEO : MediaType.IMAGE
-    const mediaUrl  = await uploadToCloudinary(file.buffer, file.mimetype, 'luxe/posts')
-    const post      = await postService.createPost(req.user!.userId, mediaUrl, mediaType, req.body.caption)
+
+    let mediaUrl: string | null = null
+    let mediaType: MediaType
+
+    if (!file) {
+      // Text post — no media file required
+      if (!caption?.trim() && !bgColor) return badRequest(res, 'Content required')
+      mediaType = MediaType.TEXT
+    } else {
+      mediaType = file.mimetype.startsWith('video') ? MediaType.VIDEO : MediaType.IMAGE
+      mediaUrl  = await uploadToCloudinary(file.buffer, file.mimetype, 'luxe/posts')
+    }
+
+    const post = await postService.createPost(req.user!.userId, mediaUrl, mediaType, caption, bgColor)
 
     // ── Real-time push to all followers via WebSocket ─────────────────────────
     // Fire-and-forget: don't block the HTTP response
@@ -113,8 +124,37 @@ export async function addComment(req: AuthRequest, res: Response) {
 
 export async function deletePost(req: AuthRequest, res: Response) {
   try {
-    await postService.deletePost(req.user!.userId, req.params.id)
+    const result = await postService.deletePost(req.user!.userId, req.params.id)
+
+    // Delete from Cloudinary (fire-and-forget — don't block the response)
+    if (result.mediaUrl && result.mediaUrl.includes('cloudinary.com')) {
+      ;(async () => {
+        try {
+          // Extract public_id: everything after /upload/vXXXXX/ up to the extension
+          const match = result.mediaUrl!.match(/\/upload\/(?:v\d+\/)?(.+)\.[^.]+$/)
+          if (match) {
+            const publicId    = match[1]
+            const resourceType = result.mediaType === 'VIDEO' ? 'video' : 'image'
+            const { cloudinary } = await import('../config/cloudinary')
+            await cloudinary.uploader.destroy(publicId, { resource_type: resourceType })
+          }
+        } catch {}
+      })()
+    }
+
     return ok(res, null, 'Deleted')
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Failed'
+    return badRequest(res, msg)
+  }
+}
+
+export async function updatePost(req: AuthRequest, res: Response) {
+  try {
+    const { caption } = req.body
+    if (caption === undefined) return badRequest(res, 'caption required')
+    const post = await postService.updatePostCaption(req.user!.userId, req.params.id, caption)
+    return ok(res, post)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Failed'
     return badRequest(res, msg)
