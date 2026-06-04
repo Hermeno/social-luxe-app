@@ -1,7 +1,8 @@
 import { Response } from 'express'
 import * as postService from '../services/post.service'
 import * as commentService from '../services/comment.service'
-import { ok, created, badRequest, serverError } from '../utils/response'
+import { ok, created, badRequest, serverError, notFound, forbidden } from '../utils/response'
+import { handleError } from '../utils/errors'
 import { AuthRequest } from '../types'
 import { MediaType } from '@prisma/client'
 import { sendPush } from '../services/notification.service'
@@ -54,9 +55,7 @@ export async function getFeed(req: AuthRequest, res: Response) {
     const page = Number(req.query.page ?? 1)
     const posts = await postService.getFeed(req.user!.userId, page)
     return ok(res, posts)
-  } catch {
-    return serverError(res)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function likePost(req: AuthRequest, res: Response) {
@@ -76,28 +75,21 @@ export async function likePost(req: AuthRequest, res: Response) {
     }
 
     return ok(res, result)
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Failed'
-    return badRequest(res, msg)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function addView(req: AuthRequest, res: Response) {
   try {
     await postService.addView(req.user!.userId, req.params.id)
     return ok(res, null)
-  } catch {
-    return serverError(res)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function getComments(req: AuthRequest, res: Response) {
   try {
     const comments = await commentService.getComments(req.params.id)
     return ok(res, comments)
-  } catch {
-    return serverError(res)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function addComment(req: AuthRequest, res: Response) {
@@ -117,9 +109,7 @@ export async function addComment(req: AuthRequest, res: Response) {
     }
 
     return created(res, comment)
-  } catch {
-    return serverError(res)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function deletePost(req: AuthRequest, res: Response) {
@@ -143,10 +133,7 @@ export async function deletePost(req: AuthRequest, res: Response) {
     }
 
     return ok(res, null, 'Deleted')
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Failed'
-    return badRequest(res, msg)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function updatePost(req: AuthRequest, res: Response) {
@@ -155,46 +142,33 @@ export async function updatePost(req: AuthRequest, res: Response) {
     if (caption === undefined) return badRequest(res, 'caption required')
     const post = await postService.updatePostCaption(req.user!.userId, req.params.id, caption)
     return ok(res, post)
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Failed'
-    return badRequest(res, msg)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function sharePost(req: AuthRequest, res: Response) {
   try {
     const share = await postService.sharePost(req.user!.userId, req.params.id)
     return created(res, share)
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Failed'
-    return badRequest(res, msg)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function voteExtendPost(req: AuthRequest, res: Response) {
   try {
     const result = await postService.voteExtendPost(req.user!.userId, req.params.id)
     return ok(res, result)
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Failed'
-    return badRequest(res, msg)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function getExtendVotes(req: AuthRequest, res: Response) {
   try {
     const result = await postService.getExtendVotes(req.params.id)
     return ok(res, result)
-  } catch {
-    return serverError(res)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function getFlashback(req: AuthRequest, res: Response) {
   try {
     const post = await postService.getFlashback(req.user!.userId)
     return ok(res, post)
-  } catch {
-    return serverError(res)
-  }
+  } catch (err) { return handleError(res, err) }
 }

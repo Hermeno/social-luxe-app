@@ -1,24 +1,21 @@
 import { Response } from 'express'
 import * as coinService from '../services/coin.service'
-import { ok, created, badRequest, serverError } from '../utils/response'
+import { ok, created, badRequest, serverError, notFound, forbidden } from '../utils/response'
+import { handleError } from '../utils/errors'
 import { AuthRequest } from '../types'
 
 export async function getBalance(req: AuthRequest, res: Response) {
   try {
     const data = await coinService.getBalance(req.user!.userId)
     return ok(res, data)
-  } catch {
-    return serverError(res)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function getHistory(req: AuthRequest, res: Response) {
   try {
     const history = await coinService.getHistory(req.user!.userId)
     return ok(res, history)
-  } catch {
-    return serverError(res)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function sendCoins(req: AuthRequest, res: Response) {
@@ -34,8 +31,5 @@ export async function sendCoins(req: AuthRequest, res: Response) {
       message,
     )
     return created(res, coin)
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Failed'
-    return badRequest(res, msg)
-  }
+  } catch (err) { return handleError(res, err) }
 }

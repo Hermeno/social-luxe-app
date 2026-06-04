@@ -1,6 +1,9 @@
 import { prisma } from '../config/database'
 
-const USER_SELECT = { id: true, name: true, avatar: true, bio: true, availability: true } as const
+const USER_SELECT = {
+  id: true, name: true, avatar: true, bio: true, availability: true,
+  _count: { select: { followers: true, posts: true } },
+} as const
 
 export async function getAllUsers(currentUserId: string) {
   return prisma.user.findMany({
@@ -47,7 +50,10 @@ export async function getUserById(userId: string) {
 export async function getUserPosts(userId: string) {
   return prisma.post.findMany({
     where: { userId, deletedAt: null, expiresAt: { gt: new Date() } },
-    include: { _count: { select: { likes: true, comments: true, views: true } } },
+    include: {
+      user: { select: { id: true, name: true, avatar: true } },
+      _count: { select: { likes: true, comments: true, views: true, shares: true } },
+    },
     orderBy: { createdAt: 'desc' },
   })
 }

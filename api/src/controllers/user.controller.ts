@@ -1,6 +1,7 @@
 import { Response } from 'express'
 import * as userService from '../services/user.service'
-import { ok, badRequest, serverError } from '../utils/response'
+import { ok, badRequest, serverError, notFound, forbidden, created } from '../utils/response'
+import { handleError } from '../utils/errors'
 import { AuthRequest } from '../types'
 import { prisma } from '../config/database'
 import { uploadToCloudinary } from '../utils/cloudinary.util'
@@ -9,7 +10,7 @@ export async function getAllUsers(req: AuthRequest, res: Response) {
   try {
     const users = await userService.getAllUsers(req.user!.userId)
     return ok(res, users)
-  } catch { return serverError(res) }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function searchUsers(req: AuthRequest, res: Response) {
@@ -18,19 +19,14 @@ export async function searchUsers(req: AuthRequest, res: Response) {
     if (!query) return badRequest(res, 'Query required')
     const users = await userService.searchUsers(query, req.user!.userId)
     return ok(res, users)
-  } catch {
-    return serverError(res)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function getUserById(req: AuthRequest, res: Response) {
   try {
     const user = await userService.getUserById(req.params.id)
     return ok(res, user)
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Failed'
-    return badRequest(res, msg)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function updateProfile(req: AuthRequest, res: Response) {
@@ -43,18 +39,14 @@ export async function updateProfile(req: AuthRequest, res: Response) {
     const location = lat != null && lng != null ? { lat: parseFloat(lat), lng: parseFloat(lng) } : {}
     const user = await userService.updateProfile(req.user!.userId, { name, bio, avatar, availability, ...location })
     return ok(res, user)
-  } catch {
-    return serverError(res)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function getUserPosts(req: AuthRequest, res: Response) {
   try {
     const posts = await userService.getUserPosts(req.params.id)
     return ok(res, posts)
-  } catch {
-    return serverError(res)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function getConnections(req: AuthRequest, res: Response) {
@@ -122,7 +114,7 @@ export async function getConnections(req: AuthRequest, res: Response) {
     })
 
     return ok(res, connections)
-  } catch { return serverError(res) }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function getSuggestedUsers(req: AuthRequest, res: Response) {
@@ -139,13 +131,13 @@ export async function getSuggestedUsers(req: AuthRequest, res: Response) {
       where: { id: { notIn: excludeIds } },
       select: {
         id: true, name: true, avatar: true, bio: true,
-        _count: { select: { followers: true } },
+        _count: { select: { followers: true, posts: true } },
       },
       orderBy: { followers: { _count: 'desc' } },
       take: 20,
     })
     return ok(res, users)
-  } catch { return serverError(res) }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function toggleGhostMode(req: AuthRequest, res: Response) {
@@ -154,7 +146,5 @@ export async function toggleGhostMode(req: AuthRequest, res: Response) {
     if (typeof ghostMode !== 'boolean') return badRequest(res, 'ghostMode must be a boolean')
     const user = await userService.toggleGhostMode(req.user!.userId, ghostMode)
     return ok(res, user)
-  } catch {
-    return serverError(res)
-  }
+  } catch (err) { return handleError(res, err) }
 }

@@ -1,6 +1,7 @@
 import { Response } from 'express'
 import * as reactionService from '../services/reaction.service'
-import { ok, badRequest, serverError } from '../utils/response'
+import { ok, badRequest, serverError, notFound, forbidden, created } from '../utils/response'
+import { handleError } from '../utils/errors'
 import { AuthRequest } from '../types'
 import { ReactionType } from '@prisma/client'
 
@@ -26,17 +27,12 @@ export async function removeReaction(req: AuthRequest, res: Response) {
   try {
     await reactionService.removeReaction(req.user!.userId, req.params.id)
     return ok(res, null, 'Reaction removed')
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Failed'
-    return badRequest(res, msg)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function getReactions(req: AuthRequest, res: Response) {
   try {
     const data = await reactionService.getReactions(req.params.id)
     return ok(res, data)
-  } catch {
-    return serverError(res)
-  }
+  } catch (err) { return handleError(res, err) }
 }

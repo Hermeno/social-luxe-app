@@ -1,6 +1,7 @@
 import { Response } from 'express'
 import * as messageService from '../services/message.service'
-import { ok, created, badRequest, serverError } from '../utils/response'
+import { ok, created, badRequest, serverError, notFound, forbidden } from '../utils/response'
+import { handleError } from '../utils/errors'
 import { AuthRequest } from '../types'
 import { emitToUser } from '../socket'
 import { sendPush } from '../services/notification.service'
@@ -11,9 +12,7 @@ export async function getConversations(req: AuthRequest, res: Response) {
   try {
     const conversations = await messageService.getConversations(req.user!.userId)
     return ok(res, conversations)
-  } catch {
-    return serverError(res)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function getMessages(req: AuthRequest, res: Response) {
@@ -22,9 +21,7 @@ export async function getMessages(req: AuthRequest, res: Response) {
     const messages = await messageService.getMessages(req.user!.userId, req.params.userId, page)
     await messageService.markRead(req.user!.userId, req.params.userId)
     return ok(res, messages)
-  } catch {
-    return serverError(res)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function sendMessage(req: AuthRequest, res: Response) {
@@ -55,10 +52,7 @@ export async function sendMessage(req: AuthRequest, res: Response) {
     sendPush(receiverId, `💬 ${sender?.name}`, preview, { type: 'message', userId: req.user!.userId }).catch(() => {})
 
     return created(res, message)
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Failed'
-    return badRequest(res, msg)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function reactToMessage(req: AuthRequest, res: Response) {
@@ -73,7 +67,5 @@ export async function reactToMessage(req: AuthRequest, res: Response) {
       emitToUser(targetId, 'message:reaction', { messageId: req.params.id, ...result, userId: req.user!.userId })
     }
     return ok(res, result)
-  } catch {
-    return serverError(res)
-  }
+  } catch (err) { return handleError(res, err) }
 }

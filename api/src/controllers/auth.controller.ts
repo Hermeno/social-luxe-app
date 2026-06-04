@@ -1,6 +1,7 @@
 import { Response } from 'express'
 import * as authService from '../services/auth.service'
-import { ok, created, badRequest, serverError } from '../utils/response'
+import { ok, created, badRequest, serverError, notFound, forbidden } from '../utils/response'
+import { handleError } from '../utils/errors'
 import { AuthRequest, RegisterBody, LoginBody } from '../types'
 import { prisma } from '../config/database'
 import { comparePassword as compareHash, hashPassword } from '../utils/hash'
@@ -13,7 +14,7 @@ export async function checkPhone(req: AuthRequest, res: Response) {
     if (!phone) return badRequest(res, 'phone required')
     const user = await prisma.user.findUnique({ where: { phone }, select: { id: true } })
     return ok(res, { exists: !!user })
-  } catch { return serverError(res) }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function register(req: AuthRequest, res: Response) {
@@ -24,10 +25,7 @@ export async function register(req: AuthRequest, res: Response) {
     }
     const result = await authService.register(body)
     return created(res, result, 'Account created')
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Register failed'
-    return badRequest(res, msg)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function login(req: AuthRequest, res: Response) {
@@ -36,19 +34,14 @@ export async function login(req: AuthRequest, res: Response) {
     if (!body.phone || !body.password) return badRequest(res, 'Phone and password required')
     const result = await authService.login(body)
     return ok(res, result, 'Login successful')
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Login failed'
-    return badRequest(res, msg)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function me(req: AuthRequest, res: Response) {
   try {
     const profile = await authService.getProfile(req.user!.userId)
     return ok(res, profile)
-  } catch {
-    return serverError(res)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 // ── Change password (authenticated) ─────────────────────────────────────────
@@ -67,9 +60,7 @@ export async function changePassword(req: AuthRequest, res: Response) {
     const hashed = await hashPassword(newPassword)
     await prisma.user.update({ where: { id: user.id }, data: { password: hashed } })
     return ok(res, null, 'Password updated')
-  } catch {
-    return serverError(res)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 // ── Request password reset (generates code, no SMS — shown in response) ──────
@@ -92,9 +83,7 @@ export async function requestPasswordReset(req: AuthRequest, res: Response) {
 
     // TODO: When SMS is available, send via provider instead of returning in response
     return ok(res, { code, expiresAt }, 'Reset code generated')
-  } catch {
-    return serverError(res)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 // ── Confirm password reset ────────────────────────────────────────────────────
@@ -119,9 +108,7 @@ export async function confirmPasswordReset(req: AuthRequest, res: Response) {
     ])
 
     return ok(res, null, 'Password reset successful')
-  } catch {
-    return serverError(res)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 // ── Delete account (GDPR) ─────────────────────────────────────────────────────
@@ -145,7 +132,5 @@ export async function deleteAccount(req: AuthRequest, res: Response) {
     await prisma.user.delete({ where: { id: user.id } })
 
     return ok(res, null, 'Account deleted')
-  } catch {
-    return serverError(res)
-  }
+  } catch (err) { return handleError(res, err) }
 }

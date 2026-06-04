@@ -1,6 +1,7 @@
 import { Response } from 'express'
 import * as storyService from '../services/story.service'
-import { ok, created, badRequest, serverError } from '../utils/response'
+import { ok, created, badRequest, serverError, notFound, forbidden } from '../utils/response'
+import { handleError } from '../utils/errors'
 import { AuthRequest } from '../types'
 import { MediaType } from '@prisma/client'
 import { uploadToCloudinary } from '../utils/cloudinary.util'
@@ -23,26 +24,19 @@ export async function getFriendsStories(req: AuthRequest, res: Response) {
   try {
     const stories = await storyService.getFriendsStories(req.user!.userId)
     return ok(res, stories)
-  } catch {
-    return serverError(res)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function deleteStory(req: AuthRequest, res: Response) {
   try {
     await storyService.deleteStory(req.user!.userId, req.params.id)
     return ok(res, null, 'Deleted')
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Failed'
-    return badRequest(res, msg)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function viewStory(req: AuthRequest, res: Response) {
   try {
     await storyService.viewStory(req.params.id, req.user!.userId)
     return ok(res, null)
-  } catch {
-    return serverError(res)
-  }
+  } catch (err) { return handleError(res, err) }
 }

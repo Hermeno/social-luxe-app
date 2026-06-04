@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express'
+import { handleError } from '../utils/errors'
 
 export function errorMiddleware(
   err: Error,
@@ -6,11 +7,5 @@ export function errorMiddleware(
   res: Response,
   _next: NextFunction
 ) {
-  console.error('[Error]', err.message)
-
-  if (err.message === 'File type not allowed') {
-    return res.status(400).json({ success: false, message: err.message })
-  }
-
-  return res.status(500).json({ success: false, message: 'Internal server error' })
+  handleError(res, err)
 }

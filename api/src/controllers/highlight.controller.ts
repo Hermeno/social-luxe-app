@@ -1,6 +1,7 @@
 import { Response } from 'express'
 import * as highlightService from '../services/highlight.service'
-import { ok, created, badRequest, serverError } from '../utils/response'
+import { ok, created, badRequest, serverError, notFound, forbidden } from '../utils/response'
+import { handleError } from '../utils/errors'
 import { AuthRequest } from '../types'
 
 export async function createHighlight(req: AuthRequest, res: Response) {
@@ -20,17 +21,12 @@ export async function getUserHighlights(req: AuthRequest, res: Response) {
   try {
     const highlights = await highlightService.getUserHighlights(req.params.userId)
     return ok(res, highlights)
-  } catch {
-    return serverError(res)
-  }
+  } catch (err) { return handleError(res, err) }
 }
 
 export async function deleteHighlight(req: AuthRequest, res: Response) {
   try {
     await highlightService.deleteHighlight(req.user!.userId, req.params.id)
     return ok(res, null, 'Deleted')
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Failed'
-    return badRequest(res, msg)
-  }
+  } catch (err) { return handleError(res, err) }
 }

@@ -31,8 +31,11 @@ export function setupSocket(httpServer: HttpServer): Server {
     onlineUsers.set(userId, socket.id)
     socket.join(userId)
 
-    // Notify all connected clients that this user is online
-    io.emit('user:online', { userId })
+    // Send current online users list to the newly connected client
+    socket.emit('users:online:snapshot', { userIds: Array.from(onlineUsers.keys()) })
+
+    // Notify all other connected clients that this user is online
+    socket.broadcast.emit('user:online', { userId })
 
     // ── message:typing ──────────────────────────────────────────────────────
     socket.on('message:typing', ({ toUserId, isTyping }: { toUserId: string; isTyping: boolean }) => {
