@@ -5,6 +5,7 @@ interface OnlineState {
   setOnline: (userId: string) => void
   setOffline: (userId: string) => void
   isOnline: (userId: string) => boolean
+  reset: () => void
 }
 
 export const useOnlineStore = create<OnlineState>((set, get) => ({
@@ -23,4 +24,5 @@ export const useOnlineStore = create<OnlineState>((set, get) => ({
     })),
 
   isOnline: (userId) => get().onlineUsers.includes(userId),
+  reset: () => set({ onlineUsers: [] }),
 }))

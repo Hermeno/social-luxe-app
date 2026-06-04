@@ -2,114 +2,140 @@ import React, { useEffect, useRef, useState } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, Animated, FlatList,
-  ActivityIndicator, SafeAreaView, Dimensions, Image,
+  ActivityIndicator, Dimensions, Alert, Pressable,
 } from 'react-native'
+import { Image } from 'expo-image'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
 import * as Haptics from 'expo-haptics'
+import Toast from 'react-native-toast-message'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { api } from '../../services/api'
 import * as followService from '../../services/follow.service'
 import { useAuthStore } from '../../store/auth.store'
+import { clearAllLocalData } from '../../db/database'
 import { fonts } from '../../theme'
 import { API_BASE } from '../../config'
 
-/* ─── constants ─────────────────────────────────────────── */
-const PRIMARY  = '#4C8CE4'
-const BG       = '#FFFFFF'
-const INPUT_BG = '#F5F5F7'
-const TEXT     = '#1A1A1A'
-const MUTED    = '#9CA3AF'
+// ── Design tokens (same as auth screens) ─────────────────────────────────────
+const T  = '#1A1A1A'
+const S  = '#6E6E73'
+const M  = '#ABABAB'
+const B  = '#4C8CE4'
+const BD = '#E5E5EA'
+const BG = '#FFFFFF'
+const SX = '#F9F9FB'
+
 const { width: W } = Dimensions.get('window')
-const CARD_GAP  = 12
-const CARD_W    = (W - 28 * 2 - CARD_GAP) / 2
+const CARD_GAP = 12
+const CARD_W   = (W - 28 * 2 - CARD_GAP) / 2
 
-/* ─── types ──────────────────────────────────────────────── */
 interface SuggestedUser {
-  id: string
-  name: string
-  avatar: string | null
-  bio: string | null
-  _count: { followers: number }
+  id: string; name: string; avatar: string | null
+  bio: string | null; _count: { followers: number }
 }
-
 interface Props { onDone: () => void }
 
-/* ─── step dots ─────────────────────────────────────────── */
-function StepDots({ current }: { current: number }) {
+function fmtFollowers(n: number) {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000)     return `${(n / 1_000).toFixed(1)}K`
+  return String(n)
+}
+
+// ── Progress bar ──────────────────────────────────────────────────────────────
+function ProgressBar({ step, total }: { step: number; total: number }) {
   return (
-    <View style={{ flexDirection: 'row', gap: 5 }}>
-      {[0, 1, 2].map((i) => (
-        <View key={i} style={{
-          width: i === current ? 18 : 6, height: 6,
-          borderRadius: 3,
-          backgroundColor: i === current ? PRIMARY : '#E5E5E5',
-        }} />
+    <View style={pb.track}>
+      {Array.from({ length: total }, (_, i) => (
+        <View key={i} style={[pb.seg, i < step ? pb.active : pb.inactive]} />
       ))}
     </View>
   )
 }
+const pb = StyleSheet.create({
+  track:    { flexDirection: 'row', gap: 4, flex: 1 },
+  seg:      { flex: 1, height: 3, borderRadius: 2 },
+  active:   { backgroundColor: T },
+  inactive: { backgroundColor: BD },
+})
 
-/* ─── step 1: bio ───────────────────────────────────────── */
-function SetBioStep({ onNext, onSkip }: { onNext: (bio: string) => void; onSkip: () => void }) {
-  const [bio, setBio] = useState('')
-  const [saving, setSaving] = useState(false)
-  const btnScale = useRef(new Animated.Value(1)).current
-
-  function animateBtn(cb: () => void) {
+// ── Shared button bounce ──────────────────────────────────────────────────────
+function useBounce() {
+  const scale = useRef(new Animated.Value(1)).current
+  function bounce(cb: () => void) {
     Animated.sequence([
-      Animated.spring(btnScale, { toValue: 0.96, useNativeDriver: true, speed: 60 }),
-      Animated.spring(btnScale, { toValue: 1, useNativeDriver: true, speed: 40, bounciness: 6 }),
+      Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, speed: 80, bounciness: 0 }),
+      Animated.spring(scale, { toValue: 1,    useNativeDriver: true, speed: 40, bounciness: 6 }),
     ]).start(cb)
   }
+  return { scale, bounce }
+}
+
+// ── Step 1: Bio ───────────────────────────────────────────────────────────────
+function SetBioStep({ onNext, onSkip }: { onNext: (bio: string) => void; onSkip: () => void }) {
+  const [bio,     setBio]     = useState('')
+  const [saving,  setSaving]  = useState(false)
+  const [focused, setFocused] = useState(false)
+  const { scale, bounce } = useBounce()
 
   async function handleSave() {
-    if (!bio.trim()) { onSkip(); return }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-    animateBtn(async () => {
+    bounce(async () => {
+      if (!bio.trim()) { onSkip(); return }
       setSaving(true)
       try {
         await api.put('/users/profile', { bio: bio.trim() })
-      } catch {}
-      setSaving(false)
-      onNext(bio.trim())
+        onNext(bio.trim())
+      } catch {
+        Toast.show({ type: 'error', text1: 'Erro', text2: 'Não foi possível guardar. Tenta novamente.', visibilityTime: 3000 })
+      } finally { setSaving(false) }
     })
   }
 
   return (
     <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={s.inner}>
-        <View style={s.topRow}>
-          <Text style={s.brand}>luxe</Text>
-          <View style={s.topRight}>
-            <StepDots current={0} />
-            <TouchableOpacity onPress={onSkip} hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}>
-              <Text style={s.skip}>Saltar</Text>
-            </TouchableOpacity>
+      <SafeAreaView style={s.safeInner}>
+
+        {/* Header */}
+        <View style={s.header}>
+          <Text style={s.brand}>luxee</Text>
+          <View style={s.headerRight}>
+            <ProgressBar step={1} total={3} />
+            <Text style={s.stepLabel}>1 / 3</Text>
           </View>
         </View>
 
-        <View style={s.headWrap}>
-          <Text style={s.heading}>Fala sobre ti</Text>
-          <Text style={s.sub}>Uma pequena bio para as pessoas te conhecerem melhor.</Text>
+        {/* Hero */}
+        <View style={s.hero}>
+          <Text style={s.heading}>Fala{'\n'}sobre ti.</Text>
+          <Text style={s.sub}>Uma bio ajuda as pessoas a conhecer-te melhor.</Text>
         </View>
 
-        <TextInput
-          style={[s.input, s.bioInput]}
-          placeholder="A tua bio..."
-          placeholderTextColor={MUTED}
-          value={bio}
-          onChangeText={setBio}
-          multiline
-          maxLength={160}
-          textAlignVertical="top"
-          autoFocus
-        />
+        {/* Bio textarea */}
+        <View style={[s.textareaWrap, focused && s.textareaFocused]}>
+          <TextInput
+            style={s.textarea}
+            placeholder="Escreve algo sobre ti..."
+            placeholderTextColor={M}
+            value={bio}
+            onChangeText={setBio}
+            multiline
+            maxLength={160}
+            textAlignVertical="top"
+            autoFocus
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+          />
+          <Text style={[s.charCount, bio.length > 140 && s.charCountWarn]}>
+            {bio.length}/160
+          </Text>
+        </View>
 
-        <Text style={s.charCount}>{bio.length}/160</Text>
+        <View style={{ flex: 1 }} />
 
-        <View style={s.spacer} />
-
-        <Animated.View style={{ transform: [{ scale: btnScale }] }}>
+        {/* CTA */}
+        <Animated.View style={{ transform: [{ scale }] }}>
           <TouchableOpacity
             style={[s.btn, saving && s.btnOff]}
             onPress={handleSave}
@@ -122,48 +148,46 @@ function SetBioStep({ onNext, onSkip }: { onNext: (bio: string) => void; onSkip:
             }
           </TouchableOpacity>
         </Animated.View>
-      </View>
+
+        <TouchableOpacity style={s.skipRow} onPress={onSkip} hitSlop={{ top: 8, bottom: 8 }}>
+          <Text style={s.skipTxt}>Saltar por agora</Text>
+        </TouchableOpacity>
+
+      </SafeAreaView>
     </KeyboardAvoidingView>
   )
 }
 
-/* ─── step 2: photo ─────────────────────────────────────── */
+// ── Step 2: Photo ─────────────────────────────────────────────────────────────
 function SetPhotoStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }) {
   const [avatarUri, setAvatarUri] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  const [saving,    setSaving]    = useState(false)
   const { loadUser } = useAuthStore()
-  const btnScale = useRef(new Animated.Value(1)).current
+  const { scale, bounce } = useBounce()
   const photoScale = useRef(new Animated.Value(1)).current
-
-  function animateBtn(cb: () => void) {
-    Animated.sequence([
-      Animated.spring(btnScale, { toValue: 0.96, useNativeDriver: true, speed: 60 }),
-      Animated.spring(btnScale, { toValue: 1, useNativeDriver: true, speed: 40, bounciness: 6 }),
-    ]).start(cb)
-  }
 
   async function pickPhoto() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (status !== 'granted') return
+    if (status !== 'granted') {
+      Alert.alert('Permissão necessária', 'Precisamos acesso à galeria.')
+      return
+    }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.85,
+      mediaTypes: 'images', allowsEditing: true, aspect: [1, 1], quality: 0.85,
     })
     if (result.canceled || !result.assets[0]) return
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     setAvatarUri(result.assets[0].uri)
     Animated.sequence([
       Animated.spring(photoScale, { toValue: 0.92, useNativeDriver: true, speed: 50 }),
-      Animated.spring(photoScale, { toValue: 1, useNativeDriver: true, speed: 30, bounciness: 8 }),
+      Animated.spring(photoScale, { toValue: 1,    useNativeDriver: true, speed: 30, bounciness: 8 }),
     ]).start()
   }
 
   async function handleSave() {
-    if (!avatarUri) { onSkip(); return }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-    animateBtn(async () => {
+    bounce(async () => {
+      if (!avatarUri) { onSkip(); return }
       setSaving(true)
       try {
         const form = new FormData()
@@ -177,47 +201,54 @@ function SetPhotoStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => vo
   }
 
   return (
-    <View style={s.screen}>
-      <View style={s.inner}>
-        <View style={s.topRow}>
-          <Text style={s.brand}>luxe</Text>
-          <View style={s.topRight}>
-            <StepDots current={1} />
-            <TouchableOpacity onPress={onSkip} hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}>
-              <Text style={s.skip}>Saltar</Text>
-            </TouchableOpacity>
+    <SafeAreaView style={s.screen}>
+      <View style={s.safeInner}>
+
+        {/* Header */}
+        <View style={s.header}>
+          <Text style={s.brand}>luxee</Text>
+          <View style={s.headerRight}>
+            <ProgressBar step={2} total={3} />
+            <Text style={s.stepLabel}>2 / 3</Text>
           </View>
         </View>
 
-        <View style={s.headWrap}>
-          <Text style={s.heading}>A tua foto</Text>
-          <Text style={s.sub}>Coloca uma foto para o teu perfil ser reconhecido.</Text>
+        {/* Hero */}
+        <View style={s.hero}>
+          <Text style={s.heading}>A tua{'\n'}foto.</Text>
+          <Text style={s.sub}>Ajuda as pessoas a reconhecer-te no teu perfil.</Text>
         </View>
 
-        <View style={s.photoCenter}>
+        {/* Photo picker */}
+        <View style={s.photoSection}>
           <TouchableOpacity onPress={pickPhoto} activeOpacity={0.85}>
-            <Animated.View style={[s.photoCircle, { transform: [{ scale: photoScale }] }]}>
+            <Animated.View style={[s.photoRing, { transform: [{ scale: photoScale }] }]}>
               {avatarUri ? (
-                <Image source={{ uri: avatarUri }} style={s.photoImg} />
+                <Image source={{ uri: avatarUri }} style={s.photoImg} contentFit="cover" />
               ) : (
-                <View style={s.photoPlaceholder}>
-                  <Text style={s.photoIcon}>📷</Text>
-                  <Text style={s.photoHint}>Toca para escolher</Text>
+                <View style={s.photoEmpty}>
+                  <Ionicons name="person-outline" size={48} color={M} />
                 </View>
               )}
+              {/* Camera badge */}
+              <View style={s.cameraBadge}>
+                <Ionicons name="camera" size={16} color={BG} />
+              </View>
             </Animated.View>
           </TouchableOpacity>
 
-          {avatarUri && (
-            <TouchableOpacity onPress={pickPhoto} style={s.changePhotoBtn}>
-              <Text style={s.changePhotoText}>Alterar foto</Text>
+          {avatarUri ? (
+            <TouchableOpacity onPress={pickPhoto} style={s.changeBtn}>
+              <Text style={s.changeBtnTxt}>Alterar foto</Text>
             </TouchableOpacity>
+          ) : (
+            <Text style={s.photoHint}>Toca para escolher da galeria</Text>
           )}
         </View>
 
-        <View style={s.spacer} />
+        <View style={{ flex: 1 }} />
 
-        <Animated.View style={{ transform: [{ scale: btnScale }] }}>
+        <Animated.View style={{ transform: [{ scale }] }}>
           <TouchableOpacity
             style={[s.btn, saving && s.btnOff]}
             onPress={handleSave}
@@ -230,46 +261,36 @@ function SetPhotoStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => vo
             }
           </TouchableOpacity>
         </Animated.View>
+
+        <TouchableOpacity style={s.skipRow} onPress={onSkip} hitSlop={{ top: 8, bottom: 8 }}>
+          <Text style={s.skipTxt}>Saltar por agora</Text>
+        </TouchableOpacity>
+
       </View>
-    </View>
+    </SafeAreaView>
   )
 }
 
-/* ─── step 3: suggested profiles ───────────────────────── */
+// ── Step 3: Suggested users ───────────────────────────────────────────────────
 function SuggestedStep({ onDone }: { onDone: () => void }) {
-  const [users, setUsers]         = useState<SuggestedUser[]>([])
-  const [loading, setLoading]     = useState(true)
-  const [followed, setFollowed]   = useState<Set<string>>(new Set())
+  const [users,     setUsers]     = useState<SuggestedUser[]>([])
+  const [loading,   setLoading]   = useState(true)
+  const [followed,  setFollowed]  = useState<Set<string>>(new Set())
+  const [pending,   setPending]   = useState<Set<string>>(new Set())
   const [finishing, setFinishing] = useState(false)
-  const btnScale = useRef(new Animated.Value(1)).current
-  // per-card scale animations
-  const cardScales = useRef<Record<string, Animated.Value>>({})
+  const { scale, bounce } = useBounce()
 
   useEffect(() => {
     api.get('/users/suggested')
-      .then((r) => {
-        const list: SuggestedUser[] = (r.data.data ?? r.data).slice(0, 10)
-        list.forEach((u) => {
-          if (!cardScales.current[u.id]) cardScales.current[u.id] = new Animated.Value(1)
-        })
-        setUsers(list)
-      })
+      .then((r) => setUsers((r.data.data ?? r.data).slice(0, 12)))
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
 
-  function getScale(userId: string) {
-    if (!cardScales.current[userId]) cardScales.current[userId] = new Animated.Value(1)
-    return cardScales.current[userId]
-  }
-
   async function toggleFollow(userId: string) {
+    if (pending.has(userId)) return
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-    const scale = getScale(userId)
-    Animated.sequence([
-      Animated.spring(scale, { toValue: 0.88, useNativeDriver: true, speed: 80 }),
-      Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 40, bounciness: 10 }),
-    ]).start()
+    setPending((p) => new Set([...p, userId]))
     try {
       const res = await followService.toggleFollow(userId)
       setFollowed((prev) => {
@@ -278,19 +299,14 @@ function SuggestedStep({ onDone }: { onDone: () => void }) {
         return next
       })
     } catch {}
-  }
-
-  function animateBtn(cb: () => void) {
-    Animated.sequence([
-      Animated.spring(btnScale, { toValue: 0.96, useNativeDriver: true, speed: 60 }),
-      Animated.spring(btnScale, { toValue: 1, useNativeDriver: true, speed: 40, bounciness: 6 }),
-    ]).start(cb)
+    setPending((p) => { const n = new Set(p); n.delete(userId); return n })
   }
 
   async function handleDone() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
-    animateBtn(async () => {
+    bounce(async () => {
       setFinishing(true)
+      await clearAllLocalData().catch(() => {})
       await AsyncStorage.setItem('onboarding_done', '1')
       onDone()
     })
@@ -298,79 +314,97 @@ function SuggestedStep({ onDone }: { onDone: () => void }) {
 
   function renderCard({ item }: { item: SuggestedUser }) {
     const isFollowing = followed.has(item.id)
-    const scale = getScale(item.id)
-    
+    const isLoading   = pending.has(item.id)
+    const uri = item.avatar
+      ? (item.avatar.startsWith('http') ? item.avatar : `${API_BASE}${item.avatar}`)
+      : null
+
     return (
-      <View style={s.card}>
-        {/* Big photo */}
-        <View style={s.cardPhoto}>
-          {item.avatar ? (
-            <Image
-              source={{ uri: item.avatar.startsWith('http') ? item.avatar : `${API_BASE}${item.avatar}` }}
-              style={s.cardImg}
-              resizeMode="cover"
-            />
-          ) : (
-            <View style={[s.cardImg, s.cardImgFallback]}>
-              <Text style={s.cardInitial}>{item.name[0]?.toUpperCase() ?? '?'}</Text>
-            </View>
-          )}
+      <View style={c.card}>
+        {/* Avatar */}
+        <View style={c.avatarWrap}>
+          {uri
+            ? <Image source={{ uri }} style={c.avatar} contentFit="cover" />
+            : <View style={[c.avatar, c.avatarFallback]}>
+                <Text style={c.avatarInitial}>{item.name[0]?.toUpperCase() ?? '?'}</Text>
+              </View>
+          }
         </View>
 
         {/* Info */}
-        <View style={s.cardInfo}>
-          <Text style={s.cardName} numberOfLines={1}>{item.name}</Text>
-          <Text style={s.cardSub} numberOfLines={1}>
-            {item.bio ?? `${item._count.followers} seguidores`}
-          </Text>
-        </View>
+        <Text style={c.name} numberOfLines={1}>{item.name}</Text>
+        <Text style={c.followers} numberOfLines={1}>
+          {fmtFollowers(item._count.followers)} seguidores
+        </Text>
 
         {/* Follow button */}
-        <Animated.View style={{ transform: [{ scale }], alignSelf: 'center', marginBottom: 12 }}>
-          <TouchableOpacity
-            style={[s.cardFollowBtn, isFollowing && s.cardFollowingBtn]}
-            onPress={() => toggleFollow(item.id)}
-            activeOpacity={1}
-          >
-            <Text style={[s.cardFollowText, isFollowing && s.cardFollowingText]}>
-              {isFollowing ? 'A seguir' : 'Seguir'}
-            </Text>
-          </TouchableOpacity>
-        </Animated.View>
+        <Pressable
+          style={({ pressed }) => [
+            c.followBtn,
+            isFollowing && c.followingBtn,
+            pressed && { opacity: 0.7 },
+          ]}
+          onPress={() => toggleFollow(item.id)}
+          disabled={isLoading}
+        >
+          {isLoading
+            ? <ActivityIndicator size="small" color={isFollowing ? B : BG} />
+            : <Text style={[c.followTxt, isFollowing && c.followingTxt]}>
+                {isFollowing ? 'A seguir' : 'Seguir'}
+              </Text>
+          }
+        </Pressable>
       </View>
     )
   }
 
   return (
     <SafeAreaView style={s.screen}>
-      <View style={s.suggestHeader}>
-        <Text style={s.brand}>luxe</Text>
-        <StepDots current={2} />
+
+      {/* Header */}
+      <View style={[s.header, { paddingHorizontal: 28, paddingTop: 12 }]}>
+        <Text style={s.brand}>luxee</Text>
+        <View style={s.headerRight}>
+          <ProgressBar step={3} total={3} />
+          <Text style={s.stepLabel}>3 / 3</Text>
+        </View>
       </View>
 
-      <View style={s.suggestHeadWrap}>
-        <Text style={s.heading}>Quem seguir?</Text>
-        <Text style={s.sub}>Segue perfis para personalizar o teu feed.</Text>
+      {/* Hero */}
+      <View style={[s.hero, { paddingHorizontal: 28 }]}>
+        <Text style={s.heading}>Quem{'\n'}seguir?</Text>
+        <Text style={s.sub}>Segue perfis para personalizar o teu feed desde o início.</Text>
       </View>
 
+      {/* Grid */}
       {loading ? (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator color={PRIMARY} />
+        <View style={s.loadingWrap}>
+          <ActivityIndicator color={B} />
         </View>
       ) : (
         <FlatList
           data={users}
           keyExtractor={(u) => u.id}
           numColumns={2}
-          columnWrapperStyle={s.cardRow}
-          contentContainerStyle={s.cardList}
+          columnWrapperStyle={c.row}
+          contentContainerStyle={c.grid}
           showsVerticalScrollIndicator={false}
           renderItem={renderCard}
         />
       )}
 
+      {/* Footer CTA */}
       <View style={s.suggestFooter}>
-        <Animated.View style={{ transform: [{ scale: btnScale }] }}>
+        <View style={s.followedPill}>
+          <Text style={s.followedTxt}>
+            {followed.size > 0
+              ? `${followed.size} perfil${followed.size > 1 ? 'is' : ''} selecionado${followed.size > 1 ? 's' : ''}`
+              : 'Seleciona pelo menos um'
+            }
+          </Text>
+        </View>
+
+        <Animated.View style={{ transform: [{ scale }] }}>
           <TouchableOpacity
             style={[s.btn, finishing && s.btnOff]}
             onPress={handleDone}
@@ -379,93 +413,122 @@ function SuggestedStep({ onDone }: { onDone: () => void }) {
           >
             {finishing
               ? <ActivityIndicator color="#fff" />
-              : <Text style={s.btnText}>Entrar no Luxe</Text>
+              : (
+                <View style={s.btnInner}>
+                  <Text style={s.btnText}>Entrar no Luxe</Text>
+                  <Ionicons name="arrow-forward" size={18} color={BG} />
+                </View>
+              )
             }
           </TouchableOpacity>
         </Animated.View>
       </View>
+
     </SafeAreaView>
   )
 }
 
-/* ─── main onboarding ───────────────────────────────────── */
+// ── Main ──────────────────────────────────────────────────────────────────────
 export default function OnboardingScreen({ onDone }: Props) {
   const [step, setStep] = useState<0 | 1 | 2>(0)
-
-  if (step === 0) {
-    return (
-      <SetBioStep
-        onNext={() => setStep(1)}
-        onSkip={() => setStep(1)}
-      />
-    )
-  }
-  if (step === 1) {
-    return (
-      <SetPhotoStep
-        onNext={() => setStep(2)}
-        onSkip={() => setStep(2)}
-      />
-    )
-  }
+  if (step === 0) return <SetBioStep   onNext={() => setStep(1)} onSkip={() => setStep(1)} />
+  if (step === 1) return <SetPhotoStep onNext={() => setStep(2)} onSkip={() => setStep(2)} />
   return <SuggestedStep onDone={onDone} />
 }
 
-/* ─── styles ─────────────────────────────────────────────── */
+// ── Shared styles ─────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  screen:   { flex: 1, backgroundColor: BG },
-  inner:    { flex: 1, paddingHorizontal: 28, paddingTop: 64, paddingBottom: 40 },
+  screen:    { flex: 1, backgroundColor: BG },
+  safeInner: { flex: 1, paddingHorizontal: 28, paddingBottom: 36 },
 
-  topRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 52 },
-  topRight: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  brand:    { fontSize: 22, fontFamily: fonts.bold, color: PRIMARY, letterSpacing: -0.3 },
-  skip:     { fontSize: 14, fontFamily: fonts.regular, color: MUTED },
+  header:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 0, gap: 12, marginBottom: 44 },
+  headerRight:{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, justifyContent: 'flex-end', maxWidth: 160 },
+  brand:      { fontFamily: fonts.bold, fontSize: 22, color: T, letterSpacing: -0.6 },
+  stepLabel:  { fontSize: 13, fontFamily: fonts.medium, color: M },
 
-  headWrap: { marginBottom: 32, gap: 8 },
-  heading:  { fontSize: 28, fontFamily: fonts.semiBold, color: TEXT, letterSpacing: -0.5, lineHeight: 34 },
-  sub:      { fontSize: 14, fontFamily: fonts.regular, color: MUTED, lineHeight: 20 },
+  hero:    { marginBottom: 40, gap: 12 },
+  heading: { fontSize: 40, fontFamily: fonts.bold, color: T, letterSpacing: -1.2, lineHeight: 46 },
+  sub:     { fontSize: 15, fontFamily: fonts.regular, color: S, lineHeight: 22, letterSpacing: -0.1 },
 
-  /* bio */
-  input:     { backgroundColor: INPUT_BG, borderRadius: 14, paddingHorizontal: 18, paddingVertical: 18, fontSize: 16, fontFamily: fonts.regular, color: TEXT },
-  bioInput:  { height: 130, paddingTop: 18 },
-  charCount: { marginTop: 8, fontSize: 12, fontFamily: fonts.regular, color: MUTED, textAlign: 'right' },
+  // Bio textarea
+  textareaWrap: {
+    borderWidth: 1.5, borderColor: BD, borderRadius: 16,
+    backgroundColor: SX, padding: 18, minHeight: 130,
+  },
+  textareaFocused: { borderColor: B, backgroundColor: BG },
+  textarea:  { fontFamily: fonts.regular, fontSize: 16, color: T, minHeight: 90, lineHeight: 23 },
+  charCount: { fontSize: 12, fontFamily: fonts.regular, color: M, textAlign: 'right', marginTop: 8 },
+  charCountWarn: { color: '#FF9500' },
 
-  /* photo */
-  photoCenter:      { alignItems: 'center', marginTop: 12 },
-  photoCircle:      { width: 140, height: 140, borderRadius: 70, overflow: 'hidden', backgroundColor: INPUT_BG },
-  photoImg:         { width: 140, height: 140, borderRadius: 70 },
-  photoPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6 },
-  photoIcon:        { fontSize: 36 },
-  photoHint:        { fontSize: 13, fontFamily: fonts.regular, color: MUTED },
-  changePhotoBtn:   { marginTop: 16 },
-  changePhotoText:  { fontSize: 14, fontFamily: fonts.semiBold, color: PRIMARY },
+  // Photo
+  photoSection: { alignItems: 'center', gap: 20, marginBottom: 16 },
+  photoRing: {
+    width: 148, height: 148, borderRadius: 74,
+    borderWidth: 2, borderColor: BD,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  photoImg:  { width: 148, height: 148, borderRadius: 74 },
+  photoEmpty:{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: SX },
+  cameraBadge: {
+    position: 'absolute', bottom: 8, right: 8,
+    width: 34, height: 34, borderRadius: 17,
+    backgroundColor: T,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2.5, borderColor: BG,
+  },
+  changeBtn:    { paddingHorizontal: 20, paddingVertical: 9, borderRadius: 20, borderWidth: 1.5, borderColor: BD },
+  changeBtnTxt: { fontSize: 14, fontFamily: fonts.semiBold, color: T },
+  photoHint:    { fontSize: 14, fontFamily: fonts.regular, color: M },
 
-  spacer: { flex: 1 },
+  loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
-  btn:     { backgroundColor: PRIMARY, borderRadius: 14, height: 56, alignItems: 'center', justifyContent: 'center' },
-  btnOff:  { opacity: 0.45 },
-  btnText: { color: '#fff', fontFamily: fonts.semiBold, fontSize: 16, letterSpacing: 0.1 },
+  // Shared button
+  btn:     { height: 56, borderRadius: 16, backgroundColor: T, alignItems: 'center', justifyContent: 'center' },
+  btnOff:  { opacity: 0.2 },
+  btnInner:{ flexDirection: 'row', alignItems: 'center', gap: 8 },
+  btnText: { color: BG, fontFamily: fonts.semiBold, fontSize: 16, letterSpacing: -0.2 },
 
-  /* suggested */
-  suggestHeader:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 28, paddingTop: 20, paddingBottom: 0 },
-  suggestHeadWrap:{ paddingHorizontal: 28, marginTop: 28, marginBottom: 20, gap: 8 },
-  suggestFooter:  { paddingHorizontal: 28, paddingBottom: 36, paddingTop: 12 },
+  skipRow: { marginTop: 18, alignItems: 'center' },
+  skipTxt: { fontSize: 14, fontFamily: fonts.regular, color: M },
 
-  cardList: { paddingHorizontal: 28, paddingBottom: 12 },
-  cardRow:  { justifyContent: 'space-between', marginBottom: CARD_GAP },
+  // Suggest footer
+  suggestFooter: { paddingHorizontal: 28, paddingBottom: 24, gap: 14 },
+  followedPill: {
+    alignSelf: 'center',
+    paddingHorizontal: 14, paddingVertical: 7,
+    borderRadius: 20, backgroundColor: SX,
+    borderWidth: 1, borderColor: BD,
+  },
+  followedTxt: { fontSize: 13, fontFamily: fonts.medium, color: S },
+})
 
-  card:        { width: CARD_W, backgroundColor: INPUT_BG, borderRadius: 16, overflow: 'hidden' },
-  cardPhoto:   { width: CARD_W, height: CARD_W },
-  cardImg:     { width: CARD_W, height: CARD_W },
-  cardImgFallback: { backgroundColor: '#E5E5EA', alignItems: 'center', justifyContent: 'center' },
-  cardInitial: { fontSize: 42, fontFamily: fonts.bold, color: MUTED },
+// ── Card styles ───────────────────────────────────────────────────────────────
+const c = StyleSheet.create({
+  grid:     { paddingHorizontal: 28, paddingBottom: 12 },
+  row:      { justifyContent: 'space-between', marginBottom: CARD_GAP },
 
-  cardInfo:   { paddingHorizontal: 10, paddingTop: 10, paddingBottom: 6, gap: 2 },
-  cardName:   { fontSize: 14, fontFamily: fonts.semiBold, color: TEXT },
-  cardSub:    { fontSize: 12, fontFamily: fonts.regular, color: MUTED },
+  card: {
+    width: CARD_W,
+    alignItems: 'center',
+    paddingBottom: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: BD,
+    backgroundColor: BG,
+    overflow: 'hidden',
+  },
 
-  cardFollowBtn:    { marginHorizontal: 10, paddingVertical: 7, borderRadius: 10, backgroundColor: PRIMARY, alignItems: 'center' },
-  cardFollowingBtn: { backgroundColor: INPUT_BG },
-  cardFollowText:   { fontSize: 13, fontFamily: fonts.semiBold, color: '#fff' },
-  cardFollowingText:{ color: MUTED },
+  avatarWrap:    { width: '100%', height: CARD_W * 0.75, marginBottom: 12, overflow: 'hidden' },
+  avatar:        { width: '100%', height: '100%' },
+  avatarFallback:{ backgroundColor: SX, alignItems: 'center', justifyContent: 'center' },
+  avatarInitial: { fontSize: 40, fontFamily: fonts.bold, color: M },
+
+  name:      { fontSize: 14, fontFamily: fonts.bold, color: T, letterSpacing: -0.2, textAlign: 'center', paddingHorizontal: 8 },
+  followers: { fontSize: 12, fontFamily: fonts.regular, color: M, marginTop: 3, marginBottom: 12, textAlign: 'center' },
+
+  followBtn:     { paddingHorizontal: 22, paddingVertical: 9, borderRadius: 20, backgroundColor: B, minWidth: 100, alignItems: 'center' },
+  followingBtn:  { backgroundColor: BG, borderWidth: 1.5, borderColor: BD },
+  followTxt:     { fontSize: 13, fontFamily: fonts.semiBold, color: BG, letterSpacing: -0.1 },
+  followingTxt:  { color: S },
 })

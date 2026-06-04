@@ -15,6 +15,8 @@ import { Ionicons } from '@expo/vector-icons'
 import { getMyGroups, Group } from '../../services/group.service'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { colors, fonts, spacing, radius } from '../../theme'
+import { getCache, setCache } from '../../db/database'
+import { isConnected } from '../../services/netinfo.service'
 
 type Nav = StackNavigationProp<AppStackParams>
 
@@ -33,10 +35,19 @@ export default function GroupsScreen() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    getMyGroups()
-      .then(setGroups)
-      .catch(() => {})
-      .finally(() => setLoading(false))
+    let cancelled = false
+    async function run() {
+      const cached = await getCache<Group[]>('my_groups')
+      if (!cancelled && cached) { setGroups(cached); setLoading(false) }
+      if (!isConnected()) { setLoading(false); return }
+      try {
+        const fresh = await getMyGroups()
+        if (!cancelled) { setGroups(fresh); setLoading(false) }
+        setCache('my_groups', fresh).catch(() => {})
+      } catch { if (!cancelled) setLoading(false) }
+    }
+    run()
+    return () => { cancelled = true }
   }, [])
 
   return (

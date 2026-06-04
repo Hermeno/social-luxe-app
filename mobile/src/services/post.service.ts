@@ -52,6 +52,14 @@ export async function sharePost(postId: string) {
   await api.post(`/posts/${postId}/share`)
 }
 
+export async function deletePost(postId: string) {
+  await api.delete(`/posts/${postId}`)
+}
+
+export async function updatePost(postId: string, caption: string) {
+  await api.patch(`/posts/${postId}`, { caption })
+}
+
 export async function voteExtend(postId: string): Promise<{ votes: number; extended: boolean }> {
   const res = await api.post<ApiResponse<{ votes: number; extended: boolean }>>(`/posts/${postId}/vote-extend`)
   return res.data.data

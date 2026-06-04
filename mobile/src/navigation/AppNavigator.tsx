@@ -7,15 +7,8 @@ import CreateScreen from '../screens/CreateScreen'
 import ProfileScreen from '../screens/ProfileScreen'
 import ChatScreen from '../screens/MessagesScreen/ChatScreen'
 import TabBar from '../components/TabBar'
-import { StoryGroup } from '../services/story.service'
-import StoryViewerScreen from '../screens/StoryViewerScreen'
-import CreateStoryScreen from '../screens/CreateStoryScreen'
-import GroupsScreen from '../screens/GroupsScreen'
-import GroupChatScreen from '../screens/GroupChatScreen'
-import CreateGroupScreen from '../screens/CreateGroupScreen'
 import BookmarksScreen from '../screens/BookmarksScreen'
 import SearchScreen from '../screens/SearchScreen'
-import HighlightsScreen from '../screens/HighlightsScreen'
 import ChallengesScreen from '../screens/ChallengesScreen'
 import CoinsScreen from '../screens/CoinsScreen'
 import MomentoScreen from '../screens/MomentoScreen'
@@ -28,14 +21,8 @@ export type AppStackParams = {
   Tabs: undefined
   Profile: { userId?: string }
   Chat: { userId: string; userName: string; userAvatar: string | null }
-  StoryViewer: { groups: StoryGroup[]; startGroupIndex: number }
-  CreateStory: undefined
-  GroupList: undefined
-  GroupChat: { groupId: string; groupName: string }
-  CreateGroup: undefined
   Bookmarks: undefined
   Search: undefined
-  Highlights: { userId: string }
   Challenges: undefined
   Coins: undefined
   Momento: undefined
@@ -69,14 +56,8 @@ export default function AppNavigator() {
       <Stack.Screen name="Tabs" component={Tabs} />
       <Stack.Screen name="Profile" component={ProfileScreen} />
       <Stack.Screen name="Chat" component={ChatScreen} />
-      <Stack.Screen name="StoryViewer" component={StoryViewerScreen} />
-      <Stack.Screen name="CreateStory" component={CreateStoryScreen} />
-      <Stack.Screen name="GroupList" component={GroupsScreen} />
-      <Stack.Screen name="GroupChat" component={GroupChatScreen} />
-      <Stack.Screen name="CreateGroup" component={CreateGroupScreen} />
       <Stack.Screen name="Bookmarks" component={BookmarksScreen} />
       <Stack.Screen name="Search" component={SearchScreen} />
-      <Stack.Screen name="Highlights" component={HighlightsScreen} />
       <Stack.Screen name="Challenges" component={ChallengesScreen} />
       <Stack.Screen name="Coins" component={CoinsScreen} />
       <Stack.Screen name="Momento" component={MomentoScreen} />

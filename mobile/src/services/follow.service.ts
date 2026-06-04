@@ -1,18 +1,5 @@
 import { api } from './api'
-import { ApiResponse } from '../types'
-
-export interface Connection {
-  user: { id: string; name: string; avatar: string | null }
-  lastMessage: {
-    id: string
-    content: string | null
-    senderId: string
-    readAt: string | null
-    createdAt: string
-  } | null
-  unreadCount: number
-  postIds: string[]
-}
+import { ApiResponse, Connection } from '../types'
 
 export interface FollowUser {
   id: string
@@ -24,12 +11,12 @@ export interface FollowUser {
 
 export async function toggleFollow(userId: string): Promise<{ following: boolean }> {
   const res = await api.post(`/users/${userId}/follow`)
-  return res.data
+  return res.data.data ?? res.data
 }
 
 export async function getFollowStatus(userId: string): Promise<{ following: boolean }> {
   const res = await api.get(`/users/${userId}/follow-status`)
-  return res.data
+  return res.data.data ?? res.data
 }
 
 export async function getConnections(): Promise<Connection[]> {
@@ -38,21 +25,21 @@ export async function getConnections(): Promise<Connection[]> {
 }
 
 export async function getMyFollowers(): Promise<FollowUser[]> {
-  const res = await api.get<FollowUser[]>('/users/followers')
-  return res.data
+  const res = await api.get('/users/followers')
+  return res.data.data ?? res.data
 }
 
 export async function getMyFollowing(): Promise<FollowUser[]> {
-  const res = await api.get<FollowUser[]>('/users/following')
-  return res.data
+  const res = await api.get('/users/following')
+  return res.data.data ?? res.data
 }
 
 export async function getUserFollowers(userId: string): Promise<FollowUser[]> {
-  const res = await api.get<FollowUser[]>(`/users/${userId}/followers`)
-  return res.data
+  const res = await api.get(`/users/${userId}/followers`)
+  return res.data.data ?? res.data
 }
 
 export async function getUserFollowing(userId: string): Promise<FollowUser[]> {
-  const res = await api.get<FollowUser[]>(`/users/${userId}/following`)
-  return res.data
+  const res = await api.get(`/users/${userId}/following`)
+  return res.data.data ?? res.data
 }

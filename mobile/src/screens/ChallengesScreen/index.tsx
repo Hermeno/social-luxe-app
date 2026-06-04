@@ -18,6 +18,8 @@ import { getActiveChallenges, Challenge } from '../../services/challenge.service
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { colors, fonts, spacing, radius } from '../../theme'
 import { API_BASE } from '../../config'
+import { getCache, setCache } from '../../db/database'
+import { isConnected } from '../../services/netinfo.service'
 
 type Nav = StackNavigationProp<AppStackParams>
 
@@ -38,10 +40,19 @@ export default function ChallengesScreen() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    getActiveChallenges()
-      .then(setChallenges)
-      .catch(() => {})
-      .finally(() => setLoading(false))
+    let cancelled = false
+    async function run() {
+      const cached = await getCache<Challenge[]>('challenges')
+      if (!cancelled && cached) { setChallenges(cached); setLoading(false) }
+      if (!isConnected()) { setLoading(false); return }
+      try {
+        const fresh = await getActiveChallenges()
+        if (!cancelled) { setChallenges(fresh); setLoading(false) }
+        setCache('challenges', fresh).catch(() => {})
+      } catch { if (!cancelled) setLoading(false) }
+    }
+    run()
+    return () => { cancelled = true }
   }, [])
 
   function handleParticipate(challenge: Challenge) {
@@ -70,7 +81,7 @@ export default function ChallengesScreen() {
           contentContainerStyle={s.list}
           ListEmptyComponent={
             <View style={s.center}>
-              <Ionicons name="trophy-outline" size={56} color="rgba(255,255,255,0.15)" />
+              <Ionicons name="trophy-outline" size={56} color={colors.gray200} />
               <Text style={s.emptyText}>Nenhum desafio ativo</Text>
             </View>
           }

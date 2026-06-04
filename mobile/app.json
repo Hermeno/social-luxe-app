@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Luxe",
-    "slug": "luxe",
+    "name": "luxee",
+    "slug": "luxee",
     "version": "1.0.0",
     "sdkVersion": "54.0.0",
     "orientation": "portrait",
@@ -9,20 +9,20 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/splash-logo.png",
       "resizeMode": "contain",
-      "backgroundColor": "#000000"
+      "backgroundColor": "#FFFFFF"
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.luxe.app"
+      "bundleIdentifier": "com.luxee.app"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#000000"
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#1A1A1A"
       },
-      "package": "com.luxe.app"
+      "package": "com.luxee.app"
     },
     "plugins": [
       "expo-video",

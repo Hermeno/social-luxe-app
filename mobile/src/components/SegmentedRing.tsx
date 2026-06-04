@@ -2,8 +2,8 @@ import React from 'react'
 import Svg, { Path, Circle, Defs, LinearGradient, Stop } from 'react-native-svg'
 import { colors } from '../theme'
 
-// Instagram-style gradient: yellow → orange → pink → purple
-const INSTA_GRADIENT = ['#feda77', '#f58529', '#dd2a7b', '#8134af', '#515bd4']
+// Instagram-inspired, lighter version
+const INSTA_GRADIENT = ['#FCAF45', '#E1306C', '#833AB4']
 
 interface Props {
   count: number

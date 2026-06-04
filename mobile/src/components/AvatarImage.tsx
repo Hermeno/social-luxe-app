@@ -1,5 +1,6 @@
 import React from 'react'
-import { View, Image, StyleSheet, ViewStyle } from 'react-native'
+import { View, StyleSheet, ViewStyle } from 'react-native'
+import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
 import { colors } from '../theme'
 import { API_BASE } from '../config'
@@ -15,7 +16,7 @@ interface Props {
 export default function AvatarImage({ uri, size = 44, style, borderColor, borderWidth = 0 }: Props) {
   const radius = size / 2
   const resolvedUri = uri
-    ? uri.startsWith('http') ? uri : `${API_BASE}${uri}`
+    ? uri.startsWith('http') || uri.startsWith('file') ? uri : `${API_BASE}${uri}`
     : null
 
   const containerStyle = [
@@ -31,7 +32,16 @@ export default function AvatarImage({ uri, size = 44, style, borderColor, border
   ]
 
   if (resolvedUri) {
-    return <Image source={{ uri: resolvedUri }} style={containerStyle as any} resizeMode="cover" />
+    return (
+      <Image
+        source={{ uri: resolvedUri }}
+        style={containerStyle as any}
+        contentFit="cover"
+        cachePolicy="disk"
+        recyclingKey={resolvedUri}
+        transition={80}
+      />
+    )
   }
 
   return (

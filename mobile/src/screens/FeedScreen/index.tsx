@@ -17,12 +17,17 @@ import { StackNavigationProp } from '@react-navigation/stack'
 import { useFocusEffect, useIsFocused } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
+import { Search, MessageCircle, User } from 'lucide-react-native'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { Post } from '../../types'
 import { useFeed } from '../../hooks/useFeed'
 import { useFeedStore } from '../../store/feed.store'
+import { useOnlineStore } from '../../store/online.store'
+import { useNotificationStore } from '../../store/notification.store'
+import { useMessageBadgeStore } from '../../store/messageBadge.store'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { markPostViewed, getViewedPostIds } from '../../db/database'
+import * as postService from '../../services/post.service'
 import { getOrDownload, prefetchMedia } from '../../db/mediaCache'
 import { colors, fonts, spacing, gradients } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
@@ -33,8 +38,8 @@ import CommentSheet from '../../components/CommentSheet'
 import { API_BASE } from '../../config'
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window')
-const RING_SIZE      = 72
-const AVATAR_SIZE    = 58
+const RING_SIZE      = 65
+const AVATAR_SIZE    = 54
 const IMAGE_DURATION = 30000
 
 type Nav = StackNavigationProp<AppStackParams>
@@ -48,6 +53,65 @@ function resolveMedia(url: string) {
   return url.startsWith('http') ? url : `${API_BASE}${url}`
 }
 
+// ─── Ripple rings (online presence — contained inside the avatar circle) ────
+const NUM_RINGS       = 3
+const RIPPLE_DURATION = 1800
+const RIPPLE_STAGGER  = 520
+
+// Waves start from the centre and expand to fill the circle.
+// The avatar container must have overflow:'hidden' to clip them to the circle.
+function RippleRings({ size }: { size: number }) {
+  const anims = [
+    useRef(new Animated.Value(0)).current,
+    useRef(new Animated.Value(0)).current,
+    useRef(new Animated.Value(0)).current,
+  ]
+
+  useEffect(() => {
+    const TOTAL = RIPPLE_DURATION + (NUM_RINGS - 1) * RIPPLE_STAGGER
+    const loops = anims.map((anim, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(i * RIPPLE_STAGGER),
+          Animated.timing(anim, { toValue: 1, duration: RIPPLE_DURATION, useNativeDriver: true }),
+          Animated.timing(anim, { toValue: 0, duration: 0,              useNativeDriver: true }),
+          Animated.delay((NUM_RINGS - 1 - i) * RIPPLE_STAGGER),
+        ]),
+      ),
+    )
+    loops.forEach((l) => l.start())
+    return () => loops.forEach((l) => l.stop())
+  }, [])
+
+  return (
+    <>
+      {anims.map((anim, i) => {
+        // Scale 0→1: starts as invisible point in centre, expands to fill the circle
+        const scale = anim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] })
+        // Opacity: flashes in quickly, then fades out
+        const opacity = anim.interpolate({
+          inputRange: [0, 0.1, 0.5, 1],
+          outputRange: [0, 0.95, 0.65, 0],
+        })
+        return (
+          <Animated.View
+            key={i}
+            style={{
+              position: 'absolute',
+              width: size, height: size,
+              borderRadius: size / 2,
+              // Filled semi-transparent white — sits on top of photo
+              backgroundColor: 'rgba(255,255,255,0.92)',
+              opacity,
+              transform: [{ scale }],
+            }}
+          />
+        )
+      })}
+    </>
+  )
+}
+
 // ─── Bubble Item ──────────────────────────────────────────────────────────────
 function BubbleItem({
   item,
@@ -55,20 +119,20 @@ function BubbleItem({
   viewedCount,
   index,
   onPress,
+  onNamePress,
 }: {
   item: UserGroup
   isActive: boolean
   viewedCount: number
   index: number
   onPress: () => void
+  onNamePress: () => void
 }) {
+  const isOnlineUser  = useOnlineStore((s) => s.isOnline(item.user.id))
   const unviewedCount = item.posts.length - viewedCount
 
   const opacity    = useRef(new Animated.Value(0)).current
   const entryY     = useRef(new Animated.Value(14)).current
-  const scaleAnim  = useRef(new Animated.Value(1)).current
-  const spinAnim   = useRef(new Animated.Value(0)).current
-  // Entrance stagger
   useEffect(() => {
     Animated.parallel([
       Animated.timing(opacity, { toValue: 1, duration: 280, delay: index * 55, useNativeDriver: true }),
@@ -76,46 +140,45 @@ function BubbleItem({
     ]).start()
   }, [])
 
-  // Active scale pulse
-  useEffect(() => {
-    Animated.spring(scaleAnim, {
-      toValue: isActive ? 1.08 : 1,
-      useNativeDriver: true,
-      speed: 20, bounciness: 8,
-    }).start()
-  }, [isActive])
-
-  function handlePress() {
-    spinAnim.setValue(0)
-    Animated.sequence([
-      Animated.timing(spinAnim, { toValue: 1, duration: 180, useNativeDriver: true }),
-      Animated.spring(spinAnim, { toValue: 0, speed: 22, bounciness: 10, useNativeDriver: true }),
-    ]).start()
-    onPress()
-  }
-
-  const rotate = spinAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '20deg'] })
-
   return (
-    <Animated.View style={{ opacity, transform: [{ translateY: entryY }] }}>
-      <TouchableOpacity style={s.bubbleItem} onPress={handlePress} activeOpacity={0.75}>
-
-        {/* Ring + badge container */}
+    <Animated.View style={[s.bubbleItem, { opacity, transform: [{ translateY: entryY }] }]}>
+      {/* Ring — toca para ver posts */}
+      <TouchableOpacity onPress={onPress} activeOpacity={0.75}>
         <View style={s.ringContainer}>
-          <Animated.View style={[s.ringWrap, { transform: [{ scale: scaleAnim }, { rotate }] }]}>
+          <View style={s.ringWrap}>
             <SegmentedRing
               count={item.posts.length}
               viewedCount={viewedCount}
               size={RING_SIZE}
               strokeWidth={3}
             />
+            {/* Avatar + ripple contained inside the circle */}
             <View style={s.avatarCenter}>
-              <AvatarImage uri={item.user.avatar} size={AVATAR_SIZE} />
+              <View style={{ width: AVATAR_SIZE, height: AVATAR_SIZE, borderRadius: AVATAR_SIZE / 2, overflow: 'hidden' }}>
+                <AvatarImage uri={item.user.avatar} size={AVATAR_SIZE} />
+                {/* Ripple inside the circle — clipped by overflow:hidden */}
+                {isOnlineUser && (
+                  <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+                    <RippleRings size={AVATAR_SIZE} />
+                  </View>
+                )}
+              </View>
             </View>
-          </Animated.View>
+          </View>
 
+          {/* ONLINE badge below the avatar */}
+          {isOnlineUser && (
+            <View style={s.onlineBadgeWrap}>
+              <View style={s.onlineBadge}>
+                <Text style={s.onlineBadgeText}>ONLINE</Text>
+              </View>
+            </View>
+          )}
         </View>
+      </TouchableOpacity>
 
+      {/* Nome — toca para ver perfil */}
+      <TouchableOpacity onPress={onNamePress} activeOpacity={0.6} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
         <Text style={s.bubbleName} numberOfLines={1}>
           {item.user.name.split(' ')[0]}
         </Text>
@@ -149,10 +212,11 @@ function ProgressBars({ count, current, progress }: {
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function FeedScreen() {
-  const { posts, refresh, loadMore, prependPost, removePost, updatePost } = useFeed()
-  const nav       = useNavigation<Nav>()
-  const { top }   = useSafeAreaInsets()
-  const isFocused = useIsFocused()
+  const { posts, refresh, loadMore, prependPost, removePost, updatePost, incrementView } = useFeed()
+  const nav                = useNavigation<Nav>()
+  const { top, bottom }    = useSafeAreaInsets()
+  const isFocused          = useIsFocused()
+  const messageBadge = useMessageBadgeStore((s) => s.totalUnread)
 
   // Consume a post published from CreateScreen → prepend instantly
   const pendingPost    = useFeedStore((s) => s.pendingPost)
@@ -216,12 +280,19 @@ export default function FeedScreen() {
     return Array.from(map.values())
   }, [posts])
 
-  const filteredGroups = useMemo(
-    () => searchQuery.trim()
+  const filteredGroups = useMemo(() => {
+    const base = searchQuery.trim()
       ? userGroups.filter((g) => g.user.name.toLowerCase().includes(searchQuery.toLowerCase()))
-      : userGroups,
-    [userGroups, searchQuery],
-  )
+      : userGroups
+
+    // Unviewed users first, fully-viewed users at the end
+    return [...base].sort((a, b) => {
+      const aAllViewed = a.posts.every((p) => viewedIds.has(p.id))
+      const bAllViewed = b.posts.every((p) => viewedIds.has(p.id))
+      if (aAllViewed === bAllViewed) return 0
+      return aAllViewed ? 1 : -1
+    })
+  }, [userGroups, searchQuery, viewedIds])
 
   const flatPosts = useMemo(() => {
     const seen = new Set<string>()
@@ -298,9 +369,11 @@ export default function FeedScreen() {
 
     if (!post || !isFocused) return
 
-    // Persist view
+    // Persist view — local cache + server counter + optimistic update
     if (!viewedIds.has(post.id)) {
       markPostViewed(post.id).catch(() => {})
+      postService.addView(post.id).catch(() => {})
+      incrementView(post.id)
       setViewedIds((prev) => new Set(prev).add(post.id))
     }
 
@@ -359,8 +432,7 @@ export default function FeedScreen() {
       }
     }
 
-    // Image: reveal immediately (expo-image loads fast from disk cache)
-    // onLoadEnd in the Image component also calls revealMedia
+    // Image: expo-image handles its own fade via transition prop — just start progress
     startProgress(IMAGE_DURATION)
     return () => { progressRef.current?.stop() }
   }, [currentIndex, isFocused])
@@ -434,7 +506,7 @@ export default function FeedScreen() {
       {searchMode ? (
         <View style={[s.searchBar, { paddingTop: top + 10 }]}>
           <View style={s.searchField}>
-            <Ionicons name="search" size={16} color={colors.gray400} />
+            <Search size={15} strokeWidth={2} color={colors.gray400} />
             <TextInput
               autoFocus
               placeholder="Pesquisar pessoas..."
@@ -452,14 +524,53 @@ export default function FeedScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        <View style={[s.header, { paddingTop: top + 8 }]}>
-          <TouchableOpacity onPress={() => setSearchMode(true)} activeOpacity={0.7} style={s.headerSideBtn}>
-            <Ionicons name="search-outline" size={22} color={colors.gray800} />
-          </TouchableOpacity>
-          <Text style={s.logo}>luxe</Text>
-          <TouchableOpacity onPress={() => nav.navigate('Profile', {})} activeOpacity={0.7} style={s.headerSideBtn}>
-            <Ionicons name="person-outline" size={22} color={colors.gray800} />
-          </TouchableOpacity>
+        <View style={[s.header, { paddingTop: top + 10 }]}>
+          <Text style={s.logo}>luxee</Text>
+
+          {/* ── Icon pill ──────────────────────────────────────────── */}
+          <View style={s.pill}>
+            {/* Search */}
+            <TouchableOpacity
+              onPress={() => setSearchMode(true)}
+              activeOpacity={0.65}
+              style={s.pillBtn}
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            >
+              <Search size={20} strokeWidth={1.8} color={colors.gray800} />
+            </TouchableOpacity>
+
+            {/* Profile */}
+            <TouchableOpacity
+              onPress={() => nav.navigate('Profile', {})}
+              activeOpacity={0.65}
+              style={s.pillBtn}
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            >
+              <User size={20} strokeWidth={1.8} color={colors.gray800} />
+            </TouchableOpacity>
+
+            {/* Vertical divider */}
+            <View style={s.pillDivider} />
+
+            {/* Chat + badge */}
+            <TouchableOpacity
+              onPress={() => (nav as any).navigate('Messages')}
+              activeOpacity={0.65}
+              style={s.pillChatBtn}
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            >
+              <View style={s.chatIconWrap}>
+                <MessageCircle size={20} strokeWidth={1.8} color={colors.gray800} />
+                {messageBadge > 0 && (
+                  <View style={s.chatBadge}>
+                    <Text style={s.chatBadgeTxt}>
+                      {messageBadge > 9 ? '9+' : messageBadge}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -473,6 +584,7 @@ export default function FeedScreen() {
         style={s.bubbleRow}
         contentContainerStyle={s.bubbleList}
         onScrollToIndexFailed={() => {}}
+        onEndReachedThreshold={0.5}
         ListHeaderComponent={
           !searchMode ? (
             <TouchableOpacity
@@ -502,6 +614,7 @@ export default function FeedScreen() {
               setSearchMode(false)
               setSearchQuery('')
             }}
+            onNamePress={() => nav.navigate('Profile', { userId: item.user.id })}
           />
         )}
         ListEmptyComponent={
@@ -526,56 +639,46 @@ export default function FeedScreen() {
           <View style={s.mediaClip} renderToHardwareTextureAndroid>
 
             {post.mediaType === 'TEXT' ? (
-              /* TEXT post — full-screen colour card */
               <View style={[s.absLayer, s.textCard, { backgroundColor: post.bgColor ?? '#FF4B6E' }]}>
                 <Text style={s.textCardContent}>{post.caption}</Text>
               </View>
-            ) : (
+            ) : post.mediaType === 'VIDEO' ? (
               <>
-                {/* Layer 1: blurred thumbnail — mesma proporção da imagem final */}
-                <Image
-                  source={{ uri: post.thumbnailUrl ?? resolveMedia(post.mediaUrl ?? '') }}
-                  style={s.absLayer}
-                  contentFit={post.mediaType === 'VIDEO' ? 'cover' : 'contain'}
-                  cachePolicy="disk"
-                  recyclingKey={`thumb-${post.id}`}
-                />
-
-                {/* Layer 2: media completa — vídeo cover, imagem contain (sem forçar) */}
+                {/* Poster frame enquanto o vídeo carrega */}
+                {post.thumbnailUrl ? (
+                  <Image
+                    source={{ uri: post.thumbnailUrl }}
+                    style={s.absLayer}
+                    contentFit="cover"
+                    cachePolicy="disk"
+                    recyclingKey={`thumb-${post.id}`}
+                  />
+                ) : null}
                 <Animated.View style={[s.absLayer, { opacity: mediaOpacity }]}>
-                  {post.mediaType === 'VIDEO' ? (
-                    <VideoView
-                      player={player}
-                      style={StyleSheet.absoluteFill}
-                      contentFit="cover"
-                      nativeControls={false}
-                    />
-                  ) : (
-                    <Image
-                      key={post.id}
-                      source={{ uri: resolveMedia(post.mediaUrl ?? '') }}
-                      style={s.absLayer}
-                      contentFit="contain"
-                      cachePolicy="disk"
-                      recyclingKey={post.id}
-                      onLoadEnd={() => {
-                        Animated.timing(mediaOpacity, {
-                          toValue: 1, duration: 200, useNativeDriver: true,
-                        }).start()
-                      }}
-                    />
-                  )}
+                  <VideoView
+                    player={player}
+                    style={StyleSheet.absoluteFill}
+                    contentFit="cover"
+                    nativeControls={false}
+                  />
                 </Animated.View>
               </>
+            ) : (
+              <Image
+                key={post.id}
+                source={{ uri: resolveMedia(post.mediaUrl ?? '') }}
+                style={s.absLayer}
+                contentFit="contain"
+                cachePolicy="disk"
+                recyclingKey={post.id}
+                transition={150}
+              />
             )}
 
           </View>
 
           {post.mediaType !== 'TEXT' && (
-            <>
-              <LinearGradient colors={gradients.feedTop}    style={s.topGradient} />
-              <LinearGradient colors={gradients.feedBottom} style={s.bottomGradient} />
-            </>
+            <LinearGradient colors={gradients.feedTop} style={s.topGradient} pointerEvents="none" />
           )}
 
           {currentGroup && (
@@ -590,19 +693,18 @@ export default function FeedScreen() {
 
           {/* Tap zones: Pressable for press-in / press-out (hold-to-pause) */}
           <Pressable
-            style={s.leftTap}
+            style={[s.leftTap,  { bottom: bottom + 100 }]}
             onPressIn={handlePressIn}
             onPressOut={() => handlePressOut(goPrev)}
           />
           <Pressable
-            style={s.rightTap}
+            style={[s.rightTap, { bottom: bottom + 100 }]}
             onPressIn={handlePressIn}
             onPressOut={() => handlePressOut(goNext)}
           />
 
-          <PostInfo key={`info-${post.id}`} post={post} isActive />
+          <PostInfo post={post} isActive />
           <ActionBar
-            key={`bar-${post.id}`}
             post={post}
             onCommentPress={() => setCommentPost(post)}
             newPostsCount={newPostsCount}
@@ -640,23 +742,56 @@ const s = StyleSheet.create({
 
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingBottom: 10,
+    paddingHorizontal: 16, paddingBottom: 12,
     backgroundColor: colors.white,
   },
-  logo:          { fontFamily: fonts.extraBold, fontSize: 26, color: colors.gray800, letterSpacing: -1.2 },
-  headerSideBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerRight:   { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  headerBtn:     { padding: 4 },
-  headerIconGroup: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: colors.gray100,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.gray200,
-    overflow: 'hidden',
+  logo: { fontFamily: fonts.semiBold, fontSize: 24, color: colors.gray800, letterSpacing: -0.8 },
+
+  /* icon pill */
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  headerGroupBtn:     { paddingHorizontal: 13, paddingVertical: 9 },
-  headerGroupDivider: { width: 1, height: 18, backgroundColor: colors.gray200 },
+  pillBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pillDivider: {
+    width: 1,
+    height: 18,
+    backgroundColor: colors.gray200,
+    marginHorizontal: 2,
+  },
+  pillChatBtn: {
+    paddingLeft: 10,
+    paddingRight: 14,
+    paddingVertical: 7,
+  },
+  chatIconWrap: {
+    position: 'relative',
+  },
+  chatBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -6,
+    minWidth: 15,
+    height: 15,
+    borderRadius: 8,
+    backgroundColor: '#FF3B30',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: colors.white,
+  },
+  chatBadgeTxt: {
+    fontSize: 8,
+    fontFamily: fonts.extraBold,
+    color: colors.white,
+    lineHeight: 10,
+  },
 
   searchBar: {
     flexDirection: 'row', alignItems: 'center',
@@ -682,13 +817,34 @@ const s = StyleSheet.create({
   ringContainer: {
     width: RING_SIZE, height: RING_SIZE,
     alignItems: 'center', justifyContent: 'center',
+    overflow: 'visible',
+  },
+  onlineBadgeWrap: {
+    position: 'absolute',
+    bottom: -9,
+    left: 0, right: 0,
+    alignItems: 'center',
+  },
+  onlineBadge: {
+    backgroundColor: '#22C55E',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderWidth: 1.5,
+    borderColor: colors.white,
+  },
+  onlineBadgeText: {
+    color: colors.white,
+    fontSize: 8,
+    fontFamily: fonts.bold,
+    letterSpacing: 0.6,
   },
 
 
-  bubbleRow:    { flexGrow: 0, flexShrink: 0, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.gray200 },
-  bubbleList:   { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 10, gap: 14 },
-  bubbleItem:   { alignItems: 'center', gap: 5, width: RING_SIZE },
-  ringWrap:     { width: RING_SIZE, height: RING_SIZE, alignItems: 'center', justifyContent: 'center' },
+  bubbleRow:  { flexGrow: 0, flexShrink: 0 },
+  bubbleList: { paddingHorizontal: 12, paddingTop: 6, paddingBottom: 10, gap: 8 },
+  bubbleItem: { alignItems: 'center', gap: 6, width: RING_SIZE },
+  ringWrap:   { width: RING_SIZE, height: RING_SIZE, alignItems: 'center', justifyContent: 'center' },
 
   // "Criar" button — mesma dimensão que os avatares com anel
   createRing: {
@@ -744,8 +900,7 @@ const s = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 6,
   },
-  topGradient:    { position: 'absolute', top: 0, left: 0, right: 0, height: 120 },
-  bottomGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 320 },
+  topGradient:    { position: 'absolute', top: 0, left: 0, right: 0, height: 80 },
 
   progressWrap:  { position: 'absolute', top: 12, left: 0, right: 0, zIndex: 20 },
   progressRow:   { flexDirection: 'row', paddingHorizontal: 10, gap: 3 },
@@ -757,8 +912,8 @@ const s = StyleSheet.create({
   progressFull:  { flex: 1, backgroundColor: colors.white },
   progressFill:  { height: '100%', backgroundColor: colors.white },
 
-  leftTap:  { position: 'absolute', left: 0, top: 0, bottom: 155, width: SCREEN_W * 0.35, zIndex: 10 },
-  rightTap: { position: 'absolute', left: SCREEN_W * 0.35, right: 80, top: 0, bottom: 155, zIndex: 10 },
+  leftTap:  { position: 'absolute', left: 0, top: 0, width: SCREEN_W * 0.35, zIndex: 10 },
+  rightTap: { position: 'absolute', left: SCREEN_W * 0.35, right: 80, top: 0, zIndex: 10 },
 
   emptyViewer:  { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 36, gap: 14 },
   emptyIconWrap:{ width: 88, height: 88, borderRadius: 44, backgroundColor: 'rgba(255,75,110,0.1)', alignItems: 'center', justifyContent: 'center', marginBottom: 4 },

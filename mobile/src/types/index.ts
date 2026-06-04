@@ -69,6 +69,19 @@ export interface Message {
   reactions?: MessageReaction[]
 }
 
+export interface Connection {
+  user: Pick<User, 'id' | 'name' | 'avatar'>
+  lastMessage: {
+    id: string
+    content: string | null
+    senderId: string
+    readAt: string | null
+    createdAt: string
+  } | null
+  unreadCount: number
+  postIds: string[]
+}
+
 export interface ApiResponse<T> {
   success: boolean
   message: string

@@ -4,6 +4,7 @@ import {
   KeyboardAvoidingView, Platform, Animated, ActivityIndicator, Alert,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import * as Haptics from 'expo-haptics'
@@ -14,103 +15,139 @@ import { fonts } from '../../theme'
 type Nav   = StackNavigationProp<AuthStackParams>
 type Route = RouteProp<AuthStackParams, 'SetName'>
 
-const PRIMARY  = '#4C8CE4'
-const BG       = '#FFFFFF'
-const INPUT_BG = '#F5F5F7'
-const TEXT     = '#1A1A1A'
-const MUTED    = '#9CA3AF'
+const T  = '#1A1A1A'
+const S  = '#6E6E73'
+const M  = '#ABABAB'
+const B  = '#4C8CE4'
+const E  = '#FF3B30'
+const BD = '#E5E5EA'
+const BG = '#FFFFFF'
+const SX = '#F9F9FB'
 
-function StepDots({ current, total }: { current: number; total: number }) {
+// ── Progress bar (reuse same component) ───────────────────────────────────────
+function ProgressBar({ step, total }: { step: number; total: number }) {
   return (
-    <View style={{ flexDirection: 'row', gap: 5 }}>
+    <View style={p.track}>
       {Array.from({ length: total }, (_, i) => (
-        <View key={i} style={{
-          width: i === current ? 18 : 6, height: 6,
-          borderRadius: 3,
-          backgroundColor: i === current ? PRIMARY : '#E5E5E5',
-        }} />
+        <View key={i} style={[p.seg, i < step ? p.segActive : p.segInactive]} />
       ))}
     </View>
   )
 }
+const p = StyleSheet.create({
+  track:       { flexDirection: 'row', gap: 4, flex: 1 },
+  seg:         { flex: 1, height: 3, borderRadius: 2 },
+  segActive:   { backgroundColor: '#1A1A1A' },
+  segInactive: { backgroundColor: '#E5E5EA' },
+})
 
+// ── Screen ────────────────────────────────────────────────────────────────────
 export default function SetNameScreen() {
   const nav   = useNavigation<Nav>()
   const route = useRoute<Route>()
+  const { top } = useSafeAreaInsets()
   const { register } = useAuthStore()
   const { phone, countryCode, password } = route.params
+
   const [name,    setName]    = useState('')
+  const [focused, setFocused] = useState(false)
   const [loading, setLoading] = useState(false)
   const btnScale = useRef(new Animated.Value(1)).current
 
-  function animateBtn(cb: () => void) {
+  const canCreate = name.trim().length >= 2
+
+  function bounce(cb: () => void) {
     Animated.sequence([
-      Animated.spring(btnScale, { toValue: 0.96, useNativeDriver: true, speed: 60 }),
+      Animated.spring(btnScale, { toValue: 0.97, useNativeDriver: true, speed: 80, bounciness: 0 }),
       Animated.spring(btnScale, { toValue: 1,    useNativeDriver: true, speed: 40, bounciness: 6 }),
     ]).start(cb)
   }
 
   async function handleRegister() {
-    if (!name.trim()) return
+    if (!canCreate) return
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-    animateBtn(async () => {
+    bounce(async () => {
       setLoading(true)
       try {
-        // password used as both password and confirmPassword (already validated match)
         await register(name.trim(), phone, countryCode, password, password)
-        // Auth store sets isAuthenticated = true → RootNavigator shows OnboardingScreen
+        // RootNavigator transitions to onboarding automatically
       } catch (e: unknown) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
         Alert.alert('Erro', e instanceof Error ? e.message : 'Não foi possível criar a conta')
-      } finally {
-        setLoading(false)
-      }
+      } finally { setLoading(false) }
     })
   }
 
   return (
     <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={s.inner}>
+      <View style={[s.inner, { paddingTop: top + 16 }]}>
 
-        <View style={s.topRow}>
-          <Text style={s.brand}>luxe</Text>
-          <View style={s.topRight}>
-            <StepDots current={1} total={2} />
-            <TouchableOpacity onPress={() => nav.goBack()} hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}>
-              <Ionicons name="chevron-back" size={26} color={TEXT} />
-            </TouchableOpacity>
-          </View>
+        {/* Header */}
+        <View style={s.header}>
+          <TouchableOpacity onPress={() => nav.goBack()} style={s.backBtn} hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}>
+            <Ionicons name="chevron-back" size={24} color={T} />
+          </TouchableOpacity>
+          <ProgressBar step={2} total={2} />
+          <Text style={s.stepLabel}>2 / 2</Text>
         </View>
 
-        <View style={s.headWrap}>
-          <Text style={s.heading}>Como te chamas?</Text>
-          <Text style={s.sub}>Este é o nome que os outros irão ver no teu perfil.</Text>
+        {/* Hero */}
+        <View style={s.hero}>
+          <Text style={s.heading}>Como te{'\n'}chamas?</Text>
+          <Text style={s.sub}>Este é o nome que os outros irão ver no teu perfil. Podes alterá-lo depois.</Text>
         </View>
 
-        <TextInput
-          style={s.input}
-          placeholder="O teu nome"
-          placeholderTextColor={MUTED}
-          value={name}
-          onChangeText={setName}
-          autoCapitalize="words"
-          autoFocus
-          returnKeyType="go"
-          onSubmitEditing={handleRegister}
-        />
+        {/* Name input */}
+        <View style={[s.inputWrap, focused && s.inputFocused]}>
+          <Ionicons name="person-outline" size={18} color={focused ? B : M} style={s.icon} />
+          <TextInput
+            style={s.input}
+            placeholder="O teu nome"
+            placeholderTextColor={M}
+            value={name}
+            onChangeText={setName}
+            autoCapitalize="words"
+            autoCorrect={false}
+            autoFocus
+            returnKeyType="go"
+            onSubmitEditing={handleRegister}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+          />
+          {name.trim().length >= 2 && (
+            <Ionicons name="checkmark-circle" size={20} color="#34C759" />
+          )}
+        </View>
+
+        {/* Character hint */}
+        {name.length > 0 && name.trim().length < 2 && (
+          <Text style={s.hint}>Mínimo 2 caracteres</Text>
+        )}
 
         <View style={s.spacer} />
 
+        {/* Finish step indicator */}
+        <View style={s.finishRow}>
+          <View style={s.finishDot} />
+          <Text style={s.finishTxt}>Última etapa</Text>
+        </View>
+
+        {/* CTA */}
         <Animated.View style={{ transform: [{ scale: btnScale }] }}>
           <TouchableOpacity
-            style={[s.btn, (!name.trim() || loading) && s.btnOff]}
+            style={[s.btn, (!canCreate || loading) && s.btnOff]}
             onPress={handleRegister}
-            disabled={!name.trim() || loading}
+            disabled={!canCreate || loading}
             activeOpacity={1}
           >
             {loading
               ? <ActivityIndicator color="#fff" />
-              : <Text style={s.btnText}>Criar conta</Text>
+              : (
+                <View style={s.btnInner}>
+                  <Text style={s.btnText}>Criar conta</Text>
+                  <Ionicons name="arrow-forward" size={18} color="#fff" />
+                </View>
+              )
             }
           </TouchableOpacity>
         </Animated.View>
@@ -121,17 +158,36 @@ export default function SetNameScreen() {
 }
 
 const s = StyleSheet.create({
-  screen:   { flex: 1, backgroundColor: BG },
-  inner:    { flex: 1, paddingHorizontal: 28, paddingTop: 64, paddingBottom: 40 },
-  topRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 52 },
-  topRight: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  brand:    { fontSize: 22, fontFamily: fonts.bold, color: PRIMARY, letterSpacing: -0.3 },
-  headWrap: { marginBottom: 32, gap: 8 },
-  heading:  { fontSize: 28, fontFamily: fonts.semiBold, color: TEXT, letterSpacing: -0.5, lineHeight: 34 },
-  sub:      { fontSize: 14, fontFamily: fonts.regular, color: MUTED, lineHeight: 20 },
-  input:    { backgroundColor: INPUT_BG, borderRadius: 14, paddingHorizontal: 18, paddingVertical: 18, fontSize: 16, fontFamily: fonts.regular, color: TEXT },
-  spacer:   { flex: 1 },
-  btn:      { backgroundColor: PRIMARY, borderRadius: 14, height: 56, alignItems: 'center', justifyContent: 'center' },
-  btnOff:   { opacity: 0.35 },
-  btnText:  { color: '#fff', fontFamily: fonts.semiBold, fontSize: 16, letterSpacing: 0.1 },
+  screen: { flex: 1, backgroundColor: BG },
+  inner:  { flex: 1, paddingHorizontal: 28, paddingBottom: 36 },
+
+  header:    { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 44 },
+  backBtn:   { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F4F4F6', alignItems: 'center', justifyContent: 'center' },
+  stepLabel: { fontSize: 13, fontFamily: fonts.medium, color: M, minWidth: 28, textAlign: 'right' },
+
+  hero:    { marginBottom: 36, gap: 12 },
+  heading: { fontSize: 40, fontFamily: fonts.bold, color: T, letterSpacing: -1.2, lineHeight: 46 },
+  sub:     { fontSize: 15, fontFamily: fonts.regular, color: S, lineHeight: 22, letterSpacing: -0.1 },
+
+  inputWrap: {
+    flexDirection: 'row', alignItems: 'center',
+    height: 58, borderRadius: 14,
+    borderWidth: 1.5, borderColor: BD,
+    backgroundColor: SX, paddingHorizontal: 16,
+  },
+  inputFocused: { borderColor: B, backgroundColor: BG },
+  icon:  { marginRight: 10 },
+  input: { flex: 1, fontFamily: fonts.regular, fontSize: 16, color: T, paddingVertical: 0 },
+  hint:  { marginTop: 7, marginLeft: 4, fontSize: 13, fontFamily: fonts.regular, color: M },
+
+  spacer: { flex: 1 },
+
+  finishRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14 },
+  finishDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#34C759' },
+  finishTxt: { fontSize: 13, fontFamily: fonts.medium, color: S },
+
+  btn:     { height: 56, borderRadius: 16, backgroundColor: T, alignItems: 'center', justifyContent: 'center' },
+  btnOff:  { opacity: 0.2 },
+  btnInner:{ flexDirection: 'row', alignItems: 'center', gap: 8 },
+  btnText: { color: '#fff', fontFamily: fonts.semiBold, fontSize: 16, letterSpacing: -0.2 },
 })

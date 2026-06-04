@@ -1,95 +1,103 @@
 import React, { useState, useRef } from 'react'
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  View, Text, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, Animated, ActivityIndicator,
 } from 'react-native'
 import PhoneInput from 'react-native-phone-number-input'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import * as Haptics from 'expo-haptics'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
-import * as Haptics from 'expo-haptics'
 import { AuthStackParams } from '../../navigation/AuthNavigator'
 import * as authService from '../../services/auth.service'
 import { fonts } from '../../theme'
 
 type Nav = StackNavigationProp<AuthStackParams>
 
-const PRIMARY = '#4C8CE4'
-const BG      = '#FFFFFF'
-const INPUT_BG = '#F5F5F7'
-const TEXT     = '#1A1A1A'
-const MUTED    = '#9CA3AF'
+// ── Design tokens ─────────────────────────────────────────────────────────────
+const T  = '#1A1A1A'
+const S  = '#6E6E73'
+const M  = '#ABABAB'
+const B  = '#4C8CE4'
+const BD = '#E5E5EA'
+const BG = '#FFFFFF'
+const SX = '#F9F9FB'
 
 export default function PhoneScreen() {
-  const nav   = useNavigation<Nav>()
-  const [phone, setPhone]           = useState('')
+  const nav     = useNavigation<Nav>()
+  const { top } = useSafeAreaInsets()
+  const [phone,       setPhone]       = useState('')
   const [countryCode, setCountryCode] = useState('+244')
-  const [loading, setLoading]       = useState(false)
+  const [loading,     setLoading]     = useState(false)
   const btnScale = useRef(new Animated.Value(1)).current
 
-  function animateBtn(cb: () => void) {
+  function bounce(cb: () => void) {
     Animated.sequence([
-      Animated.spring(btnScale, { toValue: 0.96, useNativeDriver: true, speed: 60 }),
+      Animated.spring(btnScale, { toValue: 0.97, useNativeDriver: true, speed: 80, bounciness: 0 }),
       Animated.spring(btnScale, { toValue: 1,    useNativeDriver: true, speed: 40, bounciness: 6 }),
     ]).start(cb)
   }
 
   async function handleContinue() {
-    if (!phone) return
+    if (!canGo) return
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-    animateBtn(async () => {
+    bounce(async () => {
       setLoading(true)
       try {
         const { exists } = await authService.checkPhone(phone)
-        if (exists) {
-          nav.navigate('LoginPassword', { phone, countryCode })
-        } else {
-          nav.navigate('CreatePassword', { phone, countryCode })
-        }
+        nav.navigate(exists ? 'LoginPassword' : 'CreatePassword', { phone, countryCode })
       } catch {
         nav.navigate('LoginPassword', { phone, countryCode })
-      } finally {
-        setLoading(false)
-      }
+      } finally { setLoading(false) }
     })
   }
 
-  const canContinue = phone.length >= 7
+  const canGo = phone.length >= 7
 
   return (
     <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={s.inner}>
+      <View style={[s.inner, { paddingTop: top + 20 }]}>
 
         {/* Brand */}
-        <Text style={s.brand}>luxe</Text>
+        <View style={s.brandRow}>
+          <Text style={s.brand}>luxee</Text>
+          <View style={s.brandDot} />
+        </View>
 
-        {/* Heading */}
-        <View style={s.headWrap}>
-          <Text style={s.heading}>O teu número</Text>
-          <Text style={s.sub}>Usamos apenas para identificar a tua conta. Nunca partilhamos.</Text>
+        {/* Hero text */}
+        <View style={s.hero}>
+          <Text style={s.heading}>O teu{'\n'}número.</Text>
+          <Text style={s.sub}>Usamos apenas para identificar a tua conta.{'\n'}Nunca partilhamos com terceiros.</Text>
         </View>
 
         {/* Phone input */}
-        <PhoneInput
-          defaultCode="AO"
-          layout="first"
-          onChangeFormattedText={setPhone}
-          onChangeCountry={(c) => setCountryCode(`+${c.callingCode[0]}`)}
-          containerStyle={s.phoneBox}
-          textContainerStyle={s.phoneInner}
-          textInputStyle={s.phoneText}
-          codeTextStyle={s.phoneText}
-          flagButtonStyle={s.phoneFlag}
-          textInputProps={{ placeholderTextColor: MUTED, returnKeyType: 'done', onSubmitEditing: handleContinue }}
-        />
+        <View style={s.phoneWrap}>
+          <PhoneInput
+            defaultCode="AO"
+            layout="first"
+            onChangeFormattedText={setPhone}
+            onChangeCountry={(c) => setCountryCode(`+${c.callingCode[0]}`)}
+            containerStyle={s.phoneContainer}
+            textContainerStyle={s.phoneTextContainer}
+            textInputStyle={s.phoneText}
+            codeTextStyle={s.phoneText}
+            flagButtonStyle={s.phoneFlag}
+            textInputProps={{
+              placeholderTextColor: M,
+              returnKeyType: 'done',
+              onSubmitEditing: handleContinue,
+            }}
+          />
+        </View>
 
         <View style={s.spacer} />
 
         {/* CTA */}
         <Animated.View style={{ transform: [{ scale: btnScale }] }}>
           <TouchableOpacity
-            style={[s.btn, !canContinue && s.btnOff]}
+            style={[s.btn, !canGo && s.btnOff]}
             onPress={handleContinue}
-            disabled={!canContinue || loading}
+            disabled={!canGo || loading}
             activeOpacity={1}
           >
             {loading
@@ -99,9 +107,13 @@ export default function PhoneScreen() {
           </TouchableOpacity>
         </Animated.View>
 
-        <View style={s.legalWrap}>
-          <Text style={s.legal}>Ao continuar, aceitas os nossos Termos e Política de Privacidade</Text>
-        </View>
+        {/* Legal */}
+        <Text style={s.legal}>
+          Ao continuar, aceitas os{' '}
+          <Text style={s.legalLink}>Termos de Serviço</Text>
+          {' '}e a{' '}
+          <Text style={s.legalLink}>Política de Privacidade</Text>
+        </Text>
 
       </View>
     </KeyboardAvoidingView>
@@ -109,24 +121,40 @@ export default function PhoneScreen() {
 }
 
 const s = StyleSheet.create({
-  screen:    { flex: 1, backgroundColor: BG },
-  inner:     { flex: 1, paddingHorizontal: 28, paddingTop: 64, paddingBottom: 40 },
-  brand:     { fontSize: 22, fontFamily: fonts.bold, color: PRIMARY, letterSpacing: -0.3, marginBottom: 52 },
-  headWrap:  { marginBottom: 36, gap: 8 },
-  heading:   { fontSize: 28, fontFamily: fonts.semiBold, color: TEXT, letterSpacing: -0.5, lineHeight: 34 },
-  sub:       { fontSize: 14, fontFamily: fonts.regular, color: MUTED, lineHeight: 20 },
+  screen: { flex: 1, backgroundColor: BG },
+  inner:  { flex: 1, paddingHorizontal: 28, paddingBottom: 36 },
 
-  phoneBox:  { backgroundColor: INPUT_BG, borderRadius: 14, width: '100%', borderWidth: 0, height: 58 },
-  phoneInner:{ backgroundColor: INPUT_BG, borderRadius: 14 },
-  phoneText: { color: TEXT, fontFamily: fonts.regular, fontSize: 16, paddingVertical: 0 },
-  phoneFlag: { backgroundColor: INPUT_BG, borderRadius: 14 },
+  // Brand
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 52 },
+  brand:    { fontFamily: fonts.bold, fontSize: 22, color: T, letterSpacing: -0.6 },
+  brandDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: B, marginTop: 2 },
 
-  spacer:    { flex: 1 },
+  // Hero
+  hero:    { marginBottom: 40, gap: 12 },
+  heading: {
+    fontSize: 40, fontFamily: fonts.bold, color: T,
+    letterSpacing: -1.2, lineHeight: 46,
+  },
+  sub: {
+    fontSize: 15, fontFamily: fonts.regular, color: S,
+    lineHeight: 22, letterSpacing: -0.1,
+  },
 
-  btn:       { backgroundColor: PRIMARY, borderRadius: 14, height: 56, alignItems: 'center', justifyContent: 'center' },
-  btnOff:    { opacity: 0.35 },
-  btnText:   { color: '#fff', fontFamily: fonts.semiBold, fontSize: 16, letterSpacing: 0.1 },
+  // Phone input
+  phoneWrap:          { borderRadius: 14, overflow: 'hidden', borderWidth: 1.5, borderColor: BD, backgroundColor: SX },
+  phoneContainer:     { width: '100%', backgroundColor: 'transparent', height: 58 },
+  phoneTextContainer: { backgroundColor: 'transparent', paddingVertical: 0, borderLeftWidth: 1, borderLeftColor: BD },
+  phoneText:          { fontFamily: fonts.regular, fontSize: 16, color: T },
+  phoneFlag:          { backgroundColor: 'transparent' },
 
-  legalWrap: { marginTop: 18 },
-  legal:     { fontSize: 12, fontFamily: fonts.regular, color: MUTED, textAlign: 'center', lineHeight: 18 },
+  spacer: { flex: 1 },
+
+  // CTA
+  btn:     { height: 56, borderRadius: 16, backgroundColor: B, alignItems: 'center', justifyContent: 'center' },
+  btnOff:  { opacity: 0.3 },
+  btnText: { color: '#fff', fontFamily: fonts.semiBold, fontSize: 16, letterSpacing: -0.2 },
+
+  // Legal
+  legal:     { marginTop: 16, fontSize: 12, fontFamily: fonts.regular, color: M, textAlign: 'center', lineHeight: 18 },
+  legalLink: { color: S, fontFamily: fonts.medium },
 })

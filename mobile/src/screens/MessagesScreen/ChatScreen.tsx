@@ -4,6 +4,7 @@ import {
   KeyboardAvoidingView, Platform, Animated, Pressable, TouchableOpacity, Modal,
 } from 'react-native'
 import * as Haptics from 'expo-haptics'
+import { Ionicons } from '@expo/vector-icons'
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Message, MessageReaction } from '../../types'
@@ -16,10 +17,18 @@ import { colors, spacing, radius, fonts } from '../../theme'
 import ChatHeader from './ChatHeader'
 import ChatInputBar from './ChatInputBar'
 import { API_BASE } from '../../config'
+import {
+  getCachedMessages,
+  cacheMessages,
+  upsertCachedMessage,
+  replacePendingMessage,
+  updateCachedConnection,
+} from '../../db/database'
+import { isConnected } from '../../services/netinfo.service'
 
 type Route = RouteProp<AppStackParams, 'Chat'>
-const CHAT_BG  = '#FFFFFF'
 
+const CHAT_BG = '#FFFFFF'
 const REACTION_EMOJIS = ['❤️', '😂', '😮', '😢', '🔥', '👏']
 
 function formatTime(dateStr: string) {
@@ -90,6 +99,34 @@ function EmojiPicker({ onPick, onClose }: { onPick: (e: string) => void; onClose
   )
 }
 
+// ── File card (documents, PDFs, etc.) ────────────────────────────────────────
+function FileCard({ fileName, mine }: { fileName: string; mine: boolean }) {
+  const ext = fileName.split('.').pop()?.toUpperCase() ?? 'FILE'
+  return (
+    <View style={[fc.wrap, mine ? fc.wrapMine : fc.wrapTheirs]}>
+      <View style={fc.iconWrap}>
+        <Ionicons name="document-text-outline" size={22} color={mine ? 'rgba(255,255,255,0.9)' : colors.primary} />
+      </View>
+      <View style={fc.info}>
+        <Text style={[fc.name, mine && fc.nameMine]} numberOfLines={2}>{fileName}</Text>
+        <Text style={[fc.ext, mine && fc.extMine]}>{ext}</Text>
+      </View>
+    </View>
+  )
+}
+
+const fc = StyleSheet.create({
+  wrap:      { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4, paddingHorizontal: 2, maxWidth: 220 },
+  wrapMine:  {},
+  wrapTheirs:{},
+  iconWrap:  { width: 40, height: 40, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
+  info:      { flex: 1, gap: 2 },
+  name:      { fontSize: 13, fontFamily: fonts.semiBold, color: colors.gray800 },
+  nameMine:  { color: colors.white },
+  ext:       { fontSize: 10, fontFamily: fonts.regular, color: colors.gray400, textTransform: 'uppercase', letterSpacing: 0.5 },
+  extMine:   { color: 'rgba(255,255,255,0.6)' },
+})
+
 // ── Reply quote ───────────────────────────────────────────────────────────────
 function ReplyQuote({ replyTo, mine }: { replyTo: NonNullable<Message['replyTo']>; mine: boolean }) {
   return (
@@ -102,7 +139,7 @@ function ReplyQuote({ replyTo, mine }: { replyTo: NonNullable<Message['replyTo']
 
 // ── Message bubble ────────────────────────────────────────────────────────────
 interface BubbleProps {
-  msg: Message
+  msg: Message & { _pending?: boolean; _failed?: boolean }
   mine: boolean
   isFirst: boolean
   isLast: boolean
@@ -133,22 +170,34 @@ function MessageBubble({ msg, mine, isFirst, isLast, myUserId, onLongPress, onRe
             isFirst && !mine && t.bubbleTheirsFirst,
             isLast  && mine  && t.bubbleMineLast,
             isLast  && !mine && t.bubbleTheirsLast,
+            msg._pending && t.bubblePending,
           ]}>
             {msg.replyTo && <ReplyQuote replyTo={msg.replyTo} mine={mine} />}
             {mediaUri && (
               <Image source={{ uri: mediaUri }} style={t.mediaBubble} resizeMode="cover" />
             )}
-            {msg.content ? (
+            {/* Document / file attachment */}
+            {!mediaUri && msg.content && msg.content.match(/\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|zip|rar)$/i) && (
+              <FileCard fileName={msg.content} mine={mine} />
+            )}
+            {msg.content && !msg.content.match(/\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|zip|rar)$/i) ? (
               <Text style={[t.msgText, mine ? t.msgMine : t.msgTheirs]}>{msg.content}</Text>
-            ) : null}
+            ) : !mediaUri && !msg.content ? null : null}
             <View style={t.metaRow}>
               <Text style={[t.time, mine && t.timeMine]}>{formatTime(msg.createdAt)}</Text>
-              {mine && <Text style={t.tick}>{msg.readAt ? '✓✓' : '✓'}</Text>}
+              {mine && (
+                msg._failed
+                  ? <Ionicons name="alert-circle" size={12} color="#FF6B6B" />
+                  : msg._pending
+                    ? <Ionicons name="checkmark" size={13} color="rgba(255,255,255,0.35)" />
+                    : msg.readAt
+                      ? <Ionicons name="checkmark-done" size={13} color="#4FC3F7" />
+                      : <Ionicons name="checkmark-done" size={13} color="rgba(255,255,255,0.5)" />
+              )}
             </View>
           </View>
         </Pressable>
 
-        {/* Reactions strip */}
         {allReactions.length > 0 && (
           <View style={[t.reactStrip, mine ? t.reactStripRight : t.reactStripLeft]}>
             {[...new Set(allReactions.map((r) => r.emoji))].map((e) => (
@@ -160,7 +209,6 @@ function MessageBubble({ msg, mine, isFirst, isLast, myUserId, onLongPress, onRe
           </View>
         )}
 
-        {/* Reply action — appears below bubble on long press */}
         <TouchableOpacity style={t.replyBtn} onPress={() => onReply(msg)}>
           <Text style={t.replyBtnText}>Responder</Text>
         </TouchableOpacity>
@@ -181,39 +229,86 @@ function DateSep({ label }: { label: string }) {
 }
 
 // ── Screen ────────────────────────────────────────────────────────────────────
+type LocalMessage = Message & { _pending?: boolean; _failed?: boolean }
+
 export default function ChatScreen() {
   const { user }   = useAuthStore()
   const route      = useRoute<Route>()
   const nav        = useNavigation()
   const { userId, userName, userAvatar } = route.params
-  const [messages, setMessages] = useState<Message[]>([])
-  const [text, setText]         = useState('')
-  const [isTyping, setIsTyping] = useState(false)
-  const [replyingTo, setReplyingTo] = useState<Message | null>(null)
+
+  const [messages, setMessages]         = useState<LocalMessage[]>([])
+  const [text, setText]                 = useState('')
+  const [isTyping, setIsTyping]         = useState(false)
+  const [replyingTo, setReplyingTo]     = useState<Message | null>(null)
   const [emojiTargetMsg, setEmojiTargetMsg] = useState<Message | null>(null)
+
   const listRef     = useRef<FlatList>(null)
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { bottom, top } = useSafeAreaInsets()
   const isOnline        = useOnlineStore((s) => s.isOnline(userId))
 
+  // ── Load: SQLite first → background network sync ──────────────────────────
   useEffect(() => {
-    msgService.getMessages(userId).then((m) => setMessages(m.reverse())).catch(() => {})
+    let cancelled = false
+
+    async function load() {
+      // 1. Serve from SQLite immediately (zero latency)
+      const cached = await getCachedMessages(userId).catch(() => [])
+      if (!cancelled && cached.length > 0) {
+        setMessages(cached)
+        setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 50)
+      }
+
+      // 2. Background: fetch latest page from server (most recent 30)
+      if (!isConnected()) return
+      try {
+        const fresh = await msgService.getMessages(userId, 1)
+        if (cancelled) return
+        const sorted = [...fresh].reverse() // API returns DESC, we want ASC
+        setMessages((prev) => {
+          // Merge: keep any locally pending messages, prepend server messages
+          const pendingLocal = prev.filter((m) => m._pending || m._failed)
+          const freshIds = new Set(sorted.map((m) => m.id))
+          const pending = pendingLocal.filter((m) => !freshIds.has(m.id))
+          // For older messages already in cache but not in fresh page, keep them
+          const olderCached = prev.filter((m) => !m._pending && !m._failed && !freshIds.has(m.id))
+          const merged = [...olderCached, ...sorted, ...pending]
+          merged.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+          return merged
+        })
+        await cacheMessages(userId, sorted).catch(() => {})
+        setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 80)
+      } catch {}
+    }
+
+    load()
+    return () => { cancelled = true }
   }, [userId])
 
+  // ── Socket events ──────────────────────────────────────────────────────────
   useEffect(() => {
     const socket = getSocket()
     if (!socket) return
 
     function onNewMessage(msg: Message) {
-      if (
+      const isThisConvo = (
         (msg.senderId === userId   && msg.receiverId === user?.id) ||
         (msg.senderId === user?.id && msg.receiverId === userId)
-      ) {
-        setMessages((prev) => [...prev, msg])
-        setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80)
-        if (msg.senderId === userId)
-          socket?.emit('message:read', { messageId: msg.id, senderId: userId })
-      }
+      )
+      if (!isThisConvo) return
+
+      setMessages((prev) => {
+        if (prev.find((m) => m.id === msg.id)) return prev
+        return [...prev, msg]
+      })
+      // Persist immediately to SQLite
+      upsertCachedMessage(userId, msg).catch(() => {})
+
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80)
+
+      if (msg.senderId === userId)
+        getSocket()?.emit('message:read', { messageId: msg.id, senderId: userId })
     }
 
     function onTyping({ fromUserId, isTyping: t }: { fromUserId: string; isTyping: boolean }) {
@@ -224,20 +319,23 @@ export default function ChatScreen() {
       setMessages((prev) => prev.map((m) => {
         if (m.id !== messageId) return m
         const reactions = (m.reactions ?? []).filter((r) => r.userId !== reactorId)
-        return { ...m, reactions: removed ? reactions : [...reactions, { emoji, userId: reactorId }] }
+        const updated = { ...m, reactions: removed ? reactions : [...reactions, { emoji, userId: reactorId } as MessageReaction] }
+        upsertCachedMessage(userId, updated).catch(() => {})
+        return updated
       }))
     }
 
-    socket.on('message:new', onNewMessage)
-    socket.on('message:typing', onTyping)
+    socket.on('message:new',      onNewMessage)
+    socket.on('message:typing',   onTyping)
     socket.on('message:reaction', onReaction)
     return () => {
-      socket.off('message:new', onNewMessage)
-      socket.off('message:typing', onTyping)
+      socket.off('message:new',      onNewMessage)
+      socket.off('message:typing',   onTyping)
       socket.off('message:reaction', onReaction)
     }
   }, [userId, user?.id])
 
+  // ── Typing indicator ───────────────────────────────────────────────────────
   const handleTextChange = useCallback((val: string) => {
     setText(val)
     const socket = getSocket()
@@ -249,16 +347,103 @@ export default function ChatScreen() {
     }, 2000)
   }, [userId])
 
-  async function handleSend() {
-    if (!text.trim()) return
+  // ── Update inbox immediately so MessagesScreen reflects sent message ─────────
+  function pushToInbox(msgId: string, content: string | null, createdAt: string) {
+    updateCachedConnection(
+      userId,
+      {
+        lastMessage: { id: msgId, content, senderId: user!.id, readAt: null, createdAt },
+        unreadCount: 0,
+      },
+      { user: { id: userId, name: userName, avatar: userAvatar ?? null }, postIds: [] },
+    ).catch(() => {})
+  }
+
+  // ── Send: optimistic → API → confirm ──────────────────────────────────────
+  async function handleSendFile(fileUri: string, mimeType: string, fileName: string) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    const tempId = `pending-file-${Date.now()}`
+    const isImage = mimeType.startsWith('image/')
+
+    const optimistic: LocalMessage = {
+      id:         tempId,
+      senderId:   user!.id,
+      receiverId: userId,
+      content:    isImage ? null : fileName,
+      mediaUrl:   isImage ? fileUri : null,
+      readAt:     null,
+      replyToId:  null,
+      createdAt:  new Date().toISOString(),
+      sender:     { id: user!.id, name: user!.name ?? '', avatar: user!.avatar ?? null },
+      receiver:   { id: userId, name: userName, avatar: userAvatar ?? null },
+      replyTo:    null,
+      _pending:   true,
+    }
+
+    setMessages((prev) => [...prev, optimistic])
+    upsertCachedMessage(userId, optimistic as unknown as Message).catch(() => {})
+    pushToInbox(tempId, isImage ? null : fileName, optimistic.createdAt)
+    setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80)
+
+    try {
+      const sent = await msgService.sendMessage(userId, isImage ? undefined : fileName, fileUri, undefined, mimeType, fileName)
+      setMessages((prev) => prev.map((m) => m.id === tempId ? sent : m))
+      await replacePendingMessage(tempId, sent, userId).catch(() => {})
+    } catch {
+      setMessages((prev) => prev.map((m) =>
+        m.id === tempId ? { ...m, _pending: false, _failed: true } : m,
+      ))
+    }
+  }
+
+  async function handleSend() {
+    const content = text.trim()
+    if (!content) return
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+
+    const tempId   = `pending-${Date.now()}`
     const replyToId = replyingTo?.id
-    const msg = await msgService.sendMessage(userId, text.trim(), undefined, replyToId)
-    setMessages((prev) => [...prev, msg])
+
+    const optimistic: LocalMessage = {
+      id:         tempId,
+      senderId:   user!.id,
+      receiverId: userId,
+      content,
+      mediaUrl:   null,
+      readAt:     null,
+      replyToId:  replyToId ?? null,
+      createdAt:  new Date().toISOString(),
+      sender:     { id: user!.id, name: user!.name ?? '', avatar: user!.avatar ?? null },
+      receiver:   { id: userId, name: userName, avatar: userAvatar ?? null },
+      replyTo:    replyingTo ? {
+        id: replyingTo.id,
+        content: replyingTo.content,
+        sender: { name: replyingTo.sender.name },
+      } : null,
+      _pending: true,
+    }
+
+    setMessages((prev) => [...prev, optimistic])
+    upsertCachedMessage(userId, optimistic as unknown as Message).catch(() => {})
+    // Update inbox immediately — conversation rises to top with last message
+    pushToInbox(tempId, content, optimistic.createdAt)
+
     setText('')
     setReplyingTo(null)
     getSocket()?.emit('message:typing', { toUserId: userId, isTyping: false })
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80)
+
+    try {
+      const sent = await msgService.sendMessage(userId, content, undefined, replyToId)
+      setMessages((prev) => prev.map((m) => m.id === tempId ? sent : m))
+      await replacePendingMessage(tempId, sent, userId).catch(() => {})
+    } catch {
+      setMessages((prev) => prev.map((m) =>
+        m.id === tempId ? { ...m, _pending: false, _failed: true } : m,
+      ))
+      // Mark as failed in SQLite too
+      upsertCachedMessage(userId, { ...optimistic, _pending: false, _failed: true } as unknown as Message).catch(() => {})
+    }
   }
 
   async function handleReact(emoji: string) {
@@ -271,13 +456,16 @@ export default function ChatScreen() {
       setMessages((prev) => prev.map((m) => {
         if (m.id !== messageId) return m
         const reactions = (m.reactions ?? []).filter((r) => r.userId !== user?.id)
-        return { ...m, reactions: result.removed ? reactions : [...reactions, { emoji, userId: user!.id }] }
+        const updated = { ...m, reactions: result.removed ? reactions : [...reactions, { emoji, userId: user!.id } as MessageReaction] }
+        upsertCachedMessage(userId, updated).catch(() => {})
+        return updated
       }))
     } catch {}
   }
 
+  // ── Build render list (messages + date separators) ─────────────────────────
   type Item =
-    | { kind: 'msg'; msg: Message; mine: boolean; isFirst: boolean; isLast: boolean }
+    | { kind: 'msg'; msg: LocalMessage; mine: boolean; isFirst: boolean; isLast: boolean }
     | { kind: 'date'; label: string; key: string }
 
   const items: Item[] = []
@@ -292,7 +480,6 @@ export default function ChatScreen() {
 
     const isFirst = !prev || prev.senderId !== msg.senderId || !sameDay(prev.createdAt, msg.createdAt)
     const isLast  = !next || next.senderId !== msg.senderId || !sameDay(msg.createdAt, next.createdAt)
-
     items.push({ kind: 'msg', msg, mine, isFirst, isLast })
   })
 
@@ -339,6 +526,7 @@ export default function ChatScreen() {
         value={text}
         onChange={handleTextChange}
         onSend={handleSend}
+        onSendFile={handleSendFile}
         paddingBottom={bottom + 4}
         otherUserId={userId}
         replyingTo={replyingTo ? {
@@ -348,7 +536,6 @@ export default function ChatScreen() {
         onCancelReply={() => setReplyingTo(null)}
       />
 
-      {/* Emoji reaction overlay */}
       {emojiTargetMsg && (
         <Modal transparent animationType="fade" visible onRequestClose={() => setEmojiTargetMsg(null)}>
           <EmojiPicker onPick={handleReact} onClose={() => setEmojiTargetMsg(null)} />
@@ -358,7 +545,7 @@ export default function ChatScreen() {
   )
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
+// ── Styles ─────────────────────────────────────────────────────────────────────
 const MINE_COLOR   = '#1A1A1A'
 const THEIRS_COLOR = '#FFFFFF'
 const R = 18
@@ -385,6 +572,7 @@ const t = StyleSheet.create({
   bubbleMineLast:     { borderBottomRightRadius: 4 },
   bubbleTheirsFirst:  { borderTopLeftRadius: 4 },
   bubbleTheirsLast:   { borderBottomLeftRadius: 4 },
+  bubblePending:      { opacity: 0.65 },
 
   mediaBubble: { width: 200, height: 200, borderRadius: R - 4, marginBottom: 4 },
 
@@ -392,36 +580,33 @@ const t = StyleSheet.create({
   msgMine:   { color: '#FFFFFF' },
   msgTheirs: { color: colors.gray800 },
 
-  metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 3, marginTop: 2 },
-  time:    { fontSize: 10, color: 'rgba(0,0,0,0.35)', fontFamily: fonts.regular },
-  timeMine:{ color: 'rgba(255,255,255,0.5)' },
-  tick:    { fontSize: 10, color: '#4FC3F7', fontFamily: fonts.regular },
+  metaRow:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 3, marginTop: 2 },
+  time:        { fontSize: 10, color: 'rgba(0,0,0,0.35)', fontFamily: fonts.regular },
+  timeMine:    { color: 'rgba(255,255,255,0.5)' },
+  tick:        { fontSize: 10, color: '#4FC3F7', fontFamily: fonts.regular },
+  tickPending: { fontSize: 10, color: 'rgba(255,255,255,0.4)', fontFamily: fonts.regular },
+  tickFailed:  { fontSize: 11, color: '#FF6B6B', fontFamily: fonts.bold },
 
-  // Reply quote inside bubble
   replyQuote:       { borderLeftWidth: 3, paddingLeft: 8, marginBottom: 6 },
   replyQuoteMine:   { borderLeftColor: 'rgba(255,255,255,0.5)' },
   replyQuoteTheirs: { borderLeftColor: colors.primary },
   replyQuoteName:   { fontSize: 11, fontFamily: fonts.semiBold, color: colors.primary, marginBottom: 1 },
   replyQuoteText:   { fontSize: 12, fontFamily: fonts.regular, color: 'rgba(0,0,0,0.5)' },
 
-  // Reactions strip
   reactStrip:      { flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 3, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: colors.white, borderRadius: 12, elevation: 1, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 2 },
   reactStripRight: { alignSelf: 'flex-end' },
   reactStripLeft:  { alignSelf: 'flex-start' },
   reactEmoji:      { fontSize: 14 },
   reactCount:      { fontSize: 11, color: colors.gray600, fontFamily: fonts.medium },
 
-  // Reply button (always visible but tiny so it doesn't clutter)
   replyBtn:     { paddingVertical: 1, paddingHorizontal: 4, marginTop: 2 },
   replyBtnText: { fontSize: 10, color: 'rgba(0,0,0,0.3)', fontFamily: fonts.regular },
 
-  // Emoji picker overlay
   emojiOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
   emojiRow:     { flexDirection: 'row', gap: 6, backgroundColor: colors.white, borderRadius: 40, paddingHorizontal: 16, paddingVertical: 12, elevation: 8 },
   emojiBtn:     { padding: 6 },
   emojiText:    { fontSize: 28 },
 
-  // Date separator
   dateSepWrap: { flexDirection: 'row', alignItems: 'center', marginVertical: 12, gap: 8 },
   dateLine:    { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(0,0,0,0.15)' },
   dateSepTxt:  {
@@ -430,7 +615,6 @@ const t = StyleSheet.create({
     borderRadius: 10,
   },
 
-  // Typing bubble
   typingWrap:   { paddingHorizontal: spacing.md, paddingBottom: 4 },
   typingBubble: {
     flexDirection: 'row', alignItems: 'center', gap: 5,

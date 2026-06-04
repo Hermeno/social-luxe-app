@@ -1,9 +1,26 @@
+/**
+ * useFeed — Offline-first feed hook
+ *
+ * Read path:  SQLite → UI (instant, no network wait)
+ * Write path: UI update → SQLite → sync_queue → API (when online)
+ * Sync:       Background sync updates SQLite, then calls setState
+ */
+
 import { useState, useCallback, useRef, useEffect } from 'react'
+import Toast from 'react-native-toast-message'
 import { Post } from '../types'
-import { syncFeed } from '../db/sync'
-import { cachePosts } from '../db/database'
+import { syncFeed, forceSyncFeed } from '../db/sync'
+import {
+  cachePosts,
+  getCachedPosts,
+  updateCachedPost,
+  deleteCachedPost,
+  queueLike,
+  enqueueSyncOp,
+} from '../db/database'
 import * as postService from '../services/post.service'
 import { getSocket } from '../socket'
+import { isConnected } from '../services/netinfo.service'
 
 export function useFeed() {
   const [posts, setPosts]     = useState<Post[]>([])
@@ -11,103 +28,147 @@ export function useFeed() {
   const [page, setPage]       = useState(1)
   const [hasMore, setHasMore] = useState(true)
 
-  // Refs — avoid stale closures in callbacks
-  const initialised = useRef(false)
-  const loadingRef  = useRef(false)   // single source of truth for "busy"
+  const initialised  = useRef(false)
+  const loadingRef   = useRef(false)
 
-  // Stable reference — no deps, never goes stale
+  // ── Initial load: SQLite first, then background sync ─────────────────────
   const refresh = useCallback(async () => {
     if (loadingRef.current) return
     loadingRef.current = true
     setLoading(true)
+
     try {
       if (!initialised.current) {
-        // First load: serve SQLite cache immediately, then update from API
         initialised.current = true
+
+        // Serve SQLite immediately
         const local = await syncFeed((fresh) => {
           setPosts(fresh)
           setPage(1)
           setHasMore(fresh.length >= 10)
         })
         if (local.length > 0) setPosts(local)
-      } else {
-        // Every subsequent focus: always hit network
-        const data = await postService.getFeed(1)
-        setPosts(data)
-        setPage(1)
-        setHasMore(data.length >= 10)
-        await cachePosts(data)
-      }
-    } catch {}
-    finally {
-      loadingRef.current = false
-      setLoading(false)
-    }
-  }, []) // ← stable forever — loadingRef prevents double calls
 
-  // Force a full network refresh (used after publishing a new post)
-  const forceRefresh = useCallback(async () => {
-    if (loadingRef.current) return
-    loadingRef.current = true
-    setLoading(true)
-    try {
-      const data = await postService.getFeed(1)
-      setPosts(data)
-      setPage(1)
-      setHasMore(data.length >= 10)
-      await cachePosts(data)
-    } catch {}
-    finally {
+      } else {
+        // Subsequent focus: force network refresh if online, else SQLite
+        if (isConnected()) {
+          const fresh = await forceSyncFeed()
+          setPosts(fresh)
+          setPage(1)
+          setHasMore(fresh.length >= 10)
+        } else {
+          const cached = await getCachedPosts()
+          setPosts(cached)
+        }
+      }
+    } catch {
+      // Fallback to SQLite on any error
+      try {
+        const cached = await getCachedPosts()
+        if (cached.length > 0) setPosts(cached)
+        else Toast.show({ type: 'error', text1: 'Sem ligação', text2: 'A mostrar dados guardados.', visibilityTime: 3000 })
+      } catch {}
+    } finally {
       loadingRef.current = false
       setLoading(false)
     }
   }, [])
 
+  // ── Load more pages ───────────────────────────────────────────────────────
   const loadMore = useCallback(async () => {
-    if (!hasMore || loadingRef.current) return
+    if (!hasMore || loadingRef.current || !isConnected()) return
     loadingRef.current = true
     setLoading(true)
     const nextPage = page + 1
     try {
       const data = await postService.getFeed(nextPage)
       if (data.length < 10) setHasMore(false)
-      setPosts((prev) => [...prev, ...data])
-      setPage(nextPage)
       await cachePosts(data)
-    } catch {}
-    finally {
+      setPosts((prev) => {
+        const ids = new Set(prev.map((p) => p.id))
+        return [...prev, ...data.filter((p) => !ids.has(p.id))]
+      })
+      setPage(nextPage)
+    } catch {
+      Toast.show({ type: 'error', text1: 'Sem ligação', text2: 'Não foi possível carregar mais posts.', visibilityTime: 2000 })
+    } finally {
       loadingRef.current = false
       setLoading(false)
     }
   }, [hasMore, page])
 
-  const prependPost = useCallback((post: Post) => {
+  // ── Prepend (after publish) ───────────────────────────────────────────────
+  const prependPost = useCallback(async (post: Post) => {
     setPosts((prev) => {
       if (prev.find((p) => p.id === post.id)) return prev
       return [post, ...prev]
     })
+    await cachePosts([post]).catch(() => {})
   }, [])
 
-  const removePost = useCallback((postId: string) => {
+  // ── Remove post (optimistic + queue delete) ───────────────────────────────
+  const removePost = useCallback(async (postId: string) => {
     setPosts((prev) => prev.filter((p) => p.id !== postId))
+    await deleteCachedPost(postId).catch(() => {})
+
+    if (!isConnected()) {
+      await enqueueSyncOp('post', postId, 'delete', {}).catch(() => {})
+      return
+    }
+    // Online path: queue if API fails (network error, 5xx, etc.)
+    postService.deletePost(postId).catch(async () => {
+      await enqueueSyncOp('post', postId, 'delete', {}).catch(() => {})
+    })
   }, [])
 
-  const updatePost = useCallback((postId: string, caption: string) => {
+  // ── Update caption (optimistic + queue update) ────────────────────────────
+  const updatePost = useCallback(async (postId: string, caption: string) => {
     setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, caption } : p))
+    await updateCachedPost(postId, { caption }).catch(() => {})
+
+    if (!isConnected()) {
+      await enqueueSyncOp('post', postId, 'update', { caption }).catch(() => {})
+      return
+    }
+    // Online path: queue if API fails (network error, 5xx, etc.)
+    postService.updatePost(postId, caption).catch(async () => {
+      await enqueueSyncOp('post', postId, 'update', { caption }).catch(() => {})
+    })
   }, [])
 
-  // ── Real-time: listen for new posts pushed by the server ──────────────────
+  // ── Increment view counter (optimistic + persist to SQLite) ─────────────────
+  const incrementView = useCallback((postId: string) => {
+    setPosts((prev) => prev.map((p) => {
+      if (p.id !== postId) return p
+      const updated = { ...p, _count: { ...p._count, views: (p._count?.views ?? 0) + 1 } }
+      updateCachedPost(postId, { _count: updated._count }).catch(() => {})
+      return updated
+    }))
+  }, [])
+
+  // ── Like (optimistic + SQLite queue if offline) ───────────────────────────
+  const likePost = useCallback(async (postId: string, liked: boolean) => {
+    setPosts((prev) => prev.map((p) =>
+      p.id === postId
+        ? { ...p, _count: { ...p._count, likes: Math.max(0, (p._count?.likes ?? 0) + (liked ? 1 : -1)) } }
+        : p,
+    ))
+
+    if (isConnected()) {
+      postService.likePost(postId).catch(() => {})
+    } else {
+      await queueLike(postId, liked).catch(() => {})
+    }
+  }, [])
+
+  // ── Real-time: socket new posts ───────────────────────────────────────────
   useEffect(() => {
     const socket = getSocket()
     if (!socket) return
-
-    function onNewPost(post: Post) {
-      prependPost(post)
-    }
-
+    function onNewPost(post: Post) { prependPost(post) }
     socket.on('post:new', onNewPost)
     return () => { socket.off('post:new', onNewPost) }
   }, [prependPost])
 
-  return { posts, loading, loadMore, refresh, forceRefresh, prependPost, removePost, updatePost }
+  return { posts, loading, loadMore, refresh, prependPost, removePost, updatePost, incrementView, likePost }
 }

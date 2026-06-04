@@ -5,6 +5,7 @@ interface FriendsState {
   lastSeenFollowerCount: number
   setFollowerCount: (current: number) => void
   clearBadge: () => void
+  reset: () => void
 }
 
 export const useFriendsStore = create<FriendsState>((set, get) => ({
@@ -17,4 +18,5 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
   },
   clearBadge: () =>
     set((s) => ({ newFollowersBadge: 0, lastSeenFollowerCount: s.lastSeenFollowerCount + s.newFollowersBadge })),
+  reset: () => set({ newFollowersBadge: 0, lastSeenFollowerCount: 0 }),
 }))

@@ -60,7 +60,7 @@ export default function CreateGroupScreen() {
     <View style={[s.container, { paddingTop: top }]}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => nav.goBack()} style={s.backBtn}>
-          <Ionicons name="chevron-back" size={26} color={colors.white} />
+          <Ionicons name="chevron-back" size={26} color={colors.gray800} />
         </TouchableOpacity>
         <Text style={s.title}>Novo Grupo</Text>
         <View style={{ width: 36 }} />

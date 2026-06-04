@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import {
   View, Text, FlatList, StyleSheet, TextInput,
-  TouchableOpacity, LayoutAnimation, Platform,
+  TouchableOpacity, Pressable, LayoutAnimation, Platform,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
@@ -13,6 +13,8 @@ import { getMyFollowers, getMyFollowing, toggleFollow, FollowUser } from '../../
 import { getAllUsers } from '../../services/user.service'
 import AvatarImage from '../../components/AvatarImage'
 import { AppStackParams } from '../../navigation/AppNavigator'
+import { getCache, setCache } from '../../db/database'
+import { isConnected } from '../../services/netinfo.service'
 
 type Nav = StackNavigationProp<AppStackParams>
 type Tab = 'discover' | 'following' | 'followers'
@@ -63,16 +65,15 @@ function FollowButton({ userId, initialFollowing }: { userId: string; initialFol
   }
 
   return (
-    <TouchableOpacity
-      style={[s.followBtn, following && s.followingBtn]}
+    <Pressable
+      style={({ pressed }) => [s.followBtn, following && s.followingBtn, pressed && { opacity: 0.7 }]}
       onPress={toggle}
-      activeOpacity={0.75}
       disabled={loading}
     >
       <Text style={[s.followTxt, following && s.followingTxt]}>
         {following ? 'Seguindo' : 'Seguir'}
       </Text>
-    </TouchableOpacity>
+    </Pressable>
   )
 }
 
@@ -88,24 +89,45 @@ export default function FriendsScreen() {
   const [following, setFollowing]   = useState<FollowUser[]>([])
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set())
 
-  async function loadAll() {
-    try {
-      const [users, fwers, fwing] = await Promise.all([
-        getAllUsers(),
-        getMyFollowers(),
-        getMyFollowing(),
-      ])
-      setAllUsers(users)
-      setFollowers(fwers)
-      setFollowing(fwing)
-      setFollowingIds(new Set(fwing.map((u) => u.id)))
-      setFollowerCount(fwers.length)
-    } catch {}
-  }
-
   useFocusEffect(useCallback(() => {
-    loadAll()
+    let cancelled = false
+
+    async function run() {
+      // 1. SQLite first — instant display
+      const [cachedUsers, cachedFwers, cachedFwing] = await Promise.all([
+        getCache<UserSummary[]>('all_users'),
+        getCache<FollowUser[]>('my_followers'),
+        getCache<FollowUser[]>('my_following'),
+      ])
+      if (!cancelled) {
+        if (cachedUsers)  setAllUsers(cachedUsers)
+        if (cachedFwers)  { setFollowers(cachedFwers); setFollowerCount(cachedFwers.length) }
+        if (cachedFwing)  { setFollowing(cachedFwing); setFollowingIds(new Set(cachedFwing.map((u) => u.id))) }
+      }
+
+      // 2. Background network sync
+      if (!isConnected()) return
+      try {
+        const [users, fwers, fwing] = await Promise.all([
+          getAllUsers(), getMyFollowers(), getMyFollowing(),
+        ])
+        if (cancelled) return
+        setAllUsers(users)
+        setFollowers(fwers)
+        setFollowing(fwing)
+        setFollowingIds(new Set(fwing.map((u) => u.id)))
+        setFollowerCount(fwers.length)
+        Promise.all([
+          setCache('all_users', users),
+          setCache('my_followers', fwers),
+          setCache('my_following', fwing),
+        ]).catch(() => {})
+      } catch {}
+    }
+
+    run()
     clearBadge()
+    return () => { cancelled = true }
   }, []))
 
   function switchTab(t: Tab) {

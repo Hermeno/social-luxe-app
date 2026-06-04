@@ -1,222 +1,428 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import {
-  View, Text, TextInput, FlatList, TouchableOpacity,
-  StyleSheet, ActivityIndicator, Dimensions, Image,
+  View, Text, TextInput, FlatList, TouchableOpacity, Pressable,
+  StyleSheet, ActivityIndicator, ListRenderItemInfo,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
+import Toast from 'react-native-toast-message'
 import { api } from '../../services/api'
-import { ApiResponse } from '../../types'
 import { AppStackParams } from '../../navigation/AppNavigator'
-import { fonts } from '../../theme'
+import { colors, fonts } from '../../theme'
 import { toggleFollow } from '../../services/follow.service'
-import { API_BASE } from '../../config'
+import AvatarImage from '../../components/AvatarImage'
 
 type Nav = StackNavigationProp<AppStackParams>
 
-const { width: W } = Dimensions.get('window')
-const COLS    = 3
-const PADDING = 16
-const GAP     = 10
-const CARD_W  = (W - PADDING * 2 - GAP * (COLS - 1)) / COLS
-const PRIMARY = '#4C8CE4'
-
 interface UserResult {
-  id: string; name: string; avatar: string | null; bio: string | null
+  id: string
+  name: string
+  avatar: string | null
+  bio: string | null
   _count?: { followers: number }
 }
 
-function avatarUri(u: UserResult): string | null {
-  if (!u.avatar) return null
-  return u.avatar.startsWith('http') ? u.avatar : `${API_BASE}${u.avatar}`
+function fmtCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000)     return `${(n / 1_000).toFixed(1)}K`
+  return String(n)
 }
 
-function UserCard({ user, followed, onFollow, onPress }: {
-  user: UserResult; followed: boolean; onFollow: () => void; onPress: () => void
-}) {
-  const uri    = avatarUri(user)
-  const AVATAR = CARD_W - 24
+// ── User row ──────────────────────────────────────────────────────────────────
+
+interface RowProps {
+  user: UserResult
+  followed: boolean
+  loadingFollow: boolean
+  onFollow: () => void
+  onPress: () => void
+}
+
+function UserRow({ user, followed, loadingFollow, onFollow, onPress }: RowProps) {
+  const sub = user.bio?.trim()
+    || (user._count?.followers ? `${fmtCount(user._count.followers)} seguidores` : null)
+
   return (
-    <TouchableOpacity style={s.card} onPress={onPress} activeOpacity={0.85}>
-      <View style={{ width: AVATAR, height: AVATAR, borderRadius: AVATAR / 2, overflow: 'hidden' }}>
-        {uri
-          ? <Image source={{ uri }} style={{ width: AVATAR, height: AVATAR }} resizeMode="cover" />
-          : <View style={[s.avatarFallback, { width: AVATAR, height: AVATAR }]}>
-              <Text style={s.avatarInitial}>{user.name[0]?.toUpperCase() ?? '?'}</Text>
-            </View>
-        }
-      </View>
-      <Text style={s.cardName} numberOfLines={1}>{user.name}</Text>
-      <TouchableOpacity
-        style={[s.followBtn, followed && s.followingBtn]}
-        onPress={(e) => { e.stopPropagation(); onFollow() }}
-        activeOpacity={0.8}
-      >
-        <Text style={[s.followBtnText, followed && s.followingBtnText]}>
-          {followed ? 'A seguir' : 'Seguir'}
-        </Text>
+    <View style={s.row}>
+      {/* Left: avatar + info → navigate to profile */}
+      <TouchableOpacity style={s.rowLeft} onPress={onPress} activeOpacity={0.7}>
+        <AvatarImage uri={user.avatar} size={48} />
+        <View style={s.rowInfo}>
+          <Text style={s.rowName} numberOfLines={1}>{user.name}</Text>
+          {!!sub && <Text style={s.rowSub} numberOfLines={1}>{sub}</Text>}
+        </View>
       </TouchableOpacity>
-    </TouchableOpacity>
+
+      {/* Right: follow button — sibling, NOT nested in the touchable */}
+      <Pressable
+        onPress={onFollow}
+        disabled={loadingFollow}
+        style={({ pressed }) => [
+          s.followBtn,
+          followed && s.followingBtn,
+          pressed && s.followBtnPressed,
+        ]}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        {loadingFollow
+          ? <ActivityIndicator size="small" color={followed ? colors.primary : colors.white} />
+          : <Text style={[s.followBtnText, followed && s.followingBtnText]}>
+              {followed ? 'A seguir' : 'Seguir'}
+            </Text>
+        }
+      </Pressable>
+    </View>
   )
 }
+
+// ── Skeleton placeholder ───────────────────────────────────────────────────────
+
+function SkeletonRow() {
+  return (
+    <View style={[s.row, { opacity: 0.45 }]}>
+      <View style={s.rowLeft}>
+        <View style={s.skeletonAvatar} />
+        <View style={s.skeletonInfo}>
+          <View style={s.skeletonName} />
+          <View style={s.skeletonSub} />
+        </View>
+      </View>
+      <View style={s.skeletonBtn} />
+    </View>
+  )
+}
+
+// ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function SearchScreen() {
   const nav     = useNavigation<Nav>()
   const { top } = useSafeAreaInsets()
-  const [query,     setQuery]     = useState('')
-  const [results,   setResults]   = useState<UserResult[]>([])
-  const [suggested, setSuggested] = useState<UserResult[]>([])
-  const [loading,   setLoading]   = useState(false)
-  const [followed,  setFollowed]  = useState<Set<string>>(new Set())
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const [query,         setQuery]         = useState('')
+  const [results,       setResults]       = useState<UserResult[]>([])
+  const [suggested,     setSuggested]     = useState<UserResult[]>([])
+  const [loadingSug,    setLoadingSug]    = useState(true)
+  const [loadingSearch, setLoadingSearch] = useState(false)
+  const [followed,      setFollowed]      = useState<Set<string>>(new Set())
+  const [followPending, setFollowPending] = useState<Set<string>>(new Set())
+
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const inputRef    = useRef<TextInput>(null)
+
+  // Load suggestions once
   useEffect(() => {
-    api.get('/users/suggested').then((r) => setSuggested(r.data.data ?? r.data)).catch(() => {})
+    api.get('/users/suggested')
+      .then((r) => setSuggested(r.data.data ?? r.data))
+      .catch(() => {})
+      .finally(() => setLoadingSug(false))
   }, [])
 
   const search = useCallback(async (q: string) => {
     if (!q.trim()) { setResults([]); return }
-    setLoading(true)
+    setLoadingSearch(true)
     try {
-      const res = await api.get<ApiResponse<UserResult[]>>(`/users/search?q=${encodeURIComponent(q)}`)
-      setResults(res.data.data)
-    } catch { setResults([]) }
-    finally { setLoading(false) }
+      const res = await api.get(`/users/search?q=${encodeURIComponent(q)}`)
+      setResults(res.data.data ?? [])
+    } catch {
+      setResults([])
+    } finally {
+      setLoadingSearch(false)
+    }
   }, [])
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => search(query), 280)
+    debounceRef.current = setTimeout(() => search(query), 300)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [query])
 
-  async function handleFollow(userId: string) {
+  const handleFollow = useCallback(async (userId: string) => {
+    if (followPending.has(userId)) return
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+
+    // Optimistic update — flip state immediately so UI responds at once
+    const wasFollowed = followed.has(userId)
+    setFollowed((prev) => {
+      const next = new Set(prev)
+      wasFollowed ? next.delete(userId) : next.add(userId)
+      return next
+    })
+    setFollowPending((prev) => new Set([...prev, userId]))
+
     try {
       const res = await toggleFollow(userId)
+      // Reconcile with server truth
       setFollowed((prev) => {
         const next = new Set(prev)
         res.following ? next.add(userId) : next.delete(userId)
         return next
       })
-    } catch {}
-  }
+    } catch {
+      // Rollback optimistic update
+      setFollowed((prev) => {
+        const next = new Set(prev)
+        wasFollowed ? next.add(userId) : next.delete(userId)
+        return next
+      })
+      Toast.show({ type: 'error', text1: 'Sem ligação', text2: 'Não foi possível seguir.', visibilityTime: 2500 })
+    } finally {
+      setFollowPending((prev) => {
+        const next = new Set(prev)
+        next.delete(userId)
+        return next
+      })
+    }
+  }, [followed, followPending])
 
-  const isSearching  = query.trim().length > 0
-  const displayList  = isSearching ? results : suggested
+  const isSearching = query.trim().length > 0
+  const displayList = isSearching ? results : suggested
+  const isLoading   = isSearching ? loadingSearch : loadingSug
+
+  const renderItem = useCallback(({ item }: ListRenderItemInfo<UserResult>) => (
+    <UserRow
+      user={item}
+      followed={followed.has(item.id)}
+      loadingFollow={followPending.has(item.id)}
+      onFollow={() => handleFollow(item.id)}
+      onPress={() => nav.navigate('Profile', { userId: item.id })}
+    />
+  ), [followed, followPending, handleFollow, nav])
 
   return (
     <View style={[s.screen, { paddingTop: top }]}>
 
-      {/* Header */}
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
       <View style={s.header}>
-        <TouchableOpacity onPress={() => nav.goBack()} style={s.backBtn}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Ionicons name="chevron-back" size={26} color="#1A1A1A" />
+        <TouchableOpacity
+          onPress={() => nav.goBack()}
+          style={s.backBtn}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <Ionicons name="chevron-back" size={24} color={colors.gray800} />
         </TouchableOpacity>
+
         <View style={s.searchBar}>
-          <Ionicons name="search-outline" size={17} color="#ABABAB" />
+          <Ionicons name="search-outline" size={16} color={colors.gray400} />
           <TextInput
+            ref={inputRef}
             style={s.searchInput}
             placeholder="Pesquisar pessoas..."
-            placeholderTextColor="#ABABAB"
+            placeholderTextColor={colors.gray400}
             value={query}
             onChangeText={setQuery}
             autoFocus
             autoCapitalize="none"
+            autoCorrect={false}
             returnKeyType="search"
           />
           {query.length > 0 && (
-            <TouchableOpacity onPress={() => setQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="close-circle" size={17} color="#ABABAB" />
+            <TouchableOpacity
+              onPress={() => { setQuery(''); inputRef.current?.focus() }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="close-circle" size={16} color={colors.gray400} />
             </TouchableOpacity>
           )}
         </View>
       </View>
 
-      {/* Section label */}
-      {!loading && (
-        <Text style={s.sectionTitle}>
-          {isSearching ? `Resultados para "${query}"` : 'Sugeridos para ti'}
+      {/* ── Section label ──────────────────────────────────────────────────── */}
+      <View style={s.sectionRow}>
+        <Text style={s.sectionLabel}>
+          {isSearching ? 'Resultados' : 'Sugeridos para ti'}
         </Text>
-      )}
+        {isSearching && !loadingSearch && (
+          <Text style={s.sectionCount}>{results.length}</Text>
+        )}
+      </View>
 
-      {loading && <View style={s.loadingWrap}><ActivityIndicator color={PRIMARY} /></View>}
-
-      {!loading && isSearching && results.length === 0 && (
-        <View style={s.emptyWrap}>
-          <Ionicons name="search-outline" size={44} color="#E0E0E0" />
-          <Text style={s.emptyText}>Nenhum resultado</Text>
-          <Text style={s.emptySub}>Tenta outro nome</Text>
+      {/* ── Skeleton while loading suggestions ─────────────────────────────── */}
+      {isLoading && !isSearching && (
+        <View>
+          {[0, 1, 2, 3, 4].map((i) => <SkeletonRow key={i} />)}
         </View>
       )}
 
-      {!loading && (
+      {/* ── Search spinner ──────────────────────────────────────────────────── */}
+      {isLoading && isSearching && (
+        <View style={s.spinnerWrap}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      )}
+
+      {/* ── Empty state ─────────────────────────────────────────────────────── */}
+      {!isLoading && isSearching && results.length === 0 && (
+        <View style={s.emptyWrap}>
+          <View style={s.emptyIcon}>
+            <Ionicons name="search-outline" size={32} color={colors.gray400} />
+          </View>
+          <Text style={s.emptyTitle}>Nenhum resultado</Text>
+          <Text style={s.emptySub}>Tenta pesquisar por outro nome</Text>
+        </View>
+      )}
+
+      {!isLoading && !isSearching && suggested.length === 0 && (
+        <View style={s.emptyWrap}>
+          <View style={s.emptyIcon}>
+            <Ionicons name="people-outline" size={32} color={colors.gray400} />
+          </View>
+          <Text style={s.emptyTitle}>Sem sugestões</Text>
+          <Text style={s.emptySub}>Usa a pesquisa para encontrar pessoas</Text>
+        </View>
+      )}
+
+      {/* ── List ────────────────────────────────────────────────────────────── */}
+      {!isLoading && displayList.length > 0 && (
         <FlatList
           data={displayList}
           keyExtractor={(u) => u.id}
-          numColumns={COLS}
-          columnWrapperStyle={s.row}
-          contentContainerStyle={s.grid}
+          renderItem={renderItem}
           showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => (
-            <UserCard
-              user={item}
-              followed={followed.has(item.id)}
-              onFollow={() => handleFollow(item.id)}
-              onPress={() => nav.navigate('Profile', { userId: item.id })}
-            />
-          )}
+          contentContainerStyle={s.listContent}
+          keyboardShouldPersistTaps="handled"
+          ItemSeparatorComponent={() => <View style={s.separator} />}
         />
       )}
     </View>
   )
 }
 
+// ── Styles ─────────────────────────────────────────────────────────────────────
+
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#fff' },
+  screen: { flex: 1, backgroundColor: colors.white },
 
+  // Header
   header: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingBottom: 12, gap: 10,
-    borderBottomWidth: 1, borderBottomColor: '#EAEAEA',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.gray200,
   },
-  backBtn:     { padding: 2 },
-  searchBar:   {
-    flex: 1, flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#F5F5F7', borderRadius: 8,
-    paddingHorizontal: 12, paddingVertical: 10, gap: 8,
+  backBtn: { padding: 2 },
+  searchBar: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.gray100,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
   },
-  searchInput: { flex: 1, fontSize: 15, fontFamily: fonts.regular, color: '#1A1A1A', padding: 0 },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: fonts.regular,
+    color: colors.gray800,
+    padding: 0,
+  },
 
-  sectionTitle: {
-    fontSize: 11, fontFamily: fonts.semiBold, color: '#ABABAB',
-    letterSpacing: 0.8, textTransform: 'uppercase',
-    paddingHorizontal: PADDING, paddingTop: 18, paddingBottom: 14,
+  // Section
+  sectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 8,
+    gap: 8,
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontFamily: fonts.semiBold,
+    color: colors.gray400,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  sectionCount: {
+    fontSize: 12,
+    fontFamily: fonts.semiBold,
+    color: colors.primary,
+    backgroundColor: `${colors.primary}15`,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 10,
   },
 
-  loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  // List
+  listContent: { paddingBottom: 40 },
+  separator:   { height: StyleSheet.hairlineWidth, backgroundColor: colors.gray200, marginLeft: 84 },
+
+  // Row
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  rowLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    minWidth: 0,
+  },
+  rowInfo: { flex: 1, minWidth: 0 },
+  rowName: {
+    fontSize: 15,
+    fontFamily: fonts.semiBold,
+    color: colors.gray800,
+    letterSpacing: -0.2,
+  },
+  rowSub: {
+    fontSize: 13,
+    fontFamily: fonts.regular,
+    color: colors.gray400,
+    marginTop: 2,
+  },
+
+  // Follow button
+  followBtn: {
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: colors.primary,
+    minWidth: 84,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  followingBtn: {
+    backgroundColor: colors.white,
+    borderWidth: 1.5,
+    borderColor: colors.gray200,
+  },
+  followBtnPressed: { opacity: 0.7 },
+  followBtnText: {
+    fontSize: 13,
+    fontFamily: fonts.semiBold,
+    color: colors.white,
+    letterSpacing: -0.1,
+  },
+  followingBtnText: { color: colors.gray600 },
+
+  // Skeleton
+  skeletonAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.gray200 },
+  skeletonInfo:   { flex: 1, gap: 6 },
+  skeletonName:   { width: '55%', height: 14, borderRadius: 7, backgroundColor: colors.gray200 },
+  skeletonSub:    { width: '35%', height: 11, borderRadius: 6, backgroundColor: colors.gray100 },
+  skeletonBtn:    { width: 84, height: 34, borderRadius: 20, backgroundColor: colors.gray200 },
+
+  // States
+  spinnerWrap: { flex: 1, alignItems: 'center', paddingTop: 60 },
   emptyWrap:   { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, paddingBottom: 80 },
-  emptyText:   { fontSize: 16, fontFamily: fonts.semiBold, color: '#444' },
-  emptySub:    { fontSize: 14, fontFamily: fonts.regular, color: '#ABABAB' },
-
-  grid: { paddingHorizontal: PADDING, paddingBottom: 40 },
-  row:  { gap: GAP, marginBottom: GAP },
-
-  card: {
-    width: CARD_W, alignItems: 'center',
-    paddingTop: 16, paddingBottom: 12, paddingHorizontal: 4,
-    borderWidth: 1, borderColor: '#EAEAEA', borderRadius: 8, gap: 8,
+  emptyIcon:   {
+    width: 64, height: 64, borderRadius: 32,
+    backgroundColor: colors.gray100,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 4,
   },
-  avatarFallback: { backgroundColor: '#EAEAEA', alignItems: 'center', justifyContent: 'center' },
-  avatarInitial:  { fontSize: 26, fontFamily: fonts.bold, color: '#ABABAB' },
-  cardName:       { fontSize: 13, fontFamily: fonts.semiBold, color: '#1A1A1A', textAlign: 'center' },
-
-  followBtn:        { width: '88%', paddingVertical: 7, borderRadius: 6, backgroundColor: PRIMARY, alignItems: 'center' },
-  followingBtn:     { backgroundColor: '#F5F5F7' },
-  followBtnText:    { fontSize: 12, fontFamily: fonts.semiBold, color: '#fff' },
-  followingBtnText: { color: '#888' },
+  emptyTitle: { fontSize: 16, fontFamily: fonts.semiBold, color: colors.gray800 },
+  emptySub:   { fontSize: 14, fontFamily: fonts.regular, color: colors.gray400, textAlign: 'center', paddingHorizontal: 40 },
 })

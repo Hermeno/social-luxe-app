@@ -1,7 +1,15 @@
 import { create } from 'zustand'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { User } from '../types'
 import * as authService from '../services/auth.service'
 import { getStoredToken } from '../services/api'
+import { useNotificationStore } from './notification.store'
+import { useFriendsStore } from './friends.store'
+import { useOnlineStore } from './online.store'
+import { useFeedStore } from './feed.store'
+import { useMessageBadgeStore } from './messageBadge.store'
+import { clearAllLocalData } from '../db/database'
+import { nukeMediaCache } from '../db/mediaCache'
 
 interface AuthState {
   user: User | null
@@ -43,6 +51,17 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: async () => {
     await authService.logout()
+    // Reset all in-memory stores
+    useNotificationStore.getState().reset()
+    useFriendsStore.getState().reset()
+    useOnlineStore.getState().reset()
+    useFeedStore.setState({ pendingPost: null })
+    useMessageBadgeStore.getState().setTotalUnread(0)
+    // Wipe all local SQLite cache + media files
+    await clearAllLocalData().catch(() => {})
+    await nukeMediaCache().catch(() => {})
+    // Clear onboarding flag so new users go through onboarding
+    await AsyncStorage.removeItem('onboarding_done').catch(() => {})
     set({ user: null, token: null, isAuthenticated: false })
   },
 }))

@@ -18,6 +18,8 @@ import { useAuthStore } from '../../store/auth.store'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { colors, fonts, spacing, radius } from '../../theme'
 import { API_BASE } from '../../config'
+import { getCache, setCache } from '../../db/database'
+import { isConnected } from '../../services/netinfo.service'
 
 type Route = RouteProp<AppStackParams, 'Highlights'>
 
@@ -43,10 +45,19 @@ export default function HighlightsScreen() {
   const isOwn = user?.id === userId
 
   useEffect(() => {
-    getUserHighlights(userId)
-      .then(setHighlights)
-      .catch(() => {})
-      .finally(() => setLoading(false))
+    let cancelled = false
+    async function run() {
+      const cached = await getCache<Highlight[]>(`highlights:${userId}`)
+      if (!cancelled && cached) { setHighlights(cached); setLoading(false) }
+      if (!isConnected()) { setLoading(false); return }
+      try {
+        const fresh = await getUserHighlights(userId)
+        if (!cancelled) { setHighlights(fresh); setLoading(false) }
+        setCache(`highlights:${userId}`, fresh).catch(() => {})
+      } catch { if (!cancelled) setLoading(false) }
+    }
+    run()
+    return () => { cancelled = true }
   }, [userId])
 
   function openHighlight(h: Highlight) {

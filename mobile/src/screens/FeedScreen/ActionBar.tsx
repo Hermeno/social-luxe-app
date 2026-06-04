@@ -4,16 +4,11 @@ import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
 import { Post } from '../../types'
 import { colors, fonts } from '../../theme'
-import { useNavigation } from '@react-navigation/native'
-import { StackNavigationProp } from '@react-navigation/stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { AppStackParams } from '../../navigation/AppNavigator'
 import * as postService from '../../services/post.service'
 import { ReactionType } from '../../services/reaction.service'
 import ActionItem from './ActionItem'
 import ReactionPicker from '../../components/ReactionPicker'
-import { useNotificationStore } from '../../store/notification.store'
-import { api } from '../../services/api'
 import { useAuthStore } from '../../store/auth.store'
 
 interface Props {
@@ -32,13 +27,7 @@ function fmt(n: number) {
   return String(n)
 }
 
-const TAB_ITEMS = [
-  { icon: 'home',        iconOff: 'home-outline',        screen: 'Feed'     },
-  { icon: 'chatbubble', iconOff: 'chatbubble-outline',   screen: 'Messages' },
-] as const
-
 export default function ActionBar({ post, onCommentPress, liked: likedProp = false, onLikeChange, onDeleted, onEdited, newPostsCount = 0 }: Props) {
-  const nav        = useNavigation<StackNavigationProp<AppStackParams>>()
   const { bottom } = useSafeAreaInsets()
   const { user }   = useAuthStore()
   const isSelf     = user?.id === post.userId
@@ -52,30 +41,33 @@ export default function ActionBar({ post, onCommentPress, liked: likedProp = fal
   const [editMode, setEditMode]   = useState(false)
   const [editText, setEditText]   = useState(post.caption ?? '')
 
-  const messageBadge = useNotificationStore((s) =>
-    s.notifications.filter((n) => n.type === 'message' && !n.read).length
-  )
+  // Reset all per-post state when post changes (avoids remount via key prop)
+  useEffect(() => {
+    setLiked(likedProp)
+    setLikeCount(post._count?.likes ?? 0)
+    setShareCount(post._count?.shares ?? 0)
+    setCurrentReaction(undefined)
+    setShowReactions(false)
+    setShowMenu(false)
+    setEditMode(false)
+    setEditText(post.caption ?? '')
+  }, [post.id])
 
-  useEffect(() => { setLiked(likedProp) }, [likedProp])
-
-  async function handleDelete() {
+  function handleDelete() {
     setShowMenu(false)
     Alert.alert('Eliminar publicação', 'Esta ação é permanente.', [
       { text: 'Cancelar', style: 'cancel' },
-      { text: 'Eliminar', style: 'destructive', onPress: async () => {
-        try { await api.delete(`/posts/${post.id}`); onDeleted?.(post.id) } catch {
-          Alert.alert('Erro', 'Não foi possível eliminar.')
-        }
+      { text: 'Eliminar', style: 'destructive', onPress: () => {
+        // Delegate to parent (useFeed.removePost) which handles SQLite + offline queue
+        onDeleted?.(post.id)
       }},
     ])
   }
 
-  async function handleSaveEdit() {
-    try {
-      await api.patch(`/posts/${post.id}`, { caption: editText })
-      setEditMode(false)
-      onEdited?.(post.id, editText)
-    } catch { Alert.alert('Erro', 'Não foi possível guardar.') }
+  function handleSaveEdit() {
+    setEditMode(false)
+    // Delegate to parent (useFeed.updatePost) which handles SQLite + offline queue
+    onEdited?.(post.id, editText)
   }
 
   async function handleLike() {
@@ -98,17 +90,19 @@ export default function ActionBar({ post, onCommentPress, liked: likedProp = fal
   }
 
   async function handleShare() {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-    postService.sharePost(post.id)
-      .then(() => setShareCount((c) => c + 1))
-      .catch(() => {})
-
-    // Open native share sheet
-    const caption = post.caption ? `"${post.caption}" — ` : ''
-    Share.share({
-      message: `${caption}Veja o post de ${post.user.name} no Luxe antes que expire! 🔥`,
-      title: 'Luxe',
-    }).catch(() => {})
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+      const caption = post.caption ? `"${post.caption}" — ` : ''
+      const name    = post.user?.name ?? 'alguém'
+      const result  = await Share.share({
+        message: `${caption}Vê o post de ${name} no luxee antes que expire! 🔥`,
+      })
+      if (result.action === Share.sharedAction) {
+        postService.sharePost(post.id).then(() => setShareCount((c) => c + 1)).catch(() => {})
+      }
+    } catch {
+      // Share cancelled or not available — silently ignore
+    }
   }
 
   return (
@@ -117,7 +111,7 @@ export default function ActionBar({ post, onCommentPress, liked: likedProp = fal
         {/* ── Post actions ────────────────────────────────────────────── */}
         <ActionItem
           icon={liked ? 'heart' : 'heart-outline'}
-          size={28}
+          size={30}
           count={fmt(likeCount)}
           onPress={handleLike}
           onLongPress={() => setShowReactions(true)}
@@ -126,22 +120,22 @@ export default function ActionBar({ post, onCommentPress, liked: likedProp = fal
         />
         <ActionItem
           icon="chatbubble-ellipses"
-          size={26}
+          size={28}
           count={fmt(post._count?.comments ?? 0)}
           onPress={onCommentPress}
         />
         <ActionItem
           icon="paper-plane"
-          size={26}
+          size={28}
           count={fmt(shareCount)}
           onPress={handleShare}
         />
-        <ActionItem
-          icon="eye-outline"
-          size={26}
-          count={fmt(post._count?.views ?? 0)}
-          onPress={() => {}}
-        />
+        {isSelf && (
+          <View style={s.viewsItem}>
+            <Ionicons name="eye" size={26} color="rgba(255,255,255,0.85)" />
+            <Text style={s.viewsCount}>{fmt(post._count?.views ?? 0)}</Text>
+          </View>
+        )}
 
         {/* ── Options (só para o autor) ────────────────────────────────── */}
         {isSelf && (
@@ -154,30 +148,6 @@ export default function ActionBar({ post, onCommentPress, liked: likedProp = fal
           </TouchableOpacity>
         )}
 
-        {/* ── Separator ───────────────────────────────────────────────── */}
-        <View style={s.separator} />
-
-        {/* ── Tab navigation — pill escuro, badges, icons filled ───────── */}
-        <View style={s.navGroup}>
-          {TAB_ITEMS.map(({ icon, screen }) => {
-            const badge = screen === 'Messages' ? messageBadge : newPostsCount
-            return (
-              <TouchableOpacity
-                key={screen}
-                style={s.navItem}
-                onPress={() => (nav as any).navigate(screen)}
-                activeOpacity={0.65}
-              >
-                <Ionicons name={icon as any} size={28} color="#fff" />
-                {badge > 0 && (
-                  <View style={s.navBadge}>
-                    <Text style={s.navBadgeTxt}>{badge > 9 ? '9+' : badge}</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            )
-          })}
-        </View>
       </View>
 
       {showReactions && (
@@ -233,33 +203,6 @@ const s = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 6,
   },
-  separator: {
-    width: 26, height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    marginVertical: 8,
-  },
-  // Pill sólido — mesmo preto de cima para baixo, 50% radius
-  navGroup: {
-    backgroundColor: 'rgba(0,0,0,0.42)',
-    borderRadius: 999,
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    alignItems: 'center',
-    gap: 6,
-  },
-  navItem: {
-    width: 44, height: 44,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  navBadge: {
-    position: 'absolute', top: 4, right: 2,
-    minWidth: 15, height: 15, borderRadius: 8,
-    backgroundColor: '#FF3B30',
-    alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: 3,
-    borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.5)',
-  },
-  navBadgeTxt: { color: '#fff', fontFamily: fonts.bold, fontSize: 9, lineHeight: 11 },
   badge: {
     position: 'absolute', top: -2, right: -4,
     minWidth: 16, height: 16, borderRadius: 8,
@@ -269,7 +212,9 @@ const s = StyleSheet.create({
     borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.5)',
   },
   badgeTxt:    { color: colors.white, fontSize: 9, fontFamily: fonts.bold },
-  circleActive:{ backgroundColor: 'rgba(255,75,110,0.28)' },
+  circleActive: { backgroundColor: 'rgba(255,75,110,0.28)' },
+  viewsItem:   { alignItems: 'center', gap: 2, width: 44, paddingVertical: 8 },
+  viewsCount:  { color: colors.white, fontFamily: fonts.bold, fontSize: 13, letterSpacing: -0.2 },
   optionsBtn:  { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   overlay:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end', paddingBottom: 48 },
   menu:        { marginHorizontal: 16, backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden' },

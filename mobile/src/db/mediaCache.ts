@@ -11,7 +11,7 @@
  * Images use expo-image disk cache (handled transparently by the component).
  */
 
-import * as FileSystem from 'expo-file-system'
+import * as FileSystem from 'expo-file-system/legacy'
 import {
   getMediaCacheEntry,
   saveMediaCacheEntry,

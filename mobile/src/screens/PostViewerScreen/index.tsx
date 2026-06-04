@@ -80,6 +80,10 @@ export default function PostViewerScreen() {
 
   const player = useVideoPlayer(null, (p) => { p.loop = true; p.muted = false })
 
+  const safePlayer = useCallback((fn: () => void) => {
+    try { fn() } catch { /* player already released */ }
+  }, [])
+
   // Track animated progress value
   useEffect(() => {
     const id = progressAnim.addListener(({ value }) => { progressValueRef.current = value })
@@ -108,7 +112,7 @@ export default function PostViewerScreen() {
   function resumeFromCurrent() {
     const p = postRef.current
     if (!p || commentPost) return
-    if (p.mediaType === 'VIDEO') player.play()
+    if (p.mediaType === 'VIDEO') safePlayer(() => player.play())
     const totalDur = p.mediaType === 'VIDEO' ? VIDEO_DURATION : IMAGE_DURATION
     const remaining = Math.max(400, (1 - progressValueRef.current) * totalDur)
     progressRef.current = Animated.timing(progressAnim, {
@@ -120,7 +124,7 @@ export default function PostViewerScreen() {
   // Main playback effect — runs on new post
   useEffect(() => {
     progressRef.current?.stop()
-    player.pause()
+    safePlayer(() => player.pause())
     progressAnim.setValue(0)
     progressValueRef.current = 0
 
@@ -128,8 +132,8 @@ export default function PostViewerScreen() {
     if (commentPost) return
 
     if (post.mediaType === 'VIDEO') {
-      player.replace({ uri: resolveMedia(post.mediaUrl ?? '') })
-      player.play()
+      safePlayer(() => player.replace({ uri: resolveMedia(post.mediaUrl ?? '') }))
+      safePlayer(() => player.play())
     }
 
     const duration = post.mediaType === 'VIDEO' ? VIDEO_DURATION : IMAGE_DURATION
@@ -138,14 +142,14 @@ export default function PostViewerScreen() {
     })
     progressRef.current.start(({ finished }) => { if (finished) goNext() })
 
-    return () => { progressRef.current?.stop(); player.pause() }
+    return () => { progressRef.current?.stop(); safePlayer(() => player.pause()) }
   }, [index])
 
   // Pause when comment sheet opens, resume when it closes
   useEffect(() => {
     if (commentPost) {
       progressRef.current?.stop()
-      player.pause()
+      safePlayer(() => player.pause())
     } else {
       resumeFromCurrent()
     }
@@ -155,7 +159,7 @@ export default function PostViewerScreen() {
   function handlePressIn() {
     pressStartRef.current = Date.now()
     progressRef.current?.stop()
-    player.pause()
+    safePlayer(() => player.pause())
   }
 
   function handlePressOut(navigate: () => void) {
@@ -207,8 +211,8 @@ export default function PostViewerScreen() {
       <View style={[s.topOverlay, { paddingTop: top + 6 }]} pointerEvents="box-none">
         <ProgressBars count={posts.length} current={index} progress={progressAnim} />
         <View style={s.headerRow}>
-          <AvatarImage uri={post.user.avatar} size={32} borderColor="rgba(255,255,255,0.8)" borderWidth={1.5} />
-          <Text style={s.headerName}>{post.user.name}</Text>
+          <AvatarImage uri={post.user?.avatar} size={32} borderColor="rgba(255,255,255,0.8)" borderWidth={1.5} />
+          <Text style={s.headerName}>{post.user?.name ?? ''}</Text>
           <TouchableOpacity onPress={() => nav.goBack()} style={s.closeBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <Ionicons name="close" size={26} color={colors.white} />
           </TouchableOpacity>

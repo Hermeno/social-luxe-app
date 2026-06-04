@@ -13,6 +13,7 @@ interface NotificationState {
   badge: number
   addNotification: (n: AppNotification) => void
   markAllRead: () => void
+  reset: () => void
 }
 
 export const useNotificationStore = create<NotificationState>((set) => ({
@@ -30,4 +31,6 @@ export const useNotificationStore = create<NotificationState>((set) => ({
       notifications: state.notifications.map((n) => ({ ...n, read: true })),
       badge: 0,
     })),
+
+  reset: () => set({ notifications: [], badge: 0 }),
 }))

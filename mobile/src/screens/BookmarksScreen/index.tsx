@@ -16,6 +16,8 @@ import { getBookmarks } from '../../services/bookmark.service'
 import { Post } from '../../types'
 import { colors, fonts, spacing } from '../../theme'
 import { API_BASE } from '../../config'
+import { getCache, setCache } from '../../db/database'
+import { isConnected } from '../../services/netinfo.service'
 
 const { width } = Dimensions.get('window')
 const ITEM_SIZE = (width - 3) / 2
@@ -27,10 +29,19 @@ export default function BookmarksScreen() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    getBookmarks()
-      .then(setPosts)
-      .catch(() => {})
-      .finally(() => setLoading(false))
+    let cancelled = false
+    async function run() {
+      const cached = await getCache<Post[]>('bookmarks')
+      if (!cancelled && cached) { setPosts(cached); setLoading(false) }
+      if (!isConnected()) { setLoading(false); return }
+      try {
+        const fresh = await getBookmarks()
+        if (!cancelled) { setPosts(fresh); setLoading(false) }
+        setCache('bookmarks', fresh).catch(() => {})
+      } catch { if (!cancelled) setLoading(false) }
+    }
+    run()
+    return () => { cancelled = true }
   }, [])
 
   function mediaUri(post: Post) {

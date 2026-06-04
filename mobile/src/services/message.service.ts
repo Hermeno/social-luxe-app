@@ -16,13 +16,22 @@ export async function reactToMessage(messageId: string, emoji: string): Promise<
   return res.data
 }
 
-export async function sendMessage(receiverId: string, content?: string, mediaUri?: string, replyToId?: string): Promise<Message> {
+export async function sendMessage(
+  receiverId: string,
+  content?: string,
+  mediaUri?: string,
+  replyToId?: string,
+  mimeType?: string,
+  fileName?: string,
+): Promise<Message> {
   if (mediaUri) {
     const form = new FormData()
     form.append('receiverId', receiverId)
-    if (content) form.append('content', content)
-    const filename = mediaUri.split('/').pop() ?? 'media'
-    form.append('media', { uri: mediaUri, name: filename, type: 'image/jpeg' } as unknown as Blob)
+    if (content)   form.append('content', content)
+    if (replyToId) form.append('replyToId', replyToId)
+    const name = fileName ?? mediaUri.split('/').pop() ?? 'file'
+    const type = mimeType ?? 'application/octet-stream'
+    form.append('media', { uri: mediaUri, name, type } as unknown as Blob)
     const res = await api.post<ApiResponse<Message>>('/messages', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })

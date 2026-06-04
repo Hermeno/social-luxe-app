@@ -22,6 +22,6 @@ export const colors = {
 
 export const gradients = {
   feedBottom: ['transparent', 'rgba(0,0,0,0.92)'] as const,
-  feedTop:    ['rgba(0,0,0,0.52)', 'transparent'] as const,
+  feedTop:    ['rgba(0,0,0,0.28)', 'transparent'] as const,
   tabBar:     ['rgba(0,0,0,0.0)', 'rgba(0,0,0,0.92)'] as const,
 }
