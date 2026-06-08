@@ -150,7 +150,7 @@ function BubbleItem({
               count={item.posts.length}
               viewedCount={viewedCount}
               size={RING_SIZE}
-              strokeWidth={3}
+              strokeWidth={2}
             />
             {/* Avatar + ripple contained inside the circle */}
             <View style={s.avatarCenter}>
@@ -219,14 +219,21 @@ export default function FeedScreen() {
   const messageBadge = useMessageBadgeStore((s) => s.totalUnread)
 
   // Consume a post published from CreateScreen → prepend instantly
-  const pendingPost    = useFeedStore((s) => s.pendingPost)
-  const setPendingPost = useFeedStore((s) => s.setPendingPost)
+  const pendingPost       = useFeedStore((s) => s.pendingPost)
+  const setPendingPost    = useFeedStore((s) => s.setPendingPost)
+  const setNewPostsCount  = useFeedStore((s) => s.setNewPostsCount)
+  const jumpToPostId      = useFeedStore((s) => s.jumpToPostId)
+  const setJumpToPostId   = useFeedStore((s) => s.setJumpToPostId)
+
   useEffect(() => {
     if (!pendingPost) return
     prependPost(pendingPost)
     setCurrentIndex(0)
     setPendingPost(null)
   }, [pendingPost])
+
+  const jumpToPostIdRef = useRef(jumpToPostId)
+  jumpToPostIdRef.current = jumpToPostId
 
   const [currentIndex, setCurrentIndex] = useState(0)
   const [commentPost, setCommentPost]   = useState<Post | null>(null)
@@ -235,6 +242,8 @@ export default function FeedScreen() {
   const [searchQuery, setSearchQuery]   = useState('')
   const [viewerW, setViewerW] = useState(SCREEN_W)
   const [viewerH, setViewerH] = useState(SCREEN_H)
+  const [imgH,    setImgH]    = useState<number | null>(null)
+  const [commentDelta, setCommentDelta] = useState(0)
 
   // Thumbnail → full-media crossfade opacity
   const mediaOpacity = useRef(new Animated.Value(0)).current
@@ -306,11 +315,24 @@ export default function FeedScreen() {
   const post = flatPosts[currentIndex]
   postRef.current = post
 
-  // Total posts not yet viewed — shown as badge on Home icon in ActionBar
   const newPostsCount = useMemo(
     () => flatPosts.filter((p) => !viewedIds.has(p.id)).length,
     [flatPosts, viewedIds],
   )
+  useEffect(() => { setNewPostsCount(newPostsCount) }, [newPostsCount])
+
+  // Jump to post requested from another screen (profile grid → feed)
+  useEffect(() => {
+    const id = jumpToPostIdRef.current
+    if (!id) return
+    if (flatPosts.length === 0) return
+    const idx = flatPosts.findIndex((p) => p.id === id)
+    if (idx >= 0) {
+      setCurrentIndex(idx)
+      setJumpToPostId(null)
+    }
+    // If post not in feed yet, leave jumpToPostId set — will retry when flatPosts updates
+  }, [jumpToPostId, flatPosts])
 
   function viewedCountFor(group: UserGroup): number {
     return group.posts.filter((p) => viewedIds.has(p.id)).length
@@ -364,8 +386,9 @@ export default function FeedScreen() {
     safePlayer(() => player.pause())
     progressAnim.setValue(0)
     progressValueRef.current = 0
-    // Reset crossfade — thumbnail shows while full media loads
     mediaOpacity.setValue(0)
+    setImgH(null)
+    setCommentDelta(0)
 
     if (!post || !isFocused) return
 
@@ -549,27 +572,6 @@ export default function FeedScreen() {
               <User size={20} strokeWidth={1.8} color={colors.gray800} />
             </TouchableOpacity>
 
-            {/* Vertical divider */}
-            <View style={s.pillDivider} />
-
-            {/* Chat + badge */}
-            <TouchableOpacity
-              onPress={() => (nav as any).navigate('Messages')}
-              activeOpacity={0.65}
-              style={s.pillChatBtn}
-              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-            >
-              <View style={s.chatIconWrap}>
-                <MessageCircle size={20} strokeWidth={1.8} color={colors.gray800} />
-                {messageBadge > 0 && (
-                  <View style={s.chatBadge}>
-                    <Text style={s.chatBadgeTxt}>
-                      {messageBadge > 9 ? '9+' : messageBadge}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </TouchableOpacity>
           </View>
         </View>
       )}
@@ -703,11 +705,11 @@ export default function FeedScreen() {
             onPressOut={() => handlePressOut(goNext)}
           />
 
-          <PostInfo post={post} isActive />
           <ActionBar
             post={post}
             onCommentPress={() => setCommentPost(post)}
             newPostsCount={newPostsCount}
+            commentCount={(post._count?.comments ?? 0) + commentDelta}
             onDeleted={(id) => { removePost(id); setCurrentIndex((i) => Math.max(0, i - 1)) }}
             onEdited={(id, caption) => updatePost(id, caption)}
           />
@@ -721,7 +723,7 @@ export default function FeedScreen() {
           <Text style={s.emptySub}>Segue pessoas para ver as publicações delas aqui.</Text>
           <TouchableOpacity
             style={s.emptyBtn}
-            onPress={() => nav.navigate('Search')}
+            onPress={() => (nav as any).navigate('Messages')}
             activeOpacity={0.85}
           >
             <Ionicons name="search" size={18} color="#fff" />
@@ -731,7 +733,27 @@ export default function FeedScreen() {
       )}
 
       {commentPost && (
-        <CommentSheet post={commentPost} onClose={() => setCommentPost(null)} />
+        <CommentSheet
+          post={commentPost}
+          onClose={() => setCommentPost(null)}
+          onCommentAdded={() => setCommentDelta((d) => d + 1)}
+        />
+      )}
+
+      {/* ── Floating chat FAB — right side, below action icons ───────────── */}
+      {post && (
+        <TouchableOpacity
+          style={[s.fab, { bottom: bottom + 54 }]}
+          onPress={() => (nav as any).navigate('Messages')}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="chatbubble-outline" size={26} color="#fff" />
+          {messageBadge > 0 && (
+            <View style={s.fabBadge}>
+              <Text style={s.fabBadgeTxt}>{messageBadge > 99 ? '99+' : messageBadge}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
       )}
     </View>
   )
@@ -921,4 +943,29 @@ const s = StyleSheet.create({
   emptySub:     { fontSize: 14, fontFamily: fonts.regular, color: colors.gray400, textAlign: 'center', lineHeight: 20 },
   emptyBtn:     { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, backgroundColor: '#4C8CE4', paddingHorizontal: 24, paddingVertical: 14, borderRadius: 14 },
   emptyBtnText: { color: '#fff', fontFamily: fonts.semiBold, fontSize: 15 },
+
+  // Floating chat FAB — right side, below ActionBar column
+  fab: {
+    position: 'absolute',
+    right: 16,
+    width: 56, height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.primary,
+    alignItems: 'center', justifyContent: 'center',
+    zIndex: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  fabBadge: {
+    position: 'absolute', top: -4, right: -4,
+    minWidth: 20, height: 20, borderRadius: 10,
+    backgroundColor: '#FF3B30',
+    alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2, borderColor: '#fff',
+  },
+  fabBadgeTxt: { fontSize: 10, fontFamily: fonts.extraBold, color: '#fff', lineHeight: 12 },
 })

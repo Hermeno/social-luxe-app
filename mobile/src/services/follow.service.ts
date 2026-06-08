@@ -9,12 +9,15 @@ export interface FollowUser {
   followedAt: string
 }
 
-export async function toggleFollow(userId: string): Promise<{ following: boolean }> {
-  const res = await api.post(`/users/${userId}/follow`)
+export type FollowDuration = '1d' | '1m' | '1y' | 'forever'
+
+export async function toggleFollow(userId: string, duration?: FollowDuration): Promise<{ following: boolean }> {
+  const body = duration && duration !== 'forever' ? { duration } : undefined
+  const res = await api.post(`/users/${userId}/follow`, body)
   return res.data.data ?? res.data
 }
 
-export async function getFollowStatus(userId: string): Promise<{ following: boolean }> {
+export async function getFollowStatus(userId: string): Promise<{ following: boolean; followsMe: boolean }> {
   const res = await api.get(`/users/${userId}/follow-status`)
   return res.data.data ?? res.data
 }

@@ -3,12 +3,12 @@ import {
   View,
   Text,
   FlatList,
-  Image,
   TouchableOpacity,
   StyleSheet,
   Dimensions,
   ActivityIndicator,
 } from 'react-native'
+import { Image } from 'expo-image'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
@@ -82,7 +82,9 @@ export default function BookmarksScreen() {
               <Image
                 source={{ uri: mediaUri(item) }}
                 style={s.thumb}
-                resizeMode="cover"
+                contentFit="cover"
+                cachePolicy="disk"
+                recyclingKey={mediaUri(item)}
               />
               {item.mediaType === 'VIDEO' && (
                 <View style={s.videoIcon}>

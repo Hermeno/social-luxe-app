@@ -1,8 +1,8 @@
 import React, { useState, useCallback } from 'react'
 import {
   View, Text, TouchableOpacity, FlatList,
-  RefreshControl, StyleSheet, Alert,
-  ActivityIndicator, Dimensions,
+  RefreshControl, StyleSheet, Alert, Dimensions,
+  ActivityIndicator,
 } from 'react-native'
 import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
@@ -14,27 +14,33 @@ import { useAuthStore } from '../../store/auth.store'
 import { api } from '../../services/api'
 import { Post, User } from '../../types'
 import { AppStackParams } from '../../navigation/AppNavigator'
-import { colors, spacing, fonts, radius } from '../../theme'
-import AvatarSection from './AvatarSection'
+import { colors, fonts } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
-import EditProfileSheet from './EditProfileSheet'
 import FollowersSheet from './FollowersSheet'
 import QRModal from '../../components/QRModal'
-import * as friendService from '../../services/friendship.service'
 import * as followService from '../../services/follow.service'
 import { API_BASE } from '../../config'
 import { getCache, setCache } from '../../db/database'
 import { isConnected } from '../../services/netinfo.service'
+import { useFeedStore } from '../../store/feed.store'
 
 type Nav   = StackNavigationProp<AppStackParams>
 type Route = RouteProp<AppStackParams, 'Profile'>
 
 const { width: W } = Dimensions.get('window')
-const GRID_SIZE    = (W - 3) / 3   // 3 columns, 1.5px gap each side
+const GRID_GAP  = 2
+const GRID_SIZE = (W - GRID_GAP * 2) / 3
 
-function resolveUrl(url: string | null): string | null {
+function resolveUrl(url: string | null | undefined): string | null {
   if (!url) return null
   return url.startsWith('http') ? url : `${API_BASE}${url}`
+}
+
+interface PartnerRequest {
+  id: string
+  senderId: string
+  status: string
+  sender: { id: string; name: string; avatar: string | null; bio: string | null }
 }
 
 export default function ProfileScreen() {
@@ -47,52 +53,44 @@ export default function ProfileScreen() {
   const isOwn     = !viewingId
   const targetId  = viewingId ?? me?.id ?? ''
 
-  const [profile, setProfile]             = useState<User | null>(isOwn ? me : null)
-  const [posts, setPosts]                 = useState<Post[]>([])
-  const [loading, setLoading]             = useState(!isOwn)
-  const [refreshing, setRefreshing]       = useState(false)
-  const [followerCount, setFollowerCount] = useState(0)
+  const [profile,        setProfile]        = useState<User | null>(isOwn ? me : null)
+  const [posts,          setPosts]          = useState<Post[]>([])
+  const [refreshing,     setRefreshing]     = useState(false)
+  const [followerCount,  setFollowerCount]  = useState(0)
   const [followingCount, setFollowingCount] = useState(0)
-  const [isFriend, setIsFriend]           = useState(false)
-  const [isFollowing, setIsFollowing]     = useState(false)
-  const [followLoading, setFollowLoading] = useState(false)
-  const [editOpen, setEditOpen]           = useState(false)
-  const [showQR, setShowQR]               = useState(false)
+  const [isFollowing,    setIsFollowing]    = useState(false)
+  const [theyFollowMe,   setTheyFollowMe]   = useState(false)
+  const [followLoading,  setFollowLoading]  = useState(false)
+  const [showQR,         setShowQR]         = useState(false)
   const [followSheetMode, setFollowSheetMode] = useState<'followers' | 'following'>('followers')
   const [showFollowSheet, setShowFollowSheet] = useState(false)
+  const [partnerRequests, setPartnerRequests] = useState<PartnerRequest[]>([])
 
   type ProfileCache = {
     user: User; followerCount: number; followingCount: number
-    isFollowing: boolean; isFriend: boolean
+    isFollowing: boolean; theyFollowMe: boolean
   }
 
   useFocusEffect(useCallback(() => {
     let cancelled = false
 
     async function run() {
-      // 1. Serve from SQLite immediately (zero wait)
       const [cachedMeta, cachedPosts] = await Promise.all([
         !isOwn ? getCache<ProfileCache>(`profile:${targetId}`) : null,
         getCache<Post[]>(`profile_posts:${targetId}`),
       ])
-
       if (!cancelled) {
         if (cachedMeta && !isOwn) {
           setProfile(cachedMeta.user)
           setFollowerCount(cachedMeta.followerCount)
           setFollowingCount(cachedMeta.followingCount)
           setIsFollowing(cachedMeta.isFollowing)
-          setIsFriend(cachedMeta.isFriend)
-          setLoading(false)
+          setTheyFollowMe(cachedMeta.theyFollowMe ?? false)
         }
-        if (cachedPosts) {
-          setPosts(cachedPosts)
-          if (isOwn) setLoading(false)
-        }
+        if (cachedPosts) setPosts(cachedPosts)
+        if (isOwn && me) setProfile(me)
       }
-
-      // 2. Background network sync
-      if (!isConnected()) { setLoading(false); setRefreshing(false); return }
+      if (!isConnected()) { setRefreshing(false); return }
       try {
         const [userRes, postsRes, followersRes, followingRes] = await Promise.all([
           isOwn ? Promise.resolve({ data: { data: me } }) : api.get(`/users/${targetId}`),
@@ -101,53 +99,57 @@ export default function ProfileScreen() {
           followService.getUserFollowing(targetId),
         ])
         if (cancelled) return
-
         const p = userRes.data.data as User
         if (!p) throw new Error('not found')
         const freshPosts: Post[] = postsRes.data.data ?? []
-        const follCount = followersRes.length
-        const folwCount = followingRes.length
-
-        setProfile(p)
-        setPosts(freshPosts)
-        setFollowerCount(follCount)
-        setFollowingCount(folwCount)
-        // Cache posts for both own and other profiles
+        setProfile(p); setPosts(freshPosts)
+        setFollowerCount(followersRes.length); setFollowingCount(followingRes.length)
         setCache(`profile_posts:${targetId}`, freshPosts).catch(() => {})
-
         if (!isOwn) {
-          const [friendLevel, followStatus] = await Promise.all([
-            friendService.getFriendshipLevel(targetId).catch(() => null),
-            followService.getFollowStatus(targetId).catch(() => ({ following: false })),
-          ])
+          const followStatus = await followService.getFollowStatus(targetId)
+            .catch(() => ({ following: false, followsMe: false }))
           if (cancelled) return
-          const following = followStatus.following
-          const friend    = !!friendLevel?.isFriend
-          setIsFollowing(following)
-          setIsFriend(friend)
+          setIsFollowing(followStatus.following)
+          setTheyFollowMe(followStatus.followsMe)
           setCache(`profile:${targetId}`, {
-            user: p, followerCount: follCount, followingCount: folwCount,
-            isFollowing: following, isFriend: friend,
+            user: p, followerCount: followersRes.length,
+            followingCount: followingRes.length,
+            isFollowing: followStatus.following, theyFollowMe: followStatus.followsMe,
           } as ProfileCache).catch(() => {})
         }
-      } catch {
-        if (!cancelled && loading) Alert.alert('Erro', 'Não foi possível carregar o perfil.')
-      }
-      if (!cancelled) { setLoading(false); setRefreshing(false) }
+      } catch {}
+      if (!cancelled) setRefreshing(false)
     }
-
     run()
     return () => { cancelled = true }
   }, [targetId]))
+
+  // Load partner requests — offline-first, own profile only
+  useFocusEffect(useCallback(() => {
+    if (!isOwn) return
+    let active = true
+    async function loadPartnerReqs() {
+      // 1. Serve from cache immediately
+      const cached = await getCache<PartnerRequest[]>('partner_requests').catch(() => null)
+      if (cached && active) setPartnerRequests(cached)
+      // 2. Background network sync
+      if (!isConnected()) return
+      try {
+        const r = await api.get('/users/partner-requests')
+        const fresh: PartnerRequest[] = r.data.data ?? []
+        if (active) setPartnerRequests(fresh)
+        setCache('partner_requests', fresh).catch(() => {})
+      } catch {}
+    }
+    loadPartnerReqs()
+    return () => { active = false }
+  }, [isOwn]))
 
   async function handleRefresh() {
     setRefreshing(true)
     await silentReload()
     setRefreshing(false)
   }
-
-  // Lightweight refresh used after friend-add or profile edit (no spinner)
-  async function load(_silent = true) { await silentReload() }
 
   async function silentReload() {
     if (!isConnected()) return
@@ -164,17 +166,7 @@ export default function ProfileScreen() {
       setProfile(p); setPosts(freshPosts)
       setFollowerCount(followersRes.length); setFollowingCount(followingRes.length)
       setCache(`profile_posts:${targetId}`, freshPosts).catch(() => {})
-      if (!isOwn) {
-        const [friendLevel, followStatus] = await Promise.all([
-          friendService.getFriendshipLevel(targetId).catch(() => null),
-          followService.getFollowStatus(targetId).catch(() => ({ following: false })),
-        ])
-        setIsFollowing(followStatus.following); setIsFriend(!!friendLevel?.isFriend)
-        setCache(`profile:${targetId}`, {
-          user: p, followerCount: followersRes.length, followingCount: followingRes.length,
-          isFollowing: followStatus.following, isFriend: !!friendLevel?.isFriend,
-        }).catch(() => {})
-      }
+      if (isOwn) await loadUser()
     } catch {}
   }
 
@@ -182,17 +174,38 @@ export default function ProfileScreen() {
     if (followLoading) return
     setFollowLoading(true)
     const prev = isFollowing
-    setIsFollowing(!prev)
-    setFollowerCount((c) => prev ? c - 1 : c + 1)
+    setIsFollowing(!prev); setFollowerCount((c) => prev ? c - 1 : c + 1)
     try {
       const res = await followService.toggleFollow(targetId)
       setIsFollowing(res.following)
       setFollowerCount((c) => res.following === prev ? c : res.following ? c + 1 : c - 1)
-    } catch {
-      setIsFollowing(prev)
-      setFollowerCount((c) => prev ? c + 1 : c - 1)
-    }
+    } catch { setIsFollowing(prev); setFollowerCount((c) => prev ? c + 1 : c - 1) }
     setFollowLoading(false)
+  }
+
+  async function handlePartnerResponse(id: string, accept: boolean) {
+    // Optimistic update — remove from list immediately
+    setPartnerRequests((prev) => {
+      const updated = prev.filter((r) => r.id !== id)
+      setCache('partner_requests', updated).catch(() => {})
+      return updated
+    })
+    try {
+      await api.put(`/users/partner-requests/${id}/${accept ? 'accept' : 'reject'}`)
+      if (accept) {
+        await loadUser()
+        setProfile((p) => p ? { ...p, ...me } : p)
+      }
+    } catch {
+      // Rollback not practical here — just reload fresh
+      api.get('/users/partner-requests')
+        .then((r) => {
+          const fresh = r.data.data ?? []
+          setPartnerRequests(fresh)
+          setCache('partner_requests', fresh).catch(() => {})
+        }).catch(() => {})
+      Alert.alert('Erro', 'Não foi possível processar o pedido.')
+    }
   }
 
   async function pickAvatar() {
@@ -213,124 +226,68 @@ export default function ProfileScreen() {
     }
   }
 
-  async function handleAddFriend() {
-    Alert.alert('Duração da amizade', 'Por quanto tempo?', [
-      { text: '1 dia',      onPress: () => sendFriend('ONE_DAY') },
-      { text: '7 dias',     onPress: () => sendFriend('SEVEN_DAYS') },
-      { text: '30 dias',    onPress: () => sendFriend('THIRTY_DAYS') },
-      { text: 'Permanente', onPress: () => sendFriend('PERMANENT') },
-    ])
-  }
-
-  async function sendFriend(duration: string) {
-    try { await friendService.addFriend(targetId, duration as any); load(true) }
-    catch (e: any) { Alert.alert('Erro', e.message) }
-  }
-
+  const setJumpToPostId = useFeedStore((s) => s.setJumpToPostId)
   function openPost(index: number) {
-    nav.navigate('PostViewer', { posts, startIndex: index })
+    const postId = posts[index]?.id
+    if (!postId) return
+    setJumpToPostId(postId)
+    nav.navigate('Tabs' as any, { screen: 'Feed' } as any)
   }
 
   function renderPost({ item, index }: { item: Post; index: number }) {
     const thumb = resolveUrl(item.thumbnailUrl ?? item.mediaUrl)
     return (
-      <TouchableOpacity
-        style={s.gridCell}
-        onPress={() => openPost(index)}
-        activeOpacity={0.85}
-      >
+      <TouchableOpacity style={s.gridCell} onPress={() => openPost(index)} activeOpacity={0.88}>
         {item.mediaType === 'TEXT' ? (
-          <View style={[s.gridImg, { backgroundColor: item.bgColor ?? '#FF4B6E', justifyContent: 'center', alignItems: 'center', padding: 6 }]}>
+          <View style={[s.gridImg, { backgroundColor: item.bgColor ?? '#FF4B6E', justifyContent: 'center', alignItems: 'center', padding: 4 }]}>
             <Text style={s.gridText} numberOfLines={4}>{item.caption}</Text>
           </View>
         ) : (
-          <Image
-            source={{ uri: thumb ?? '' }}
-            style={s.gridImg}
-            contentFit="cover"
-            cachePolicy="disk"
-            recyclingKey={`grid-${item.id}`}
-          />
+          <Image source={{ uri: thumb ?? '' }} style={s.gridImg} contentFit="cover" cachePolicy="disk" recyclingKey={`grid-${item.id}`} />
         )}
         {item.mediaType === 'VIDEO' && (
-          <View style={s.videoIcon}>
-            <Ionicons name="play" size={10} color="#fff" />
-          </View>
+          <View style={s.videoIcon}><Ionicons name="play" size={10} color="#fff" /></View>
         )}
       </TouchableOpacity>
     )
   }
 
-  if (loading) {
-    return (
-      <View style={[s.container, s.center, { paddingTop: top }]}>
-        <ActivityIndicator color={colors.primary} size="large" />
-      </View>
-    )
-  }
+  const header = isOwn
+    ? <OwnHeader
+        profile={profile} me={me}
+        postsCount={posts.length}
+        followerCount={followerCount} followingCount={followingCount}
+        partnerRequests={partnerRequests}
+        onPickAvatar={pickAvatar}
+        onEdit={() => nav.navigate('EditProfile' as any)}
+        onShowFollowers={() => { setFollowSheetMode('followers'); setShowFollowSheet(true) }}
+        onShowFollowing={() => { setFollowSheetMode('following'); setShowFollowSheet(true) }}
+        onNavigate={(screen: string) => nav.navigate(screen as any)}
+        onPartnerResponse={handlePartnerResponse}
+        onLogout={() => Alert.alert('Logout', 'Sair da conta?', [{ text: 'Cancelar' }, { text: 'Sair', style: 'destructive', onPress: logout }])}
+        onShowQR={() => setShowQR(true)}
+      />
+    : <OtherHeader
+        profile={profile}
+        postsCount={posts.length}
+        followerCount={followerCount} followingCount={followingCount}
+        isFollowing={isFollowing} theyFollowMe={theyFollowMe}
+        followLoading={followLoading}
+        onFollow={handleFollow}
+        onMessage={() => { if (!profile) return; nav.navigate('Chat', { userId: profile.id, userName: profile.name, userAvatar: profile.avatar }) }}
+        onShowFollowers={() => { setFollowSheetMode('followers'); setShowFollowSheet(true) }}
+        onShowFollowing={() => { setFollowSheetMode('following'); setShowFollowSheet(true) }}
+      />
 
   return (
     <View style={[s.container, { paddingTop: top }]}>
-      {/* ── Header bar ── */}
-      <View style={s.headerBar}>
-        <TouchableOpacity onPress={() => nav.goBack()} style={s.headerBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Ionicons name="chevron-back" size={26} color={colors.gray800} />
-        </TouchableOpacity>
-        <Text style={s.headerTitle} numberOfLines={1}>{profile?.name ?? ''}</Text>
-        {isOwn ? (
-          <View style={s.headerRight}>
-            <TouchableOpacity onPress={() => setShowQR(true)} style={s.headerBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="qr-code-outline" size={22} color={colors.gray800} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => Alert.alert('Logout', 'Sair da conta?', [{ text: 'Cancelar' }, { text: 'Sair', style: 'destructive', onPress: logout }])}
-              style={s.headerBtn}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons name="log-out-outline" size={22} color={colors.gray800} />
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={{ width: 44 }} />
-        )}
-      </View>
-
       <FlatList
         data={posts}
         keyExtractor={(p) => p.id}
         numColumns={3}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
-        ListHeaderComponent={
-          isOwn ? <OwnHeader
-            profile={profile}
-            postsCount={posts.length}
-            followerCount={followerCount}
-            followingCount={followingCount}
-            onPickAvatar={pickAvatar}
-            onEdit={() => setEditOpen(true)}
-            onShowFollowers={() => { setFollowSheetMode('followers'); setShowFollowSheet(true) }}
-            onShowFollowing={() => { setFollowSheetMode('following'); setShowFollowSheet(true) }}
-            onNavigate={(screen: string, params?: object) => nav.navigate(screen as any, params as any)}
-            myId={me?.id ?? ''}
-          /> : <OtherHeader
-            profile={profile}
-            postsCount={posts.length}
-            followerCount={followerCount}
-            followingCount={followingCount}
-            isFollowing={isFollowing}
-            followLoading={followLoading}
-            isFriend={isFriend}
-            onFollow={handleFollow}
-            onMessage={() => {
-              if (!profile) return
-              nav.navigate('Chat', { userId: profile.id, userName: profile.name, userAvatar: profile.avatar })
-            }}
-            onAddFriend={handleAddFriend}
-            onShowFollowers={() => { setFollowSheetMode('followers'); setShowFollowSheet(true) }}
-            onShowFollowing={() => { setFollowSheetMode('following'); setShowFollowSheet(true) }}
-          />
-        }
+        ListHeaderComponent={header}
         renderItem={renderPost}
         ListEmptyComponent={
           <View style={s.emptyGrid}>
@@ -338,191 +295,503 @@ export default function ProfileScreen() {
             <Text style={s.emptyGridText}>Sem publicações ainda</Text>
           </View>
         }
+        contentContainerStyle={{ paddingBottom: bottom + 16 }}
       />
-
-      {isOwn && <EditProfileSheet visible={editOpen} onClose={() => { setEditOpen(false); load(true) }} />}
       {isOwn && profile && <QRModal visible={showQR} userId={profile.id} userName={profile.name} onClose={() => setShowQR(false)} />}
       <FollowersSheet visible={showFollowSheet} mode={followSheetMode} userId={targetId} onClose={() => setShowFollowSheet(false)} />
     </View>
   )
 }
 
-// ── Own profile header ─────────────────────────────────────────────────────────
-function OwnHeader({ profile, postsCount, followerCount, followingCount, onPickAvatar, onEdit, onShowFollowers, onShowFollowing, onNavigate, myId }: any) {
-  if (!profile) return null
+// ─── Own Profile Header ────────────────────────────────────────────────────────
+function OwnHeader({ profile, me, postsCount, followerCount, followingCount, partnerRequests, onPickAvatar, onEdit, onShowFollowers, onShowFollowing, onNavigate, onPartnerResponse, onLogout, onShowQR }: any) {
+  const nav        = useNavigation<Nav>()
+  const canGoBack  = nav.canGoBack()
+  const hasPartner = Boolean(profile?.partnerId && profile?.partnerName)
+
   return (
-    <View style={s.ownHeader}>
-      {/* Avatar + Stats */}
-      <View style={s.topRow}>
-        <AvatarSection uri={profile.avatar ?? null} availability={profile.availability} onPress={onPickAvatar} />
-        <View style={s.statsRow}>
-          <Stat num={postsCount} label="Posts" />
-          <TouchableOpacity onPress={onShowFollowers} activeOpacity={0.7}>
-            <Stat num={followerCount} label="Seguidores" />
+    <View>
+      {/* ── Top bar ── */}
+      <View style={s.topBar}>
+        {canGoBack ? (
+          <TouchableOpacity onPress={() => nav.goBack()} style={s.iconBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="chevron-back" size={26} color={colors.gray800} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={onShowFollowing} activeOpacity={0.7}>
-            <Stat num={followingCount} label="Seguindo" />
+        ) : (
+          <View style={s.iconBtn} />
+        )}
+        <Text style={s.screenTitle}>Perfil</Text>
+        <View style={s.topBarRight}>
+          <TouchableOpacity onPress={onShowQR} style={s.iconBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="qr-code-outline" size={22} color={colors.gray800} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onLogout} style={s.iconBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="log-out-outline" size={22} color={colors.gray800} />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Bio */}
-      {profile.bio ? <Text style={s.bio}>{profile.bio}</Text> : null}
-      {profile.availability ? <Text style={s.availability}>● {profile.availability}</Text> : null}
+      {/* ── Hero ── */}
+      <View style={s.hero}>
+        {/* Avatars */}
+        <View style={s.avatarRow}>
+          <TouchableOpacity onPress={onPickAvatar} activeOpacity={0.85} style={s.avatarWrap}>
+            <AvatarImage uri={profile?.avatar} size={88} borderColor={colors.primary} borderWidth={2.5} />
+            <View style={s.cameraBtn}>
+              <Ionicons name="camera" size={12} color="#fff" />
+            </View>
+          </TouchableOpacity>
+          {hasPartner && (
+            <View style={s.partnerAvatarWrap}>
+              <View style={s.partnerAvatarCircle}>
+                <Text style={s.partnerAvatarInitial}>{profile.partnerName?.[0]?.toUpperCase()}</Text>
+              </View>
+              <View style={s.heartBadge}>
+                <Ionicons name="heart" size={8} color="#fff" />
+              </View>
+            </View>
+          )}
+        </View>
 
-      {/* Edit button */}
-      <TouchableOpacity style={s.editBtn} onPress={onEdit} activeOpacity={0.8}>
-        <Text style={s.editText}>Editar perfil</Text>
-      </TouchableOpacity>
+        {/* Name */}
+        <Text style={s.heroName}>{profile?.name ?? ''}</Text>
+        {profile?.bio ? <Text style={s.heroBio}>{profile.bio}</Text> : null}
 
-      {/* Quick actions */}
+        {/* Stats */}
+        <View style={s.statsCard}>
+          <TouchableOpacity style={s.statItem} activeOpacity={0.7}>
+            <Text style={s.statNum}>{postsCount}</Text>
+            <Text style={s.statLabel}>Posts</Text>
+          </TouchableOpacity>
+          <View style={s.statDivider} />
+          <TouchableOpacity style={s.statItem} onPress={onShowFollowers} activeOpacity={0.7}>
+            <Text style={s.statNum}>{followerCount}</Text>
+            <Text style={s.statLabel}>Seguidores</Text>
+          </TouchableOpacity>
+          <View style={s.statDivider} />
+          <TouchableOpacity style={s.statItem} onPress={onShowFollowing} activeOpacity={0.7}>
+            <Text style={s.statNum}>{followingCount}</Text>
+            <Text style={s.statLabel}>Seguindo</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Partner association badge */}
+        {hasPartner && (
+          <View style={s.partnerBadge}>
+            <Ionicons name="heart" size={13} color="#FF4B6E" />
+            <Text style={s.partnerBadgeText}>Associado/a a {profile.partnerName}</Text>
+          </View>
+        )}
+
+        {/* Edit profile button */}
+        <TouchableOpacity style={s.editProfileBtn} onPress={onEdit} activeOpacity={0.85}>
+          <Ionicons name="pencil-outline" size={15} color={colors.gray800} />
+          <Text style={s.editProfileBtnText}>Editar perfil</Text>
+        </TouchableOpacity>
+
+        {/* ── Partner requests — inline below edit button ── */}
+        {partnerRequests.length > 0 && (
+          <View style={s.inlinePartnerWrap}>
+            <View style={s.inlinePartnerHeader}>
+              <Ionicons name="heart-circle" size={15} color="#FF4B6E" />
+              <Text style={s.inlinePartnerTitle}>PEDIDO DE ASSOCIAÇÃO</Text>
+            </View>
+            {partnerRequests.map((req: any) => (
+              <View key={req.id} style={s.inlinePartnerRow}>
+                <AvatarImage uri={req.sender.avatar} size={42} />
+                <View style={{ flex: 1 }}>
+                  <Text style={s.partnerReqName}>{req.sender.name}</Text>
+                  {req.sender.bio
+                    ? <Text style={s.partnerReqBio} numberOfLines={1}>{req.sender.bio}</Text>
+                    : <Text style={s.partnerReqBio}>Quer associar-se a ti 💑</Text>
+                  }
+                </View>
+                <TouchableOpacity
+                  style={s.acceptBtn}
+                  onPress={() => onPartnerResponse(req.id, true)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={s.acceptBtnText}>Aceitar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={s.rejectBtn}
+                  onPress={() => onPartnerResponse(req.id, false)}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="close" size={16} color={colors.gray600} />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+
+      {/* ── Info cards ── */}
+      {(profile?.city || profile?.district || profile?.relationshipStatus || profile?.contact || profile?.availability || profile?.autoReply) && (
+        <View style={s.infoSection}>
+          {(profile?.district || profile?.city) && (
+            <InfoRow icon="location-outline" value={[profile.district, profile.city].filter(Boolean).join(', ')} />
+          )}
+          {profile?.relationshipStatus && (
+            <InfoRow
+              icon="heart-outline"
+              value={
+                profile.relationshipStatus === 'married'         ? `Casado/a${hasPartner ? ` com ${profile.partnerName}` : ''}` :
+                profile.relationshipStatus === 'in_relationship' ? `Em relacionamento${hasPartner ? ` com ${profile.partnerName}` : ''}` :
+                'Solteiro/a'
+              }
+              color={profile.relationshipStatus !== 'single' ? colors.primary : undefined}
+            />
+          )}
+          {profile?.contact && (
+            <InfoRow icon="call-outline" value={profile.contact} />
+          )}
+          {profile?.availability && (
+            <InfoRow
+              icon="radio-button-on"
+              value={profile.availability}
+              color={profile.availability === 'Disponível' ? '#22C55E' : profile.availability === 'Ocupado' ? '#F59E0B' : colors.gray400}
+            />
+          )}
+          {profile?.autoReply && (
+            <InfoRow icon="chatbubble-ellipses-outline" value={`Auto-reply: ${profile.autoReply}`} muted />
+          )}
+        </View>
+      )}
+
+
+      {/* ── Quick actions ── */}
       <View style={s.quickRow}>
         {[
-          { icon: 'bookmark-outline',      label: 'Salvos',       screen: 'Bookmarks' },
-          { icon: 'trophy-outline',        label: 'Desafios',     screen: 'Challenges' },
+          { icon: 'bookmark-outline',      label: 'Salvos',       screen: 'Bookmarks'     },
+          { icon: 'trophy-outline',        label: 'Desafios',     screen: 'Challenges'    },
           { icon: 'notifications-outline', label: 'Notificações', screen: 'Notifications' },
         ].map(({ icon, label, screen }) => (
-          <TouchableOpacity key={label} style={s.quickBtn} onPress={() => onNavigate(screen)} activeOpacity={0.7}>
+          <TouchableOpacity key={label} style={s.quickBtn} onPress={() => onNavigate(screen)} activeOpacity={0.75}>
             <Ionicons name={icon as any} size={20} color={colors.gray600} />
             <Text style={s.quickLabel}>{label}</Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      <Text style={s.sectionTitle}>Publicações</Text>
+      <View style={s.gridHeader}>
+        <Ionicons name="grid-outline" size={16} color={colors.gray600} />
+        <Text style={s.gridHeaderText}>Publicações</Text>
+      </View>
     </View>
   )
 }
 
-// ── Other user header ─────────────────────────────────────────────────────────
-function OtherHeader({ profile, postsCount, followerCount, followingCount, isFollowing, followLoading, isFriend, onFollow, onMessage, onAddFriend, onShowFollowers, onShowFollowing }: any) {
-  if (!profile) return null
-  return (
-    <View style={s.otherHeaderWrap}>
-      {/* Avatar centrado */}
-      <AvatarImage uri={profile.avatar} size={90} borderColor={colors.primary} borderWidth={2.5} />
-      <Text style={s.otherName}>{profile.name}</Text>
-      {profile.bio ? <Text style={s.otherBio}>{profile.bio}</Text> : null}
-      {profile.availability ? <Text style={s.availability}>● {profile.availability}</Text> : null}
+// ─── Other User Header ─────────────────────────────────────────────────────────
+function OtherHeader({ profile, postsCount, followerCount, followingCount, isFollowing, theyFollowMe, followLoading, onFollow, onMessage, onShowFollowers, onShowFollowing }: any) {
+  const nav = useNavigation<Nav>()
 
-      {/* Stats */}
-      <View style={s.otherStats}>
-        <Stat num={postsCount} label="Posts" />
-        <View style={s.statsDivider} />
-        <TouchableOpacity onPress={onShowFollowers} activeOpacity={0.7}>
-          <Stat num={followerCount} label="Seguidores" />
+  // Skeleton while loading
+  if (!profile) {
+    return (
+      <View style={s.otherHero}>
+        <View style={[s.skeletonCircle, { width: 88, height: 88, borderRadius: 44 }]} />
+        <View style={[s.skeletonLine, { width: 140, height: 20, marginTop: 12 }]} />
+        <View style={[s.skeletonLine, { width: 200, height: 14, marginTop: 8 }]} />
+        <View style={s.gridHeader}>
+          <Text style={s.gridHeaderText}>Publicações</Text>
+        </View>
+      </View>
+    )
+  }
+
+  const hasPartner = Boolean(profile.partnerId && profile.partnerName)
+  const relLabel =
+    profile.relationshipStatus === 'married'         ? `Casado/a${hasPartner ? ` com ${profile.partnerName}` : ''}` :
+    profile.relationshipStatus === 'in_relationship' ? `Em relacionamento${hasPartner ? ` com ${profile.partnerName}` : ''}` :
+    profile.relationshipStatus === 'single'          ? 'Solteiro/a' : null
+
+  return (
+    <View>
+      {/* ── Top bar ── */}
+      <View style={s.topBar}>
+        <TouchableOpacity onPress={() => nav.goBack()} style={s.iconBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Ionicons name="chevron-back" size={26} color={colors.gray800} />
         </TouchableOpacity>
-        <View style={s.statsDivider} />
-        <TouchableOpacity onPress={onShowFollowing} activeOpacity={0.7}>
-          <Stat num={followingCount} label="Seguindo" />
-        </TouchableOpacity>
+        <Text style={s.screenTitle} numberOfLines={1}>{profile.name}</Text>
+        <View style={{ width: 44 }} />
       </View>
 
-      {/* Action buttons */}
-      <View style={s.actionRow}>
-        <TouchableOpacity style={s.msgBtn} onPress={onMessage} activeOpacity={0.8}>
-          <Ionicons name="chatbubble-ellipses" size={16} color={colors.white} />
-          <Text style={s.msgBtnText}>Mensagem</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[s.followBtn, isFollowing && s.followingBtn]}
-          onPress={onFollow}
-          disabled={followLoading}
-          activeOpacity={0.8}
-        >
-          {followLoading ? (
-            <ActivityIndicator size="small" color={isFollowing ? colors.gray800 : colors.white} />
-          ) : (
-            <Text style={[s.followBtnText, isFollowing && s.followingBtnText]}>
-              {isFollowing ? 'Seguindo' : 'Seguir'}
-            </Text>
+      <View style={s.otherHero}>
+        {/* Avatar */}
+        <View style={s.avatarRow}>
+          <AvatarImage uri={profile.avatar} size={88} borderColor={colors.primary} borderWidth={2.5} />
+          {hasPartner && (
+            <View style={s.partnerAvatarWrap}>
+              <View style={s.partnerAvatarCircle}>
+                <Text style={s.partnerAvatarInitial}>{profile.partnerName?.[0]?.toUpperCase()}</Text>
+              </View>
+              <View style={s.heartBadge}>
+                <Ionicons name="heart" size={8} color="#fff" />
+              </View>
+            </View>
           )}
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[s.friendBtn, isFriend && s.friendActiveBtn]}
-          onPress={isFriend ? undefined : onAddFriend}
-          activeOpacity={isFriend ? 1 : 0.8}
-        >
-          <Ionicons name={isFriend ? 'people' : 'person-add'} size={18} color={isFriend ? colors.primary : colors.gray800} />
-        </TouchableOpacity>
+        </View>
+
+        <Text style={s.heroName}>{profile.name}</Text>
+        {profile.bio ? <Text style={s.heroBio}>{profile.bio}</Text> : null}
+
+        {/* Stats */}
+        <View style={s.statsCard}>
+          <View style={s.statItem}>
+            <Text style={s.statNum}>{postsCount}</Text>
+            <Text style={s.statLabel}>Posts</Text>
+          </View>
+          <View style={s.statDivider} />
+          <TouchableOpacity style={s.statItem} onPress={onShowFollowers} activeOpacity={0.7}>
+            <Text style={s.statNum}>{followerCount}</Text>
+            <Text style={s.statLabel}>Seguidores</Text>
+          </TouchableOpacity>
+          <View style={s.statDivider} />
+          <TouchableOpacity style={s.statItem} onPress={onShowFollowing} activeOpacity={0.7}>
+            <Text style={s.statNum}>{followingCount}</Text>
+            <Text style={s.statLabel}>Seguindo</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Action buttons */}
+        <View style={s.actionRow}>
+          <TouchableOpacity style={s.msgBtn} onPress={onMessage} activeOpacity={0.85}>
+            <Ionicons name="chatbubble-ellipses" size={16} color="#fff" />
+            <Text style={s.msgBtnText}>Mensagem</Text>
+          </TouchableOpacity>
+          {isFollowing ? (
+            <TouchableOpacity style={s.followingBtn} onPress={onFollow} disabled={followLoading} activeOpacity={0.85}>
+              {followLoading
+                ? <ActivityIndicator size="small" color={colors.gray600} />
+                : <><Ionicons name="checkmark" size={14} color={colors.gray600} /><Text style={s.followingBtnText}>Seguindo</Text></>
+              }
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={s.followBtn} onPress={onFollow} disabled={followLoading} activeOpacity={0.85}>
+              {followLoading
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={s.followBtnText}>{theyFollowMe ? 'Seguir de volta' : 'Seguir'}</Text>
+              }
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
-      <Text style={s.sectionTitle}>Publicações</Text>
+      {/* ── Info section ── */}
+      {(profile.city || profile.district || relLabel || profile.contact || profile.availability) && (
+        <View style={s.infoSection}>
+          {(profile.district || profile.city) && (
+            <InfoRow icon="location-outline" value={[profile.district, profile.city].filter(Boolean).join(', ')} />
+          )}
+          {relLabel && (
+            <InfoRow icon="heart-outline" value={relLabel}
+              color={profile.relationshipStatus !== 'single' ? colors.primary : undefined}
+            />
+          )}
+          {profile.contact && <InfoRow icon="call-outline" value={profile.contact} />}
+          {profile.availability && (
+            <InfoRow icon="radio-button-on" value={profile.availability}
+              color={profile.availability === 'Disponível' ? '#22C55E' : profile.availability === 'Ocupado' ? '#F59E0B' : colors.gray400}
+            />
+          )}
+        </View>
+      )}
+
+      <View style={s.gridHeader}>
+        <Ionicons name="grid-outline" size={16} color={colors.gray600} />
+        <Text style={s.gridHeaderText}>Publicações</Text>
+      </View>
     </View>
   )
 }
 
-// ── Stat component ─────────────────────────────────────────────────────────────
-function Stat({ num, label }: { num: number; label: string }) {
+// ─── Info Row ─────────────────────────────────────────────────────────────────
+function InfoRow({ icon, value, color, muted }: { icon: string; value: string; color?: string; muted?: boolean }) {
   return (
-    <View style={s.stat}>
-      <Text style={s.statNum}>{num}</Text>
-      <Text style={s.statLabel}>{label}</Text>
+    <View style={s.infoRow}>
+      <Ionicons name={icon as any} size={16} color={color ?? colors.gray400} />
+      <Text style={[s.infoText, muted && { color: colors.gray400 }, color ? { color } : null]} numberOfLines={2}>
+        {value}
+      </Text>
     </View>
   )
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.white },
-  center:    { alignItems: 'center', justifyContent: 'center' },
+  container: { flex: 1, backgroundColor: '#fff' },
 
-  // Header bar
-  headerBar:   { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingBottom: 10, gap: 8 },
-  headerBtn:   { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { flex: 1, fontSize: 17, fontFamily: fonts.bold, color: colors.gray800, textAlign: 'center' },
-  headerRight: { flexDirection: 'row', gap: 4 },
+  // Top bar
+  topBar: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 10,
+    backgroundColor: '#fff',
+  },
+  screenTitle: {
+    flex: 1, fontSize: 18, fontFamily: fonts.bold,
+    color: colors.gray800, textAlign: 'center', letterSpacing: -0.3,
+  },
+  topBarRight: { flexDirection: 'row', gap: 4 },
+  iconBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
 
-  // Own header
-  ownHeader: { paddingHorizontal: spacing.md, paddingTop: spacing.sm, gap: spacing.md },
-  topRow:    { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
-  statsRow:  { flex: 1, flexDirection: 'row', justifyContent: 'space-around' },
+  // Hero section
+  hero: {
+    backgroundColor: colors.white,
+    marginHorizontal: 16, borderRadius: 20,
+    paddingHorizontal: 20, paddingTop: 24, paddingBottom: 20,
+    alignItems: 'center', gap: 12,
+    marginBottom: 12,
+  },
+  otherHero: {
+    backgroundColor: colors.white,
+    marginHorizontal: 16, borderRadius: 20,
+    paddingHorizontal: 20, paddingTop: 24, paddingBottom: 20,
+    alignItems: 'center', gap: 12,
+    marginBottom: 12,
+  },
 
-  // Other header
-  otherHeaderWrap: { paddingHorizontal: spacing.md, paddingTop: spacing.lg, paddingBottom: spacing.sm, alignItems: 'center', gap: spacing.sm },
-  otherName:  { fontSize: 20, fontFamily: fonts.bold, color: colors.gray800, letterSpacing: -0.3 },
-  otherBio:   { fontSize: 13, fontFamily: fonts.regular, color: colors.gray600, textAlign: 'center', lineHeight: 19 },
-  otherStats: { flexDirection: 'row', alignItems: 'center', gap: spacing.xl, marginTop: 4 },
-  statsDivider:{ width: 1, height: 32, backgroundColor: colors.gray200 },
+  // Avatar
+  avatarRow: { flexDirection: 'row', alignItems: 'flex-end' },
+  avatarWrap: { position: 'relative' },
+  cameraBtn: {
+    position: 'absolute', bottom: 0, right: 0,
+    width: 24, height: 24, borderRadius: 12,
+    backgroundColor: colors.primary, borderWidth: 2, borderColor: colors.white,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  partnerAvatarWrap: { marginLeft: -16, position: 'relative' },
+  partnerAvatarCircle: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: `${colors.primary}22`,
+    borderWidth: 3, borderColor: colors.white,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  partnerAvatarInitial: { fontSize: 26, fontFamily: fonts.bold, color: colors.primary },
+  heartBadge: {
+    position: 'absolute', bottom: 0, left: 0,
+    width: 18, height: 18, borderRadius: 9,
+    backgroundColor: '#FF4B6E', borderWidth: 1.5, borderColor: colors.white,
+    alignItems: 'center', justifyContent: 'center',
+  },
 
-  // Shared stats
-  stat:      { alignItems: 'center', gap: 1 },
-  statNum:   { fontSize: 20, fontFamily: fonts.bold, color: colors.gray800, letterSpacing: -0.5 },
-  statLabel: { fontSize: 11, fontFamily: fonts.regular, color: colors.gray400 },
+  // Name / bio
+  heroName: { fontSize: 22, fontFamily: fonts.bold, color: colors.gray800, letterSpacing: -0.5, textAlign: 'center' },
+  heroBio:  { fontSize: 14, fontFamily: fonts.regular, color: colors.gray400, textAlign: 'center', lineHeight: 20, paddingHorizontal: 8 },
 
-  // Bio/avail
-  bio:          { fontSize: 14, fontFamily: fonts.regular, color: colors.gray600, lineHeight: 20 },
-  availability: { fontSize: 12, fontFamily: fonts.medium, color: colors.secondary },
+  // Stats
+  statsCard: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#fff', borderRadius: 14,
+    paddingVertical: 14, paddingHorizontal: 8,
+    width: '100%',
+  },
+  statItem:   { flex: 1, alignItems: 'center', gap: 2 },
+  statDivider:{ width: 1, height: 28, backgroundColor: colors.gray200 },
+  statNum:    { fontSize: 20, fontFamily: fonts.bold, color: colors.gray800, letterSpacing: -0.5 },
+  statLabel:  { fontSize: 11, fontFamily: fonts.regular, color: colors.gray400 },
 
-  // Edit
-  editBtn:  { borderWidth: 1.5, borderColor: colors.gray200, borderRadius: radius.md, paddingVertical: 9, alignItems: 'center' },
-  editText: { fontSize: 14, fontFamily: fonts.semiBold, color: colors.gray800 },
+  // Partner badge
+  partnerBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: '#FFF0F3', borderRadius: 20,
+    paddingHorizontal: 12, paddingVertical: 6,
+  },
+  partnerBadgeText: { fontSize: 13, fontFamily: fonts.semiBold, color: '#FF4B6E' },
+
+  // Edit profile button
+  editProfileBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderWidth: 1.5, borderColor: colors.gray200, borderRadius: 10,
+    paddingVertical: 9, paddingHorizontal: 20, width: '100%', justifyContent: 'center',
+  },
+  editProfileBtnText: { fontSize: 14, fontFamily: fonts.semiBold, color: colors.gray800 },
+
+  // Info section
+  infoSection: {
+    backgroundColor: colors.white,
+    marginHorizontal: 16, borderRadius: 16,
+    paddingHorizontal: 16, paddingVertical: 12,
+    gap: 12, marginBottom: 12,
+  },
+  infoRow:  { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  infoText: { fontSize: 14, fontFamily: fonts.regular, color: colors.gray600, flex: 1, lineHeight: 19 },
+
+  // Partner requests — inline inside hero card
+  inlinePartnerWrap: {
+    width: '100%',
+    borderTopWidth: 1, borderTopColor: colors.gray200,
+    paddingTop: 14, gap: 10,
+  },
+  inlinePartnerHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+  },
+  inlinePartnerTitle: {
+    fontSize: 10, fontFamily: fonts.bold, color: '#FF4B6E', letterSpacing: 1,
+  },
+  inlinePartnerRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+  },
+  partnerReqName: { fontSize: 14, fontFamily: fonts.semiBold, color: colors.gray800 },
+  partnerReqBio:  { fontSize: 12, fontFamily: fonts.regular, color: colors.gray400 },
+  acceptBtn: {
+    backgroundColor: colors.primary, borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 7,
+  },
+  acceptBtnText: { fontSize: 13, fontFamily: fonts.semiBold, color: '#fff' },
+  rejectBtn: {
+    width: 32, height: 32, borderRadius: 8,
+    backgroundColor: colors.gray100, alignItems: 'center', justifyContent: 'center',
+  },
 
   // Quick actions
-  quickRow:   { flexDirection: 'row', gap: spacing.sm },
-  quickBtn:   { flex: 1, alignItems: 'center', gap: 5, backgroundColor: colors.gray100, borderRadius: radius.md, paddingVertical: 12 },
+  quickRow: {
+    flexDirection: 'row', gap: 10,
+    marginHorizontal: 16, marginBottom: 12,
+  },
+  quickBtn: {
+    flex: 1, alignItems: 'center', gap: 6,
+    backgroundColor: colors.white, borderRadius: 14,
+    paddingVertical: 14,
+  },
   quickLabel: { fontSize: 10, fontFamily: fonts.medium, color: colors.gray600 },
 
-
   // Action buttons (other profile)
-  actionRow:       { flexDirection: 'row', gap: spacing.sm, marginTop: 4, width: '100%' },
-  msgBtn:          { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.primary, borderRadius: radius.md, paddingVertical: 11 },
-  msgBtnText:      { color: colors.white, fontFamily: fonts.semiBold, fontSize: 14 },
-  followBtn:       { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary, borderRadius: radius.md, paddingVertical: 11 },
-  followingBtn:    { backgroundColor: colors.gray100, borderWidth: 1.5, borderColor: colors.gray200 },
-  followBtnText:   { color: colors.white, fontFamily: fonts.semiBold, fontSize: 14 },
-  followingBtnText:{ color: colors.gray800 },
-  friendBtn:       { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.gray100, borderWidth: 1.5, borderColor: colors.gray200 },
-  friendActiveBtn: { backgroundColor: `${colors.primary}15`, borderColor: `${colors.primary}40` },
+  actionRow: { flexDirection: 'row', gap: 10, width: '100%' },
+  msgBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 12,
+  },
+  msgBtnText: { color: '#fff', fontFamily: fonts.semiBold, fontSize: 14 },
+  followBtn: {
+    flex: 1, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 5,
+    backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 12,
+  },
+  followBtnText: { color: '#fff', fontFamily: fonts.semiBold, fontSize: 14 },
+  followingBtn: {
+    flex: 1, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 5,
+    backgroundColor: colors.gray100, borderRadius: 12, paddingVertical: 12,
+    borderWidth: 1.5, borderColor: colors.gray200,
+  },
+  followingBtnText: { color: colors.gray800, fontFamily: fonts.semiBold, fontSize: 14 },
 
-  // Section title
-  sectionTitle: { fontSize: 12, fontFamily: fonts.semiBold, color: colors.gray400, letterSpacing: 0.6, textTransform: 'uppercase', marginTop: 4, marginBottom: 2 },
+  // Grid header
+  gridHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    marginHorizontal: 16, marginBottom: 8, marginTop: 4,
+  },
+  gridHeaderText: { fontSize: 13, fontFamily: fonts.semiBold, color: colors.gray600, letterSpacing: 0.2 },
 
   // Grid
-  gridCell: { width: GRID_SIZE, height: GRID_SIZE, margin: 0.5 },
-  gridImg:  { width: '100%', height: '100%' },
-  gridText: { fontSize: 10, fontFamily: fonts.medium, color: colors.white, textAlign: 'center' },
+  gridCell: { width: GRID_SIZE, height: GRID_SIZE, margin: GRID_GAP / 2 },
+  gridImg:  { width: '100%', height: '100%', borderRadius: 2 },
+  gridText: { fontSize: 9, fontFamily: fonts.medium, color: '#fff', textAlign: 'center' },
   videoIcon:{ position: 'absolute', top: 5, right: 5, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 4, padding: 3 },
 
-  emptyGrid:     { alignItems: 'center', paddingTop: 60, gap: 10 },
+  emptyGrid:     { alignItems: 'center', paddingTop: 48, gap: 10 },
   emptyGridText: { fontSize: 14, fontFamily: fonts.regular, color: colors.gray400 },
+
+  // Skeletons
+  skeletonCircle: { backgroundColor: colors.gray100, alignSelf: 'center' },
+  skeletonLine:   { backgroundColor: colors.gray100, borderRadius: 8, alignSelf: 'center' },
 })

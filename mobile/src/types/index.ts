@@ -1,7 +1,5 @@
 export type MediaType = 'IMAGE' | 'VIDEO'
 
-export type FriendshipDuration = 'ONE_DAY' | 'THREE_DAYS' | 'SEVEN_DAYS' | 'THIRTY_DAYS' | 'PERMANENT'
-
 export interface User {
   id: string
   name: string
@@ -11,8 +9,17 @@ export interface User {
   bio: string | null
   availability: string | null
   ghostMode: boolean
+  viewsPublic: boolean
   coinBalance: number
   createdAt: string
+  contact?: string | null
+  defaultFollowDuration?: string | null
+  relationshipStatus?: string | null
+  partnerName?: string | null
+  partnerId?: string | null
+  city?: string | null
+  district?: string | null
+  autoReply?: string | null
 }
 
 export interface Post {
@@ -26,7 +33,10 @@ export interface Post {
   expiresAt: string
   extended: boolean
   createdAt: string
-  user: Pick<User, 'id' | 'name' | 'avatar'>
+  partnerUserId?: string | null
+  partnerAccepted?: boolean
+  partnerUser?: { id: string; name: string; avatar: string | null } | null
+  user: Pick<User, 'id' | 'name' | 'avatar' | 'viewsPublic'>
   _count: { likes: number; comments: number; shares: number; views: number }
 }
 
@@ -39,14 +49,6 @@ export interface Comment {
   createdAt: string
   user: Pick<User, 'id' | 'name' | 'avatar'>
   replies?: Comment[]
-}
-
-export interface Friendship {
-  friendshipId: string
-  duration: FriendshipDuration
-  expiresAt: string | null
-  renewedAt: string | null
-  friend: Pick<User, 'id' | 'name' | 'avatar'>
 }
 
 export interface MessageReaction {
@@ -86,4 +88,20 @@ export interface ApiResponse<T> {
   success: boolean
   message: string
   data: T
+}
+
+export type FriendshipDuration = 'ONE_DAY' | 'THREE_DAYS' | 'SEVEN_DAYS' | 'THIRTY_DAYS' | 'PERMANENT'
+
+export interface Friendship {
+  id: string
+  friendshipId: string
+  userAId: string
+  userBId: string
+  duration: FriendshipDuration
+  expiresAt: string | null
+  renewedAt: string | null
+  createdAt: string
+  friend: Pick<User, 'id' | 'name' | 'avatar'>
+  userA?: Pick<User, 'id' | 'name' | 'avatar'>
+  userB?: Pick<User, 'id' | 'name' | 'avatar'>
 }

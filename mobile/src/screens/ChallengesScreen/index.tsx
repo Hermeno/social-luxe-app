@@ -3,12 +3,12 @@ import {
   View,
   Text,
   FlatList,
-  Image,
   TouchableOpacity,
   StyleSheet,
   Dimensions,
   ActivityIndicator,
 } from 'react-native'
+import { Image } from 'expo-image'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
@@ -92,7 +92,7 @@ export default function ChallengesScreen() {
             return (
               <View style={s.card}>
                 {coverUri ? (
-                  <Image source={{ uri: coverUri }} style={s.cardBg} resizeMode="cover" />
+                  <Image source={{ uri: coverUri }} style={s.cardBg} contentFit="cover" cachePolicy="disk" />
                 ) : (
                   <LinearGradient
                     colors={['#1a0010', '#FF4B6E']}

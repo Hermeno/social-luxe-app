@@ -8,9 +8,6 @@ import * as ImagePicker from 'expo-image-picker'
 import * as DocumentPicker from 'expo-document-picker'
 import { Ionicons } from '@expo/vector-icons'
 import { colors, spacing, radius, fonts } from '../../theme'
-import VoiceRecorder from '../../components/VoiceRecorder'
-import VoicePlayer from '../../components/VoicePlayer'
-import * as msgService from '../../services/message.service'
 
 interface ReplyPreview {
   senderName: string
@@ -32,23 +29,8 @@ export default function ChatInputBar({
   value, onChange, onSend, onSendFile, paddingBottom,
   otherUserId, replyingTo, onCancelReply,
 }: Props) {
-  const [voiceMode,     setVoiceMode]     = useState(false)
-  const [pendingVoice,  setPendingVoice]  = useState<string | null>(null)
-  const [sendingVoice,  setSendingVoice]  = useState(false)
   const [showAttach,    setShowAttach]    = useState(false)
   const [uploadingFile, setUploadingFile] = useState(false)
-
-  async function handleSendVoice() {
-    if (!pendingVoice) return
-    setSendingVoice(true)
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-      await msgService.sendVoiceMessage(otherUserId, pendingVoice)
-      setPendingVoice(null)
-      setVoiceMode(false)
-    } catch {}
-    setSendingVoice(false)
-  }
 
   async function pickImage() {
     setShowAttach(false)
@@ -83,43 +65,15 @@ export default function ChatInputBar({
     setUploadingFile(false)
   }
 
-  if (voiceMode) {
-    return (
-      <View style={[s.wrapper, { paddingBottom }]}>
-        <View style={s.row}>
-          {pendingVoice ? (
-            <>
-              <View style={s.playerWrap}><VoicePlayer uri={pendingVoice} /></View>
-              <TouchableOpacity style={s.iconBtn} onPress={() => setPendingVoice(null)}>
-                <Ionicons name="trash-outline" size={20} color={colors.gray600} />
-              </TouchableOpacity>
-              <TouchableOpacity style={s.send} onPress={handleSendVoice} disabled={sendingVoice}>
-                <Ionicons name="send" size={18} color={colors.white} />
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              <View style={s.playerWrap}><VoiceRecorder onRecordingComplete={setPendingVoice} /></View>
-              <TouchableOpacity style={s.iconBtn} onPress={() => setVoiceMode(false)}>
-                <Ionicons name="close" size={22} color={colors.gray600} />
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-      </View>
-    )
-  }
-
   return (
     <>
       <View style={[s.wrapper, { paddingBottom }]}>
-        {/* Reply preview */}
         {replyingTo && (
           <View style={s.replyBar}>
             <View style={s.replyBarInner}>
               <Text style={s.replyBarName}>{replyingTo.senderName}</Text>
               <Text style={s.replyBarContent} numberOfLines={1}>
-                {replyingTo.content ?? '🎤 Voz'}
+                {replyingTo.content ?? '…'}
               </Text>
             </View>
             <TouchableOpacity onPress={onCancelReply} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
@@ -129,7 +83,6 @@ export default function ChatInputBar({
         )}
 
         <View style={s.row}>
-          {/* Attachment */}
           <TouchableOpacity
             onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowAttach(true) }}
             disabled={uploadingFile}
@@ -138,11 +91,6 @@ export default function ChatInputBar({
               ? <ActivityIndicator size="small" color={colors.primary} />
               : <Ionicons name="attach" size={22} color={colors.gray600} />
             }
-          </TouchableOpacity>
-
-          {/* Voice */}
-          <TouchableOpacity onPress={() => setVoiceMode(true)}>
-            <Ionicons name="mic-outline" size={22} color={colors.gray600} />
           </TouchableOpacity>
 
           <TextInput
@@ -159,12 +107,10 @@ export default function ChatInputBar({
         </View>
       </View>
 
-      {/* Attachment action sheet */}
       <Modal transparent animationType="slide" visible={showAttach} onRequestClose={() => setShowAttach(false)}>
         <Pressable style={s.sheetOverlay} onPress={() => setShowAttach(false)}>
           <View style={s.sheet}>
             <View style={s.sheetHandle} />
-
             <TouchableOpacity style={s.sheetRow} onPress={pickImage} activeOpacity={0.75}>
               <View style={[s.sheetIcon, { backgroundColor: '#E3F2FD' }]}>
                 <Ionicons name="image-outline" size={22} color="#1565C0" />
@@ -175,9 +121,7 @@ export default function ChatInputBar({
               </View>
               <Ionicons name="chevron-forward" size={18} color={colors.gray400} />
             </TouchableOpacity>
-
             <View style={s.sheetDivider} />
-
             <TouchableOpacity style={s.sheetRow} onPress={pickDocument} activeOpacity={0.75}>
               <View style={[s.sheetIcon, { backgroundColor: '#FFF3E0' }]}>
                 <Ionicons name="document-outline" size={22} color="#E65100" />
@@ -202,22 +146,18 @@ const s = StyleSheet.create({
     paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: spacing.sm,
     gap: spacing.sm,
   },
-  input:    {
+  input: {
     flex: 1, backgroundColor: colors.gray100, borderRadius: radius.full,
     paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
     fontSize: 14, color: colors.gray800, maxHeight: 100,
   },
-  send:     { backgroundColor: colors.dark, width: 38, height: 38, borderRadius: 19, justifyContent: 'center', alignItems: 'center' },
-  iconBtn:  { padding: 4 },
-  playerWrap: { flex: 1 },
+  send: { backgroundColor: colors.dark, width: 38, height: 38, borderRadius: 19, justifyContent: 'center', alignItems: 'center' },
 
-  // Reply bar
   replyBar:        { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingVertical: 8, gap: 8, backgroundColor: colors.offWhite },
   replyBarInner:   { flex: 1, borderLeftWidth: 3, borderLeftColor: colors.primary, paddingLeft: 8 },
   replyBarName:    { fontSize: 12, fontFamily: fonts.semiBold, color: colors.primary },
   replyBarContent: { fontSize: 12, fontFamily: fonts.regular, color: colors.gray600 },
 
-  // Action sheet
   sheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
   sheet:        { backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 36, paddingTop: 12 },
   sheetHandle:  { width: 36, height: 4, borderRadius: 2, backgroundColor: colors.gray200, alignSelf: 'center', marginBottom: 20 },

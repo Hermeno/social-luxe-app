@@ -7,9 +7,10 @@ import { colors, spacing, radius } from '../../theme'
 interface Props {
   text: string; onChange: (t: string) => void; onSend: () => void
   sending: boolean; replyTo: Comment | null; onCancelReply: () => void
+  bottomInset?: number
 }
 
-export default function CommentInputArea({ text, onChange, onSend, sending, replyTo, onCancelReply }: Props) {
+export default function CommentInputArea({ text, onChange, onSend, sending, replyTo, onCancelReply, bottomInset = 0 }: Props) {
   return (
     <>
       {replyTo && (
@@ -20,11 +21,19 @@ export default function CommentInputArea({ text, onChange, onSend, sending, repl
           </TouchableOpacity>
         </View>
       )}
-      <View style={s.inputRow}>
+      <View style={[s.inputRow, { paddingBottom: Math.max(bottomInset, 10) }]}>
         <TouchableOpacity style={s.iconBtn}><Text style={s.emoji}>😊</Text></TouchableOpacity>
         <TouchableOpacity style={s.iconBtn}><Text style={s.emoji}>@</Text></TouchableOpacity>
-        <TextInput style={s.input} placeholder="Escreva um comentário..." placeholderTextColor={colors.gray400}
-          value={text} onChangeText={onChange} multiline />
+        <TextInput
+          style={s.input}
+          placeholder="Escreva um comentário..."
+          placeholderTextColor={colors.gray400}
+          value={text}
+          onChangeText={onChange}
+          multiline
+          returnKeyType="send"
+          onSubmitEditing={onSend}
+        />
         <TouchableOpacity style={[s.sendBtn, !text && s.sendDisabled]} onPress={onSend} disabled={sending || !text}>
           <Ionicons name="send" size={18} color={colors.white} />
         </TouchableOpacity>

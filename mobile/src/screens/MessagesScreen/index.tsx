@@ -1,9 +1,13 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react'
 import {
   View, Text, FlatList, StyleSheet, TextInput,
-  TouchableOpacity, Animated, Pressable, ActivityIndicator,
-  Dimensions, Keyboard,
+  TouchableOpacity, Animated, ActivityIndicator, KeyboardAvoidingView,
+  Dimensions, Keyboard, LayoutAnimation, Platform, UIManager,
 } from 'react-native'
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true)
+}
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -11,8 +15,8 @@ import { useFocusEffect } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 import Toast from 'react-native-toast-message'
-import { getConnections } from '../../services/follow.service'
-import { toggleFollow } from '../../services/follow.service'
+import * as msgService from '../../services/message.service'
+import { getConnections, toggleFollow, FollowDuration } from '../../services/follow.service'
 import { Connection } from '../../types'
 import {
   getViewedPostIds,
@@ -21,13 +25,18 @@ import {
   updateCachedConnection,
   getCache,
   setCache,
+  getSyncMeta,
+  setSyncMeta,
 } from '../../db/database'
 import { FollowUser } from '../../services/follow.service'
+import { getMyGroups, Group } from '../../services/group.service'
+import FollowSplitButton from '../../components/FollowSplitButton'
 import { api } from '../../services/api'
 import { getSocket } from '../../socket'
 import { useAuthStore } from '../../store/auth.store'
 import { isConnected } from '../../services/netinfo.service'
 import { useMessageBadgeStore } from '../../store/messageBadge.store'
+import { useFeedStore } from '../../store/feed.store'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { colors, fonts } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
@@ -69,15 +78,46 @@ interface UserResult {
   _count?: { followers: number; posts: number }
 }
 
+// ── Group row (communities tab) ───────────────────────────────────────────────
+
+function GroupRow({ group, onPress }: { group: Group; onPress: () => void }) {
+  return (
+    <TouchableOpacity style={s.row} onPress={onPress} activeOpacity={0.65}>
+      <View style={s.avatarWrap}>
+        {group.avatar
+          ? <AvatarImage uri={group.avatar} size={AVA} />
+          : (
+            <View style={s.groupFallback}>
+              <Ionicons name="people" size={20} color={colors.white} />
+            </View>
+          )
+        }
+      </View>
+      <View style={s.info}>
+        <View style={s.topRow}>
+          <Text style={s.name} numberOfLines={1}>{group.name}</Text>
+          {group.lastMessage && (
+            <Text style={s.time}>{timeAgo(group.lastMessage.createdAt)}</Text>
+          )}
+        </View>
+        <Text style={[s.preview, s.previewMuted]} numberOfLines={1}>
+          {group.lastMessage?.content ?? `${group.memberCount} ${group.memberCount === 1 ? 'membro' : 'membros'}`}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  )
+}
+
 // ── User card (search / suggestions) ─────────────────────────────────────────
 
 function UserCard({
-  user, followed, loadingFollow, onFollow, onPress,
+  user, followed, followBack, loadingFollow, onFollow, onPress,
 }: {
   user: UserResult
   followed: boolean
+  followBack: boolean
   loadingFollow: boolean
-  onFollow: () => void
+  onFollow: (duration: FollowDuration) => void
   onPress: () => void
 }) {
   const followers = user._count?.followers ?? 0
@@ -105,31 +145,97 @@ function UserCard({
       </TouchableOpacity>
 
       {/* follow button — sibling, not nested */}
-      <Pressable
-        style={({ pressed }) => [
-          c.followBtn,
-          followed && c.followingBtn,
-          pressed && { opacity: 0.7 },
-        ]}
-        onPress={onFollow}
-        disabled={loadingFollow}
-        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-      >
-        {loadingFollow
-          ? <ActivityIndicator size="small" color={followed ? colors.primary : colors.white} />
-          : <Text style={[c.followBtnTxt, followed && c.followingBtnTxt]}>
-              {followed ? 'A seguir' : 'Seguir'}
-            </Text>
-        }
-      </Pressable>
+      <FollowSplitButton
+        following={followed}
+        followBack={followBack}
+        loading={loadingFollow}
+        onFollow={onFollow}
+        theme="light"
+      />
+    </View>
+  )
+}
+
+// ── Quick reply inline form ───────────────────────────────────────────────────
+
+function QuickReplyBox({
+  userName, onSend, onClose,
+}: {
+  userName: string
+  onSend: (text: string) => Promise<void>
+  onClose: () => void
+}) {
+  const [text,    setText]    = useState('')
+  const [sending, setSending] = useState(false)
+  const inputRef = useRef<TextInput>(null)
+
+  useEffect(() => {
+    // Auto-focus after animation settles
+    const t = setTimeout(() => inputRef.current?.focus(), 120)
+    return () => clearTimeout(t)
+  }, [])
+
+  async function handleSend() {
+    const msg = text.trim()
+    if (!msg || sending) return
+    setSending(true)
+    await onSend(msg)
+    setSending(false)
+    setText('')
+  }
+
+  return (
+    <View style={q.container}>
+      {/* Header bar */}
+      <View style={q.header}>
+        <View style={q.replyLabel}>
+          <Ionicons name="return-down-forward" size={13} color={colors.primary} />
+          <Text style={q.replyTxt} numberOfLines={1}>Responder a <Text style={q.replyName}>{userName}</Text></Text>
+        </View>
+        <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Ionicons name="close" size={16} color={colors.gray400} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Input row */}
+      <View style={q.row}>
+        <TextInput
+          ref={inputRef}
+          style={q.input}
+          placeholder="Escreve uma mensagem..."
+          placeholderTextColor={colors.gray400}
+          value={text}
+          onChangeText={setText}
+          returnKeyType="send"
+          onSubmitEditing={handleSend}
+          multiline={false}
+        />
+        <TouchableOpacity
+          style={[q.sendBtn, (!text.trim() || sending) && q.sendBtnOff]}
+          onPress={handleSend}
+          disabled={!text.trim() || sending}
+        >
+          {sending
+            ? <ActivityIndicator size="small" color={colors.white} />
+            : <Ionicons name="send" size={15} color={colors.white} />
+          }
+        </TouchableOpacity>
+      </View>
     </View>
   )
 }
 
 // ── Conversation row ──────────────────────────────────────────────────────────
 
-function ConvoRow({ item, viewedIds, onPress, index, myUserId }: {
-  item: Connection; viewedIds: Set<string>; onPress: () => void; index: number; myUserId: string
+function ConvoRow({ item, viewedIds, onPress, index, myUserId, isQuickOpen, onToggleQuick, onQuickSend }: {
+  item: Connection
+  viewedIds: Set<string>
+  onPress: () => void
+  index: number
+  myUserId: string
+  isQuickOpen: boolean
+  onToggleQuick: () => void
+  onQuickSend: (text: string) => Promise<void>
 }) {
   const hasMsg      = !!item.lastMessage
   const unread      = item.unreadCount > 0
@@ -137,6 +243,7 @@ function ConvoRow({ item, viewedIds, onPress, index, myUserId }: {
   const viewedCount = item.postIds.filter((id) => viewedIds.has(id)).length
   const iMine       = hasMsg && item.lastMessage!.senderId === myUserId
   const isRead      = hasMsg && !!item.lastMessage!.readAt
+  const showReply   = unread && !iMine  // new message from the other person
 
   const opacity    = useRef(new Animated.Value(0)).current
   const translateY = useRef(new Animated.Value(8)).current
@@ -180,19 +287,40 @@ function ConvoRow({ item, viewedIds, onPress, index, myUserId }: {
           </Text>
         </View>
 
-        {unread && !iMine ? (
-          <View style={s.dot}>
-            <Text style={s.dotTxt}>{item.unreadCount > 9 ? '9+' : item.unreadCount}</Text>
-          </View>
-        ) : iMine ? (
-          // My last message: 2 gray ticks = sent, 2 blue ticks = read
-          <Ionicons
-            name="checkmark-done"
-            size={17}
-            color={isRead ? '#4FC3F7' : '#C8C8C8'}
-          />
-        ) : null}
+        {/* Right side indicators */}
+        <View style={s.rowRight}>
+          {showReply ? (
+            <>
+              <View style={s.dot}>
+                <Text style={s.dotTxt}>{item.unreadCount > 9 ? '9+' : item.unreadCount}</Text>
+              </View>
+              {/* Quick reply arrow — inner TouchableOpacity takes priority */}
+              <TouchableOpacity
+                style={[s.replyArrow, isQuickOpen && s.replyArrowActive]}
+                onPress={(e) => { (e as any).stopPropagation?.(); onToggleQuick() }}
+                hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+              >
+                <Ionicons
+                  name={isQuickOpen ? 'chevron-up' : 'chevron-down'}
+                  size={18}
+                  color={isQuickOpen ? colors.white : colors.primary}
+                />
+              </TouchableOpacity>
+            </>
+          ) : iMine ? (
+            <Ionicons name="checkmark-done" size={17} color={isRead ? '#4FC3F7' : '#C8C8C8'} />
+          ) : null}
+        </View>
       </TouchableOpacity>
+
+      {/* Inline quick reply form */}
+      {isQuickOpen && (
+        <QuickReplyBox
+          userName={item.user.name.split(' ')[0]}
+          onSend={onQuickSend}
+          onClose={onToggleQuick}
+        />
+      )}
     </Animated.View>
   )
 }
@@ -201,14 +329,23 @@ function ConvoRow({ item, viewedIds, onPress, index, myUserId }: {
 
 export default function MessagesScreen() {
   const nav        = useNavigation<Nav>()
-  const { top }    = useSafeAreaInsets()
+  const { top, bottom } = useSafeAreaInsets()
   const { user }   = useAuthStore()
   const inputRef   = useRef<TextInput>(null)
   const { setTotalUnread, increment } = useMessageBadgeStore()
+  const newPostsCount = useFeedStore((s) => s.newPostsCount)
+
+  // Tab
+  const [activeTab, setActiveTab] = useState<'messages' | 'communities'>('messages')
 
   // Conversations state
-  const [connections, setConnections] = useState<Connection[]>([])
-  const [viewedIds,   setViewedIds]   = useState<Set<string>>(new Set())
+  const [connections,    setConnections]    = useState<Connection[]>([])
+  const [viewedIds,      setViewedIds]      = useState<Set<string>>(new Set())
+  const [quickReplyId,   setQuickReplyId]   = useState<string | null>(null)
+
+  // Communities state
+  const [groups,        setGroups]        = useState<Group[]>([])
+  const [loadingGroups, setLoadingGroups] = useState(false)
 
   // Search / discovery state
   const [query,         setQuery]         = useState('')
@@ -218,24 +355,33 @@ export default function MessagesScreen() {
   const [searchLoading, setSearchLoading] = useState(false)
   const [suggestLoading, setSuggestLoading] = useState(false)
   const [followed,      setFollowed]      = useState<Set<string>>(new Set())
+  const [followers,     setFollowers]     = useState<Set<string>>(new Set()) // who follows ME
   const [followPending, setFollowPending] = useState<Set<string>>(new Set())
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // ── Load connections: SQLite first → background network sync ──────────────
+  // ── Load connections: SQLite first → background network sync (60s TTL) ───
   useFocusEffect(useCallback(() => {
     let cancelled = false
+    const SYNC_TTL = 60_000 // 1 minute
 
     async function load() {
-      const [cached, viewed] = await Promise.all([
+      const [cached, viewed, lastSyncStr] = await Promise.all([
         getCachedConnections().catch(() => [] as Connection[]),
         getViewedPostIds().catch(() => new Set<string>()),
+        getSyncMeta('connections_sync').catch(() => null),
       ])
+
       if (!cancelled && cached.length > 0) {
         setConnections(cached)
         setViewedIds(viewed)
         setTotalUnread(cached.reduce((s, c) => s + c.unreadCount, 0))
       }
+
+      // Skip API if cache is fresh and we already have data
+      const cacheAge = lastSyncStr ? Date.now() - parseInt(lastSyncStr, 10) : Infinity
+      if (cached.length > 0 && cacheAge < SYNC_TTL) return
+
       if (!isConnected()) return
       try {
         const [fresh, viewedFresh] = await Promise.all([
@@ -245,7 +391,10 @@ export default function MessagesScreen() {
         if (cancelled) return
         setConnections(fresh)
         setViewedIds(viewedFresh)
-        cacheConnections(fresh).catch(() => {})
+        await Promise.all([
+          cacheConnections(fresh).catch(() => {}),
+          setSyncMeta('connections_sync', String(Date.now())).catch(() => {}),
+        ])
         setTotalUnread(fresh.reduce((s, c) => s + c.unreadCount, 0))
       } catch {}
     }
@@ -310,29 +459,51 @@ export default function MessagesScreen() {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [query, isSearchMode])
 
-  // ── Load who I follow (cache first → API fallback) ───────────────────────
+  // ── Load follow state: who I follow + who follows me ─────────────────────
   const followedLoadedRef = useRef(false)
 
   async function loadFollowedState() {
     if (followedLoadedRef.current) return
     followedLoadedRef.current = true
 
-    // 1. Cache (FriendsScreen may have saved it)
-    const cached = await getCache<FollowUser[]>('my_following').catch(() => null)
-    if (cached && cached.length > 0) {
-      setFollowed(new Set(cached.map((u) => u.id)))
-    }
+    // 1. Cache
+    const [cachedFollowing, cachedFollowers] = await Promise.all([
+      getCache<FollowUser[]>('my_following').catch(() => null),
+      getCache<FollowUser[]>('my_followers').catch(() => null),
+    ])
+    if (cachedFollowing?.length) setFollowed(new Set(cachedFollowing.map((u) => u.id)))
+    if (cachedFollowers?.length) setFollowers(new Set(cachedFollowers.map((u) => u.id)))
 
-    // 2. Always refresh from API (source of truth)
+    // 2. Refresh both from API
     if (!isConnected()) return
     try {
-      const res = await api.get('/users/following')
-      const list: FollowUser[] = res.data.data ?? res.data ?? []
-      setFollowed(new Set(list.map((u) => u.id)))
-      setCache('my_following', list).catch(() => {})
+      const [followingRes, followersRes] = await Promise.all([
+        api.get('/users/following'),
+        api.get('/users/followers'),
+      ])
+      const following: FollowUser[] = followingRes.data.data ?? followingRes.data ?? []
+      const myFollowers: FollowUser[] = followersRes.data.data ?? followersRes.data ?? []
+      setFollowed(new Set(following.map((u) => u.id)))
+      setFollowers(new Set(myFollowers.map((u) => u.id)))
+      setCache('my_following', following).catch(() => {})
+      setCache('my_followers', myFollowers).catch(() => {})
     } catch {
-      followedLoadedRef.current = false // allow retry
+      followedLoadedRef.current = false
     }
+  }
+
+  // ── Load groups (communities tab) ────────────────────────────────────────
+  async function loadGroups() {
+    setLoadingGroups(true)
+    const cached = await getCache<Group[]>('my_groups').catch(() => null)
+    if (cached) { setGroups(cached); setLoadingGroups(false) }
+    if (!isConnected()) { setLoadingGroups(false); return }
+    try {
+      const fresh = await getMyGroups()
+      setGroups(fresh)
+      setCache('my_groups', fresh).catch(() => {})
+    } catch {}
+    setLoadingGroups(false)
   }
 
   // ── Enter / exit search mode ──────────────────────────────────────────────
@@ -350,7 +521,7 @@ export default function MessagesScreen() {
   }
 
   // ── Follow / unfollow ─────────────────────────────────────────────────────
-  const handleFollow = useCallback(async (userId: string) => {
+  const handleFollow = useCallback(async (userId: string, duration: FollowDuration = 'forever') => {
     if (followPending.has(userId)) return
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
 
@@ -363,7 +534,7 @@ export default function MessagesScreen() {
     setFollowPending((prev) => new Set([...prev, userId]))
 
     try {
-      const res = await toggleFollow(userId)
+      const res = await toggleFollow(userId, duration)
       setFollowed((prev) => {
         const next = new Set(prev)
         res.following ? next.add(userId) : next.delete(userId)
@@ -385,13 +556,68 @@ export default function MessagesScreen() {
     }
   }, [followed, followPending])
 
+  // ── Quick reply ───────────────────────────────────────────────────────────
+  function toggleQuickReply(userId: string) {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
+    setQuickReplyId((prev) => (prev === userId ? null : userId))
+    Keyboard.dismiss()
+  }
+
+  async function handleQuickSend(userId: string, userName: string, text: string) {
+    try {
+      const sent = await msgService.sendMessage(userId, text)
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+
+      const msgPatch = {
+        lastMessage: { id: sent.id, content: sent.content, senderId: user!.id, readAt: null, createdAt: sent.createdAt },
+        unreadCount: 0,
+      }
+
+      // Update state immediately
+      setConnections((prev) => {
+        const updated = prev.map((c) =>
+          c.user.id === userId ? { ...c, ...msgPatch } : c,
+        )
+        // Move to top
+        const idx = updated.findIndex((c) => c.user.id === userId)
+        if (idx > 0) {
+          const [item] = updated.splice(idx, 1)
+          return [item, ...updated]
+        }
+        return updated
+      })
+
+      // Persist to SQLite
+      updateCachedConnection(userId, msgPatch, {
+        user: { id: userId, name: userName, avatar: null }, postIds: [],
+      }).catch(() => {})
+
+      // Close the quick reply form
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
+      setQuickReplyId(null)
+    } catch {
+      Toast.show({ type: 'error', text1: 'Erro ao enviar', text2: 'Tenta novamente.', visibilityTime: 2500 })
+    }
+  }
+
   // ── Derived display state ─────────────────────────────────────────────────
   const totalUnread    = connections.reduce((sum, c) => sum + c.unreadCount, 0)
   const displayCards   = query.trim() ? searchResults : suggested
   const isCardLoading  = query.trim() ? searchLoading : suggestLoading
 
+  function switchTab(tab: 'messages' | 'communities') {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
+    setActiveTab(tab)
+    if (tab === 'communities' && groups.length === 0) loadGroups()
+    if (tab === 'messages' && isSearchMode) exitSearch()
+  }
+
   return (
-    <View style={[s.screen, { paddingTop: top }]}>
+    <KeyboardAvoidingView
+      style={[s.screen, { paddingTop: top }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 8}
+    >
 
       {/* ── Header ──────────────────────────────────────────────────── */}
       <View style={s.header}>
@@ -401,57 +627,101 @@ export default function MessagesScreen() {
 
         <View style={s.titleWrap}>
           <Text style={s.title}>Mensagens</Text>
-          {totalUnread > 0 && (
-            <View style={s.unreadPill}>
-              <Text style={s.unreadPillTxt}>{totalUnread}</Text>
-            </View>
-          )}
         </View>
+
+        {/* COMMUNITY BLOCKED FOR LAUNCH
+        {activeTab === 'communities' && (
+          <TouchableOpacity
+            style={s.createBtn}
+            onPress={() => nav.navigate('CreateGroup')}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="add" size={22} color={colors.primary} />
+          </TouchableOpacity>
+        )}
+        */}
       </View>
 
-      {/* ── Search bar ──────────────────────────────────────────────── */}
-      <View style={s.searchRow}>
-        <View style={[s.searchBar, isSearchMode && s.searchBarActive]}>
+      {/* ── Tab switcher ────────────────────────────────────────────── */}
+      <View style={s.tabRow}>
+        <TouchableOpacity
+          style={[s.tabPill, activeTab === 'messages' && s.tabPillActive]}
+          onPress={() => switchTab('messages')}
+          activeOpacity={0.7}
+        >
           <Ionicons
-            name="search-outline"
-            size={16}
-            color={isSearchMode ? colors.primary : colors.gray400}
+            name="chatbubbles-outline"
+            size={14}
+            color={activeTab === 'messages' ? colors.white : colors.gray400}
           />
-          <TextInput
-            ref={inputRef}
-            style={s.searchInput}
-            placeholder="Pesquisar pessoas..."
-            placeholderTextColor={colors.gray400}
-            value={query}
-            onChangeText={setQuery}
-            onFocus={enterSearch}
-            autoCapitalize="none"
-            autoCorrect={false}
-            returnKeyType="search"
+          <Text style={[s.tabLabel, activeTab === 'messages' && s.tabLabelActive]}>
+            Mensagens
+          </Text>
+        </TouchableOpacity>
+
+        {/* COMMUNITY BLOCKED FOR LAUNCH
+        <TouchableOpacity
+          style={[s.tabPill, activeTab === 'communities' && s.tabPillActive]}
+          onPress={() => switchTab('communities')}
+          activeOpacity={0.7}
+        >
+          <Ionicons
+            name="people-outline"
+            size={14}
+            color={activeTab === 'communities' ? colors.white : colors.gray400}
           />
-          {query.length > 0 && (
-            <TouchableOpacity
-              onPress={() => { setQuery(''); inputRef.current?.focus() }}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons name="close-circle" size={16} color={colors.gray400} />
+          <Text style={[s.tabLabel, activeTab === 'communities' && s.tabLabelActive]}>
+            Comunidades
+          </Text>
+        </TouchableOpacity>
+        */}
+      </View>
+
+      {/* ── Search bar (messages tab only) ──────────────────────────── */}
+      {activeTab === 'messages' && (
+        <View style={s.searchRow}>
+          <View style={[s.searchBar, isSearchMode && s.searchBarActive]}>
+            <Ionicons
+              name="search-outline"
+              size={16}
+              color={isSearchMode ? colors.primary : colors.gray400}
+            />
+            <TextInput
+              ref={inputRef}
+              style={s.searchInput}
+              placeholder="Pesquisar pessoas..."
+              placeholderTextColor={colors.gray400}
+              value={query}
+              onChangeText={setQuery}
+              onFocus={enterSearch}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+            {query.length > 0 && (
+              <TouchableOpacity
+                onPress={() => { setQuery(''); inputRef.current?.focus() }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="close-circle" size={16} color={colors.gray400} />
+              </TouchableOpacity>
+            )}
+          </View>
+          {isSearchMode && (
+            <TouchableOpacity onPress={exitSearch} style={s.cancelBtn}>
+              <Text style={s.cancelTxt}>Cancelar</Text>
             </TouchableOpacity>
           )}
         </View>
-
-        {isSearchMode && (
-          <TouchableOpacity onPress={exitSearch} style={s.cancelBtn}>
-            <Text style={s.cancelTxt}>Cancelar</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+      )}
 
       {/* ── Content ─────────────────────────────────────────────────── */}
+      {/* COMMUNITY BLOCKED FOR LAUNCH — communities branch removed, always show messages/search
+      {activeTab === 'communities' ? ( ... ) : */}
       {isSearchMode ? (
 
         /* ── Search / discovery: user cards 2-column grid ─────────── */
         <>
-          {/* Section label */}
           <View style={s.sectionRow}>
             <Text style={s.sectionLabel}>
               {query.trim() ? 'Resultados' : 'Sugeridos para ti'}
@@ -492,8 +762,9 @@ export default function MessagesScreen() {
                 <UserCard
                   user={item}
                   followed={followed.has(item.id)}
+                  followBack={followers.has(item.id) && !followed.has(item.id)}
                   loadingFollow={followPending.has(item.id)}
-                  onFollow={() => handleFollow(item.id)}
+                  onFollow={(duration) => handleFollow(item.id, duration)}
                   onPress={() => { exitSearch(); nav.navigate('Profile', { userId: item.id }) }}
                 />
               )}
@@ -516,11 +787,17 @@ export default function MessagesScreen() {
               viewedIds={viewedIds}
               index={index}
               myUserId={user?.id ?? ''}
-              onPress={() => nav.navigate('Chat', {
-                userId:     item.user.id,
-                userName:   item.user.name,
-                userAvatar: item.user.avatar,
-              })}
+              isQuickOpen={quickReplyId === item.user.id}
+              onToggleQuick={() => toggleQuickReply(item.user.id)}
+              onQuickSend={(text) => handleQuickSend(item.user.id, item.user.name, text)}
+              onPress={() => {
+                setQuickReplyId(null)
+                nav.navigate('Chat', {
+                  userId:     item.user.id,
+                  userName:   item.user.name,
+                  userAvatar: item.user.avatar,
+                })
+              }}
             />
           )}
           ListEmptyComponent={
@@ -534,7 +811,20 @@ export default function MessagesScreen() {
           }
         />
       )}
-    </View>
+      {/* ── Floating home FAB ─────────────────────────────────────────────── */}
+      <TouchableOpacity
+        style={[ms.homeFab, { bottom: bottom + 24 }]}
+        onPress={() => nav.goBack()}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="home" size={28} color="#fff" />
+        {newPostsCount > 0 && (
+          <View style={ms.homeFabBadge}>
+            <Text style={ms.homeFabBadgeTxt}>{newPostsCount > 99 ? '99+' : newPostsCount}</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    </KeyboardAvoidingView>
   )
 }
 
@@ -594,6 +884,50 @@ const s = StyleSheet.create({
   },
   cancelBtn: { paddingHorizontal: 4, paddingVertical: 6 },
   cancelTxt: { fontSize: 14, fontFamily: fonts.semiBold, color: colors.primary },
+
+  /* tab switcher */
+  tabRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.gray200,
+  },
+  tabPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: colors.gray100,
+  },
+  tabPillActive: { backgroundColor: colors.primary },
+  tabLabel:      { fontSize: 13, fontFamily: fonts.semiBold, color: colors.gray400 },
+  tabLabelActive:{ color: colors.white },
+
+  /* header create button */
+  createBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: `${colors.primary}15`,
+    alignItems: 'center', justifyContent: 'center',
+  },
+
+  /* group avatar fallback */
+  groupFallback: {
+    width: AVA, height: AVA, borderRadius: AVA / 2,
+    backgroundColor: colors.primary,
+    alignItems: 'center', justifyContent: 'center',
+  },
+
+  /* empty create button */
+  emptyCreateBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    marginTop: 8, backgroundColor: colors.primary,
+    paddingHorizontal: 20, paddingVertical: 10, borderRadius: 22,
+  },
+  emptyCreateTxt: { fontSize: 14, fontFamily: fonts.semiBold, color: colors.white },
 
   /* section label */
   sectionRow: {
@@ -656,11 +990,77 @@ const s = StyleSheet.create({
   dot:         { minWidth: 20, height: 20, borderRadius: 10, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
   dotTxt:      { fontSize: 11, fontFamily: fonts.bold, color: colors.white },
 
+  /* row right section */
+  rowRight:      { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  replyArrow:    { width: 30, height: 30, borderRadius: 15, backgroundColor: `${colors.primary}15`, alignItems: 'center', justifyContent: 'center' },
+  replyArrowActive: { backgroundColor: colors.primary },
+
   /* empty (conversations) */
   empty:       { alignItems: 'center', paddingTop: 80, paddingHorizontal: 48, gap: 10 },
   emptyCircle: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.gray100, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
   emptyTitle:  { fontSize: 17, fontFamily: fonts.semiBold, color: colors.gray800 },
   emptySub:    { fontSize: 14, fontFamily: fonts.regular, color: colors.gray400, textAlign: 'center', lineHeight: 21 },
+})
+
+// ── Quick reply box styles ─────────────────────────────────────────────────────
+
+const q = StyleSheet.create({
+  container: {
+    backgroundColor: `${colors.primary}08`,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: `${colors.primary}25`,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 12,
+    gap: 8,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  replyLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  replyTxt: {
+    fontSize: 12,
+    fontFamily: fonts.regular,
+    color: colors.gray600,
+  },
+  replyName: {
+    fontFamily: fonts.semiBold,
+    color: colors.primary,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  input: {
+    flex: 1,
+    backgroundColor: colors.white,
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontSize: 14,
+    fontFamily: fonts.regular,
+    color: colors.gray800,
+    borderWidth: 1,
+    borderColor: colors.gray200,
+    maxHeight: 80,
+  },
+  sendBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sendBtnOff: { opacity: 0.35 },
 })
 
 // ── User card styles ──────────────────────────────────────────────────────────
@@ -718,27 +1118,31 @@ const c = StyleSheet.create({
     backgroundColor: colors.gray200,
   },
 
-  /* follow button */
-  followBtn: {
-    marginTop: 2,
-    paddingHorizontal: 24,
-    paddingVertical: 9,
-    borderRadius: 22,
+})
+
+// ── Floating FAB styles (separate const to avoid name collision) ────────────
+const ms = StyleSheet.create({
+  homeFab: {
+    position: 'absolute',
+    right: 20,
+    width: 62, height: 62,
+    borderRadius: 31,
     backgroundColor: colors.primary,
-    minWidth: 110,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center', justifyContent: 'center',
+    zIndex: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  followingBtn: {
-    backgroundColor: colors.white,
-    borderWidth: 1.5,
-    borderColor: colors.gray200,
+  homeFabBadge: {
+    position: 'absolute', top: -4, right: -4,
+    minWidth: 20, height: 20, borderRadius: 10,
+    backgroundColor: '#FF3B30',
+    alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2, borderColor: '#fff',
   },
-  followBtnTxt: {
-    fontSize: 13,
-    fontFamily: fonts.semiBold,
-    color: colors.white,
-    letterSpacing: -0.1,
-  },
-  followingBtnTxt: { color: colors.gray600 },
+  homeFabBadgeTxt: { fontSize: 10, fontFamily: fonts.extraBold, color: '#fff', lineHeight: 12 },
 })

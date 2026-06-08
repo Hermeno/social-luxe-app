@@ -8,6 +8,7 @@ import { useAuthStore } from '../../store/auth.store'
 import AvatarImage from '../../components/AvatarImage'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { colors, spacing, fonts } from '../../theme'
+import { useNotificationStore } from '../../store/notification.store'
 
 type Nav = StackNavigationProp<AppStackParams>
 interface Props {
@@ -40,6 +41,7 @@ export default function FeedHeader({ onTabChange, onStoriesPress }: Props) {
   const { top } = useSafeAreaInsets()
   const nav = useNavigation<Nav>()
   const { user } = useAuthStore()
+  const partnerRequestBadge = useNotificationStore((s) => s.partnerRequestBadge)
 
   function select(tab: 'following' | 'forYou') {
     setActive(tab)
@@ -54,6 +56,11 @@ export default function FeedHeader({ onTabChange, onStoriesPress }: Props) {
           <TouchableOpacity style={s.storyDot} onPress={onStoriesPress} activeOpacity={0.8}>
             <Ionicons name="add" size={10} color={colors.white} />
           </TouchableOpacity>
+          {partnerRequestBadge > 0 && (
+            <View style={s.partnerBadge}>
+              <Ionicons name="heart" size={7} color="#fff" />
+            </View>
+          )}
         </View>
       </TouchableOpacity>
 
@@ -69,7 +76,7 @@ export default function FeedHeader({ onTabChange, onStoriesPress }: Props) {
         })}
       </View>
 
-      <SearchButton onPress={() => nav.navigate('Search')} />
+      <SearchButton onPress={() => (nav as any).navigate('Messages')} />
     </View>
   )
 }
@@ -85,6 +92,13 @@ const s = StyleSheet.create({
     position: 'absolute', bottom: -2, right: -2,
     width: 16, height: 16, borderRadius: 8,
     backgroundColor: colors.primary,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: colors.black,
+  },
+  partnerBadge: {
+    position: 'absolute', top: -3, right: -3,
+    width: 14, height: 14, borderRadius: 7,
+    backgroundColor: '#FF4B6E',
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1.5, borderColor: colors.black,
   },

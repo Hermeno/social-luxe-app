@@ -13,6 +13,7 @@ import { fonts } from '../../theme'
 import MediaPreview from './MediaPreview'
 import { createPost } from '../../services/post.service'
 import { useFeedStore } from '../../store/feed.store'
+import { useAuthStore } from '../../store/auth.store'
 import { toast } from '../../utils/toast'
 
 const { width: W, height: H } = Dimensions.get('window')
@@ -39,10 +40,13 @@ export default function CreateScreen() {
   const [media,   setMedia]   = useState<Media | null>(null)
   const [caption, setCaption] = useState('')
   const [textBg,  setTextBg]  = useState(TEXT_BG_COLORS[0])
-  const [loading, setLoading] = useState(false)
+  const [loading,        setLoading]        = useState(false)
+  const [includePartner, setIncludePartner] = useState(false)
   const textRef = useRef<TextInput>(null)
 
   const setPendingPost = useFeedStore((s) => s.setPendingPost)
+  const { user } = useAuthStore()
+  const hasPartner = !!(user?.partnerId && user?.partnerName)
 
   async function pickPhoto() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
@@ -56,9 +60,10 @@ export default function CreateScreen() {
     if (tab === 'text'  && !caption.trim()) return Alert.alert('', 'Escreve alguma coisa')
     setLoading(true)
     try {
+      const partnerId = hasPartner && includePartner ? user!.partnerId! : undefined
       const newPost = tab === 'photo'
-        ? await createPost(media!.uri, 'IMAGE', caption.trim() || undefined)
-        : await createPost(null, 'TEXT', caption.trim(), textBg)
+        ? await createPost(media!.uri, 'IMAGE', caption.trim() || undefined, undefined, partnerId)
+        : await createPost(null, 'TEXT', caption.trim(), textBg, partnerId)
       if (newPost) setPendingPost(newPost)
       setMedia(null); setCaption(''); setTextBg(TEXT_BG_COLORS[0])
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
@@ -128,6 +133,24 @@ export default function CreateScreen() {
               maxLength={200}
             />
           </View>
+
+          {/* Partner toggle — only if has an accepted partner */}
+          {hasPartner && (
+            <TouchableOpacity
+              style={[s.partnerToggle, includePartner && s.partnerToggleActive]}
+              onPress={() => setIncludePartner((v) => !v)}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name={includePartner ? 'heart' : 'heart-outline'}
+                size={16}
+                color={includePartner ? '#fff' : PRIMARY}
+              />
+              <Text style={[s.partnerToggleText, includePartner && s.partnerToggleTextActive]}>
+                {includePartner ? `Com ${user!.partnerName}` : `Incluir ${user!.partnerName}`}
+              </Text>
+            </TouchableOpacity>
+          )}
 
           <View style={s.badge24h}>
             <Ionicons name="time-outline" size={12} color={PRIMARY} />
@@ -240,6 +263,16 @@ const s = StyleSheet.create({
     fontSize: 15, fontFamily: fonts.regular, color: '#1A1A1A',
     minHeight: 52,
   },
+
+  partnerToggle: {
+    flexDirection: 'row', alignItems: 'center', gap: 7,
+    marginHorizontal: 20, marginTop: 14,
+    borderWidth: 1.5, borderColor: PRIMARY, borderRadius: 20,
+    paddingHorizontal: 14, paddingVertical: 8, alignSelf: 'flex-start',
+  },
+  partnerToggleActive: { backgroundColor: PRIMARY, borderColor: PRIMARY },
+  partnerToggleText:   { fontSize: 13, fontFamily: fonts.semiBold, color: PRIMARY },
+  partnerToggleTextActive: { color: '#fff' },
 
   badge24h:     { flexDirection: 'row', alignItems: 'center', gap: 5, marginHorizontal: 20, marginTop: 14 },
   badge24hText: { fontSize: 12, fontFamily: fonts.regular, color: PRIMARY },

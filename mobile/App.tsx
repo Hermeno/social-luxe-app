@@ -19,6 +19,7 @@ import { connectSocket, disconnectSocket } from './src/socket'
 import { useAuthStore } from './src/store/auth.store'
 import { useNotificationStore } from './src/store/notification.store'
 import { useFriendsStore } from './src/store/friends.store'
+import { useMessageBadgeStore } from './src/store/messageBadge.store'
 import { getMyFollowers } from './src/services/follow.service'
 import { api, onTokenExpired } from './src/services/api'
 
@@ -51,6 +52,7 @@ async function registerForPushNotificationsAsync(): Promise<string | null> {
 function SocketManager() {
   const { token, isAuthenticated } = useAuthStore()
   const { addNotification } = useNotificationStore()
+  const { setTotalUnread, increment } = useMessageBadgeStore()
   const notifListener = useRef<ReturnType<typeof Notifications.addNotificationReceivedListener> | null>(null)
 
   useEffect(() => {
@@ -60,6 +62,22 @@ function SocketManager() {
     }
 
     const socket = connectSocket(token)
+
+    // ── Load initial unread count immediately on login ──────────────
+    api.get('/users/connections')
+      .then((r) => {
+        const connections: { unreadCount: number }[] = r.data.data ?? r.data ?? []
+        const total = connections.reduce((s, c) => s + (c.unreadCount ?? 0), 0)
+        setTotalUnread(total)
+      })
+      .catch(() => {})
+
+    // ── Real-time: increment badge for incoming messages ────────────
+    function onNewMessage(msg: any) {
+      const myId = useAuthStore.getState().user?.id
+      if (msg.senderId && msg.senderId !== myId) increment()
+    }
+    socket.on('message:new', onNewMessage)
 
     socket.on('notification', (payload: any) => {
       addNotification({
@@ -74,7 +92,6 @@ function SocketManager() {
     registerForPushNotificationsAsync().then(async (pushToken) => {
       if (pushToken) {
         await AsyncStorage.setItem('push_token', pushToken).catch(() => {})
-        // Register token in backend so server can send pushes
         const platform = require('react-native').Platform.OS
         api.post('/notifications/token', { token: pushToken, platform }).catch(() => {})
       }
@@ -94,6 +111,7 @@ function SocketManager() {
     })
 
     return () => {
+      socket.off('message:new', onNewMessage)
       socket.off('notification')
       if (notifListener.current) {
         notifListener.current.remove()

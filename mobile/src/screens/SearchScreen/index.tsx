@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import {
-  View, Text, TextInput, FlatList, TouchableOpacity, Pressable,
+  View, Text, TextInput, FlatList, TouchableOpacity,
   StyleSheet, ActivityIndicator, ListRenderItemInfo,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -12,8 +12,11 @@ import Toast from 'react-native-toast-message'
 import { api } from '../../services/api'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { colors, fonts } from '../../theme'
-import { toggleFollow } from '../../services/follow.service'
+import { toggleFollow, FollowDuration } from '../../services/follow.service'
+import { getCache, setCache } from '../../db/database'
+import { isConnected } from '../../services/netinfo.service'
 import AvatarImage from '../../components/AvatarImage'
+import FollowSplitButton from '../../components/FollowSplitButton'
 
 type Nav = StackNavigationProp<AppStackParams>
 
@@ -37,7 +40,7 @@ interface RowProps {
   user: UserResult
   followed: boolean
   loadingFollow: boolean
-  onFollow: () => void
+  onFollow: (duration: FollowDuration) => void
   onPress: () => void
 }
 
@@ -56,24 +59,13 @@ function UserRow({ user, followed, loadingFollow, onFollow, onPress }: RowProps)
         </View>
       </TouchableOpacity>
 
-      {/* Right: follow button — sibling, NOT nested in the touchable */}
-      <Pressable
-        onPress={onFollow}
-        disabled={loadingFollow}
-        style={({ pressed }) => [
-          s.followBtn,
-          followed && s.followingBtn,
-          pressed && s.followBtnPressed,
-        ]}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      >
-        {loadingFollow
-          ? <ActivityIndicator size="small" color={followed ? colors.primary : colors.white} />
-          : <Text style={[s.followBtnText, followed && s.followingBtnText]}>
-              {followed ? 'A seguir' : 'Seguir'}
-            </Text>
-        }
-      </Pressable>
+      {/* Right: follow split button — sibling, NOT nested in the touchable */}
+      <FollowSplitButton
+        following={followed}
+        loading={loadingFollow}
+        onFollow={onFollow}
+        theme="light"
+      />
     </View>
   )
 }
@@ -112,12 +104,26 @@ export default function SearchScreen() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputRef    = useRef<TextInput>(null)
 
-  // Load suggestions once
+  // Load suggestions — cache-first (offline-first)
   useEffect(() => {
-    api.get('/users/suggested')
-      .then((r) => setSuggested(r.data.data ?? r.data))
-      .catch(() => {})
-      .finally(() => setLoadingSug(false))
+    async function loadSuggested() {
+      // 1. Serve cache immediately — no wait
+      const cached = await getCache<UserResult[]>('suggested_users').catch(() => null)
+      if (cached && cached.length > 0) {
+        setSuggested(cached)
+        setLoadingSug(false)
+      }
+      // 2. Background network sync
+      if (!isConnected()) { setLoadingSug(false); return }
+      try {
+        const r = await api.get('/users/suggested')
+        const fresh: UserResult[] = r.data.data ?? r.data ?? []
+        setSuggested(fresh)
+        setCache('suggested_users', fresh).catch(() => {})
+      } catch {}
+      setLoadingSug(false)
+    }
+    loadSuggested()
   }, [])
 
   const search = useCallback(async (q: string) => {
@@ -139,11 +145,10 @@ export default function SearchScreen() {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [query])
 
-  const handleFollow = useCallback(async (userId: string) => {
+  const handleFollow = useCallback(async (userId: string, duration: FollowDuration = 'forever') => {
     if (followPending.has(userId)) return
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
 
-    // Optimistic update — flip state immediately so UI responds at once
     const wasFollowed = followed.has(userId)
     setFollowed((prev) => {
       const next = new Set(prev)
@@ -153,15 +158,13 @@ export default function SearchScreen() {
     setFollowPending((prev) => new Set([...prev, userId]))
 
     try {
-      const res = await toggleFollow(userId)
-      // Reconcile with server truth
+      const res = await toggleFollow(userId, duration)
       setFollowed((prev) => {
         const next = new Set(prev)
         res.following ? next.add(userId) : next.delete(userId)
         return next
       })
     } catch {
-      // Rollback optimistic update
       setFollowed((prev) => {
         const next = new Set(prev)
         wasFollowed ? next.add(userId) : next.delete(userId)
@@ -186,7 +189,7 @@ export default function SearchScreen() {
       user={item}
       followed={followed.has(item.id)}
       loadingFollow={followPending.has(item.id)}
-      onFollow={() => handleFollow(item.id)}
+      onFollow={(duration) => handleFollow(item.id, duration)}
       onPress={() => nav.navigate('Profile', { userId: item.id })}
     />
   ), [followed, followPending, handleFollow, nav])
@@ -239,8 +242,8 @@ export default function SearchScreen() {
         )}
       </View>
 
-      {/* ── Skeleton while loading suggestions ─────────────────────────────── */}
-      {isLoading && !isSearching && (
+      {/* ── Skeleton only when no cached data yet ──────────────────────────── */}
+      {isLoading && !isSearching && suggested.length === 0 && (
         <View>
           {[0, 1, 2, 3, 4].map((i) => <SkeletonRow key={i} />)}
         </View>
@@ -274,8 +277,8 @@ export default function SearchScreen() {
         </View>
       )}
 
-      {/* ── List ────────────────────────────────────────────────────────────── */}
-      {!isLoading && displayList.length > 0 && (
+      {/* ── List — show even while loading if cache exists ──────────────────── */}
+      {displayList.length > 0 && (
         <FlatList
           data={displayList}
           keyExtractor={(u) => u.id}
@@ -382,30 +385,6 @@ const s = StyleSheet.create({
     color: colors.gray400,
     marginTop: 2,
   },
-
-  // Follow button
-  followBtn: {
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: colors.primary,
-    minWidth: 84,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  followingBtn: {
-    backgroundColor: colors.white,
-    borderWidth: 1.5,
-    borderColor: colors.gray200,
-  },
-  followBtnPressed: { opacity: 0.7 },
-  followBtnText: {
-    fontSize: 13,
-    fontFamily: fonts.semiBold,
-    color: colors.white,
-    letterSpacing: -0.1,
-  },
-  followingBtnText: { color: colors.gray600 },
 
   // Skeleton
   skeletonAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.gray200 },

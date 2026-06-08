@@ -11,10 +11,10 @@ export async function createPost(
   mediaType: 'IMAGE' | 'VIDEO' | 'TEXT',
   caption?: string,
   bgColor?: string,
+  partnerUserId?: string,
 ) {
   if (mediaType === 'TEXT') {
-    // Text post — JSON body, no multipart
-    const res = await api.post<ApiResponse<Post>>('/posts', { caption, bgColor })
+    const res = await api.post<ApiResponse<Post>>('/posts', { caption, bgColor, partnerUserId })
     return res.data.data
   }
 
@@ -22,11 +22,21 @@ export async function createPost(
   const filename = mediaUri!.split('/').pop() ?? 'media'
   const type = mediaType === 'VIDEO' ? 'video/mp4' : 'image/jpeg'
   form.append('media', { uri: mediaUri, name: filename, type } as unknown as Blob)
-  if (caption) form.append('caption', caption)
+  if (caption)       form.append('caption', caption)
+  if (partnerUserId) form.append('partnerUserId', partnerUserId)
   const res = await api.post<ApiResponse<Post>>('/posts', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
   return res.data.data
+}
+
+export async function getPartnerPostInvites(): Promise<Post[]> {
+  const res = await api.get<ApiResponse<Post[]>>('/posts/partner-pending')
+  return res.data.data ?? []
+}
+
+export async function respondPartnerPost(postId: string, accept: boolean) {
+  await api.put(`/posts/${postId}/partner-${accept ? 'accept' : 'reject'}`)
 }
 
 export async function likePost(postId: string): Promise<{ liked: boolean }> {

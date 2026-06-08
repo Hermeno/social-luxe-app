@@ -3,13 +3,13 @@ import {
   View,
   Text,
   FlatList,
-  Image,
   TouchableOpacity,
   StyleSheet,
   Dimensions,
   Modal,
   ActivityIndicator,
 } from 'react-native'
+import { Image } from 'expo-image'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
@@ -107,7 +107,7 @@ export default function HighlightsScreen() {
             return (
               <TouchableOpacity style={s.item} onPress={() => openHighlight(item)} activeOpacity={0.8}>
                 {cover ? (
-                  <Image source={{ uri: mediaUri(cover) }} style={s.cover} resizeMode="cover" />
+                  <Image source={{ uri: mediaUri(cover) }} style={s.cover} contentFit="cover" cachePolicy="disk" recyclingKey={mediaUri(cover)} />
                 ) : (
                   <View style={[s.cover, s.coverPlaceholder]}>
                     <Ionicons name="images-outline" size={32} color={colors.gray200} />
@@ -145,7 +145,9 @@ export default function HighlightsScreen() {
                   <Image
                     source={{ uri: mediaUri(item.mediaUrl) }}
                     style={s.viewerMedia}
-                    resizeMode="contain"
+                    contentFit="contain"
+                    cachePolicy="disk"
+                    recyclingKey={mediaUri(item.mediaUrl)}
                   />
                   {item.caption && (
                     <Text style={s.viewerCaption}>{item.caption}</Text>

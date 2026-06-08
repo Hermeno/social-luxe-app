@@ -6,29 +6,42 @@ import MessagesScreen from '../screens/MessagesScreen'
 import CreateScreen from '../screens/CreateScreen'
 import ProfileScreen from '../screens/ProfileScreen'
 import ChatScreen from '../screens/MessagesScreen/ChatScreen'
+// COMMUNITY BLOCKED FOR LAUNCH
+// import GroupChatScreen from '../screens/GroupChatScreen'
+// import CreateGroupScreen from '../screens/CreateGroupScreen'
 import TabBar from '../components/TabBar'
 import BookmarksScreen from '../screens/BookmarksScreen'
-import SearchScreen from '../screens/SearchScreen'
 import ChallengesScreen from '../screens/ChallengesScreen'
 import CoinsScreen from '../screens/CoinsScreen'
 import MomentoScreen from '../screens/MomentoScreen'
-import FriendshipMapScreen from '../screens/FriendshipMapScreen'
 import NotificationsScreen from '../screens/NotificationsScreen'
 import PostViewerScreen from '../screens/PostViewerScreen'
+import EditProfileScreen from '../screens/EditProfileScreen'
+import StoryViewerScreen from '../screens/StoryViewerScreen'
+import CreateStoryScreen from '../screens/CreateStoryScreen'
+import HighlightsScreen from '../screens/HighlightsScreen'
 import { Post } from '../types'
+import { StoryGroup } from '../services/story.service'
 
 export type AppStackParams = {
   Tabs: undefined
   Profile: { userId?: string }
   Chat: { userId: string; userName: string; userAvatar: string | null }
+  // COMMUNITY BLOCKED FOR LAUNCH
+  // GroupChat: { groupId: string; groupName: string; groupAvatar?: string | null }
+  // CreateGroup: undefined
+  GroupChat: { groupId: string; groupName: string; groupAvatar?: string | null }
+  CreateGroup: undefined
   Bookmarks: undefined
-  Search: undefined
   Challenges: undefined
   Coins: undefined
   Momento: undefined
-  FriendshipMap: undefined
   Notifications: undefined
   PostViewer: { posts: Post[]; startIndex: number }
+  EditProfile: undefined
+  StoryViewer: { groups: StoryGroup[]; startGroupIndex: number }
+  CreateStory: undefined
+  Highlights: { userId: string }
 }
 
 export type AppTabParams = {
@@ -56,14 +69,20 @@ export default function AppNavigator() {
       <Stack.Screen name="Tabs" component={Tabs} />
       <Stack.Screen name="Profile" component={ProfileScreen} />
       <Stack.Screen name="Chat" component={ChatScreen} />
+      {/* COMMUNITY BLOCKED FOR LAUNCH
+      <Stack.Screen name="GroupChat" component={GroupChatScreen} />
+      <Stack.Screen name="CreateGroup" component={CreateGroupScreen} />
+      */}
       <Stack.Screen name="Bookmarks" component={BookmarksScreen} />
-      <Stack.Screen name="Search" component={SearchScreen} />
       <Stack.Screen name="Challenges" component={ChallengesScreen} />
       <Stack.Screen name="Coins" component={CoinsScreen} />
       <Stack.Screen name="Momento" component={MomentoScreen} />
-      <Stack.Screen name="FriendshipMap" component={FriendshipMapScreen} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
       <Stack.Screen name="PostViewer" component={PostViewerScreen} />
+      <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+      <Stack.Screen name="StoryViewer" component={StoryViewerScreen} />
+      <Stack.Screen name="CreateStory" component={CreateStoryScreen} />
+      <Stack.Screen name="Highlights" component={HighlightsScreen} />
     </Stack.Navigator>
   )
 }

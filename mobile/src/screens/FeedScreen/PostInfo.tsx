@@ -5,12 +5,18 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useNavigation } from '@react-navigation/native'
+import { StackNavigationProp } from '@react-navigation/stack'
 import { Post } from '../../types'
 import { colors, fonts } from '../../theme'
 import { useAuthStore } from '../../store/auth.store'
 import { toggleFollow, getFollowStatus } from '../../services/follow.service'
 import AvatarImage from '../../components/AvatarImage'
+import FollowSplitButton, { FollowDuration } from '../../components/FollowSplitButton'
+import { AppStackParams } from '../../navigation/AppNavigator'
 import * as Haptics from 'expo-haptics'
+
+type Nav = StackNavigationProp<AppStackParams>
 
 // Module-level cache so follow state is instant on revisit
 const followCache = new Map<string, boolean>()
@@ -23,6 +29,7 @@ interface Props {
 export default function PostInfo({ post, isActive }: Props) {
   const { user }    = useAuthStore()
   const { bottom }  = useSafeAreaInsets()
+  const nav         = useNavigation<Nav>()
   const [expanded, setExpanded]         = useState(false)
   const [following, setFollowing]       = useState(() => followCache.get(post.user.id) ?? false)
   const [loadingFollow, setLoadingFollow] = useState(false)
@@ -68,11 +75,11 @@ export default function PostInfo({ post, isActive }: Props) {
       .catch(() => {})
   }, [post.user.id])
 
-  async function handleFollow() {
+  async function handleFollow(duration: FollowDuration = 'forever') {
     if (loadingFollow) return
     setLoadingFollow(true)
     try {
-      const res = await toggleFollow(post.user.id)
+      const res = await toggleFollow(post.user.id, duration)
       followCache.set(post.user.id, res.following)
       setFollowing(res.following)
     } catch {}
@@ -88,33 +95,41 @@ export default function PostInfo({ post, isActive }: Props) {
 
   return (
     <>
-      <Animated.View style={[s.container, { bottom: bottom + 100, transform: [{ translateY: slideAnim }] }]}>
-        {/* Avatar + Name + follow/menu */}
+      <Animated.View style={[s.container, { bottom: bottom + 130, transform: [{ translateY: slideAnim }] }]}>
+        {/* Avatar(s) + Name + follow */}
         <View style={s.userRow}>
-          <AvatarImage
-            uri={post.user.avatar}
-            size={32}
-            borderColor="rgba(255,255,255,0.8)"
-            borderWidth={1}
-          />
+          <View style={s.avatarStack}>
+            <TouchableOpacity onPress={() => nav.navigate('Profile', { userId: post.user.id })} activeOpacity={0.8}>
+              <AvatarImage uri={post.user.avatar} size={32} borderColor="rgba(255,255,255,0.9)" borderWidth={1.5} />
+            </TouchableOpacity>
+            {post.partnerUser && post.partnerAccepted && (
+              <TouchableOpacity
+                onPress={() => nav.navigate('Profile', { userId: post.partnerUser!.id })}
+                activeOpacity={0.8}
+                style={s.partnerAvatarOverlap}
+              >
+                <AvatarImage uri={post.partnerUser.avatar} size={28} borderColor="rgba(255,255,255,0.95)" borderWidth={2} />
+              </TouchableOpacity>
+            )}
+          </View>
           <View style={s.nameGroup}>
             {post.extended && (
               <View style={s.extBadge}>
                 <Text style={s.extBadgeText}>+24h</Text>
               </View>
             )}
-            <Text style={s.username} numberOfLines={1}>{post.user.name}</Text>
+            <TouchableOpacity onPress={() => nav.navigate('Profile', { userId: post.user.id })} activeOpacity={0.8}>
+              <Text style={s.username} numberOfLines={1}>
+                {post.user.name}{post.partnerUser && post.partnerAccepted ? ` & ${post.partnerUser.name}` : ''}
+              </Text>
+            </TouchableOpacity>
             {!isSelf && (
-              <TouchableOpacity
-                style={s.followBtn}
-                onPress={handleFollow}
-                activeOpacity={0.7}
-                disabled={loadingFollow}
-              >
-                <Text style={s.followTxt}>
-                  {following ? 'Seguindo' : 'Seguir'}
-                </Text>
-              </TouchableOpacity>
+              <FollowSplitButton
+                following={following}
+                loading={loadingFollow}
+                onFollow={handleFollow}
+                theme="dark"
+              />
             )}
           </View>
 
@@ -148,9 +163,20 @@ export default function PostInfo({ post, isActive }: Props) {
 }
 
 const s = StyleSheet.create({
-  container: { position: 'absolute', left: 16, right: 90, gap: 8, zIndex: 30 },
+  container: { position: 'absolute', left: 16, right: 16, gap: 8, zIndex: 30 },
 
-  userRow:   { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  userRow:  { flexDirection: 'row', alignItems: 'center', gap: 8 },
+
+  // Row of avatars — overlap via negative margin
+  avatarStack: { flexDirection: 'row', alignItems: 'flex-start' },
+
+  // Partner avatar: overlaps left (-14px) and drops slightly (6px) — diagonal stack
+  partnerAvatarOverlap: {
+    marginLeft: -14,
+    marginTop: 6,
+    zIndex: 1,
+  },
+
   nameGroup: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
   username: {
     color: colors.white, fontFamily: fonts.semiBold, fontSize: 13,
@@ -162,15 +188,6 @@ const s = StyleSheet.create({
 
   extBadge:     { backgroundColor: colors.primary, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
   extBadgeText: { color: colors.white, fontFamily: fonts.bold, fontSize: 9, letterSpacing: 0.2 },
-
-  followBtn: {
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.85)',
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-  },
-  followTxt: { color: colors.white, fontFamily: fonts.medium, fontSize: 11 },
 
   caption:  { color: 'rgba(255,255,255,0.88)', fontFamily: fonts.regular, fontSize: 13, lineHeight: 19 },
   seeMore:  { color: 'rgba(255,255,255,0.50)', fontFamily: fonts.medium },

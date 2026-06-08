@@ -2,13 +2,13 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import {
   View,
   Text,
-  Image,
   TouchableOpacity,
   StyleSheet,
   Dimensions,
   Animated,
   PanResponder,
 } from 'react-native'
+import { Image } from 'expo-image'
 import AvatarImage from '../../components/AvatarImage'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
@@ -163,7 +163,7 @@ export default function StoryViewerScreen() {
           nativeControls={false}
         />
       ) : (
-        <Image source={{ uri: storyUrl(story) }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        <Image source={{ uri: storyUrl(story) }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="disk" recyclingKey={storyUrl(story)} />
       )}
 
       <View style={[s.overlay, { paddingTop: top + 8 }]}>

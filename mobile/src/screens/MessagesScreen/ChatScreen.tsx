@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
 import {
-  View, Text, FlatList, Image, StyleSheet,
+  View, Text, FlatList, StyleSheet,
   KeyboardAvoidingView, Platform, Animated, Pressable, TouchableOpacity, Modal,
 } from 'react-native'
+import { Image } from 'expo-image'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native'
@@ -23,6 +24,8 @@ import {
   upsertCachedMessage,
   replacePendingMessage,
   updateCachedConnection,
+  getSyncMeta,
+  setSyncMeta,
 } from '../../db/database'
 import { isConnected } from '../../services/netinfo.service'
 
@@ -131,8 +134,10 @@ const fc = StyleSheet.create({
 function ReplyQuote({ replyTo, mine }: { replyTo: NonNullable<Message['replyTo']>; mine: boolean }) {
   return (
     <View style={[t.replyQuote, mine ? t.replyQuoteMine : t.replyQuoteTheirs]}>
-      <Text style={t.replyQuoteName}>{replyTo.sender.name}</Text>
-      <Text style={t.replyQuoteText} numberOfLines={1}>{replyTo.content ?? '🎤 Voz'}</Text>
+      <Text style={[t.replyQuoteName, mine && t.replyQuoteNameMine]}>{replyTo.sender.name}</Text>
+      <Text style={[t.replyQuoteText, mine && t.replyQuoteTextMine]} numberOfLines={1}>
+        {replyTo.content ?? '🎤 Voz'}
+      </Text>
     </View>
   )
 }
@@ -174,7 +179,14 @@ function MessageBubble({ msg, mine, isFirst, isLast, myUserId, onLongPress, onRe
           ]}>
             {msg.replyTo && <ReplyQuote replyTo={msg.replyTo} mine={mine} />}
             {mediaUri && (
-              <Image source={{ uri: mediaUri }} style={t.mediaBubble} resizeMode="cover" />
+              <Image
+                source={{ uri: mediaUri }}
+                style={t.mediaBubble}
+                contentFit="cover"
+                cachePolicy="disk"
+                recyclingKey={mediaUri}
+                transition={100}
+              />
             )}
             {/* Document / file attachment */}
             {!mediaUri && msg.content && msg.content.match(/\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|zip|rar)$/i) && (
@@ -208,10 +220,6 @@ function MessageBubble({ msg, mine, isFirst, isLast, myUserId, onLongPress, onRe
             )}
           </View>
         )}
-
-        <TouchableOpacity style={t.replyBtn} onPress={() => onReply(msg)}>
-          <Text style={t.replyBtnText}>Responder</Text>
-        </TouchableOpacity>
       </View>
     </View>
   )
@@ -248,36 +256,47 @@ export default function ChatScreen() {
   const { bottom, top } = useSafeAreaInsets()
   const isOnline        = useOnlineStore((s) => s.isOnline(userId))
 
-  // ── Load: SQLite first → background network sync ──────────────────────────
+  // ── Load: SQLite first → background network sync (5-min TTL) ────────────
   useEffect(() => {
     let cancelled = false
+    const SYNC_TTL = 5 * 60 * 1000 // 5 minutes
+    const syncKey  = `chat_sync_${userId}`
 
     async function load() {
       // 1. Serve from SQLite immediately (zero latency)
-      const cached = await getCachedMessages(userId).catch(() => [])
+      const [cached, lastSyncStr] = await Promise.all([
+        getCachedMessages(userId).catch(() => [] as LocalMessage[]),
+        getSyncMeta(syncKey).catch(() => null),
+      ])
+
       if (!cancelled && cached.length > 0) {
         setMessages(cached)
         setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 50)
       }
 
-      // 2. Background: fetch latest page from server (most recent 30)
+      // 2. Skip API if cache is fresh (< 5 min) and we have messages
+      const cacheAge = lastSyncStr ? Date.now() - parseInt(lastSyncStr, 10) : Infinity
+      if (cached.length > 0 && cacheAge < SYNC_TTL) return
+
+      // 3. Background: fetch latest page from server
       if (!isConnected()) return
       try {
         const fresh = await msgService.getMessages(userId, 1)
         if (cancelled) return
-        const sorted = [...fresh].reverse() // API returns DESC, we want ASC
+        const sorted = [...fresh].reverse()
         setMessages((prev) => {
-          // Merge: keep any locally pending messages, prepend server messages
           const pendingLocal = prev.filter((m) => m._pending || m._failed)
-          const freshIds = new Set(sorted.map((m) => m.id))
-          const pending = pendingLocal.filter((m) => !freshIds.has(m.id))
-          // For older messages already in cache but not in fresh page, keep them
-          const olderCached = prev.filter((m) => !m._pending && !m._failed && !freshIds.has(m.id))
+          const freshIds     = new Set(sorted.map((m) => m.id))
+          const pending      = pendingLocal.filter((m) => !freshIds.has(m.id))
+          const olderCached  = prev.filter((m) => !m._pending && !m._failed && !freshIds.has(m.id))
           const merged = [...olderCached, ...sorted, ...pending]
           merged.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
           return merged
         })
-        await cacheMessages(userId, sorted).catch(() => {})
+        await Promise.all([
+          cacheMessages(userId, sorted).catch(() => {}),
+          setSyncMeta(syncKey, String(Date.now())).catch(() => {}),
+        ])
         setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 80)
       } catch {}
     }
@@ -546,73 +565,82 @@ export default function ChatScreen() {
 }
 
 // ── Styles ─────────────────────────────────────────────────────────────────────
-const MINE_COLOR   = '#1A1A1A'
-const THEIRS_COLOR = '#FFFFFF'
-const R = 18
+const MINE_COLOR   = colors.primary   // Brand blue — "bom dia" looks clean and on-brand
+const THEIRS_COLOR = '#F0F2F5'        // Warm light gray — softer than pure white
+const R = 20
 
 const t = StyleSheet.create({
   screen:      { flex: 1, backgroundColor: CHAT_BG },
   list:        { flex: 1 },
-  listContent: { paddingHorizontal: spacing.md, paddingVertical: spacing.md, gap: 2 },
+  listContent: { paddingHorizontal: 14, paddingVertical: spacing.md, gap: 1 },
 
-  row:        { flexDirection: 'row', marginBottom: 2 },
+  row:        { flexDirection: 'row', marginBottom: 3 },
   rowRight:   { justifyContent: 'flex-end' },
   rowLeft:    { justifyContent: 'flex-start' },
   rowCompact: { marginBottom: 1 },
 
   bubble: {
     maxWidth: '78%',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
     borderRadius: R,
   },
-  bubbleMine:         { backgroundColor: MINE_COLOR },
-  bubbleTheirs:       { backgroundColor: THEIRS_COLOR },
-  bubbleMineFirst:    { borderTopRightRadius: 4 },
-  bubbleMineLast:     { borderBottomRightRadius: 4 },
-  bubbleTheirsFirst:  { borderTopLeftRadius: 4 },
-  bubbleTheirsLast:   { borderBottomLeftRadius: 4 },
-  bubblePending:      { opacity: 0.65 },
+  // Mine: brand blue, sharp top-right corner on first, sharp bottom-right on last
+  bubbleMine:   { backgroundColor: MINE_COLOR },
+  bubbleTheirs: { backgroundColor: THEIRS_COLOR },
+  bubbleMineFirst:    { borderTopRightRadius: 5 },
+  bubbleMineLast:     { borderBottomRightRadius: 5 },
+  bubbleTheirsFirst:  { borderTopLeftRadius: 5 },
+  bubbleTheirsLast:   { borderBottomLeftRadius: 5 },
+  bubblePending:      { opacity: 0.6 },
 
-  mediaBubble: { width: 200, height: 200, borderRadius: R - 4, marginBottom: 4 },
+  mediaBubble: { width: 220, height: 220, borderRadius: R - 4, marginBottom: 4 },
 
-  msgText:   { fontSize: 15, lineHeight: 21, fontFamily: fonts.regular },
+  msgText:   { fontSize: 15, lineHeight: 22, fontFamily: fonts.regular, letterSpacing: 0.1 },
   msgMine:   { color: '#FFFFFF' },
   msgTheirs: { color: colors.gray800 },
 
-  metaRow:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 3, marginTop: 2 },
-  time:        { fontSize: 10, color: 'rgba(0,0,0,0.35)', fontFamily: fonts.regular },
-  timeMine:    { color: 'rgba(255,255,255,0.5)' },
-  tick:        { fontSize: 10, color: '#4FC3F7', fontFamily: fonts.regular },
-  tickPending: { fontSize: 10, color: 'rgba(255,255,255,0.4)', fontFamily: fonts.regular },
-  tickFailed:  { fontSize: 11, color: '#FF6B6B', fontFamily: fonts.bold },
+  metaRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4, marginTop: 3 },
+  time:     { fontSize: 10, color: 'rgba(0,0,0,0.3)', fontFamily: fonts.regular },
+  timeMine: { color: 'rgba(255,255,255,0.55)' },
 
-  replyQuote:       { borderLeftWidth: 3, paddingLeft: 8, marginBottom: 6 },
-  replyQuoteMine:   { borderLeftColor: 'rgba(255,255,255,0.5)' },
-  replyQuoteTheirs: { borderLeftColor: colors.primary },
+  replyQuote: {
+    borderLeftWidth: 3, paddingLeft: 9, paddingVertical: 2,
+    marginBottom: 7, borderRadius: 2,
+  },
+  replyQuoteMine:   { borderLeftColor: 'rgba(255,255,255,0.6)', backgroundColor: 'rgba(255,255,255,0.1)' },
+  replyQuoteTheirs: { borderLeftColor: colors.primary, backgroundColor: `${colors.primary}10` },
   replyQuoteName:   { fontSize: 11, fontFamily: fonts.semiBold, color: colors.primary, marginBottom: 1 },
-  replyQuoteText:   { fontSize: 12, fontFamily: fonts.regular, color: 'rgba(0,0,0,0.5)' },
+  replyQuoteNameMine: { color: 'rgba(255,255,255,0.8)' },
+  replyQuoteText:   { fontSize: 12, fontFamily: fonts.regular, color: 'rgba(0,0,0,0.45)' },
+  replyQuoteTextMine: { color: 'rgba(255,255,255,0.6)' },
 
-  reactStrip:      { flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 3, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: colors.white, borderRadius: 12, elevation: 1, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 2 },
+  reactStrip: {
+    flexDirection: 'row', alignItems: 'center', gap: 2,
+    marginTop: 4, paddingHorizontal: 7, paddingVertical: 3,
+    backgroundColor: colors.white, borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: colors.gray200,
+  },
   reactStripRight: { alignSelf: 'flex-end' },
   reactStripLeft:  { alignSelf: 'flex-start' },
   reactEmoji:      { fontSize: 14 },
   reactCount:      { fontSize: 11, color: colors.gray600, fontFamily: fonts.medium },
 
-  replyBtn:     { paddingVertical: 1, paddingHorizontal: 4, marginTop: 2 },
-  replyBtnText: { fontSize: 10, color: 'rgba(0,0,0,0.3)', fontFamily: fonts.regular },
+  emojiOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center' },
+  emojiRow: {
+    flexDirection: 'row', gap: 4, backgroundColor: colors.white,
+    borderRadius: 44, paddingHorizontal: 14, paddingVertical: 10,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: colors.gray200,
+  },
+  emojiBtn:  { padding: 8 },
+  emojiText: { fontSize: 26 },
 
-  emojiOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
-  emojiRow:     { flexDirection: 'row', gap: 6, backgroundColor: colors.white, borderRadius: 40, paddingHorizontal: 16, paddingVertical: 12, elevation: 8 },
-  emojiBtn:     { padding: 6 },
-  emojiText:    { fontSize: 28 },
-
-  dateSepWrap: { flexDirection: 'row', alignItems: 'center', marginVertical: 12, gap: 8 },
-  dateLine:    { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(0,0,0,0.15)' },
+  dateSepWrap: { flexDirection: 'row', alignItems: 'center', marginVertical: 16, gap: 10 },
+  dateLine:    { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(0,0,0,0.1)' },
   dateSepTxt:  {
-    fontSize: 11, color: 'rgba(0,0,0,0.4)', fontFamily: fonts.medium,
-    backgroundColor: '#EAEAEA', paddingHorizontal: 10, paddingVertical: 3,
-    borderRadius: 10,
+    fontSize: 11, color: 'rgba(0,0,0,0.35)', fontFamily: fonts.medium,
+    backgroundColor: '#E8EAF0', paddingHorizontal: 12, paddingVertical: 4,
+    borderRadius: 12,
   },
 
   typingWrap:   { paddingHorizontal: spacing.md, paddingBottom: 4 },

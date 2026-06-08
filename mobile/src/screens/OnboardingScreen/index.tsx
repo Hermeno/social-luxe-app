@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, Animated, FlatList,
-  ActivityIndicator, Dimensions, Alert, Pressable,
+  ActivityIndicator, Dimensions, Alert,
 } from 'react-native'
 import { Image } from 'expo-image'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -13,6 +13,8 @@ import Toast from 'react-native-toast-message'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { api } from '../../services/api'
 import * as followService from '../../services/follow.service'
+import { FollowDuration } from '../../services/follow.service'
+import FollowSplitButton from '../../components/FollowSplitButton'
 import { useAuthStore } from '../../store/auth.store'
 import { clearAllLocalData } from '../../db/database'
 import { fonts } from '../../theme'
@@ -281,18 +283,26 @@ function SuggestedStep({ onDone }: { onDone: () => void }) {
   const { scale, bounce } = useBounce()
 
   useEffect(() => {
-    api.get('/users/suggested')
-      .then((r) => setUsers((r.data.data ?? r.data).slice(0, 12)))
+    // Fetch suggested users AND current following list in parallel
+    // so buttons correctly show "Seguindo" for people already followed
+    Promise.all([
+      api.get('/users/suggested').then((r) => r.data.data ?? r.data),
+      api.get('/users/following').then((r) => r.data.data ?? r.data ?? []),
+    ])
+      .then(([suggested, following]) => {
+        setUsers((suggested as SuggestedUser[]).slice(0, 12))
+        setFollowed(new Set((following as { id: string }[]).map((u) => u.id)))
+      })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
 
-  async function toggleFollow(userId: string) {
+  async function toggleFollow(userId: string, duration: FollowDuration = 'forever') {
     if (pending.has(userId)) return
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     setPending((p) => new Set([...p, userId]))
     try {
-      const res = await followService.toggleFollow(userId)
+      const res = await followService.toggleFollow(userId, duration)
       setFollowed((prev) => {
         const next = new Set(prev)
         res.following ? next.add(userId) : next.delete(userId)
@@ -338,22 +348,12 @@ function SuggestedStep({ onDone }: { onDone: () => void }) {
         </Text>
 
         {/* Follow button */}
-        <Pressable
-          style={({ pressed }) => [
-            c.followBtn,
-            isFollowing && c.followingBtn,
-            pressed && { opacity: 0.7 },
-          ]}
-          onPress={() => toggleFollow(item.id)}
-          disabled={isLoading}
-        >
-          {isLoading
-            ? <ActivityIndicator size="small" color={isFollowing ? B : BG} />
-            : <Text style={[c.followTxt, isFollowing && c.followingTxt]}>
-                {isFollowing ? 'A seguir' : 'Seguir'}
-              </Text>
-          }
-        </Pressable>
+        <FollowSplitButton
+          following={isFollowing}
+          loading={isLoading}
+          onFollow={(duration) => toggleFollow(item.id, duration)}
+          theme="light"
+        />
       </View>
     )
   }
@@ -527,8 +527,4 @@ const c = StyleSheet.create({
   name:      { fontSize: 14, fontFamily: fonts.bold, color: T, letterSpacing: -0.2, textAlign: 'center', paddingHorizontal: 8 },
   followers: { fontSize: 12, fontFamily: fonts.regular, color: M, marginTop: 3, marginBottom: 12, textAlign: 'center' },
 
-  followBtn:     { paddingHorizontal: 22, paddingVertical: 9, borderRadius: 20, backgroundColor: B, minWidth: 100, alignItems: 'center' },
-  followingBtn:  { backgroundColor: BG, borderWidth: 1.5, borderColor: BD },
-  followTxt:     { fontSize: 13, fontFamily: fonts.semiBold, color: BG, letterSpacing: -0.1 },
-  followingTxt:  { color: S },
 })
