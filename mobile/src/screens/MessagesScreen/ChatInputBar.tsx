@@ -77,7 +77,7 @@ export default function ChatInputBar({
 
   return (
     <>
-      <View style={[s.container, { paddingBottom: paddingBottom || 8 }]}>
+      <View style={s.container}>
 
         {/* Reply preview banner */}
         {replyingTo && (
@@ -149,6 +149,12 @@ export default function ChatInputBar({
         </View>
       </View>
 
+      {/* Safe-area spacer — outside the styled container so the system navigation
+          bar area is plain screen background, not inside the bordered input bar */}
+      {paddingBottom > 0 && (
+        <View style={{ height: paddingBottom, backgroundColor: colors.white }} />
+      )}
+
       {/* Attachment sheet */}
       <Modal transparent animationType="slide" visible={showAttach} onRequestClose={() => setShowAttach(false)}>
         <Pressable style={s.overlay} onPress={() => setShowAttach(false)}>
@@ -192,6 +198,7 @@ const s = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.gray200,
     paddingTop: 8,
+    paddingBottom: 8,
     paddingHorizontal: 12,
     // Subtle elevation so the bar "floats" above the message list
     ...Platform.select({
