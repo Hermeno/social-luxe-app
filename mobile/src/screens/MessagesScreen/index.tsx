@@ -817,17 +817,21 @@ export default function MessagesScreen() {
       )}
     </KeyboardAvoidingView>
 
-      {/* ── Floating home FAB — fora do KeyboardAvoidingView, nunca sobe com teclado ── */}
-      <TouchableOpacity
-        style={[ms.homeFab, { bottom: bottom + 24 }]}
-        onPress={() => nav.goBack()}
-        activeOpacity={0.85}
-      >
-        <Ionicons name="home" size={28} color="#fff" />
-      </TouchableOpacity>
-      <View style={[ms.homeFabBadgePos, { bottom: bottom + 74 }]} pointerEvents="none">
-        <SpeechBadge count={newPostsCount} />
-      </View>
+      {/* ── Floating home FAB — hidden when quick-reply keyboard is open ── */}
+      {!quickReplyId && (
+        <>
+          <TouchableOpacity
+            style={[ms.homeFab, { bottom: bottom + 24 }]}
+            onPress={() => nav.goBack()}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="home" size={28} color="#fff" />
+          </TouchableOpacity>
+          <View style={[ms.homeFabBadgePos, { bottom: bottom + 74 }]} pointerEvents="none">
+            <SpeechBadge count={newPostsCount} />
+          </View>
+        </>
+      )}
     </View>
   )
 }
