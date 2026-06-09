@@ -18,6 +18,7 @@ import { useFocusEffect, useIsFocused } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { Search, MessageCircle, User } from 'lucide-react-native'
+import SpeechBadge from '../../components/SpeechBadge'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { Post } from '../../types'
 import { useFeed } from '../../hooks/useFeed'
@@ -228,14 +229,15 @@ export default function FeedScreen() {
   useEffect(() => {
     if (!pendingPost) return
     prependPost(pendingPost)
-    setCurrentIndex(0)
+    // currentIndex is derived from currentPostId — no manual correction needed
     setPendingPost(null)
   }, [pendingPost])
 
   const jumpToPostIdRef = useRef(jumpToPostId)
   jumpToPostIdRef.current = jumpToPostId
 
-  const [currentIndex, setCurrentIndex] = useState(0)
+  // Track current post by ID so flatPosts reorders never cause a flash
+  const [currentPostId, setCurrentPostId] = useState<string | null>(null)
   const [commentPost, setCommentPost]   = useState<Post | null>(null)
   const [viewedIds, setViewedIds]       = useState<Set<string>>(new Set())
   const [searchMode, setSearchMode]     = useState(false)
@@ -312,6 +314,32 @@ export default function FeedScreen() {
     })
   }, [userGroups])
 
+  // Derived synchronously — when flatPosts rebuilds (socket prepend, refresh, etc.)
+  // the index is always correct in the same render, never one frame behind
+  const currentIndex = useMemo(() => {
+    if (!currentPostId || flatPosts.length === 0) return 0
+    const idx = flatPosts.findIndex((p) => p.id === currentPostId)
+    return idx >= 0 ? idx : 0
+  }, [currentPostId, flatPosts])
+
+  // Initialise to first post once feed loads, and keep in sync when feed resets
+  const prevFlatLenRef = useRef(0)
+  useEffect(() => {
+    if (prevFlatLenRef.current === 0 && flatPosts.length > 0) {
+      setCurrentPostId(flatPosts[0].id)
+    }
+    prevFlatLenRef.current = flatPosts.length
+  }, [flatPosts.length])
+
+  // Navigate to a specific index
+  const flatPostsRef = useRef(flatPosts)
+  flatPostsRef.current = flatPosts
+  function navigateTo(idx: number) {
+    const fp = flatPostsRef.current
+    const clamped = Math.max(0, Math.min(idx, fp.length - 1))
+    setCurrentPostId(fp[clamped]?.id ?? null)
+  }
+
   const post = flatPosts[currentIndex]
   postRef.current = post
 
@@ -328,7 +356,7 @@ export default function FeedScreen() {
     if (flatPosts.length === 0) return
     const idx = flatPosts.findIndex((p) => p.id === id)
     if (idx >= 0) {
-      setCurrentIndex(idx)
+      navigateTo(idx)
       setJumpToPostId(null)
     }
     // If post not in feed yet, leave jumpToPostId set — will retry when flatPosts updates
@@ -345,24 +373,27 @@ export default function FeedScreen() {
   const currentGroup       = post ? userGroups.find((g) => g.user.id === post.user.id) : undefined
   const currentPostInGroup = currentIndex - currentGroupFirstIdx
 
+  const currentIndexRef = useRef(currentIndex)
+  currentIndexRef.current = currentIndex
+
   const goNext = useCallback(() => {
-    setCurrentIndex((i) => {
-      // Stop at last post — no wrap-around
-      if (i >= flatPosts.length - 1) return i
-      if (flatPosts.length - i <= 3) loadMore()
-      return i + 1
-    })
-  }, [flatPosts.length, loadMore])
+    const i = currentIndexRef.current
+    const fp = flatPostsRef.current
+    if (i >= fp.length - 1) return
+    if (fp.length - i <= 3) loadMore()
+    navigateTo(i + 1)
+  }, [loadMore])
 
   const goPrev = useCallback(() => {
-    setCurrentIndex((i) => (i > 0 ? i - 1 : 0))
+    navigateTo(currentIndexRef.current > 0 ? currentIndexRef.current - 1 : 0)
   }, [])
+
   const goNextRef = useRef(goNext)
   goNextRef.current = goNext
 
   function jumpToUser(group: UserGroup) {
     const idx = flatPosts.findIndex((p) => p.user.id === group.user.id)
-    if (idx >= 0) setCurrentIndex(idx)
+    if (idx >= 0) navigateTo(idx)
   }
 
   // ── Playback helpers ──────────────────────────────────────────────────────
@@ -477,8 +508,9 @@ export default function FeedScreen() {
 
   useFocusEffect(useCallback(() => {
     refreshRef.current()
-    // Only reset index when NOT arriving from a publish (pendingPost handles that)
-    if (!useFeedStore.getState().pendingPost) setCurrentIndex(0)
+    // Only reset index when NOT arriving from a publish or a profile post jump
+    const st = useFeedStore.getState()
+    if (!st.pendingPost && !st.jumpToPostId) navigateTo(0)
   }, []))
 
   // Prefetch next 2 posts' media into device storage
@@ -693,6 +725,13 @@ export default function FeedScreen() {
             </View>
           )}
 
+          {post.isAnnouncement && (
+            <View style={s.announcementBadge} pointerEvents="none">
+              <Ionicons name="megaphone-outline" size={13} color="#fff" />
+              <Text style={s.announcementBadgeText}>anúncio oficial · luxee</Text>
+            </View>
+          )}
+
           {/* Tap zones: Pressable for press-in / press-out (hold-to-pause) */}
           <Pressable
             style={[s.leftTap,  { bottom: bottom + 100 }]}
@@ -710,7 +749,7 @@ export default function FeedScreen() {
             onCommentPress={() => setCommentPost(post)}
             newPostsCount={newPostsCount}
             commentCount={(post._count?.comments ?? 0) + commentDelta}
-            onDeleted={(id) => { removePost(id); setCurrentIndex((i) => Math.max(0, i - 1)) }}
+            onDeleted={(id) => { removePost(id); navigateTo(Math.max(0, currentIndex - 1)) }}
             onEdited={(id, caption) => updatePost(id, caption)}
           />
         </View>
@@ -742,18 +781,19 @@ export default function FeedScreen() {
 
       {/* ── Floating chat FAB — right side, below action icons ───────────── */}
       {post && (
-        <TouchableOpacity
-          style={[s.fab, { bottom: bottom + 54 }]}
-          onPress={() => (nav as any).navigate('Messages')}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="chatbubble-outline" size={26} color="#fff" />
-          {messageBadge > 0 && (
-            <View style={s.fabBadge}>
-              <Text style={s.fabBadgeTxt}>{messageBadge > 99 ? '99+' : messageBadge}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+        <>
+          <TouchableOpacity
+            style={[s.fab, { bottom: bottom + 54 }]}
+            onPress={() => (nav as any).navigate('Messages')}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="chatbubble-outline" size={26} color="#fff" style={s.mirrorX} />
+          </TouchableOpacity>
+          {/* Badge as sibling of FAB — no clipping from parent bounds */}
+          <View style={[s.fabBadgePos, { bottom: bottom + 98 }]} pointerEvents="none">
+            <SpeechBadge count={messageBadge} />
+          </View>
+        </>
       )}
     </View>
   )
@@ -925,6 +965,18 @@ const s = StyleSheet.create({
   topGradient:    { position: 'absolute', top: 0, left: 0, right: 0, height: 80 },
 
   progressWrap:  { position: 'absolute', top: 12, left: 0, right: 0, zIndex: 20 },
+
+  announcementBadge: {
+    position: 'absolute', top: 54, left: 16, zIndex: 21,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: 'rgba(230,126,34,0.88)',
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderRadius: 20,
+  },
+  announcementBadgeText: {
+    color: '#fff', fontSize: 12,
+    fontFamily: fonts.semiBold, letterSpacing: 0.2,
+  },
   progressRow:   { flexDirection: 'row', paddingHorizontal: 10, gap: 3 },
   progressTrack: {
     flex: 1, height: 2.5,
@@ -959,13 +1011,14 @@ const s = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
-  fabBadge: {
-    position: 'absolute', top: -4, right: -4,
-    minWidth: 20, height: 20, borderRadius: 10,
-    backgroundColor: '#FF3B30',
-    alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: 4,
-    borderWidth: 2, borderColor: '#fff',
+  // Badge sibling of FAB — bottom: fabBottom + fabHeight - overlap (bottom+54+56-12=bottom+98)
+  fabBadgePos: {
+    position: 'absolute',
+    right: 16,
+    width: 56,
+    alignItems: 'center',
+    zIndex: 31,
+    elevation: 10,
   },
-  fabBadgeTxt: { fontSize: 10, fontFamily: fonts.extraBold, color: '#fff', lineHeight: 12 },
+  mirrorX: { transform: [{ scaleX: -1 }] },
 })

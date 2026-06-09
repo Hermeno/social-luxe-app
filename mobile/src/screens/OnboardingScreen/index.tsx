@@ -164,7 +164,7 @@ function SetBioStep({ onNext, onSkip }: { onNext: (bio: string) => void; onSkip:
 function SetPhotoStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }) {
   const [avatarUri, setAvatarUri] = useState<string | null>(null)
   const [saving,    setSaving]    = useState(false)
-  const { loadUser } = useAuthStore()
+  const { refreshUser } = useAuthStore()
   const { scale, bounce } = useBounce()
   const photoScale = useRef(new Animated.Value(1)).current
 
@@ -195,7 +195,7 @@ function SetPhotoStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => vo
         const form = new FormData()
         form.append('avatar', { uri: avatarUri, name: 'avatar.jpg', type: 'image/jpeg' } as any)
         await api.put('/users/profile', form, { headers: { 'Content-Type': 'multipart/form-data' } })
-        await loadUser()
+        await refreshUser()
       } catch {}
       setSaving(false)
       onNext()

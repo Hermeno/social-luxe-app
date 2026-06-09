@@ -9,12 +9,18 @@
     },
     "preview": {
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://luxe-la07.onrender.com"
+      },
       "ios": {
         "simulator": false
       }
     },
     "production": {
       "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://luxe-la07.onrender.com"
+      },
       "ios": {
         "resourceClass": "m-medium"
       }

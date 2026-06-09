@@ -20,6 +20,7 @@ export interface User {
   city?: string | null
   district?: string | null
   autoReply?: string | null
+  isAdmin?: boolean
 }
 
 export interface Post {
@@ -36,6 +37,7 @@ export interface Post {
   partnerUserId?: string | null
   partnerAccepted?: boolean
   partnerUser?: { id: string; name: string; avatar: string | null } | null
+  isAnnouncement?: boolean
   user: Pick<User, 'id' | 'name' | 'avatar' | 'viewsPublic'>
   _count: { likes: number; comments: number; shares: number; views: number }
 }

@@ -42,11 +42,13 @@ export default function CreateScreen() {
   const [textBg,  setTextBg]  = useState(TEXT_BG_COLORS[0])
   const [loading,        setLoading]        = useState(false)
   const [includePartner, setIncludePartner] = useState(false)
+  const [isAnnouncement, setIsAnnouncement] = useState(false)
   const textRef = useRef<TextInput>(null)
 
   const setPendingPost = useFeedStore((s) => s.setPendingPost)
   const { user } = useAuthStore()
   const hasPartner = !!(user?.partnerId && user?.partnerName)
+  const isAdmin = user?.isAdmin === true
 
   async function pickPhoto() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
@@ -60,14 +62,14 @@ export default function CreateScreen() {
     if (tab === 'text'  && !caption.trim()) return Alert.alert('', 'Escreve alguma coisa')
     setLoading(true)
     try {
-      const partnerId = hasPartner && includePartner ? user!.partnerId! : undefined
+      const partnerId = hasPartner && includePartner && !isAnnouncement ? user!.partnerId! : undefined
       const newPost = tab === 'photo'
-        ? await createPost(media!.uri, 'IMAGE', caption.trim() || undefined, undefined, partnerId)
-        : await createPost(null, 'TEXT', caption.trim(), textBg, partnerId)
+        ? await createPost(media!.uri, 'IMAGE', caption.trim() || undefined, undefined, partnerId, isAnnouncement)
+        : await createPost(null, 'TEXT', caption.trim(), textBg, partnerId, isAnnouncement)
       if (newPost) setPendingPost(newPost)
-      setMedia(null); setCaption(''); setTextBg(TEXT_BG_COLORS[0])
+      setMedia(null); setCaption(''); setTextBg(TEXT_BG_COLORS[0]); setIsAnnouncement(false)
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-      toast.success('Publicado!', 'Visível por 24 horas')
+      toast.success('Publicado!', isAnnouncement ? 'Anúncio oficial enviado para todos' : 'Visível por 24 horas')
       nav.navigate('Feed' as never)
     } catch (e: unknown) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
@@ -134,8 +136,8 @@ export default function CreateScreen() {
             />
           </View>
 
-          {/* Partner toggle — only if has an accepted partner */}
-          {hasPartner && (
+          {/* Partner toggle — only if has an accepted partner and not announcement */}
+          {hasPartner && !isAnnouncement && (
             <TouchableOpacity
               style={[s.partnerToggle, includePartner && s.partnerToggleActive]}
               onPress={() => setIncludePartner((v) => !v)}
@@ -152,9 +154,29 @@ export default function CreateScreen() {
             </TouchableOpacity>
           )}
 
+          {/* Announcement toggle — only for admins */}
+          {isAdmin && (
+            <TouchableOpacity
+              style={[s.partnerToggle, isAnnouncement && s.announcementActive]}
+              onPress={() => setIsAnnouncement((v) => !v)}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name={isAnnouncement ? 'megaphone' : 'megaphone-outline'}
+                size={16}
+                color={isAnnouncement ? '#fff' : '#E67E22'}
+              />
+              <Text style={[s.partnerToggleText, isAnnouncement && s.partnerToggleTextActive]}>
+                {isAnnouncement ? 'Anúncio Oficial · luxee' : 'Publicar como Anúncio'}
+              </Text>
+            </TouchableOpacity>
+          )}
+
           <View style={s.badge24h}>
             <Ionicons name="time-outline" size={12} color={PRIMARY} />
-            <Text style={s.badge24hText}>Esta publicação expira em 24h</Text>
+            <Text style={s.badge24hText}>
+              {isAnnouncement ? 'Anúncio visível para todos os utilizadores' : 'Esta publicação expira em 24h'}
+            </Text>
           </View>
         </ScrollView>
       )}
@@ -270,7 +292,8 @@ const s = StyleSheet.create({
     borderWidth: 1.5, borderColor: PRIMARY, borderRadius: 20,
     paddingHorizontal: 14, paddingVertical: 8, alignSelf: 'flex-start',
   },
-  partnerToggleActive: { backgroundColor: PRIMARY, borderColor: PRIMARY },
+  partnerToggleActive:   { backgroundColor: PRIMARY, borderColor: PRIMARY },
+  announcementActive:    { backgroundColor: '#E67E22', borderColor: '#E67E22' },
   partnerToggleText:   { fontSize: 13, fontFamily: fonts.semiBold, color: PRIMARY },
   partnerToggleTextActive: { color: '#fff' },
 

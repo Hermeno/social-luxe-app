@@ -41,6 +41,7 @@ import { AppStackParams } from '../../navigation/AppNavigator'
 import { colors, fonts } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
 import SegmentedRing from '../../components/SegmentedRing'
+import SpeechBadge from '../../components/SpeechBadge'
 
 type Nav = StackNavigationProp<AppStackParams>
 
@@ -49,8 +50,8 @@ const CARD_GAP  = 12
 const CARD_H_PAD = 16
 const CARD_W = (W - CARD_H_PAD * 2 - CARD_GAP) / 2
 
-const RING = 54
-const AVA  = 44
+const RING = 78
+const AVA  = 66
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -162,26 +163,23 @@ function QuickReplyBox({
   userName, onSend, onClose,
 }: {
   userName: string
-  onSend: (text: string) => Promise<void>
+  onSend: (text: string) => void
   onClose: () => void
 }) {
-  const [text,    setText]    = useState('')
-  const [sending, setSending] = useState(false)
+  const [text, setText] = useState('')
   const inputRef = useRef<TextInput>(null)
 
   useEffect(() => {
-    // Auto-focus after animation settles
     const t = setTimeout(() => inputRef.current?.focus(), 120)
     return () => clearTimeout(t)
   }, [])
 
-  async function handleSend() {
+  function handleSend() {
     const msg = text.trim()
-    if (!msg || sending) return
-    setSending(true)
-    await onSend(msg)
-    setSending(false)
+    if (!msg) return
     setText('')
+    onClose()   // fecha imediatamente — sem spinner
+    onSend(msg) // fire-and-forget
   }
 
   return (
@@ -211,14 +209,11 @@ function QuickReplyBox({
           multiline={false}
         />
         <TouchableOpacity
-          style={[q.sendBtn, (!text.trim() || sending) && q.sendBtnOff]}
+          style={[q.sendBtn, !text.trim() && q.sendBtnOff]}
           onPress={handleSend}
-          disabled={!text.trim() || sending}
+          disabled={!text.trim()}
         >
-          {sending
-            ? <ActivityIndicator size="small" color={colors.white} />
-            : <Ionicons name="send" size={15} color={colors.white} />
-          }
+          <Ionicons name="send" size={15} color={colors.white} />
         </TouchableOpacity>
       </View>
     </View>
@@ -235,7 +230,7 @@ function ConvoRow({ item, viewedIds, onPress, index, myUserId, isQuickOpen, onTo
   myUserId: string
   isQuickOpen: boolean
   onToggleQuick: () => void
-  onQuickSend: (text: string) => Promise<void>
+  onQuickSend: (text: string) => void
 }) {
   const hasMsg      = !!item.lastMessage
   const unread      = item.unreadCount > 0
@@ -563,41 +558,49 @@ export default function MessagesScreen() {
     Keyboard.dismiss()
   }
 
-  async function handleQuickSend(userId: string, userName: string, text: string) {
-    try {
-      const sent = await msgService.sendMessage(userId, text)
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+  function handleQuickSend(userId: string, userName: string, text: string) {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
 
-      const msgPatch = {
-        lastMessage: { id: sent.id, content: sent.content, senderId: user!.id, readAt: null, createdAt: sent.createdAt },
-        unreadCount: 0,
+    // Optimistic: update inbox instantly with a temp ID
+    const tempId = `pending-${Date.now()}`
+    const now    = new Date().toISOString()
+    const msgPatch = {
+      lastMessage: { id: tempId, content: text, senderId: user!.id, readAt: null, createdAt: now },
+      unreadCount: 0,
+    }
+
+    setConnections((prev) => {
+      const updated = prev.map((c) => c.user.id === userId ? { ...c, ...msgPatch } : c)
+      const idx = updated.findIndex((c) => c.user.id === userId)
+      if (idx > 0) {
+        const [item] = updated.splice(idx, 1)
+        return [item, ...updated]
       }
+      return updated
+    })
 
-      // Update state immediately
+    updateCachedConnection(userId, msgPatch, {
+      user: { id: userId, name: userName, avatar: null }, postIds: [],
+    }).catch(() => {})
+
+    // Fire-and-forget — UI já respondeu, API sincroniza em background
+    msgService.sendMessage(userId, text).then((sent) => {
+      // Substitui o tempId pelo ID real na inbox
       setConnections((prev) => {
-        const updated = prev.map((c) =>
-          c.user.id === userId ? { ...c, ...msgPatch } : c,
-        )
-        // Move to top
-        const idx = updated.findIndex((c) => c.user.id === userId)
-        if (idx > 0) {
-          const [item] = updated.splice(idx, 1)
-          return [item, ...updated]
+        const idx = prev.findIndex((c) => c.user.id === userId)
+        if (idx < 0) return prev
+        const updated = [...prev]
+        if (updated[idx].lastMessage?.id === tempId) {
+          updated[idx] = {
+            ...updated[idx],
+            lastMessage: { id: sent.id, content: sent.content, senderId: user!.id, readAt: null, createdAt: sent.createdAt },
+          }
         }
         return updated
       })
-
-      // Persist to SQLite
-      updateCachedConnection(userId, msgPatch, {
-        user: { id: userId, name: userName, avatar: null }, postIds: [],
-      }).catch(() => {})
-
-      // Close the quick reply form
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
-      setQuickReplyId(null)
-    } catch {
+    }).catch(() => {
       Toast.show({ type: 'error', text1: 'Erro ao enviar', text2: 'Tenta novamente.', visibilityTime: 2500 })
-    }
+    })
   }
 
   // ── Derived display state ─────────────────────────────────────────────────
@@ -613,10 +616,11 @@ export default function MessagesScreen() {
   }
 
   return (
+    <View style={[s.screen, { paddingTop: top }]}>
     <KeyboardAvoidingView
-      style={[s.screen, { paddingTop: top }]}
+      style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 8}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? top : 8}
     >
 
       {/* ── Header ──────────────────────────────────────────────────── */}
@@ -811,20 +815,20 @@ export default function MessagesScreen() {
           }
         />
       )}
-      {/* ── Floating home FAB ─────────────────────────────────────────────── */}
+    </KeyboardAvoidingView>
+
+      {/* ── Floating home FAB — fora do KeyboardAvoidingView, nunca sobe com teclado ── */}
       <TouchableOpacity
         style={[ms.homeFab, { bottom: bottom + 24 }]}
         onPress={() => nav.goBack()}
         activeOpacity={0.85}
       >
         <Ionicons name="home" size={28} color="#fff" />
-        {newPostsCount > 0 && (
-          <View style={ms.homeFabBadge}>
-            <Text style={ms.homeFabBadgeTxt}>{newPostsCount > 99 ? '99+' : newPostsCount}</Text>
-          </View>
-        )}
       </TouchableOpacity>
-    </KeyboardAvoidingView>
+      <View style={[ms.homeFabBadgePos, { bottom: bottom + 74 }]} pointerEvents="none">
+        <SpeechBadge count={newPostsCount} />
+      </View>
+    </View>
   )
 }
 
@@ -972,8 +976,8 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 18,
-    paddingVertical: 13,
-    gap: 14,
+    paddingVertical: 8,
+    gap: 16,
     backgroundColor: colors.white,
   },
   avatarWrap:  { width: RING, height: RING, alignItems: 'center', justifyContent: 'center' },
@@ -1136,13 +1140,13 @@ const ms = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
-  homeFabBadge: {
-    position: 'absolute', top: -4, right: -4,
-    minWidth: 20, height: 20, borderRadius: 10,
-    backgroundColor: '#FF3B30',
-    alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: 4,
-    borderWidth: 2, borderColor: '#fff',
+  // Badge sibling of FAB — bottom: fabBottom + fabHeight - overlap (bottom+24+62-12=bottom+74)
+  homeFabBadgePos: {
+    position: 'absolute',
+    right: 20,
+    width: 62,
+    alignItems: 'center',
+    zIndex: 31,
+    elevation: 10,
   },
-  homeFabBadgeTxt: { fontSize: 10, fontFamily: fonts.extraBold, color: '#fff', lineHeight: 12 },
 })

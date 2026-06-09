@@ -44,7 +44,7 @@ interface PartnerRequest {
 }
 
 export default function ProfileScreen() {
-  const { user: me, logout, loadUser } = useAuthStore()
+  const { user: me, logout, refreshUser } = useAuthStore()
   const nav   = useNavigation<Nav>()
   const route = useRoute<Route>()
   const { top, bottom } = useSafeAreaInsets()
@@ -166,7 +166,7 @@ export default function ProfileScreen() {
       setProfile(p); setPosts(freshPosts)
       setFollowerCount(followersRes.length); setFollowingCount(followingRes.length)
       setCache(`profile_posts:${targetId}`, freshPosts).catch(() => {})
-      if (isOwn) await loadUser()
+      if (isOwn) await refreshUser()
     } catch {}
   }
 
@@ -193,7 +193,7 @@ export default function ProfileScreen() {
     try {
       await api.put(`/users/partner-requests/${id}/${accept ? 'accept' : 'reject'}`)
       if (accept) {
-        await loadUser()
+        await refreshUser()
         setProfile((p) => p ? { ...p, ...me } : p)
       }
     } catch {
@@ -219,7 +219,7 @@ export default function ProfileScreen() {
     form.append('avatar', { uri, name: 'avatar.jpg', type: 'image/jpeg' } as any)
     try {
       await api.put('/users/profile', form, { headers: { 'Content-Type': 'multipart/form-data' } })
-      await loadUser()
+      await refreshUser()
     } catch {
       setProfile((prev) => prev ? { ...prev, avatar: me?.avatar ?? null } : prev)
       Alert.alert('Erro', 'Não foi possível actualizar a foto.')
@@ -472,6 +472,20 @@ function OwnHeader({ profile, me, postsCount, followerCount, followingCount, par
             <Text style={s.quickLabel}>{label}</Text>
           </TouchableOpacity>
         ))}
+      </View>
+
+      {/* ── Verificação + Sobre ── */}
+      <View style={s.extraRow}>
+        <TouchableOpacity style={s.verifiedBtn} onPress={() => onNavigate('Verified')} activeOpacity={0.85}>
+          <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
+          <Text style={s.verifiedBtnText}>
+            {profile?.verified ? 'Conta Verificada ✓' : 'Obter Verificação'}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.aboutBtn} onPress={() => onNavigate('About')} activeOpacity={0.85}>
+          <Ionicons name="information-circle-outline" size={18} color={colors.gray600} />
+          <Text style={s.aboutBtnText}>Sobre</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={s.gridHeader}>
@@ -747,7 +761,7 @@ const s = StyleSheet.create({
   // Quick actions
   quickRow: {
     flexDirection: 'row', gap: 10,
-    marginHorizontal: 16, marginBottom: 12,
+    marginHorizontal: 16, marginBottom: 10,
   },
   quickBtn: {
     flex: 1, alignItems: 'center', gap: 6,
@@ -755,6 +769,25 @@ const s = StyleSheet.create({
     paddingVertical: 14,
   },
   quickLabel: { fontSize: 10, fontFamily: fonts.medium, color: colors.gray600 },
+
+  // Verified + About row
+  extraRow: {
+    flexDirection: 'row', gap: 10,
+    marginHorizontal: 16, marginBottom: 12,
+  },
+  verifiedBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
+    backgroundColor: `${colors.primary}12`,
+    borderWidth: 1.5, borderColor: `${colors.primary}40`,
+    borderRadius: 12, paddingVertical: 11,
+  },
+  verifiedBtnText: { fontSize: 13, fontFamily: fonts.semiBold, color: colors.primary },
+  aboutBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    backgroundColor: colors.white, borderRadius: 12, paddingVertical: 11, paddingHorizontal: 16,
+    borderWidth: 1.5, borderColor: colors.gray200,
+  },
+  aboutBtnText: { fontSize: 13, fontFamily: fonts.semiBold, color: colors.gray600 },
 
   // Action buttons (other profile)
   actionRow: { flexDirection: 'row', gap: 10, width: '100%' },

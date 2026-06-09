@@ -9,7 +9,7 @@ const AVAILABILITY = ['Disponível', 'Ocupado', 'Ausente']
 interface Props { visible: boolean; onClose: () => void }
 
 export default function EditProfileSheet({ visible, onClose }: Props) {
-  const { user, loadUser } = useAuthStore()
+  const { user, refreshUser } = useAuthStore()
   const [name,        setName]        = useState(user?.name ?? '')
   const [bio,         setBio]         = useState(user?.bio ?? '')
   const [avail,       setAvail]       = useState(user?.availability ?? 'Disponível')
@@ -20,7 +20,7 @@ export default function EditProfileSheet({ visible, onClose }: Props) {
     setSaving(true)
     try {
       await api.put('/users/profile', { name, bio, availability: avail, viewsPublic })
-      await loadUser()
+      await refreshUser()
       onClose()
     } catch {} finally { setSaving(false) }
   }

@@ -20,6 +20,8 @@ import EditProfileScreen from '../screens/EditProfileScreen'
 import StoryViewerScreen from '../screens/StoryViewerScreen'
 import CreateStoryScreen from '../screens/CreateStoryScreen'
 import HighlightsScreen from '../screens/HighlightsScreen'
+import AboutScreen from '../screens/AboutScreen'
+import VerifiedScreen from '../screens/VerifiedScreen'
 import { Post } from '../types'
 import { StoryGroup } from '../services/story.service'
 
@@ -27,6 +29,8 @@ export type AppStackParams = {
   Tabs: undefined
   Profile: { userId?: string }
   Chat: { userId: string; userName: string; userAvatar: string | null }
+  About: undefined
+  Verified: undefined
   // COMMUNITY BLOCKED FOR LAUNCH
   // GroupChat: { groupId: string; groupName: string; groupAvatar?: string | null }
   // CreateGroup: undefined
@@ -83,6 +87,8 @@ export default function AppNavigator() {
       <Stack.Screen name="StoryViewer" component={StoryViewerScreen} />
       <Stack.Screen name="CreateStory" component={CreateStoryScreen} />
       <Stack.Screen name="Highlights" component={HighlightsScreen} />
+      <Stack.Screen name="About" component={AboutScreen} />
+      <Stack.Screen name="Verified" component={VerifiedScreen} />
     </Stack.Navigator>
   )
 }

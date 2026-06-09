@@ -12,9 +12,10 @@ export async function createPost(
   caption?: string,
   bgColor?: string,
   partnerUserId?: string,
+  isAnnouncement?: boolean,
 ) {
   if (mediaType === 'TEXT') {
-    const res = await api.post<ApiResponse<Post>>('/posts', { caption, bgColor, partnerUserId })
+    const res = await api.post<ApiResponse<Post>>('/posts', { caption, bgColor, partnerUserId, isAnnouncement })
     return res.data.data
   }
 
@@ -22,8 +23,9 @@ export async function createPost(
   const filename = mediaUri!.split('/').pop() ?? 'media'
   const type = mediaType === 'VIDEO' ? 'video/mp4' : 'image/jpeg'
   form.append('media', { uri: mediaUri, name: filename, type } as unknown as Blob)
-  if (caption)       form.append('caption', caption)
-  if (partnerUserId) form.append('partnerUserId', partnerUserId)
+  if (caption)        form.append('caption', caption)
+  if (partnerUserId)  form.append('partnerUserId', partnerUserId)
+  if (isAnnouncement) form.append('isAnnouncement', 'true')
   const res = await api.post<ApiResponse<Post>>('/posts', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })

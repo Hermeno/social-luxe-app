@@ -118,50 +118,51 @@ export default function ActionBar({
     onEdited?.(post.id, editText)
   }
 
+  const isAnnouncement = post.isAnnouncement ?? false
+
   return (
     <>
       {/* Vertical column — fixed position, right side */}
-      <View style={[s.column, { bottom: bottom + 120 }]}>
+      <View style={[s.column, { bottom: bottom + 155 }]}>
 
-        {/* Like — always visible */}
-        <TouchableOpacity
-          style={s.btn}
-          onPress={handleLike}
-          onLongPress={() => setShowReactions(true)}
-          activeOpacity={0.7}
-        >
-          <Ionicons
-            name={liked ? 'heart' : 'heart-outline'}
-            size={30}
-            color={liked ? '#FF4B6E' : '#fff'}
-            style={s.shadow}
-          />
-          <Text style={s.label}>{fmt(likeCount)}</Text>
-        </TouchableOpacity>
+        {/* Like — hidden for announcements */}
+        {!isAnnouncement && (
+          <TouchableOpacity
+            style={s.btn}
+            onPress={handleLike}
+            onLongPress={() => setShowReactions(true)}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name={liked ? 'heart' : 'heart-outline'}
+              size={30}
+              color={liked ? '#FF4B6E' : '#fff'}
+              style={s.shadow}
+            />
+            <Text style={s.label}>{fmt(likeCount)}</Text>
+          </TouchableOpacity>
+        )}
 
-        {/* Comment — always visible */}
-        <TouchableOpacity style={s.btn} onPress={onCommentPress} activeOpacity={0.7}>
-          <Ionicons name="chatbubble-ellipses" size={28} color="#fff" style={s.shadow} />
-          <Text style={s.label}>{fmt(commentCountProp ?? post._count?.comments ?? 0)}</Text>
-        </TouchableOpacity>
+        {/* Comment — hidden for announcements */}
+        {!isAnnouncement && (
+          <TouchableOpacity style={s.btn} onPress={onCommentPress} activeOpacity={0.7}>
+            <Ionicons name="chatbubble-outline" size={28} color="#fff" style={[s.shadow, s.mirrorX]} />
+            <Text style={s.label}>{fmt(commentCountProp ?? post._count?.comments ?? 0)}</Text>
+          </TouchableOpacity>
+        )}
 
-        {/* Share — always visible */}
-        <TouchableOpacity style={s.btn} onPress={handleShare} activeOpacity={0.7}>
-          <Ionicons name="paper-plane" size={28} color="#fff" style={s.shadow} />
-          <Text style={s.label}>{fmt(shareCount)}</Text>
-        </TouchableOpacity>
+        {/* Share — hidden for announcements */}
+        {!isAnnouncement && (
+          <TouchableOpacity style={s.btn} onPress={handleShare} activeOpacity={0.7}>
+            <Ionicons name="paper-plane" size={28} color="#fff" style={s.shadow} />
+            <Text style={s.label}>{fmt(shareCount)}</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Views — always occupies space; count shown only when authorized */}
-        <View style={s.btn}>
-          <Ionicons
-            name="eye"
-            size={28}
-            color={(isSelf || post.user.viewsPublic) ? '#fff' : 'transparent'}
-            style={s.shadow}
-          />
-          <Text style={[s.label, !(isSelf || post.user.viewsPublic) && { opacity: 0 }]}>
-            {fmt(post._count?.views ?? 0)}
-          </Text>
+        <View style={[s.btn, { opacity: (isSelf || post.user.viewsPublic) ? 1 : 0 }]}>
+          <Ionicons name="eye" size={28} color="#fff" style={s.shadow} />
+          <Text style={s.label}>{fmt(post._count?.views ?? 0)}</Text>
         </View>
 
         {/* Timer — always visible */}
@@ -178,20 +179,15 @@ export default function ActionBar({
 
         {/* Options — always occupies space; visible only for author */}
         <TouchableOpacity
-          style={s.btn}
+          style={[s.btn, { opacity: isSelf ? 1 : 0 }]}
           onPress={() => { if (isSelf) { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowMenu(true) } }}
           activeOpacity={isSelf ? 0.7 : 1}
         >
-          <Ionicons
-            name="ellipsis-horizontal"
-            size={24}
-            color={isSelf ? 'rgba(255,255,255,0.85)' : 'transparent'}
-            style={s.shadow}
-          />
+          <Ionicons name="ellipsis-horizontal" size={24} color="rgba(255,255,255,0.85)" style={s.shadow} />
         </TouchableOpacity>
       </View>
 
-      {showReactions && (
+      {showReactions && !isAnnouncement && (
         <Modal transparent animationType="none" visible onRequestClose={() => setShowReactions(false)}>
           <ReactionPicker postId={post.id} currentReaction={undefined} onClose={() => setShowReactions(false)} />
         </Modal>
@@ -263,11 +259,11 @@ const s = StyleSheet.create({
     gap: 4,
   },
   shadow: {
-    // icon drop shadow via text shadow (works on Ionicons which renders as text)
     textShadowColor: 'rgba(0,0,0,0.6)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 5,
   } as any,
+  mirrorX: { transform: [{ scaleX: -1 }] },
   label: {
     color: '#fff',
     fontFamily: fonts.semiBold,

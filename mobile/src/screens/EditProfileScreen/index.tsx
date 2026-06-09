@@ -54,7 +54,7 @@ const RELATIONSHIP_STATUS = [
 export default function EditProfileScreen() {
   const nav = useNavigation<Nav>()
   const { top, bottom } = useSafeAreaInsets()
-  const { user, loadUser } = useAuthStore()
+  const { user, refreshUser } = useAuthStore()
 
   const [name,                 setName]                 = useState(user?.name ?? '')
   const [bio,                  setBio]                  = useState(user?.bio ?? '')
@@ -147,7 +147,7 @@ export default function EditProfileScreen() {
         }
       }
 
-      await loadUser()
+      await refreshUser()
       nav.goBack()
     } catch {
       Alert.alert('Erro', 'Não foi possível guardar as alterações.')

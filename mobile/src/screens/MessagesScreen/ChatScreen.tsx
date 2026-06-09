@@ -284,19 +284,29 @@ export default function ChatScreen() {
         const fresh = await msgService.getMessages(userId, 1)
         if (cancelled) return
         const sorted = [...fresh].reverse()
+
         setMessages((prev) => {
-          const pendingLocal = prev.filter((m) => m._pending || m._failed)
-          const freshIds     = new Set(sorted.map((m) => m.id))
-          const pending      = pendingLocal.filter((m) => !freshIds.has(m.id))
-          const olderCached  = prev.filter((m) => !m._pending && !m._failed && !freshIds.has(m.id))
+          const pendingLocal   = prev.filter((m) => m._pending || m._failed)
+          const freshIds       = new Set(sorted.map((m) => m.id))
+          const pending        = pendingLocal.filter((m) => !freshIds.has(m.id))
+
+          // Só actualiza o estado se houver mensagens realmente novas — evita re-render desnecessário
+          const prevNonPending = prev.filter((m) => !m._pending && !m._failed)
+          const prevIds        = new Set(prevNonPending.map((m) => m.id))
+          const hasNew         = sorted.some((m) => !prevIds.has(m.id))
+          if (!hasNew && pending.length === pendingLocal.length) return prev
+
+          const olderCached = prevNonPending.filter((m) => !freshIds.has(m.id))
           const merged = [...olderCached, ...sorted, ...pending]
           merged.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
           return merged
         })
+
         await Promise.all([
           cacheMessages(userId, sorted).catch(() => {}),
           setSyncMeta(syncKey, String(Date.now())).catch(() => {}),
         ])
+        // Só faz scroll se havia mensagens novas — scroll silencioso
         setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 80)
       } catch {}
     }
@@ -523,7 +533,7 @@ export default function ChatScreen() {
         style={t.list}
         contentContainerStyle={t.listContent}
         showsVerticalScrollIndicator={false}
-        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+        maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
         renderItem={({ item }) =>
           item.kind === 'date'
             ? <DateSep label={item.label} />
