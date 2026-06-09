@@ -31,13 +31,23 @@ export async function getUserById(req: AuthRequest, res: Response) {
 
 export async function updateProfile(req: AuthRequest, res: Response) {
   try {
-    const { name, bio, availability, lat, lng } = req.body
+    const {
+      name, bio, availability, lat, lng, viewsPublic,
+      contact, defaultFollowDuration, relationshipStatus,
+      partnerName, partnerId, city, district, autoReply,
+    } = req.body
     let avatar: string | undefined
     if (req.file) {
       avatar = await uploadToCloudinary(req.file.buffer, req.file.mimetype, 'luxe/avatars')
     }
     const location = lat != null && lng != null ? { lat: parseFloat(lat), lng: parseFloat(lng) } : {}
-    const user = await userService.updateProfile(req.user!.userId, { name, bio, avatar, availability, ...location })
+    const extra = viewsPublic != null ? { viewsPublic: viewsPublic === true || viewsPublic === 'true' } : {}
+    const user = await userService.updateProfile(req.user!.userId, {
+      name, bio, avatar, availability,
+      ...location, ...extra,
+      contact, defaultFollowDuration, relationshipStatus,
+      partnerName, partnerId, city, district, autoReply,
+    })
     return ok(res, user)
   } catch (err) { return handleError(res, err) }
 }

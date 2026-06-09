@@ -8,8 +8,11 @@ const router = Router()
 
 router.use(authMiddleware)
 
-router.get('/feed', postController.getFeed)
-router.get('/flashback', postController.getFlashback)
+router.get('/feed',            postController.getFeed)
+router.get('/flashback',       postController.getFlashback)
+router.get('/partner-pending', postController.getPartnerPostInvites)
+router.put('/:id/partner-accept', postController.acceptPostPartner)
+router.put('/:id/partner-reject', postController.rejectPostPartner)
 router.post('/', upload.single('media'), postController.createPost)
 router.delete('/:id', postController.deletePost)
 router.patch('/:id', postController.updatePost)

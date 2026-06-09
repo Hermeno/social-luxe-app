@@ -27,11 +27,33 @@ export async function searchUsers(query: string, currentUserId: string) {
   })
 }
 
-export async function updateProfile(userId: string, data: { name?: string; bio?: string; avatar?: string; availability?: string; lat?: number; lng?: number }) {
+export async function updateProfile(userId: string, data: {
+  name?: string
+  bio?: string
+  avatar?: string
+  availability?: string
+  lat?: number
+  lng?: number
+  viewsPublic?: boolean
+  contact?: string
+  defaultFollowDuration?: string
+  relationshipStatus?: string
+  partnerName?: string
+  partnerId?: string
+  city?: string
+  district?: string
+  autoReply?: string
+}) {
   return prisma.user.update({
     where: { id: userId },
     data,
-    select: { id: true, name: true, phone: true, countryCode: true, avatar: true, bio: true, availability: true, createdAt: true },
+    select: {
+      id: true, name: true, phone: true, countryCode: true,
+      avatar: true, bio: true, availability: true, viewsPublic: true,
+      contact: true, defaultFollowDuration: true, relationshipStatus: true,
+      partnerName: true, partnerId: true, city: true, district: true,
+      autoReply: true, createdAt: true,
+    },
   })
 }
 

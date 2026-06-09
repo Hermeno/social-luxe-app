@@ -24,17 +24,22 @@ export function setupSocket(httpServer: HttpServer): Server {
     }
   })
 
-  io.on('connection', (socket: Socket & { userId?: string }) => {
+  io.on('connection', async (socket: Socket & { userId?: string }) => {
     const userId = socket.userId!
 
-    // Add to online users map
     onlineUsers.set(userId, socket.id)
     socket.join(userId)
 
-    // Send current online users list to the newly connected client
-    socket.emit('users:online:snapshot', { userIds: Array.from(onlineUsers.keys()) })
+    // Auto-join all group rooms so messages arrive without explicit group:join
+    try {
+      const memberships = await prisma.groupMember.findMany({
+        where: { userId },
+        select: { groupId: true },
+      })
+      memberships.forEach(({ groupId }) => socket.join(`group:${groupId}`))
+    } catch {}
 
-    // Notify all other connected clients that this user is online
+    socket.emit('users:online:snapshot', { userIds: Array.from(onlineUsers.keys()) })
     socket.broadcast.emit('user:online', { userId })
 
     // ── message:typing ──────────────────────────────────────────────────────
@@ -45,44 +50,51 @@ export function setupSocket(httpServer: HttpServer): Server {
     // ── message:read ────────────────────────────────────────────────────────
     socket.on('message:read', async ({ messageId, senderId }: { messageId: string; senderId: string }) => {
       try {
-        await prisma.message.update({
-          where: { id: messageId },
-          data: { readAt: new Date() },
-        })
+        await prisma.message.update({ where: { id: messageId }, data: { readAt: new Date() } })
         io.to(senderId).emit('message:read', { messageId })
-      } catch {
-        // silently ignore db errors in socket context
-      }
+      } catch {}
+    })
+
+    // ── group:join ──────────────────────────────────────────────────────────
+    // Client calls this after creating a group or when navigating into one
+    socket.on('group:join', ({ groupId }: { groupId: string }) => {
+      socket.join(`group:${groupId}`)
+    })
+
+    // ── group:leave ─────────────────────────────────────────────────────────
+    socket.on('group:leave', ({ groupId }: { groupId: string }) => {
+      socket.leave(`group:${groupId}`)
     })
 
     // ── group:message ───────────────────────────────────────────────────────
+    // Broadcasts via room — O(1) vs O(n members) with individual emits
     socket.on(
       'group:message',
-      async ({
-        groupId,
-        content,
-        mediaUrl,
-      }: {
-        groupId: string
-        content?: string
-        mediaUrl?: string
-      }) => {
+      async ({ groupId, content, replyToId }: { groupId: string; content?: string; replyToId?: string }) => {
         try {
+          const member = await prisma.groupMember.findUnique({
+            where: { groupId_userId: { groupId, userId } },
+          })
+          if (!member) return
+
           const message = await prisma.groupMessage.create({
-            data: { groupId, senderId: userId, content, mediaUrl },
-            include: { sender: { select: { id: true, name: true, avatar: true } } },
+            data: { groupId, senderId: userId, content, replyToId: replyToId ?? null },
+            include: {
+              sender:  { select: { id: true, name: true, avatar: true } },
+              replyTo: { include: { sender: { select: { id: true, name: true, avatar: true } } } },
+            },
           })
 
-          // Emit to all group members
-          const members = await prisma.groupMember.findMany({ where: { groupId } })
-          members.forEach((m) => {
-            io.to(m.userId).emit('group:message:new', { groupId, message })
-          })
-        } catch {
-          // silently ignore
-        }
+          // socket.to() excludes the sender — they already see the message locally
+          socket.to(`group:${groupId}`).emit('group:message:new', { groupId, message })
+        } catch {}
       },
     )
+
+    // ── group:typing ────────────────────────────────────────────────────────
+    socket.on('group:typing', ({ groupId, isTyping }: { groupId: string; isTyping: boolean }) => {
+      socket.to(`group:${groupId}`).emit('group:typing', { groupId, userId, isTyping })
+    })
 
     // ── disconnect ──────────────────────────────────────────────────────────
     socket.on('disconnect', () => {

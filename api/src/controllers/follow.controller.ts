@@ -5,6 +5,14 @@ import { sendPush } from '../services/notification.service'
 import { ok, badRequest } from '../utils/response'
 import { handleError } from '../utils/errors'
 
+function calcExpiresAt(duration?: string): Date | null {
+  const now = new Date()
+  if (duration === '1d') { now.setDate(now.getDate() + 1); return now }
+  if (duration === '1m') { now.setMonth(now.getMonth() + 1); return now }
+  if (duration === '1y') { now.setFullYear(now.getFullYear() + 1); return now }
+  return null
+}
+
 export async function followUser(req: Request, res: Response) {
   try {
     const followerId  = req.user!.userId
@@ -21,7 +29,8 @@ export async function followUser(req: Request, res: Response) {
       return ok(res, { following: false })
     }
 
-    await prisma.follow.create({ data: { followerId, followingId } })
+    const expiresAt = calcExpiresAt(req.body?.duration)
+    await prisma.follow.create({ data: { followerId, followingId, expiresAt } })
 
     const follower = await prisma.user.findUnique({ where: { id: followerId }, select: { name: true } })
     sendPush(followingId, '👤 Novo seguidor', `${follower?.name} começou a seguir-te`, { type: 'follow', userId: followerId }).catch(() => {})
@@ -34,12 +43,16 @@ export async function followUser(req: Request, res: Response) {
 
 export async function getFollowStatus(req: Request, res: Response) {
   try {
-    const followerId  = req.user!.userId
-    const followingId = req.params.id
-    const existing = await prisma.follow.findUnique({
-      where: { followerId_followingId: { followerId, followingId } },
-    })
-    return ok(res, { following: !!existing })
+    const viewerId  = req.user!.userId
+    const profileId = req.params.id
+    const now = new Date()
+    const [iFollow, theyFollow] = await Promise.all([
+      prisma.follow.findUnique({ where: { followerId_followingId: { followerId: viewerId,  followingId: profileId } } }),
+      prisma.follow.findUnique({ where: { followerId_followingId: { followerId: profileId, followingId: viewerId  } } }),
+    ])
+    const following = !!iFollow   && (iFollow.expiresAt   === null || iFollow.expiresAt   > now)
+    const followsMe = !!theyFollow && (theyFollow.expiresAt === null || theyFollow.expiresAt > now)
+    return ok(res, { following, followsMe })
   } catch (err) {
     return handleError(res, err, 'getFollowStatus')
   }

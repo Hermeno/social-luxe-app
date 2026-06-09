@@ -10,13 +10,18 @@ export async function createPost(
   mediaType: MediaType,
   caption?: string,
   bgColor?: string,
+  partnerUserId?: string,
+  isAnnouncement?: boolean,
 ) {
-  const expiresAt = new Date(Date.now() + POST_INITIAL_HOURS * 60 * 60 * 1000)
+  const expiresAt = isAnnouncement
+    ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000) // announcements last 1 year
+    : new Date(Date.now() + POST_INITIAL_HOURS * 60 * 60 * 1000)
   const post = await prisma.post.create({
-    data: { userId, mediaUrl, mediaType, caption, bgColor, expiresAt },
+    data: { userId, mediaUrl, mediaType, caption, bgColor, expiresAt, partnerUserId: partnerUserId ?? null, isAnnouncement: isAnnouncement ?? false },
     include: {
-      user:   { select: { id: true, name: true, avatar: true } },
-      _count: { select: { likes: true, comments: true, shares: true, views: true } },
+      user:        { select: { id: true, name: true, avatar: true, viewsPublic: true } },
+      partnerUser: { select: { id: true, name: true, avatar: true } },
+      _count:      { select: { likes: true, comments: true, shares: true, views: true } },
     },
   })
   return withThumbnail(post)
@@ -37,32 +42,42 @@ export async function getFeed(userId: string, page = 1, limit = 10) {
   const now = new Date()
   const baseWhere = { deletedAt: null, expiresAt: { gt: now } }
   const include = {
-    user: { select: { id: true, name: true, avatar: true } },
-    _count: { select: { likes: true, comments: true, shares: true, views: true } },
+    user:        { select: { id: true, name: true, avatar: true, viewsPublic: true, isAdmin: true } },
+    partnerUser: { select: { id: true, name: true, avatar: true } },
+    _count:      { select: { likes: true, comments: true, shares: true, views: true } },
   }
 
-  // Get blocked user IDs (both directions)
-  const [blocksGiven, blocksReceived, currentUser, followingRows] = await Promise.all([
+  // Get blocked user IDs (both directions) + connections (both follow directions)
+  const [blocksGiven, blocksReceived, currentUser, followRows] = await Promise.all([
     prisma.block.findMany({ where: { blockerId: userId }, select: { blockedId: true } }),
     prisma.block.findMany({ where: { blockedId: userId }, select: { blockerId: true } }),
     prisma.user.findUnique({ where: { id: userId }, select: { lat: true, lng: true } }),
-    prisma.follow.findMany({ where: { followerId: userId }, select: { followingId: true } }),
+    // Connections = union of following + followers (same base as Messages)
+    prisma.follow.findMany({
+      where: { OR: [{ followerId: userId }, { followingId: userId }] },
+      select: { followerId: true, followingId: true },
+    }),
   ])
 
   const blockedIds = new Set([
     ...blocksGiven.map((b) => b.blockedId),
     ...blocksReceived.map((b) => b.blockerId),
   ])
-  const followingIds = followingRows.map((f) => f.followingId)
 
-  // Users with posts the current user follows
-  const hasFollowing = followingIds.length > 0
+  // Collect all connected user IDs (both directions, excluding self)
+  const connectedSet = new Set<string>()
+  for (const f of followRows) {
+    if (f.followerId  !== userId) connectedSet.add(f.followerId)
+    if (f.followingId !== userId) connectedSet.add(f.followingId)
+  }
+  const connectionIds = Array.from(connectedSet)
+  const hasConnections = connectionIds.length > 0
 
-  if (hasFollowing) {
-    // Personalised feed: people I follow + own posts, excluding blocked
-    const allowedIds = [...followingIds, userId].filter((id) => !blockedIds.has(id))
+  if (hasConnections) {
+    // Personalised feed: all connections + own posts, excluding blocked
+    const allowedIds = [...connectionIds, userId].filter((id) => !blockedIds.has(id))
     const posts = await prisma.post.findMany({
-      where: { ...baseWhere, userId: { in: allowedIds } },
+      where: { ...baseWhere, OR: [{ userId: { in: allowedIds } }, { isAnnouncement: true }] },
       include,
       orderBy: { createdAt: 'desc' },
       skip: (page - 1) * limit,
@@ -97,7 +112,7 @@ export async function getFeed(userId: string, page = 1, limit = 10) {
     if (nearbyIds.length > 0) {
       const nearbyWithSelf = [...new Set([...nearbyIds, userId])].filter((id) => !blockedIds.has(id))
       const posts = await prisma.post.findMany({
-        where: { ...baseWhere, userId: { in: nearbyWithSelf } },
+        where: { ...baseWhere, OR: [{ userId: { in: nearbyWithSelf } }, { isAnnouncement: true }] },
         include,
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,
@@ -109,7 +124,7 @@ export async function getFeed(userId: string, page = 1, limit = 10) {
 
   // Fallback: global feed — own posts always included
   const posts = await prisma.post.findMany({
-    where: { ...baseWhere, userId: { notIn: [...blockedIds] } },
+    where: { ...baseWhere, OR: [{ userId: { notIn: [...blockedIds] } }, { isAnnouncement: true }] },
     include,
     orderBy: { createdAt: 'desc' },
     skip: (page - 1) * limit,
@@ -223,7 +238,7 @@ export async function getFlashback(userId: string) {
       createdAt: { gte: rangeStart, lte: rangeEnd },
     },
     include: {
-      user: { select: { id: true, name: true, avatar: true } },
+      user: { select: { id: true, name: true, avatar: true, viewsPublic: true } },
       _count: { select: { likes: true, comments: true, shares: true, views: true } },
     },
     orderBy: { createdAt: 'desc' },

@@ -51,9 +51,19 @@ model User {
   bio          String?
   availability String?  @default("Disponível")
   ghostMode    Boolean  @default(false)
-  coinBalance  Int      @default(0)
+  viewsPublic          Boolean  @default(false)
+  coinBalance          Int      @default(0)
+  contact              String?
+  defaultFollowDuration String? @default("forever")
+  relationshipStatus   String?
+  partnerName          String?
+  partnerId            String?
+  city                 String?
+  district             String?
+  autoReply            String?
   lat          Float?
   lng          Float?
+  isAdmin      Boolean  @default(false)
   createdAt    DateTime @default(now())
 
   posts            Post[]
@@ -89,23 +99,30 @@ model User {
   collabPostsB     CollabPost[]        @relation("CollabB")
   following        Follow[]            @relation("Follower")
   followers        Follow[]            @relation("Following")
+  sentPartnerReqs     PartnerRequest[] @relation("SentPartnerReqs")
+  receivedPartnerReqs PartnerRequest[] @relation("ReceivedPartnerReqs")
+  partnerPosts     Post[]              @relation("PostPartner")
 }
 
 // ─── Post ────────────────────────────────────────────────────────────────────
 
 model Post {
-  id        String    @id @default(cuid())
-  userId    String
-  mediaUrl  String?   // null for TEXT posts
-  mediaType MediaType
-  caption   String?
-  bgColor   String?   // background colour for TEXT posts
-  expiresAt DateTime
-  extended  Boolean   @default(false)
-  deletedAt DateTime?
-  createdAt DateTime  @default(now())
+  id              String    @id @default(cuid())
+  userId          String
+  mediaUrl        String?
+  mediaType       MediaType
+  caption         String?
+  bgColor         String?
+  expiresAt       DateTime
+  extended        Boolean   @default(false)
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  partnerUserId   String?
+  partnerAccepted Boolean   @default(false)
+  isAnnouncement  Boolean   @default(false)
 
   user        User             @relation(fields: [userId], references: [id])
+  partnerUser User?            @relation("PostPartner", fields: [partnerUserId], references: [id])
   likes       Like[]
   comments    Comment[]
   shares      Share[]
@@ -253,12 +270,19 @@ model MessageReaction {
   @@unique([messageId, userId])
 }
 
+enum GroupType {
+  COMMUNITY
+  GROUP
+}
+
 model GroupChat {
-  id        String         @id @default(cuid())
-  name      String
-  avatar    String?
-  createdBy String
-  createdAt DateTime       @default(now())
+  id          String    @id @default(cuid())
+  name        String
+  avatar      String?
+  description String?
+  type        GroupType @default(COMMUNITY)
+  createdBy   String
+  createdAt   DateTime  @default(now())
 
   creator  User           @relation("GroupCreator", fields: [createdBy], references: [id])
   members  GroupMember[]
@@ -272,8 +296,8 @@ model GroupMember {
   isAdmin  Boolean   @default(false)
   joinedAt DateTime  @default(now())
 
-  group GroupChat @relation(fields: [groupId], references: [id])
-  user  User      @relation(fields: [userId], references: [id])
+  group GroupChat @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User      @relation(fields: [userId],  references: [id], onDelete: Cascade)
 
   @@unique([groupId, userId])
 }
@@ -283,11 +307,13 @@ model GroupMessage {
   groupId   String
   senderId  String
   content   String?
-  mediaUrl  String?
+  replyToId String?
   createdAt DateTime @default(now())
 
-  group  GroupChat @relation(fields: [groupId], references: [id])
-  sender User      @relation("GroupSender", fields: [senderId], references: [id])
+  group   GroupChat     @relation(fields: [groupId],   references: [id], onDelete: Cascade)
+  sender  User          @relation("GroupSender",        fields: [senderId],  references: [id], onDelete: Cascade)
+  replyTo GroupMessage? @relation("GroupReplies",       fields: [replyToId], references: [id], onDelete: SetNull)
+  replies GroupMessage[] @relation("GroupReplies")
 }
 
 // ─── Stories ─────────────────────────────────────────────────────────────────
@@ -472,15 +498,32 @@ model CollabPost {
 // ─── Follow ───────────────────────────────────────────────────────────────────
 
 model Follow {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   followerId  String
   followingId String
-  createdAt   DateTime @default(now())
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
 
   follower  User @relation("Follower",  fields: [followerId],  references: [id], onDelete: Cascade)
   following User @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
 
   @@unique([followerId, followingId])
+}
+
+// ─── Partner Request ─────────────────────────────────────────────────────────
+
+model PartnerRequest {
+  id         String   @id @default(cuid())
+  senderId   String
+  receiverId String
+  status     String   @default("pending")  // "pending" | "accepted" | "rejected"
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  sender   User @relation("SentPartnerReqs",     fields: [senderId],   references: [id], onDelete: Cascade)
+  receiver User @relation("ReceivedPartnerReqs", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, receiverId])
 }
 
 // ─── PasswordReset ────────────────────────────────────────────────────────────

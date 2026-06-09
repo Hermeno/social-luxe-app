@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import * as userController from '../controllers/user.controller'
 import * as followController from '../controllers/follow.controller'
+import { sendPartnerRequest, getPartnerRequests, acceptPartnerRequest, rejectPartnerRequest, removePartner } from '../controllers/partner.controller'
 import { authMiddleware } from '../middlewares/auth.middleware'
 import { upload } from '../middlewares/upload.middleware'
 
@@ -17,6 +18,11 @@ router.get('/followers', followController.getMyFollowers)
 router.get('/following', followController.getMyFollowing)
 router.put('/profile', upload.single('avatar'), userController.updateProfile)
 router.put('/ghost-mode', userController.toggleGhostMode)
+router.post('/partner-request',              sendPartnerRequest)
+router.get('/partner-requests',              getPartnerRequests)
+router.put('/partner-requests/:id/accept',   acceptPartnerRequest)
+router.put('/partner-requests/:id/reject',   rejectPartnerRequest)
+router.delete('/partner',                    removePartner)
 router.get('/:id', userController.getUserById)
 router.get('/:id/posts', userController.getUserPosts)
 router.get('/:id/followers', followController.getUserFollowers)

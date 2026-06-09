@@ -27,10 +27,29 @@ export async function createPost(req: AuthRequest, res: Response) {
       mediaUrl  = await uploadToCloudinary(file.buffer, file.mimetype, 'luxe/posts')
     }
 
-    const post = await postService.createPost(req.user!.userId, mediaUrl, mediaType, caption, bgColor)
+    // Include partner if user has an accepted partner and opted in
+    const { partnerUserId: requestedPartner, isAnnouncement: rawAnnouncement } = req.body
+    let partnerUserId: string | null = null
+    if (requestedPartner) {
+      const me = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { partnerId: true } })
+      if (me?.partnerId === requestedPartner) partnerUserId = requestedPartner
+    }
+
+    let isAnnouncement = false
+    if (rawAnnouncement === true || rawAnnouncement === 'true') {
+      const me = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { isAdmin: true } })
+      if (!me?.isAdmin) return forbidden(res, 'Apenas administradores podem publicar anúncios')
+      isAnnouncement = true
+    }
+
+    const post = await postService.createPost(req.user!.userId, mediaUrl, mediaType, caption, bgColor, partnerUserId ?? undefined, isAnnouncement)
+
+    // Notify partner of post invitation
+    if (partnerUserId) {
+      sendPush(partnerUserId, '💑 Foste incluído/a num post', 'O teu parceiro publicou algo contigo. Aceita ou rejeita.', { type: 'post_partner_invite', postId: post.id }).catch(() => {})
+    }
 
     // ── Real-time push to all followers via WebSocket ─────────────────────────
-    // Fire-and-forget: don't block the HTTP response
     ;(async () => {
       try {
         const followers = await prisma.follow.findMany({
@@ -48,6 +67,43 @@ export async function createPost(req: AuthRequest, res: Response) {
     console.error('[createPost]', err)
     return serverError(res)
   }
+}
+
+// GET /posts/partner-pending — posts where I'm invited as partner but haven't responded
+export async function getPartnerPostInvites(req: AuthRequest, res: Response) {
+  try {
+    const posts = await prisma.post.findMany({
+      where: { partnerUserId: req.user!.userId, partnerAccepted: false, deletedAt: null },
+      include: {
+        user: { select: { id: true, name: true, avatar: true, viewsPublic: true } },
+        _count: { select: { likes: true, comments: true, shares: true, views: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+    return ok(res, posts)
+  } catch (err) { return handleError(res, err, 'getPartnerPostInvites') }
+}
+
+// PUT /posts/:id/partner-accept
+export async function acceptPostPartner(req: AuthRequest, res: Response) {
+  try {
+    const myId = req.user!.userId
+    const post = await prisma.post.findUnique({ where: { id: req.params.id } })
+    if (!post || post.partnerUserId !== myId) return badRequest(res, 'Convite não encontrado')
+    await prisma.post.update({ where: { id: req.params.id }, data: { partnerAccepted: true } })
+    return ok(res, { accepted: true })
+  } catch (err) { return handleError(res, err, 'acceptPostPartner') }
+}
+
+// PUT /posts/:id/partner-reject
+export async function rejectPostPartner(req: AuthRequest, res: Response) {
+  try {
+    const myId = req.user!.userId
+    const post = await prisma.post.findUnique({ where: { id: req.params.id } })
+    if (!post || post.partnerUserId !== myId) return badRequest(res, 'Convite não encontrado')
+    await prisma.post.update({ where: { id: req.params.id }, data: { partnerUserId: null } })
+    return ok(res, { rejected: true })
+  } catch (err) { return handleError(res, err, 'rejectPostPartner') }
 }
 
 export async function getFeed(req: AuthRequest, res: Response) {
