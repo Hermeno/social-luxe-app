@@ -1,12 +1,13 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
 import {
-  View, Text, FlatList, StyleSheet,
-  KeyboardAvoidingView, Platform, Animated, Pressable, TouchableOpacity, Modal,
+  View, Text, FlatList, StyleSheet, ImageBackground,
+  KeyboardAvoidingView, Platform, Animated, Pressable, TouchableOpacity, Modal, StatusBar, AppState,
 } from 'react-native'
 import { Image } from 'expo-image'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
-import { RouteProp, useNavigation, useRoute } from '@react-navigation/native'
+import { RouteProp, useNavigation, useRoute, useFocusEffect } from '@react-navigation/native'
+import { StackNavigationProp } from '@react-navigation/stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Message, MessageReaction } from '../../types'
 import * as msgService from '../../services/message.service'
@@ -17,6 +18,9 @@ import { AppStackParams } from '../../navigation/AppNavigator'
 import { colors, spacing, radius, fonts } from '../../theme'
 import ChatHeader from './ChatHeader'
 import ChatInputBar from './ChatInputBar'
+import ScheduleMessageModal from './ScheduleMessageModal'
+import * as scheduledSvc from '../../services/scheduledMessages.service'
+import Toast from 'react-native-toast-message'
 import { API_BASE } from '../../config'
 import {
   getCachedMessages,
@@ -29,9 +33,13 @@ import {
 } from '../../db/database'
 import { isConnected } from '../../services/netinfo.service'
 
-type Route = RouteProp<AppStackParams, 'Chat'>
+type Route  = RouteProp<AppStackParams, 'Chat'>
+type NavProp = StackNavigationProp<AppStackParams>
 
-const CHAT_BG = '#FFFFFF'
+const CHAT_BG        = '#FFFFFF'
+const MINE_COLOR     = '#4C8CE4'
+const THEIRS_COLOR   = '#F0F2F5'
+const WALLPAPER_TILE = require('../../../assets/preview_light.png')
 const REACTION_EMOJIS = ['❤️', '😂', '😮', '😢', '🔥', '👏']
 
 function formatTime(dateStr: string) {
@@ -158,15 +166,20 @@ function MessageBubble({ msg, mine, isFirst, isLast, myUserId, onLongPress, onRe
     ? (msg.mediaUrl.startsWith('http') ? msg.mediaUrl : `${API_BASE}${msg.mediaUrl}`)
     : null
 
-  const myReaction = msg.reactions?.find((r) => r.userId === myUserId)?.emoji
   const allReactions = msg.reactions ?? []
+  const isFile = !mediaUri && !!msg.content && !!msg.content.match(/\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|zip|rar)$/i)
+  const isText = !!msg.content && !isFile
 
   return (
+    // FIX: row must be flex:1 so that maxWidth:'80%' on bubbleOuter
+    // is relative to the full screen width — prevents text going vertical
     <View style={[t.row, mine ? t.rowRight : t.rowLeft, !isLast && t.rowCompact]}>
-      <View style={{ alignItems: mine ? 'flex-end' : 'flex-start' }}>
+      <View style={[t.bubbleOuter, mine ? t.bubbleOuterMine : t.bubbleOuterTheirs]}>
+
         <Pressable
           onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); onLongPress(msg) }}
           delayLongPress={350}
+          onPress={() => onReply(msg)}
         >
           <View style={[
             t.bubble,
@@ -177,7 +190,9 @@ function MessageBubble({ msg, mine, isFirst, isLast, myUserId, onLongPress, onRe
             isLast  && !mine && t.bubbleTheirsLast,
             msg._pending && t.bubblePending,
           ]}>
+
             {msg.replyTo && <ReplyQuote replyTo={msg.replyTo} mine={mine} />}
+
             {mediaUri && (
               <Image
                 source={{ uri: mediaUri }}
@@ -188,23 +203,28 @@ function MessageBubble({ msg, mine, isFirst, isLast, myUserId, onLongPress, onRe
                 transition={100}
               />
             )}
-            {/* Document / file attachment */}
-            {!mediaUri && msg.content && msg.content.match(/\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|zip|rar)$/i) && (
-              <FileCard fileName={msg.content} mine={mine} />
+
+            {isFile && <FileCard fileName={msg.content!} mine={mine} />}
+
+            {isText && (
+              <Text style={[t.msgText, mine ? t.msgMine : t.msgTheirs]}>
+                {msg.content}
+              </Text>
             )}
-            {msg.content && !msg.content.match(/\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|zip|rar)$/i) ? (
-              <Text style={[t.msgText, mine ? t.msgMine : t.msgTheirs]}>{msg.content}</Text>
-            ) : !mediaUri && !msg.content ? null : null}
-            <View style={t.metaRow}>
-              <Text style={[t.time, mine && t.timeMine]}>{formatTime(msg.createdAt)}</Text>
+
+            {/* Time + status — inline at bottom-right */}
+            <View style={[t.metaRow, mine ? t.metaRowMine : t.metaRowTheirs]}>
+              <Text style={[t.time, mine ? t.timeMine : t.timeTheirs]}>
+                {formatTime(msg.createdAt)}
+              </Text>
               {mine && (
                 msg._failed
-                  ? <Ionicons name="alert-circle" size={12} color="#FF6B6B" />
+                  ? <Ionicons name="alert-circle"    size={12} color="#FF6B6B" />
                   : msg._pending
-                    ? <Ionicons name="checkmark" size={13} color="rgba(255,255,255,0.35)" />
+                    ? <Ionicons name="checkmark"      size={12} color="rgba(255,255,255,0.4)" />
                     : msg.readAt
-                      ? <Ionicons name="checkmark-done" size={13} color="#4FC3F7" />
-                      : <Ionicons name="checkmark-done" size={13} color="rgba(255,255,255,0.5)" />
+                      ? <Ionicons name="checkmark-done" size={12} color="#7DD3FC" />
+                      : <Ionicons name="checkmark-done" size={12} color="rgba(255,255,255,0.55)" />
               )}
             </View>
           </View>
@@ -229,9 +249,7 @@ function MessageBubble({ msg, mine, isFirst, isLast, myUserId, onLongPress, onRe
 function DateSep({ label }: { label: string }) {
   return (
     <View style={t.dateSepWrap}>
-      <View style={t.dateLine} />
       <Text style={t.dateSepTxt}>{label}</Text>
-      <View style={t.dateLine} />
     </View>
   )
 }
@@ -242,7 +260,7 @@ type LocalMessage = Message & { _pending?: boolean; _failed?: boolean }
 export default function ChatScreen() {
   const { user }   = useAuthStore()
   const route      = useRoute<Route>()
-  const nav        = useNavigation()
+  const nav        = useNavigation<NavProp>()
   const { userId, userName, userAvatar } = route.params
 
   const [messages, setMessages]         = useState<LocalMessage[]>([])
@@ -250,70 +268,72 @@ export default function ChatScreen() {
   const [isTyping, setIsTyping]         = useState(false)
   const [replyingTo, setReplyingTo]     = useState<Message | null>(null)
   const [emojiTargetMsg, setEmojiTargetMsg] = useState<Message | null>(null)
+  const [showScheduler, setShowScheduler]   = useState(false)
+  const [scheduledMsg, setScheduledMsg]     = useState<scheduledSvc.ScheduledMessage | null>(null)
 
   const listRef     = useRef<FlatList>(null)
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { bottom, top } = useSafeAreaInsets()
   const isOnline        = useOnlineStore((s) => s.isOnline(userId))
 
+  // Tracks whether we've done the first scroll-to-end for this session
+  const initialScrollRef = useRef(false)
+
   // ── Load: SQLite first → background network sync (5-min TTL) ────────────
-  useEffect(() => {
-    let cancelled = false
-    const SYNC_TTL = 5 * 60 * 1000 // 5 minutes
+  const loadMessages = useCallback(async (ignoreCache = false) => {
+    const SYNC_TTL = 5 * 60 * 1000
     const syncKey  = `chat_sync_${userId}`
 
-    async function load() {
-      // 1. Serve from SQLite immediately (zero latency)
-      const [cached, lastSyncStr] = await Promise.all([
-        getCachedMessages(userId).catch(() => [] as LocalMessage[]),
-        getSyncMeta(syncKey).catch(() => null),
-      ])
+    const [cached, lastSyncStr] = await Promise.all([
+      getCachedMessages(userId).catch(() => [] as LocalMessage[]),
+      getSyncMeta(syncKey).catch(() => null),
+    ])
 
-      if (!cancelled && cached.length > 0) {
-        setMessages(cached)
-        setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 50)
-      }
-
-      // 2. Skip API if cache is fresh (< 5 min) and we have messages
-      const cacheAge = lastSyncStr ? Date.now() - parseInt(lastSyncStr, 10) : Infinity
-      if (cached.length > 0 && cacheAge < SYNC_TTL) return
-
-      // 3. Background: fetch latest page from server
-      if (!isConnected()) return
-      try {
-        const fresh = await msgService.getMessages(userId, 1)
-        if (cancelled) return
-        const sorted = [...fresh].reverse()
-
-        setMessages((prev) => {
-          const pendingLocal   = prev.filter((m) => m._pending || m._failed)
-          const freshIds       = new Set(sorted.map((m) => m.id))
-          const pending        = pendingLocal.filter((m) => !freshIds.has(m.id))
-
-          // Só actualiza o estado se houver mensagens realmente novas — evita re-render desnecessário
-          const prevNonPending = prev.filter((m) => !m._pending && !m._failed)
-          const prevIds        = new Set(prevNonPending.map((m) => m.id))
-          const hasNew         = sorted.some((m) => !prevIds.has(m.id))
-          if (!hasNew && pending.length === pendingLocal.length) return prev
-
-          const olderCached = prevNonPending.filter((m) => !freshIds.has(m.id))
-          const merged = [...olderCached, ...sorted, ...pending]
-          merged.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-          return merged
-        })
-
-        await Promise.all([
-          cacheMessages(userId, sorted).catch(() => {}),
-          setSyncMeta(syncKey, String(Date.now())).catch(() => {}),
-        ])
-        // Só faz scroll se havia mensagens novas — scroll silencioso
-        setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 80)
-      } catch {}
+    if (cached.length > 0) {
+      setMessages(cached)
     }
 
-    load()
-    return () => { cancelled = true }
+    const cacheAge = lastSyncStr ? Date.now() - parseInt(lastSyncStr, 10) : Infinity
+    if (!ignoreCache && cached.length > 0 && cacheAge < SYNC_TTL) return
+
+    if (!isConnected()) return
+    try {
+      const fresh = await msgService.getMessages(userId, 1)
+      const sorted = [...fresh].reverse()
+
+      setMessages((prev) => {
+        const pendingLocal   = prev.filter((m) => m._pending || m._failed)
+        const freshIds       = new Set(sorted.map((m) => m.id))
+        const pending        = pendingLocal.filter((m) => !freshIds.has(m.id))
+        const prevNonPending = prev.filter((m) => !m._pending && !m._failed)
+        const prevIds        = new Set(prevNonPending.map((m) => m.id))
+        const hasNew         = sorted.some((m) => !prevIds.has(m.id))
+        if (!hasNew && pending.length === pendingLocal.length) return prev
+        const olderCached = prevNonPending.filter((m) => !freshIds.has(m.id))
+        const merged = [...olderCached, ...sorted, ...pending]
+        merged.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+        return merged
+      })
+
+      await Promise.all([
+        cacheMessages(userId, sorted).catch(() => {}),
+        setSyncMeta(syncKey, String(Date.now())).catch(() => {}),
+      ])
+    } catch {}
   }, [userId])
+
+  useEffect(() => {
+    initialScrollRef.current = false
+    loadMessages()
+  }, [loadMessages])
+
+  // Reload messages when app comes back from background (catches missed messages while inactive)
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') loadMessages(true)
+    })
+    return () => sub.remove()
+  }, [loadMessages])
 
   // ── Socket events ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -388,6 +408,90 @@ export default function ChatScreen() {
     ).catch(() => {})
   }
 
+  // ── Scheduled messages ────────────────────────────────────────────────────
+  const loadScheduled = useCallback(async () => {
+    const msgs = await scheduledSvc.getFor(userId)
+    setScheduledMsg(msgs.length > 0 ? msgs[0] : null)
+  }, [userId])
+
+  async function handleScheduleMessage(content: string, scheduledAt: Date) {
+    await scheduledSvc.add(userId, userName, content, scheduledAt)
+    await loadScheduled()
+    const time = scheduledAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    const label = scheduledAt.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+    Toast.show({
+      type: 'success',
+      text1: 'Mensagem agendada ✓',
+      text2: `Será enviada ${label} às ${time}`,
+      visibilityTime: 3500,
+    })
+  }
+
+  async function handleCancelScheduled() {
+    if (!scheduledMsg) return
+    await scheduledSvc.cancel(scheduledMsg.id)
+    setScheduledMsg(null)
+    setShowScheduler(false)
+    Toast.show({ type: 'info', text1: 'Agendamento cancelado', visibilityTime: 2500 })
+  }
+
+  const checkAndSendDue = useCallback(async () => {
+    const due = await scheduledSvc.getDue(userId)
+    for (const sm of due) {
+      try {
+        const sent = await msgService.sendMessage(sm.receiverId, sm.content)
+        await scheduledSvc.markSent(sm.id)
+        setScheduledMsg(null)
+
+        setMessages((prev) => {
+          if (prev.find((m) => m.id === sent.id)) return prev
+          return [...prev, sent]
+        })
+        upsertCachedMessage(userId, sent).catch(() => {})
+        setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80)
+
+        Toast.show({
+          type: 'success',
+          text1: '📬 Mensagem agendada enviada',
+          text2: sm.content.length > 40 ? sm.content.slice(0, 40) + '...' : sm.content,
+          visibilityTime: 3000,
+        })
+      } catch (err: any) {
+        const status = err?.response?.status
+        if (status === 404 || status === 410) {
+          // Receiver account was deleted — cancel and notify
+          await scheduledSvc.markCancelled(sm.id, 'user_deleted')
+          setScheduledMsg(null)
+          Toast.show({
+            type: 'error',
+            text1: 'Mensagem agendada cancelada',
+            text2: 'A conta do destinatário foi removida.',
+            visibilityTime: 4000,
+          })
+        }
+      }
+    }
+  }, [userId])
+
+  // Check on screen focus + load scheduled state
+  useFocusEffect(useCallback(() => {
+    checkAndSendDue()
+    loadScheduled()
+    scheduledSvc.cleanup().catch(() => {})
+  }, [checkAndSendDue, loadScheduled]))
+
+  // Check every 30 seconds while screen is open + on app foreground
+  useEffect(() => {
+    const interval = setInterval(checkAndSendDue, 30_000)
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') checkAndSendDue()
+    })
+    return () => {
+      clearInterval(interval)
+      sub.remove()
+    }
+  }, [checkAndSendDue])
+
   // ── Send: optimistic → API → confirm ──────────────────────────────────────
   async function handleSendFile(fileUri: string, mimeType: string, fileName: string) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
@@ -418,10 +522,13 @@ export default function ChatScreen() {
       const sent = await msgService.sendMessage(userId, isImage ? undefined : fileName, fileUri, undefined, mimeType, fileName)
       setMessages((prev) => prev.map((m) => m.id === tempId ? sent : m))
       await replacePendingMessage(tempId, sent, userId).catch(() => {})
-    } catch {
+    } catch (err: any) {
       setMessages((prev) => prev.map((m) =>
         m.id === tempId ? { ...m, _pending: false, _failed: true } : m,
       ))
+      if (err?.response?.status === 404 || err?.response?.status === 410) {
+        Toast.show({ type: 'error', text1: 'Conta removida', text2: 'Este utilizador apagou a sua conta.', visibilityTime: 3500 })
+      }
     }
   }
 
@@ -466,12 +573,14 @@ export default function ChatScreen() {
       const sent = await msgService.sendMessage(userId, content, undefined, replyToId)
       setMessages((prev) => prev.map((m) => m.id === tempId ? sent : m))
       await replacePendingMessage(tempId, sent, userId).catch(() => {})
-    } catch {
+    } catch (err: any) {
       setMessages((prev) => prev.map((m) =>
         m.id === tempId ? { ...m, _pending: false, _failed: true } : m,
       ))
-      // Mark as failed in SQLite too
       upsertCachedMessage(userId, { ...optimistic, _pending: false, _failed: true } as unknown as Message).catch(() => {})
+      if (err?.response?.status === 404 || err?.response?.status === 410) {
+        Toast.show({ type: 'error', text1: 'Conta removida', text2: 'Este utilizador apagou a sua conta.', visibilityTime: 3500 })
+      }
     }
   }
 
@@ -513,152 +622,232 @@ export default function ChatScreen() {
   })
 
   return (
-    <KeyboardAvoidingView
-      style={[t.screen, { paddingTop: top }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-    >
-      <ChatHeader
-        userName={userName}
-        avatarUri={userAvatar ?? null}
-        isOnline={isOnline}
-        isTyping={isTyping}
-        onBack={() => nav.goBack()}
-      />
+    <View style={[t.screen, { paddingTop: top }]}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? top : 0}
+      >
+        <ChatHeader
+          userName={userName}
+          avatarUri={userAvatar ?? null}
+          isOnline={isOnline}
+          isTyping={isTyping}
+          onBack={() => nav.goBack()}
+          onSchedule={() => setShowScheduler(true)}
+          onProfilePress={() => nav.navigate('Profile', { userId })}
+          hasScheduled={!!scheduledMsg}
+        />
 
-      <FlatList
-        ref={listRef}
-        data={items}
-        keyExtractor={(item) => item.kind === 'msg' ? item.msg.id : item.key}
-        style={t.list}
-        contentContainerStyle={t.listContent}
-        showsVerticalScrollIndicator={false}
-        maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
-        renderItem={({ item }) =>
-          item.kind === 'date'
-            ? <DateSep label={item.label} />
-            : <MessageBubble
-                msg={item.msg}
-                mine={item.mine}
-                isFirst={item.isFirst}
-                isLast={item.isLast}
-                myUserId={user?.id ?? ''}
-                onLongPress={setEmojiTargetMsg}
-                onReply={setReplyingTo}
-              />
-        }
-      />
+        <ImageBackground
+          source={WALLPAPER_TILE}
+          resizeMode="repeat"
+          style={t.wallpaper}
+        >
+          <FlatList
+            ref={listRef}
+            data={items}
+            keyExtractor={(item) => item.kind === 'msg' ? item.msg.id : item.key}
+            style={t.list}
+            contentContainerStyle={t.listContent}
+            showsVerticalScrollIndicator={false}
+            maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+            onContentSizeChange={() => {
+              if (!initialScrollRef.current && items.length > 0) {
+                initialScrollRef.current = true
+                listRef.current?.scrollToEnd({ animated: false })
+              }
+            }}
+            renderItem={({ item }) =>
+              item.kind === 'date'
+                ? <DateSep label={item.label} />
+                : <MessageBubble
+                    msg={item.msg}
+                    mine={item.mine}
+                    isFirst={item.isFirst}
+                    isLast={item.isLast}
+                    myUserId={user?.id ?? ''}
+                    onLongPress={setEmojiTargetMsg}
+                    onReply={setReplyingTo}
+                  />
+            }
+          />
 
-      {isTyping && <TypingBubble />}
+          {isTyping && <TypingBubble />}
+        </ImageBackground>
 
-      <ChatInputBar
-        value={text}
-        onChange={handleTextChange}
-        onSend={handleSend}
-        onSendFile={handleSendFile}
-        paddingBottom={bottom + 4}
-        otherUserId={userId}
-        replyingTo={replyingTo ? {
-          senderName: replyingTo.sender.name,
-          content: replyingTo.content,
-        } : null}
-        onCancelReply={() => setReplyingTo(null)}
-      />
+        <ChatInputBar
+          value={text}
+          onChange={handleTextChange}
+          onSend={handleSend}
+          onSendFile={handleSendFile}
+          otherUserId={userId}
+          replyingTo={replyingTo ? {
+            senderName: replyingTo.sender.name,
+            content: replyingTo.content,
+          } : null}
+          onCancelReply={() => setReplyingTo(null)}
+          onSchedulePress={() => setShowScheduler(true)}
+        />
 
-      {emojiTargetMsg && (
-        <Modal transparent animationType="fade" visible onRequestClose={() => setEmojiTargetMsg(null)}>
-          <EmojiPicker onPick={handleReact} onClose={() => setEmojiTargetMsg(null)} />
-        </Modal>
-      )}
-    </KeyboardAvoidingView>
+        {emojiTargetMsg && (
+          <Modal transparent animationType="fade" visible onRequestClose={() => setEmojiTargetMsg(null)}>
+            <EmojiPicker onPick={handleReact} onClose={() => setEmojiTargetMsg(null)} />
+          </Modal>
+        )}
+
+        <ScheduleMessageModal
+          visible={showScheduler}
+          receiverName={userName.split(' ')[0]}
+          existingMessage={scheduledMsg}
+          onClose={() => setShowScheduler(false)}
+          onSchedule={handleScheduleMessage}
+          onCancelScheduled={handleCancelScheduled}
+        />
+      </KeyboardAvoidingView>
+
+      {/* Safe-area spacer — outside KAV so it's never affected by keyboard events */}
+      {bottom > 0 && <View style={{ height: bottom, backgroundColor: colors.white }} />}
+    </View>
   )
 }
 
 // ── Styles ─────────────────────────────────────────────────────────────────────
-const MINE_COLOR   = colors.primary   // Brand blue — "bom dia" looks clean and on-brand
-const THEIRS_COLOR = '#F0F2F5'        // Warm light gray — softer than pure white
-const R = 20
+const R = 18   // base border radius
 
 const t = StyleSheet.create({
   screen:      { flex: 1, backgroundColor: CHAT_BG },
-  list:        { flex: 1 },
-  listContent: { paddingHorizontal: 14, paddingVertical: spacing.md, gap: 1 },
+  wallpaper:   { flex: 1, backgroundColor: CHAT_BG },
+  list:        { flex: 1, backgroundColor: 'transparent' },
+  listContent: { paddingHorizontal: 12, paddingTop: 12, paddingBottom: 16 },
 
-  row:        { flexDirection: 'row', marginBottom: 3 },
+  // ── Row: must be flex:1 so maxWidth on bubbleOuter works against full width ──
+  row:        { flex: 1, flexDirection: 'row', marginBottom: 4 },
   rowRight:   { justifyContent: 'flex-end' },
   rowLeft:    { justifyContent: 'flex-start' },
   rowCompact: { marginBottom: 1 },
 
+  // ── Outer wrapper — constrain to 80% of screen width (fixes vertical text) ──
+  bubbleOuter:      { maxWidth: '80%' },
+  bubbleOuterMine:  { alignItems: 'flex-end' },
+  bubbleOuterTheirs:{ alignItems: 'flex-start' },
+
+  // ── Bubble ────────────────────────────────────────────────────────────────
   bubble: {
-    maxWidth: '78%',
-    paddingHorizontal: 14,
-    paddingVertical: 9,
     borderRadius: R,
+    paddingHorizontal: 13,
+    paddingTop: 9,
+    paddingBottom: 7,
   },
-  // Mine: brand blue, sharp top-right corner on first, sharp bottom-right on last
-  bubbleMine:   { backgroundColor: MINE_COLOR },
-  bubbleTheirs: { backgroundColor: THEIRS_COLOR },
-  bubbleMineFirst:    { borderTopRightRadius: 5 },
-  bubbleMineLast:     { borderBottomRightRadius: 5 },
-  bubbleTheirsFirst:  { borderTopLeftRadius: 5 },
-  bubbleTheirsLast:   { borderBottomLeftRadius: 5 },
-  bubblePending:      { opacity: 0.6 },
+  bubbleMine: {
+    backgroundColor: MINE_COLOR,
+    ...Platform.select({
+      ios:     { shadowColor: MINE_COLOR, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.28, shadowRadius: 6 },
+      android: { elevation: 2 },
+    }),
+  },
+  bubbleTheirs: {
+    backgroundColor: THEIRS_COLOR,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.07)',
+    ...Platform.select({
+      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4 },
+      android: { elevation: 1 },
+    }),
+  },
 
-  mediaBubble: { width: 220, height: 220, borderRadius: R - 4, marginBottom: 4 },
+  // Tail corners: flatten one corner to hint at message direction
+  bubbleMineFirst:   { borderTopRightRadius: 4 },
+  bubbleMineLast:    { borderBottomRightRadius: 4 },
+  bubbleTheirsFirst: { borderTopLeftRadius: 4 },
+  bubbleTheirsLast:  { borderBottomLeftRadius: 4 },
+  bubblePending:     { opacity: 0.55 },
 
-  msgText:   { fontSize: 15, lineHeight: 22, fontFamily: fonts.regular, letterSpacing: 0.1 },
+  mediaBubble: { width: 220, height: 220, borderRadius: R - 4, marginBottom: 5 },
+
+  // ── Text ─────────────────────────────────────────────────────────────────
+  msgText:   {
+    fontSize: 15,
+    lineHeight: 22,
+    fontFamily: fonts.regular,
+    flexShrink: 1,   // ensures text wraps horizontally, never collapses
+  },
   msgMine:   { color: '#FFFFFF' },
-  msgTheirs: { color: colors.gray800 },
+  msgTheirs: { color: '#1A1A1A' },
 
-  metaRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4, marginTop: 3 },
-  time:     { fontSize: 10, color: 'rgba(0,0,0,0.3)', fontFamily: fonts.regular },
-  timeMine: { color: 'rgba(255,255,255,0.55)' },
-
-  replyQuote: {
-    borderLeftWidth: 3, paddingLeft: 9, paddingVertical: 2,
-    marginBottom: 7, borderRadius: 2,
+  // ── Meta row (time + tick) ────────────────────────────────────────────────
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 3,
+    marginTop: 3,
   },
-  replyQuoteMine:   { borderLeftColor: 'rgba(255,255,255,0.6)', backgroundColor: 'rgba(255,255,255,0.1)' },
-  replyQuoteTheirs: { borderLeftColor: colors.primary, backgroundColor: `${colors.primary}10` },
-  replyQuoteName:   { fontSize: 11, fontFamily: fonts.semiBold, color: colors.primary, marginBottom: 1 },
-  replyQuoteNameMine: { color: 'rgba(255,255,255,0.8)' },
-  replyQuoteText:   { fontSize: 12, fontFamily: fonts.regular, color: 'rgba(0,0,0,0.45)' },
-  replyQuoteTextMine: { color: 'rgba(255,255,255,0.6)' },
+  metaRowMine:   {},
+  metaRowTheirs: {},
+  time:       { fontSize: 10, fontFamily: fonts.regular },
+  timeMine:   { color: 'rgba(255,255,255,0.6)' },
+  timeTheirs: { color: 'rgba(0,0,0,0.35)' },
 
+  // ── Reply quote ───────────────────────────────────────────────────────────
+  replyQuote: {
+    borderLeftWidth: 3, paddingLeft: 8, paddingVertical: 3,
+    marginBottom: 7, borderRadius: 4,
+  },
+  replyQuoteMine:      { borderLeftColor: 'rgba(255,255,255,0.7)', backgroundColor: 'rgba(255,255,255,0.12)' },
+  replyQuoteTheirs:    { borderLeftColor: colors.primary,          backgroundColor: `${colors.primary}0F` },
+  replyQuoteName:      { fontSize: 11, fontFamily: fonts.semiBold, color: colors.primary, marginBottom: 1 },
+  replyQuoteNameMine:  { color: 'rgba(255,255,255,0.85)' },
+  replyQuoteText:      { fontSize: 12, fontFamily: fonts.regular, color: 'rgba(0,0,0,0.4)' },
+  replyQuoteTextMine:  { color: 'rgba(255,255,255,0.65)' },
+
+  // ── Reactions ─────────────────────────────────────────────────────────────
   reactStrip: {
     flexDirection: 'row', alignItems: 'center', gap: 2,
-    marginTop: 4, paddingHorizontal: 7, paddingVertical: 3,
+    marginTop: 3, paddingHorizontal: 8, paddingVertical: 3,
     backgroundColor: colors.white, borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth, borderColor: colors.gray200,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 3 },
+      android: { elevation: 1 },
+    }),
   },
   reactStripRight: { alignSelf: 'flex-end' },
   reactStripLeft:  { alignSelf: 'flex-start' },
-  reactEmoji:      { fontSize: 14 },
-  reactCount:      { fontSize: 11, color: colors.gray600, fontFamily: fonts.medium },
+  reactEmoji:      { fontSize: 13 },
+  reactCount:      { fontSize: 11, color: colors.gray600, fontFamily: fonts.semiBold },
 
-  emojiOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center' },
+  // ── Emoji picker ──────────────────────────────────────────────────────────
+  emojiOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
   emojiRow: {
-    flexDirection: 'row', gap: 4, backgroundColor: colors.white,
-    borderRadius: 44, paddingHorizontal: 14, paddingVertical: 10,
-    borderWidth: StyleSheet.hairlineWidth, borderColor: colors.gray200,
+    flexDirection: 'row', gap: 2, backgroundColor: colors.white,
+    borderRadius: 48, paddingHorizontal: 12, paddingVertical: 10,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12 },
+      android: { elevation: 8 },
+    }),
   },
   emojiBtn:  { padding: 8 },
   emojiText: { fontSize: 26 },
 
-  dateSepWrap: { flexDirection: 'row', alignItems: 'center', marginVertical: 16, gap: 10 },
-  dateLine:    { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(0,0,0,0.1)' },
+  // ── Date separator ────────────────────────────────────────────────────────
+  dateSepWrap: { justifyContent: 'center', alignItems: 'center', marginVertical: 14 },
+  dateLine:    { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(0,0,0,0.08)' },
   dateSepTxt:  {
-    fontSize: 11, color: 'rgba(0,0,0,0.35)', fontFamily: fonts.medium,
-    backgroundColor: '#E8EAF0', paddingHorizontal: 12, paddingVertical: 4,
-    borderRadius: 12,
+    fontSize: 12, color: '#ABABAB', fontFamily: fonts.medium,
+    backgroundColor: '#F2F2F7', paddingHorizontal: 12, paddingVertical: 4,
+    borderRadius: 10,
   },
 
-  typingWrap:   { paddingHorizontal: spacing.md, paddingBottom: 4 },
+  // ── Typing dots ───────────────────────────────────────────────────────────
+  typingWrap:   { paddingHorizontal: 12, paddingBottom: 4 },
   typingBubble: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: THEIRS_COLOR, alignSelf: 'flex-start',
-    paddingHorizontal: 16, paddingVertical: 12, borderRadius: R,
-    borderTopLeftRadius: 4,
+    backgroundColor: THEIRS_COLOR,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 16, paddingVertical: 12,
+    borderRadius: R, borderTopLeftRadius: 4,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(0,0,0,0.07)',
   },
   dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.gray400 },
 })

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import { View, ActivityIndicator, AppState, AppStateStatus } from 'react-native'
-import { NavigationContainer } from '@react-navigation/native'
+import { View, ActivityIndicator, Image, AppState, AppStateStatus } from 'react-native'
+import { NavigationContainer, DefaultTheme } from '@react-navigation/native'
 import Toast from 'react-native-toast-message'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useAuthStore } from '../store/auth.store'
@@ -83,14 +83,17 @@ export default function RootNavigator() {
 
   if (isLoading || (isAuthenticated && onboardingDone === null)) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.black }}>
-        <ActivityIndicator color={colors.primary} size="large" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#4C8CE4' }}>
+        <Image
+          source={require('../../assets/splash-logo.png')}
+          style={{ width: 160, height: 160, resizeMode: 'contain' }}
+        />
       </View>
     )
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={{ ...DefaultTheme, colors: { ...DefaultTheme.colors, background: '#FFFFFF' } }}>
       {!isAuthenticated
         ? <AuthNavigator />
         : !onboardingDone

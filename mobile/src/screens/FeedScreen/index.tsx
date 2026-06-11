@@ -9,19 +9,20 @@ import {
   StyleSheet,
   Dimensions,
   Animated,
+  InteractionManager,
 } from 'react-native'
 import { Image } from 'expo-image'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
-import { useFocusEffect, useIsFocused } from '@react-navigation/native'
+import { useFocusEffect } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { Search, MessageCircle, User } from 'lucide-react-native'
-import SpeechBadge from '../../components/SpeechBadge'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { Post } from '../../types'
 import { useFeed } from '../../hooks/useFeed'
+import { useAuthStore } from '../../store/auth.store'
 import { useFeedStore } from '../../store/feed.store'
 import { useOnlineStore } from '../../store/online.store'
 import { useNotificationStore } from '../../store/notification.store'
@@ -52,6 +53,16 @@ interface UserGroup {
 
 function resolveMedia(url: string) {
   return url.startsWith('http') ? url : `${API_BASE}${url}`
+}
+
+function viewerTimeAgo(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime()
+  const m = Math.floor(diff / 60000)
+  if (m < 1)  return 'agora'
+  if (m < 60) return `há ${m}m`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `há ${h}h`
+  return `há ${Math.floor(h / 24)}d`
 }
 
 // ─── Ripple rings (online presence — contained inside the avatar circle) ────
@@ -151,7 +162,6 @@ function BubbleItem({
               count={item.posts.length}
               viewedCount={viewedCount}
               size={RING_SIZE}
-              strokeWidth={2}
             />
             {/* Avatar + ripple contained inside the circle */}
             <View style={s.avatarCenter}>
@@ -215,8 +225,8 @@ function ProgressBars({ count, current, progress }: {
 export default function FeedScreen() {
   const { posts, refresh, loadMore, prependPost, removePost, updatePost, incrementView } = useFeed()
   const nav                = useNavigation<Nav>()
+  const { user }           = useAuthStore()
   const { top, bottom }    = useSafeAreaInsets()
-  const isFocused          = useIsFocused()
   const messageBadge = useMessageBadgeStore((s) => s.totalUnread)
 
   // Consume a post published from CreateScreen → prepend instantly
@@ -245,7 +255,9 @@ export default function FeedScreen() {
   const [viewerW, setViewerW] = useState(SCREEN_W)
   const [viewerH, setViewerH] = useState(SCREEN_H)
   const [imgH,    setImgH]    = useState<number | null>(null)
-  const [commentDelta, setCommentDelta] = useState(0)
+  // Per-post comment and like deltas — persists while FeedScreen stays mounted
+  const [commentDeltas, setCommentDeltas] = useState<Record<string, number>>({})
+  const [likedPostIds,  setLikedPostIds]  = useState<Set<string>>(new Set())
 
   // Thumbnail → full-media crossfade opacity
   const mediaOpacity = useRef(new Animated.Value(0)).current
@@ -258,8 +270,34 @@ export default function FeedScreen() {
 
   // Keep refs in sync for callbacks that can't depend on state
   const postRef      = useRef<Post | undefined>(undefined)
-  const isFocusedRef = useRef(isFocused)
-  isFocusedRef.current = isFocused
+  const isFocusedRef = useRef(false)
+
+  // Tracks the last post we set up playback for — used to distinguish
+  // "new post" from "same post, focus regained" in the playback effect
+  const prevPostIdRef = useRef<string | null>(null)
+  // True when FeedScreen blurred because a stack screen was pushed on top.
+  // Detected at blur-time by inspecting the parent AppStack route count so
+  // ALL navigate-to-Profile calls are covered, regardless of which component
+  // triggered the navigation (PostInfo, header, bubble names, etc.).
+  const cameFromStackRef = useRef(false)
+
+  // Detect when AppStack pushes a screen on top of Tabs (Profile, Chat, etc.).
+  // Using parent 'state' event fires AFTER state is updated — the old 'blur' listener
+  // fired BEFORE the new route was added, so parentRoutes.length was still 1 (wrong).
+  useEffect(() => {
+    const parentNav = nav.getParent()
+    if (!parentNav) return
+    const unsub = (parentNav as any).addListener('state', (e: any) => {
+      const routes: any[] = e.data?.state?.routes ?? []
+      if (routes.length > 1) {
+        cameFromStackRef.current = true
+        if (postRef.current?.mediaType === 'VIDEO') {
+          mediaOpacity.setValue(0)
+        }
+      }
+    })
+    return unsub
+  }, [nav])
 
   // Track progress value continuously
   useEffect(() => {
@@ -411,17 +449,28 @@ export default function FeedScreen() {
     progressRef.current.start(({ finished }) => { if (finished) goNextRef.current() })
   }
 
+  const resumeFromCurrentRef = useRef(resumeFromCurrent)
+  resumeFromCurrentRef.current = resumeFromCurrent
+
   // ── Main playback effect (new post or focus change) ───────────────────────
   useEffect(() => {
+    const isNewPost = post?.id !== prevPostIdRef.current
+    prevPostIdRef.current = post?.id ?? null
+
     progressRef.current?.stop()
     safePlayer(() => player.pause())
-    progressAnim.setValue(0)
-    progressValueRef.current = 0
-    mediaOpacity.setValue(0)
-    setImgH(null)
-    setCommentDelta(0)
 
-    if (!post || !isFocused) return
+    // Only wipe media state when the post actually changed.
+    // When the same post regains focus (e.g. returning from Profile), skip
+    // the reset so there is no black flash before the media reappears.
+    if (isNewPost) {
+      progressAnim.setValue(0)
+      progressValueRef.current = 0
+      mediaOpacity.setValue(0)
+      setImgH(null)
+    }
+
+    if (!post || !isFocusedRef.current) return
 
     // Persist view — local cache + server counter + optimistic update
     if (!viewedIds.has(post.id)) {
@@ -432,6 +481,12 @@ export default function FeedScreen() {
     }
 
     if (commentPost) return
+
+    // Same post, focus regained (e.g. returned from Profile) — just resume
+    if (!isNewPost) {
+      resumeFromCurrent()
+      return
+    }
 
     function startProgress(durationMs: number) {
       progressRef.current = Animated.timing(progressAnim, {
@@ -489,7 +544,7 @@ export default function FeedScreen() {
     // Image: expo-image handles its own fade via transition prop — just start progress
     startProgress(IMAGE_DURATION)
     return () => { progressRef.current?.stop() }
-  }, [currentIndex, isFocused])
+  }, [currentIndex, post?.id])
 
   // ── Comment sheet pause / resume effect ──────────────────────────────────
   useEffect(() => {
@@ -507,10 +562,48 @@ export default function FeedScreen() {
   refreshRef.current = refresh
 
   useFocusEffect(useCallback(() => {
-    refreshRef.current()
-    // Only reset index when NOT arriving from a publish or a profile post jump
-    const st = useFeedStore.getState()
-    if (!st.pendingPost && !st.jumpToPostId) navigateTo(0)
+    isFocusedRef.current = true
+
+    // Returning from a stack screen (Profile, Chat, etc.) — keep the user on
+    // the same post; do not reset to index 0.
+    const fromStack = cameFromStackRef.current
+    cameFromStackRef.current = false
+
+    if (!fromStack) {
+      const st = useFeedStore.getState()
+      if (!st.pendingPost && !st.jumpToPostId) navigateTo(0)
+      // Refresh only on tab-switch/app-foregrounding — not on stack-return
+      // (Profile visit doesn't change feed data, and the setPosts re-render
+      // is what causes the visible flash).
+      const task = InteractionManager.runAfterInteractions(() => {
+        refreshRef.current()
+      })
+      return () => {
+        isFocusedRef.current = false
+        task.cancel()
+        progressRef.current?.stop()
+        safePlayer(() => player.pause())
+      }
+    }
+
+    // Returning from a stack screen: defer play() until after the back animation
+    // so the native VideoView black-frame flash is never visible. mediaOpacity was
+    // already set to 0 at blur-time (thumbnail shows during the animation).
+    const isVideo = postRef.current?.mediaType === 'VIDEO'
+    const task = InteractionManager.runAfterInteractions(() => {
+      if (!isFocusedRef.current) return
+      resumeFromCurrentRef.current()
+      if (isVideo) {
+        Animated.timing(mediaOpacity, { toValue: 1, duration: 250, useNativeDriver: true }).start()
+      }
+    })
+
+    return () => {
+      isFocusedRef.current = false
+      task.cancel()
+      progressRef.current?.stop()
+      safePlayer(() => player.pause())
+    }
   }, []))
 
   // Prefetch next 2 posts' media into device storage
@@ -559,7 +652,7 @@ export default function FeedScreen() {
     <View style={s.container}>
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       {searchMode ? (
-        <View style={[s.searchBar, { paddingTop: top + 10 }]}>
+        <View style={[s.searchBar, { paddingTop: top + 4 }]}>
           <View style={s.searchField}>
             <Search size={15} strokeWidth={2} color={colors.gray400} />
             <TextInput
@@ -579,7 +672,7 @@ export default function FeedScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        <View style={[s.header, { paddingTop: top + 10 }]}>
+        <View style={[s.header, { paddingTop: top + 4 }]}>
           <Text style={s.logo}>luxee</Text>
 
           {/* ── Icon pill ──────────────────────────────────────────── */}
@@ -591,7 +684,7 @@ export default function FeedScreen() {
               style={s.pillBtn}
               hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
-              <Search size={20} strokeWidth={1.8} color={colors.gray800} />
+              <Search size={24} strokeWidth={1.8} color={colors.gray800} />
             </TouchableOpacity>
 
             {/* Profile */}
@@ -601,7 +694,10 @@ export default function FeedScreen() {
               style={s.pillBtn}
               hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
-              <User size={20} strokeWidth={1.8} color={colors.gray800} />
+              {user?.avatar
+                ? <AvatarImage uri={user.avatar} size={26} />
+                : <User size={20} strokeWidth={1.8} color={colors.gray800} />
+              }
             </TouchableOpacity>
 
           </View>
@@ -715,6 +811,7 @@ export default function FeedScreen() {
             <LinearGradient colors={gradients.feedTop} style={s.topGradient} pointerEvents="none" />
           )}
 
+          {/* Progress bars — top of viewer per design */}
           {currentGroup && (
             <View style={s.progressWrap} pointerEvents="none">
               <ProgressBars
@@ -724,6 +821,13 @@ export default function FeedScreen() {
               />
             </View>
           )}
+
+          {/* Top user info overlay */}
+          <View style={s.viewerTopUser} pointerEvents="none">
+            <AvatarImage uri={post.user.avatar} size={34} borderColor="rgba(255,255,255,0.7)" borderWidth={1.5} />
+            <Text style={s.viewerTopName} numberOfLines={1}>{post.user.name}</Text>
+            <Text style={s.viewerTopAge} numberOfLines={1}>· {viewerTimeAgo(post.createdAt)}</Text>
+          </View>
 
           {post.isAnnouncement && (
             <View style={s.announcementBadge} pointerEvents="none">
@@ -748,7 +852,9 @@ export default function FeedScreen() {
             post={post}
             onCommentPress={() => setCommentPost(post)}
             newPostsCount={newPostsCount}
-            commentCount={(post._count?.comments ?? 0) + commentDelta}
+            liked={likedPostIds.has(post.id)}
+            onLikeChange={(l) => setLikedPostIds((s) => { const n = new Set(s); l ? n.add(post.id) : n.delete(post.id); return n })}
+            commentCount={(post._count?.comments ?? 0) + (commentDeltas[post.id] ?? 0)}
             onDeleted={(id) => { removePost(id); navigateTo(Math.max(0, currentIndex - 1)) }}
             onEdited={(id, caption) => updatePost(id, caption)}
           />
@@ -775,7 +881,7 @@ export default function FeedScreen() {
         <CommentSheet
           post={commentPost}
           onClose={() => setCommentPost(null)}
-          onCommentAdded={() => setCommentDelta((d) => d + 1)}
+          onCommentAdded={() => setCommentDeltas((d) => ({ ...d, [commentPost!.id]: (d[commentPost!.id] ?? 0) + 1 }))}
         />
       )}
 
@@ -783,16 +889,17 @@ export default function FeedScreen() {
       {post && (
         <>
           <TouchableOpacity
-            style={[s.fab, { bottom: bottom + 54 }]}
+            style={[s.fab, { bottom: bottom + 34 }]}
             onPress={() => (nav as any).navigate('Messages')}
             activeOpacity={0.85}
           >
             <Ionicons name="chatbubble-outline" size={26} color="#fff" style={s.mirrorX} />
+            {messageBadge > 0 && (
+              <View style={s.fabBadge}>
+                <Text style={s.fabBadgeTxt}>{messageBadge > 9 ? '9+' : messageBadge}</Text>
+              </View>
+            )}
           </TouchableOpacity>
-          {/* Badge as sibling of FAB — no clipping from parent bounds */}
-          <View style={[s.fabBadgePos, { bottom: bottom + 98 }]} pointerEvents="none">
-            <SpeechBadge count={messageBadge} />
-          </View>
         </>
       )}
     </View>
@@ -804,7 +911,7 @@ const s = StyleSheet.create({
 
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingBottom: 12,
+    paddingHorizontal: 16, paddingBottom: 8,
     backgroundColor: colors.white,
   },
   logo: { fontFamily: fonts.semiBold, fontSize: 24, color: colors.gray800, letterSpacing: -0.8 },
@@ -962,9 +1069,24 @@ const s = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 6,
   },
-  topGradient:    { position: 'absolute', top: 0, left: 0, right: 0, height: 80 },
+  topGradient:    { position: 'absolute', top: 0, left: 0, right: 0, height: 90 },
 
-  progressWrap:  { position: 'absolute', top: 12, left: 0, right: 0, zIndex: 20 },
+  progressWrap:  { position: 'absolute', top: 12, left: 44, right: 44, zIndex: 22 },
+
+  viewerTopUser: {
+    position: 'absolute', top: 30, left: 16, zIndex: 22,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+  },
+  viewerTopName: {
+    color: '#fff', fontFamily: fonts.semiBold, fontSize: 14,
+    letterSpacing: -0.2, flexShrink: 1,
+    textShadowColor: 'rgba(0,0,0,0.4)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  viewerTopAge: {
+    color: 'rgba(255,255,255,0.7)', fontFamily: fonts.regular, fontSize: 13, flexShrink: 0,
+  },
 
   announcementBadge: {
     position: 'absolute', top: 54, left: 16, zIndex: 21,
@@ -996,29 +1118,33 @@ const s = StyleSheet.create({
   emptyBtn:     { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, backgroundColor: '#4C8CE4', paddingHorizontal: 24, paddingVertical: 14, borderRadius: 14 },
   emptyBtnText: { color: '#fff', fontFamily: fonts.semiBold, fontSize: 15 },
 
-  // Floating chat FAB — right side, below ActionBar column
+  // Floating chat FAB — bottom right per design
   fab: {
     position: 'absolute',
-    right: 16,
+    right: 14,
     width: 56, height: 56,
     borderRadius: 28,
     backgroundColor: colors.primary,
     alignItems: 'center', justifyContent: 'center',
     zIndex: 30,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowColor: 'rgba(0,0,0,0.45)',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 18,
     elevation: 8,
   },
-  // Badge sibling of FAB — bottom: fabBottom + fabHeight - overlap (bottom+54+56-12=bottom+98)
-  fabBadgePos: {
+  fabBadge: {
     position: 'absolute',
-    right: 16,
-    width: 56,
-    alignItems: 'center',
-    zIndex: 31,
-    elevation: 10,
+    top: -3, right: -3,
+    minWidth: 18, height: 18,
+    borderRadius: 9,
+    backgroundColor: '#FF3B30',
+    borderWidth: 1.5, borderColor: '#fff',
+    alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 5,
+  },
+  fabBadgeTxt: {
+    color: '#fff', fontFamily: fonts.extraBold, fontSize: 10, lineHeight: 12,
   },
   mirrorX: { transform: [{ scaleX: -1 }] },
 })

@@ -50,8 +50,8 @@ const CARD_GAP  = 12
 const CARD_H_PAD = 16
 const CARD_W = (W - CARD_H_PAD * 2 - CARD_GAP) / 2
 
-const RING = 78
-const AVA  = 66
+const RING = 62
+const AVA  = 52
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -260,7 +260,7 @@ function ConvoRow({ item, viewedIds, onPress, index, myUserId, isQuickOpen, onTo
         <View style={s.avatarWrap}>
           {hasPosts ? (
             <>
-              <SegmentedRing count={item.postIds.length} viewedCount={viewedCount} size={RING} strokeWidth={2} />
+              <SegmentedRing count={item.postIds.length} viewedCount={viewedCount} size={RING} />
               <View style={s.avatarInner}><AvatarImage uri={item.user.avatar} size={AVA} /></View>
             </>
           ) : (
@@ -616,69 +616,39 @@ export default function MessagesScreen() {
   }
 
   return (
-    <View style={[s.screen, { paddingTop: top }]}>
+    <View style={s.screen}>
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? top : 8}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={0}
     >
 
       {/* ── Header ──────────────────────────────────────────────────── */}
-      <View style={s.header}>
+      <View style={[s.header, { paddingTop: top + 10 }]}>
         <TouchableOpacity onPress={() => nav.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Ionicons name="chevron-back" size={26} color={colors.gray800} />
         </TouchableOpacity>
 
-        <View style={s.titleWrap}>
-          <Text style={s.title}>Mensagens</Text>
-        </View>
+        <Text style={s.title}>Mensagens</Text>
 
-        {/* COMMUNITY BLOCKED FOR LAUNCH
-        {activeTab === 'communities' && (
+        <View style={s.headerRight}>
+          <View style={s.chatBadgeWrap}>
+            <Ionicons name="chatbubble-outline" size={26} color={colors.gray800} style={s.mirrorX} />
+            {totalUnread > 0 && (
+              <View style={s.headerBadge}>
+                <Text style={s.headerBadgeTxt}>{totalUnread > 99 ? '99+' : totalUnread}</Text>
+              </View>
+            )}
+          </View>
           <TouchableOpacity
-            style={s.createBtn}
-            onPress={() => nav.navigate('CreateGroup')}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={s.avatarRing}
+            onPress={() => nav.navigate('Profile', { userId: user?.id })}
+            activeOpacity={0.75}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
           >
-            <Ionicons name="add" size={22} color={colors.primary} />
+            <AvatarImage uri={user?.avatar ?? null} size={26} />
           </TouchableOpacity>
-        )}
-        */}
-      </View>
-
-      {/* ── Tab switcher ────────────────────────────────────────────── */}
-      <View style={s.tabRow}>
-        <TouchableOpacity
-          style={[s.tabPill, activeTab === 'messages' && s.tabPillActive]}
-          onPress={() => switchTab('messages')}
-          activeOpacity={0.7}
-        >
-          <Ionicons
-            name="chatbubbles-outline"
-            size={14}
-            color={activeTab === 'messages' ? colors.white : colors.gray400}
-          />
-          <Text style={[s.tabLabel, activeTab === 'messages' && s.tabLabelActive]}>
-            Mensagens
-          </Text>
-        </TouchableOpacity>
-
-        {/* COMMUNITY BLOCKED FOR LAUNCH
-        <TouchableOpacity
-          style={[s.tabPill, activeTab === 'communities' && s.tabPillActive]}
-          onPress={() => switchTab('communities')}
-          activeOpacity={0.7}
-        >
-          <Ionicons
-            name="people-outline"
-            size={14}
-            color={activeTab === 'communities' ? colors.white : colors.gray400}
-          />
-          <Text style={[s.tabLabel, activeTab === 'communities' && s.tabLabelActive]}>
-            Comunidades
-          </Text>
-        </TouchableOpacity>
-        */}
+        </View>
       </View>
 
       {/* ── Search bar (messages tab only) ──────────────────────────── */}
@@ -687,7 +657,7 @@ export default function MessagesScreen() {
           <View style={[s.searchBar, isSearchMode && s.searchBarActive]}>
             <Ionicons
               name="search-outline"
-              size={16}
+              size={20}
               color={isSearchMode ? colors.primary : colors.gray400}
             />
             <TextInput
@@ -848,12 +818,27 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 18,
-    paddingTop: 10,
-    paddingBottom: 6,
+    paddingBottom: 12,
     gap: 12,
   },
-  titleWrap:     { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title:         { fontSize: 26, fontFamily: fonts.bold, color: colors.gray800, letterSpacing: -0.5 },
+  title: { flex: 1, fontSize: 26, fontFamily: fonts.bold, color: colors.gray800, letterSpacing: -0.5, lineHeight: 26, marginTop: -3 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  chatBadgeWrap: {},
+  mirrorX:      { transform: [{ scaleX: -1 }] },
+  headerBadge: {
+    position: 'absolute', top: -5, right: -6,
+    minWidth: 15, height: 15, borderRadius: 8,
+    backgroundColor: '#FF3B30',
+    alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 3,
+    borderWidth: 1.5, borderColor: colors.white,
+  },
+  headerBadgeTxt: { fontSize: 8, fontFamily: fonts.extraBold, color: colors.white, lineHeight: 10 },
+  avatarRing: {
+    width: 26, height: 26, borderRadius: 13,
+    overflow: 'hidden',
+    alignItems: 'center', justifyContent: 'center',
+  },
   unreadPill:    { backgroundColor: colors.primary, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2, minWidth: 20, alignItems: 'center' },
   unreadPillTxt: { fontSize: 11, fontFamily: fonts.bold, color: colors.white },
 
@@ -862,7 +847,8 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingTop: 10,
+    paddingBottom: 14,
     gap: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.gray200,
@@ -873,11 +859,11 @@ const s = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.gray100,
     borderRadius: 14,
-    paddingHorizontal: 13,
-    paddingVertical: 11,
-    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 10,
     borderWidth: 1.5,
-    borderColor: 'transparent',
+    borderColor: colors.gray200,
   },
   searchBarActive: {
     borderColor: colors.primary,
@@ -885,7 +871,7 @@ const s = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 16,
     fontFamily: fonts.regular,
     color: colors.gray800,
     padding: 0,

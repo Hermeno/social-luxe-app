@@ -1,5 +1,6 @@
 import React from 'react'
-import { Modal, View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Share } from 'react-native'
+import { Modal, View, Text, TouchableOpacity, StyleSheet, Share } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import QRCode from 'react-native-qrcode-svg'
 import { Ionicons } from '@expo/vector-icons'
 import { colors, fonts, spacing, radius } from '../theme'

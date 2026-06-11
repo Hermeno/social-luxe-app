@@ -1,87 +1,63 @@
 import React from 'react'
-import Svg, { Path, Circle, Defs, LinearGradient, Stop } from 'react-native-svg'
-import { colors } from '../theme'
-
-// Instagram-inspired, lighter version
-const INSTA_GRADIENT = ['#FCAF45', '#E1306C', '#833AB4']
+import Svg, { Circle } from 'react-native-svg'
 
 interface Props {
   count: number
   viewedCount?: number
   size: number
   strokeWidth?: number
+  activeColor?: string
   inactiveColor?: string
-  useGradient?: boolean
 }
 
+/**
+ * Anel segmentado onde cada segmento = 1 post.
+ * count=1 → anel sólido, count=2 → 2 metades, count=N → N fatias iguais.
+ * Segmentos visualizados ficam cinza, os não-vistos ficam azuis.
+ */
 export default function SegmentedRing({
   count,
   viewedCount = 0,
   size,
-  strokeWidth = 3,
-  inactiveColor = colors.gray200,
-  useGradient = true,
+  strokeWidth = 2.5,
+  activeColor  = '#4C8CE4',
+  inactiveColor = '#E5E5EA',
 }: Props) {
-  const r     = (size - strokeWidth) / 2
-  const cx    = size / 2
-  const cy    = size / 2
-  const gap   = count > 1 ? 8 : 0
-  const segDeg = (360 - count * gap) / count
-  const gradId = 'instaGrad'
+  if (count === 0) return null
 
-  function toXY(deg: number) {
-    const rad = ((deg - 90) * Math.PI) / 180
-    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) }
-  }
+  const r   = (size - strokeWidth) / 2
+  const cx  = size / 2
+  const cy  = size / 2
+  const circumference = 2 * Math.PI * r
 
-  function arc(startDeg: number, endDeg: number) {
-    const s = toXY(startDeg)
-    const e = toXY(endDeg)
-    const large = endDeg - startDeg > 180 ? 1 : 0
-    return `M${s.x} ${s.y} A${r} ${r} 0 ${large} 1 ${e.x} ${e.y}`
-  }
-
-  function activeStroke(i: number) {
-    return useGradient ? `url(#${gradId})` : colors.primary
-  }
+  // Sem gaps para 1 post (anel sólido); 4° de gap entre segmentos para 2+
+  const GAP_DEG  = count === 1 ? 0 : 4
+  const segDeg   = 360 / count - GAP_DEG
+  const segArc   = (circumference / 360) * segDeg
 
   return (
     <Svg width={size} height={size} style={{ position: 'absolute' }}>
-      <Defs>
-        <LinearGradient id={gradId} x1="0" y1="1" x2="1" y2="0">
-          {INSTA_GRADIENT.map((color, i) => (
-            <Stop
-              key={i}
-              offset={`${i / (INSTA_GRADIENT.length - 1)}`}
-              stopColor={color}
-            />
-          ))}
-        </LinearGradient>
-      </Defs>
+      {Array.from({ length: count }, (_, i) => {
+        const isViewed  = i < viewedCount
+        const color     = isViewed ? inactiveColor : activeColor
+        // Cada segmento começa na posição angular correcta (topo = -90°)
+        const startDeg  = -90 + i * (360 / count)
 
-      {count === 1 ? (
-        <Circle
-          cx={cx} cy={cy} r={r}
-          stroke={viewedCount >= 1 ? inactiveColor : activeStroke(0)}
-          strokeWidth={strokeWidth}
-          fill="none"
-        />
-      ) : (
-        Array.from({ length: count }, (_, i) => {
-          const start = i * (segDeg + gap)
-          const end   = start + segDeg
-          return (
-            <Path
-              key={i}
-              d={arc(start, end)}
-              stroke={i < viewedCount ? inactiveColor : activeStroke(i)}
-              strokeWidth={strokeWidth}
-              fill="none"
-              strokeLinecap="round"
-            />
-          )
-        })
-      )}
+        return (
+          <Circle
+            key={i}
+            cx={cx}
+            cy={cy}
+            r={r}
+            fill="none"
+            stroke={color}
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeDasharray={`${segArc} ${circumference}`}
+            transform={`rotate(${startDeg} ${cx} ${cy})`}
+          />
+        )
+      })}
     </Svg>
   )
 }

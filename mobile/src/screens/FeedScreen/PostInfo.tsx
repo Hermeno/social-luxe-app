@@ -95,7 +95,7 @@ export default function PostInfo({ post, isActive }: Props) {
 
   return (
     <>
-      <Animated.View style={[s.container, { bottom: bottom + 130, transform: [{ translateY: slideAnim }] }]}>
+      <Animated.View style={[s.container, { bottom: bottom + 34, transform: [{ translateY: slideAnim }] }]}>
         {/* Avatar(s) + Name + follow */}
         <View style={s.userRow}>
           <View style={s.avatarStack}>
@@ -163,7 +163,7 @@ export default function PostInfo({ post, isActive }: Props) {
 }
 
 const s = StyleSheet.create({
-  container: { position: 'absolute', left: 16, right: 16, gap: 8, zIndex: 30 },
+  container: { position: 'absolute', left: 16, right: 80, gap: 6, zIndex: 30 },
 
   userRow:  { flexDirection: 'row', alignItems: 'center', gap: 8 },
 

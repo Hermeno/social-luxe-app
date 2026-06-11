@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
-  View, Text, TouchableOpacity, StyleSheet, Share, Modal, Alert, TextInput, Animated, Easing,
+  View, Text, TouchableOpacity, StyleSheet, Share, Modal, Alert, TextInput,
 } from 'react-native'
 import * as Haptics from 'expo-haptics'
-import { Ionicons } from '@expo/vector-icons'
+import { Ionicons, FontAwesome5 } from '@expo/vector-icons'
 import { Post } from '../../types'
 import { colors, fonts } from '../../theme'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -28,25 +28,7 @@ function fmt(n: number) {
   return String(n)
 }
 
-function useTimeLeft(expiresAt: string) {
-  const calc = () => {
-    const diff = new Date(expiresAt).getTime() - Date.now()
-    const totalMin = Math.max(0, Math.floor(diff / 60_000))
-    const h = Math.floor(totalMin / 60)
-    const m = totalMin % 60
-    const label = h > 0 ? `${h}h ${m}m` : `${m}m`
-    return { label, urgent: diff < 2 * 3_600_000 }
-  }
-  const [state, setState] = useState(calc)
-  useEffect(() => {
-    setState(calc())
-    const id = setInterval(() => setState(calc()), 30_000)
-    return () => clearInterval(id)
-  }, [expiresAt])
-  return state
-}
-
-export default function ActionBar({
+export default React.memo(function ActionBar({
   post, onCommentPress, liked: likedProp = false,
   onLikeChange, onDeleted, onEdited, newPostsCount = 0,
   commentCount: commentCountProp,
@@ -62,18 +44,6 @@ export default function ActionBar({
   const [showMenu,  setShowMenu]  = useState(false)
   const [editMode,  setEditMode]  = useState(false)
   const [editText,  setEditText]  = useState(post.caption ?? '')
-
-  const clockAnim = useRef(new Animated.Value(0)).current
-  const { label: timeLeft, urgent } = useTimeLeft(post.expiresAt)
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.timing(clockAnim, {
-        toValue: 1, duration: urgent ? 3000 : 8000,
-        easing: Easing.linear, useNativeDriver: true,
-      }),
-    ).start()
-  }, [urgent])
 
   useEffect(() => {
     setLiked(likedProp)
@@ -123,9 +93,9 @@ export default function ActionBar({
   return (
     <>
       {/* Vertical column — fixed position, right side */}
-      <View style={[s.column, { bottom: bottom + 155 }]}>
+      <View style={[s.column, { bottom: bottom + 150 }]}>
 
-        {/* Like — hidden for announcements */}
+        {/* Like */}
         {!isAnnouncement && (
           <TouchableOpacity
             style={s.btn}
@@ -133,57 +103,40 @@ export default function ActionBar({
             onLongPress={() => setShowReactions(true)}
             activeOpacity={0.7}
           >
-            <Ionicons
-              name={liked ? 'heart' : 'heart-outline'}
-              size={30}
-              color={liked ? '#FF4B6E' : '#fff'}
-              style={s.shadow}
-            />
+            <FontAwesome5 name="heart" size={24} color={liked ? '#FF4B6E' : '#fff'} solid={liked} />
             <Text style={s.label}>{fmt(likeCount)}</Text>
           </TouchableOpacity>
         )}
 
-        {/* Comment — hidden for announcements */}
+        {/* Comment */}
         {!isAnnouncement && (
           <TouchableOpacity style={s.btn} onPress={onCommentPress} activeOpacity={0.7}>
-            <Ionicons name="chatbubble-outline" size={28} color="#fff" style={[s.shadow, s.mirrorX]} />
+            <Ionicons name="chatbubble-outline" size={28} color="#fff" style={s.mirrorX} />
             <Text style={s.label}>{fmt(commentCountProp ?? post._count?.comments ?? 0)}</Text>
           </TouchableOpacity>
         )}
 
-        {/* Share — hidden for announcements */}
+        {/* Share */}
         {!isAnnouncement && (
           <TouchableOpacity style={s.btn} onPress={handleShare} activeOpacity={0.7}>
-            <Ionicons name="paper-plane" size={28} color="#fff" style={s.shadow} />
+            <Ionicons name="paper-plane" size={28} color="#fff" />
             <Text style={s.label}>{fmt(shareCount)}</Text>
           </TouchableOpacity>
         )}
 
-        {/* Views — always occupies space; count shown only when authorized */}
+        {/* Views */}
         <View style={[s.btn, { opacity: (isSelf || post.user.viewsPublic) ? 1 : 0 }]}>
-          <Ionicons name="eye" size={28} color="#fff" style={s.shadow} />
+          <Ionicons name="eye" size={28} color="#fff" />
           <Text style={s.label}>{fmt(post._count?.views ?? 0)}</Text>
         </View>
 
-        {/* Timer — always visible */}
-        <View style={s.btn}>
-          <Animated.View style={{
-            transform: [{
-              rotate: clockAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }),
-            }],
-          }}>
-            <Ionicons name="time-outline" size={26} color="#fff" style={s.shadow} />
-          </Animated.View>
-          <Text style={s.label}>{timeLeft}</Text>
-        </View>
-
-        {/* Options — always occupies space; visible only for author */}
+        {/* Options — visible only for author */}
         <TouchableOpacity
           style={[s.btn, { opacity: isSelf ? 1 : 0 }]}
           onPress={() => { if (isSelf) { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowMenu(true) } }}
           activeOpacity={isSelf ? 0.7 : 1}
         >
-          <Ionicons name="ellipsis-horizontal" size={24} color="rgba(255,255,255,0.85)" style={s.shadow} />
+          <Ionicons name="ellipsis-horizontal" size={24} color="rgba(255,255,255,0.85)" />
         </TouchableOpacity>
       </View>
 
@@ -236,40 +189,29 @@ export default function ActionBar({
       </Modal>
     </>
   )
-}
-
-const SHADOW = {
-  textShadowColor: 'rgba(0,0,0,0.6)',
-  textShadowOffset: { width: 0, height: 1 },
-  textShadowRadius: 4,
-}
+})
 
 const s = StyleSheet.create({
   column: {
     position: 'absolute',
-    right: 12,
+    right: 14,
+    width: 60,
     alignItems: 'center',
     zIndex: 20,
     gap: 4,
   },
   btn: {
+    width: 60,
     alignItems: 'center',
     paddingVertical: 8,
-    paddingHorizontal: 4,
     gap: 4,
   },
-  shadow: {
-    textShadowColor: 'rgba(0,0,0,0.6)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 5,
-  } as any,
   mirrorX: { transform: [{ scaleX: -1 }] },
   label: {
     color: '#fff',
     fontFamily: fonts.semiBold,
     fontSize: 13,
     letterSpacing: -0.2,
-    ...SHADOW,
   },
 
   overlay:       { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end', paddingBottom: 48 },

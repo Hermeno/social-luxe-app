@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, Animated, ActivityIndicator, Alert,
+  KeyboardAvoidingView, Platform, Animated, ActivityIndicator,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -24,10 +24,17 @@ const BD = '#E5E5EA'
 const BG = '#FFFFFF'
 const SX = '#F9F9FB'
 
+function maskPhone(phone: string): string {
+  if (phone.length < 6) return phone
+  const visible = phone.slice(-3)
+  const prefix = phone.slice(0, 4)
+  return `${prefix} •• ••• ${visible}`
+}
+
 export default function LoginPasswordScreen() {
   const nav    = useNavigation<Nav>()
   const route  = useRoute<Route>()
-  const { top } = useSafeAreaInsets()
+  const { top, bottom } = useSafeAreaInsets()
   const { login } = useAuthStore()
   const { phone } = route.params
 
@@ -42,17 +49,17 @@ export default function LoginPasswordScreen() {
   function bounce(cb: () => void) {
     Animated.sequence([
       Animated.spring(btnScale, { toValue: 0.97, useNativeDriver: true, speed: 80, bounciness: 0 }),
-      Animated.spring(btnScale, { toValue: 1,    useNativeDriver: true, speed: 40, bounciness: 6 }),
+      Animated.spring(btnScale, { toValue: 1,    useNativeDriver: true, speed: 40, bounciness: 5 }),
     ]).start(cb)
   }
 
   function shake() {
     Animated.sequence([
-      Animated.timing(shakeAnim, { toValue: 8,  duration: 60, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: -8, duration: 60, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: 6,  duration: 50, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: -6, duration: 50, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: 0,  duration: 40, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 8,  duration: 55, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -8, duration: 55, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 5,  duration: 45, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -5, duration: 45, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0,  duration: 35, useNativeDriver: true }),
     ]).start()
   }
 
@@ -60,53 +67,49 @@ export default function LoginPasswordScreen() {
     if (!password) return
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     bounce(async () => {
-      setLoading(true)
-      setError(false)
+      setLoading(true); setError(false)
       try {
         await login(phone, password)
       } catch {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
-        setError(true)
-        shake()
+        setError(true); shake()
       } finally { setLoading(false) }
     })
   }
 
+  // Avatar initials from phone last 2 digits
+  const avatarLabel = phone.replace(/\D/g, '').slice(-2) || '••'
+
   return (
     <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={[s.inner, { paddingTop: top + 16 }]}>
+      <View style={[s.inner, { paddingTop: top + 14, paddingBottom: bottom + 24 }]}>
 
-        {/* Header */}
-        <View style={s.header}>
-          <TouchableOpacity
-            onPress={() => nav.goBack()}
-            style={s.backBtn}
-            hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
-          >
-            <Ionicons name="chevron-back" size={24} color={T} />
-          </TouchableOpacity>
-          <Text style={s.brand}>luxee</Text>
-          <View style={{ width: 36 }} />
-        </View>
+        {/* Square back button */}
+        <TouchableOpacity onPress={() => nav.goBack()} style={s.backBtn} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+          <Ionicons name="chevron-back" size={20} color={T} />
+        </TouchableOpacity>
 
-        {/* Hero */}
+        {/* Avatar + greeting */}
         <View style={s.hero}>
-          <Text style={s.heading}>Bem‑vindo{'\n'}de volta.</Text>
-
-          {/* Phone badge */}
-          <View style={s.phoneBadge}>
-            <Ionicons name="call-outline" size={14} color={S} />
-            <Text style={s.phoneTxt}>{phone}</Text>
+          {/* Dashed ring + avatar */}
+          <View style={s.avatarArea}>
+            <View style={s.avatarRing}>
+              <View style={s.avatar}>
+                <Ionicons name="person" size={44} color={B} />
+              </View>
+            </View>
           </View>
+
+          <Text style={s.greeting}>Bem-vinda de volta,</Text>
+          <Text style={s.phoneTxt}>{maskPhone(phone)}</Text>
         </View>
 
         {/* Password input */}
         <Animated.View style={{ transform: [{ translateX: shakeAnim }] }}>
           <View style={[s.inputWrap, focused && s.inputFocused, error && s.inputError]}>
-            <Ionicons name="lock-closed-outline" size={18} color={focused ? B : M} style={s.inputIcon} />
             <TextInput
               style={s.input}
-              placeholder="Senha"
+              placeholder="A tua senha"
               placeholderTextColor={M}
               value={password}
               onChangeText={(v) => { setPassword(v); setError(false) }}
@@ -117,42 +120,38 @@ export default function LoginPasswordScreen() {
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
             />
-            <TouchableOpacity onPress={() => setSecure(!secure)} style={s.eyeBtn} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+            <TouchableOpacity onPress={() => setSecure(!secure)} hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}>
               <Ionicons name={secure ? 'eye-off-outline' : 'eye-outline'} size={20} color={M} />
             </TouchableOpacity>
           </View>
-          {error && (
-            <Text style={s.errorTxt}>Senha incorreta. Tenta novamente.</Text>
-          )}
+          {error && <Text style={s.errorTxt}>Senha incorreta. Tenta novamente.</Text>}
         </Animated.View>
+
+        {/* Forgot password — right-aligned, disabled in v1 */}
+        <TouchableOpacity style={s.forgotRow} disabled activeOpacity={0.6}>
+          <Text style={s.forgotTxt}>Esqueceste a senha?</Text>
+        </TouchableOpacity>
 
         <View style={s.spacer} />
 
-        {/* CTA */}
+        {/* Full-width CTA */}
         <Animated.View style={{ transform: [{ scale: btnScale }] }}>
           <TouchableOpacity
-            style={[s.btn, (!password || loading) && s.btnOff]}
+            style={[s.cta, (!password || loading) && s.ctaOff]}
             onPress={handleLogin}
             disabled={!password || loading}
-            activeOpacity={1}
+            activeOpacity={0.88}
           >
             {loading
-              ? <ActivityIndicator color="#fff" />
-              : <Text style={s.btnText}>Entrar</Text>
+              ? <ActivityIndicator color="#fff" size="small" />
+              : <Text style={s.ctaTxt}>Entrar</Text>
             }
           </TouchableOpacity>
         </Animated.View>
 
-        {/* Switch to register */}
-        <TouchableOpacity
-          style={s.switchRow}
-          onPress={() => nav.navigate('CreatePassword', route.params)}
-          hitSlop={{ top: 8, bottom: 8 }}
-        >
-          <Text style={s.switchTxt}>
-            Não tens conta?{'  '}
-            <Text style={s.switchLink}>Criar agora</Text>
-          </Text>
+        {/* Switch account */}
+        <TouchableOpacity style={s.switchRow} onPress={() => nav.goBack()} activeOpacity={0.6}>
+          <Text style={s.switchTxt}>Não és tu? <Text style={s.switchLink}>Trocar de conta</Text></Text>
         </TouchableOpacity>
 
       </View>
@@ -162,42 +161,66 @@ export default function LoginPasswordScreen() {
 
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: BG },
-  inner:  { flex: 1, paddingHorizontal: 28, paddingBottom: 36 },
+  inner:  { flex: 1, paddingHorizontal: 24 },
 
-  header:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 44 },
-  backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F4F4F6', alignItems: 'center', justifyContent: 'center' },
-  brand:   { fontFamily: fonts.bold, fontSize: 22, color: T, letterSpacing: -0.6 },
-
-  hero:    { marginBottom: 36, gap: 14 },
-  heading: { fontSize: 40, fontFamily: fonts.bold, color: T, letterSpacing: -1.2, lineHeight: 46 },
-
-  phoneBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start',
-    backgroundColor: '#F4F4F6', borderRadius: 20,
-    paddingHorizontal: 12, paddingVertical: 7,
+  backBtn: {
+    width: 44, height: 44, borderRadius: 14,
+    borderWidth: 1.5, borderColor: BD, backgroundColor: BG,
+    alignItems: 'center', justifyContent: 'center',
   },
-  phoneTxt: { fontFamily: fonts.medium, fontSize: 14, color: S, letterSpacing: -0.2 },
+
+  hero: { alignItems: 'center', marginTop: 44, marginBottom: 36, gap: 10 },
+
+  avatarArea: { marginBottom: 6 },
+  avatarRing: {
+    width: 112, height: 112, borderRadius: 56,
+    borderWidth: 2, borderColor: BD,
+    borderStyle: 'dashed',
+    padding: 4,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  avatar: {
+    width: 100, height: 100, borderRadius: 50,
+    backgroundColor: `${B}12`,
+    alignItems: 'center', justifyContent: 'center',
+  },
+
+  greeting: { fontFamily: fonts.regular, fontSize: 15, color: S, marginTop: 4 },
+  phoneTxt:  { fontFamily: fonts.bold, fontSize: 20, color: T, letterSpacing: -0.4 },
 
   inputWrap: {
     flexDirection: 'row', alignItems: 'center',
-    height: 58, borderRadius: 14,
+    height: 56, borderRadius: 16,
     borderWidth: 1.5, borderColor: BD,
-    backgroundColor: SX, paddingHorizontal: 16,
+    backgroundColor: SX, paddingHorizontal: 18,
   },
-  inputFocused: { borderColor: B, backgroundColor: BG },
-  inputError:   { borderColor: E },
-  inputIcon:    { marginRight: 10 },
-  input:        { flex: 1, fontFamily: fonts.regular, fontSize: 16, color: T, paddingVertical: 0 },
-  eyeBtn:       { paddingLeft: 8 },
-  errorTxt:     { marginTop: 8, marginLeft: 4, fontSize: 13, fontFamily: fonts.regular, color: E },
+  inputFocused: {
+    borderColor: B, backgroundColor: BG,
+    ...Platform.select({
+      ios: { shadowColor: B, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.12, shadowRadius: 10 },
+    }),
+  },
+  inputError: { borderColor: E },
+  input:      { flex: 1, fontFamily: fonts.medium, fontSize: 17, color: T, paddingVertical: 0 },
+  errorTxt:   { marginTop: 8, fontSize: 13, fontFamily: fonts.regular, color: E },
+
+  forgotRow: { alignItems: 'flex-end', marginTop: 12 },
+  forgotTxt: { fontSize: 13, fontFamily: fonts.semiBold, color: M },
 
   spacer: { flex: 1 },
 
-  btn:     { height: 56, borderRadius: 16, backgroundColor: B, alignItems: 'center', justifyContent: 'center' },
-  btnOff:  { opacity: 0.3 },
-  btnText: { color: '#fff', fontFamily: fonts.semiBold, fontSize: 16, letterSpacing: -0.2 },
+  cta: {
+    height: 52, borderRadius: 16, backgroundColor: B,
+    alignItems: 'center', justifyContent: 'center',
+    ...Platform.select({
+      ios: { shadowColor: B, shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.65, shadowRadius: 18 },
+      android: { elevation: 8 },
+    }),
+  },
+  ctaOff: { opacity: 0.35 },
+  ctaTxt: { fontFamily: fonts.bold, fontSize: 17, color: '#fff', letterSpacing: -0.2 },
 
-  switchRow: { marginTop: 20, alignItems: 'center' },
-  switchTxt: { fontSize: 14, fontFamily: fonts.regular, color: M },
-  switchLink:{ fontFamily: fonts.semiBold, color: B },
+  switchRow: { marginTop: 14, alignItems: 'center' },
+  switchTxt: { fontSize: 13, fontFamily: fonts.regular, color: M },
+  switchLink:{ color: S, fontFamily: fonts.semiBold },
 })
