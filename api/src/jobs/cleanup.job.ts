@@ -1,8 +1,7 @@
 import cron from 'node-cron'
 import { prisma } from '../config/database'
 import { POST_EXTENSION_THRESHOLD } from '../types'
-
-// Media is stored on Cloudinary — no local file cleanup needed
+import { deleteFromCloudinary } from '../utils/cloudinary.util'
 
 async function checkPostExtension(postId: string, userId: string): Promise<boolean> {
   const friendships = await prisma.friendship.findMany({
@@ -38,14 +37,22 @@ async function processExpiredPosts() {
       const newExpiry = new Date(now.getTime() + 24 * 60 * 60 * 1000)
       await prisma.post.update({ where: { id: post.id }, data: { expiresAt: newExpiry, extended: true } })
     } else {
+      // Delete Cloudinary media immediately so nothing lingers
+      if (post.mediaUrl) await deleteFromCloudinary(post.mediaUrl)
       await prisma.post.update({ where: { id: post.id }, data: { deletedAt: now } })
     }
   }
 
-  // Hard-delete soft-deleted posts older than 7 days
-  // (Cloudinary files stay — Cloudinary has its own retention settings)
-  await prisma.post.deleteMany({
+  // Hard-delete soft-deleted posts older than 7 days (DB cleanup)
+  const stale = await prisma.post.findMany({
     where: { deletedAt: { lte: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) } },
+    select: { id: true, mediaUrl: true },
+  })
+  for (const p of stale) {
+    if (p.mediaUrl) await deleteFromCloudinary(p.mediaUrl)
+  }
+  await prisma.post.deleteMany({
+    where: { id: { in: stale.map((p) => p.id) } },
   })
 }
 

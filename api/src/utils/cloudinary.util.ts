@@ -40,6 +40,21 @@ export function uploadToCloudinary(
   })
 }
 
+// ── Delete ─────────────────────────────────────────────────────────────────────
+
+export async function deleteFromCloudinary(url: string): Promise<void> {
+  if (!url || !url.includes('cloudinary.com')) return
+  try {
+    const isVideo = url.includes('/video/upload/')
+    const match   = url.match(/\/upload\/(?:v\d+\/)?(.+)\.[^.]+$/)
+    if (!match) return
+    const publicId = match[1]
+    await cloudinary.uploader.destroy(publicId, {
+      resource_type: isVideo ? 'video' : 'image',
+    })
+  } catch {}
+}
+
 // ── Thumbnail generation (Cloudinary URL transformation) ───────────────────────
 //
 // No extra upload needed — Cloudinary transforms the URL on the fly.
