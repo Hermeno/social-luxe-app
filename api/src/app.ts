@@ -10,6 +10,10 @@ import './config/cloudinary'
 
 const app = express()
 
+// Trust the first proxy (Render, Heroku, Railway, etc.) so that
+// express-rate-limit can read the real client IP from X-Forwarded-For.
+app.set('trust proxy', 1)
+
 // ── Security headers ───────────────────────────────────────────────────────
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
 
