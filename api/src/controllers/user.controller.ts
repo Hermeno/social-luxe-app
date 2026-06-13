@@ -35,6 +35,7 @@ export async function updateProfile(req: AuthRequest, res: Response) {
       name, bio, availability, lat, lng, viewsPublic,
       contact, defaultFollowDuration, relationshipStatus,
       partnerName, partnerId, city, district, autoReply,
+      showDevice: rawShowDevice, statusLabel,
     } = req.body
     let avatar: string | undefined
     if (req.file) {
@@ -42,11 +43,13 @@ export async function updateProfile(req: AuthRequest, res: Response) {
     }
     const location = lat != null && lng != null ? { lat: parseFloat(lat), lng: parseFloat(lng) } : {}
     const extra = viewsPublic != null ? { viewsPublic: viewsPublic === true || viewsPublic === 'true' } : {}
+    const deviceExtra = rawShowDevice != null ? { showDevice: rawShowDevice === true || rawShowDevice === 'true' } : {}
     const user = await userService.updateProfile(req.user!.userId, {
       name, bio, avatar, availability,
-      ...location, ...extra,
+      ...location, ...extra, ...deviceExtra,
       contact, defaultFollowDuration, relationshipStatus,
       partnerName, partnerId, city, district, autoReply,
+      statusLabel: statusLabel !== undefined ? (statusLabel || null) : undefined,
     })
     return ok(res, user)
   } catch (err) { return handleError(res, err) }

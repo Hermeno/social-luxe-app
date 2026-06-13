@@ -61,6 +61,8 @@ model User {
   city                 String?
   district             String?
   autoReply            String?
+  showDevice           Boolean  @default(false)
+  statusLabel          String?
   lat          Float?
   lng          Float?
   isAdmin      Boolean  @default(false)
@@ -117,6 +119,7 @@ model Post {
   bgColor         String?
   expiresAt       DateTime
   extended        Boolean   @default(false)
+  deviceModel     String?
   deletedAt       DateTime?
   createdAt       DateTime  @default(now())
   partnerUserId   String?

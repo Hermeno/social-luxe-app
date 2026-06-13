@@ -43,6 +43,8 @@ export async function updateProfile(userId: string, data: {
   city?: string
   district?: string
   autoReply?: string
+  showDevice?: boolean
+  statusLabel?: string | null
 }) {
   return prisma.user.update({
     where: { id: userId },
@@ -52,7 +54,7 @@ export async function updateProfile(userId: string, data: {
       avatar: true, bio: true, availability: true, viewsPublic: true,
       contact: true, defaultFollowDuration: true, relationshipStatus: true,
       partnerName: true, partnerId: true, city: true, district: true,
-      autoReply: true, createdAt: true,
+      autoReply: true, showDevice: true, statusLabel: true, createdAt: true,
     },
   })
 }

@@ -28,7 +28,7 @@ export async function createPost(req: AuthRequest, res: Response) {
     }
 
     // Include partner if user has an accepted partner and opted in
-    const { partnerUserId: requestedPartner, isAnnouncement: rawAnnouncement } = req.body
+    const { partnerUserId: requestedPartner, isAnnouncement: rawAnnouncement, deviceModel } = req.body
     let partnerUserId: string | null = null
     if (requestedPartner) {
       const me = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { partnerId: true } })
@@ -42,7 +42,7 @@ export async function createPost(req: AuthRequest, res: Response) {
       isAnnouncement = true
     }
 
-    const post = await postService.createPost(req.user!.userId, mediaUrl, mediaType, caption, bgColor, partnerUserId ?? undefined, isAnnouncement)
+    const post = await postService.createPost(req.user!.userId, mediaUrl, mediaType, caption, bgColor, partnerUserId ?? undefined, isAnnouncement, deviceModel ?? undefined)
 
     // Notify partner of post invitation
     if (partnerUserId) {

@@ -12,14 +12,15 @@ export async function createPost(
   bgColor?: string,
   partnerUserId?: string,
   isAnnouncement?: boolean,
+  deviceModel?: string,
 ) {
   const expiresAt = isAnnouncement
-    ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000) // announcements last 1 year
+    ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
     : new Date(Date.now() + POST_INITIAL_HOURS * 60 * 60 * 1000)
   const post = await prisma.post.create({
-    data: { userId, mediaUrl, mediaType, caption, bgColor, expiresAt, partnerUserId: partnerUserId ?? null, isAnnouncement: isAnnouncement ?? false },
+    data: { userId, mediaUrl, mediaType, caption, bgColor, expiresAt, partnerUserId: partnerUserId ?? null, isAnnouncement: isAnnouncement ?? false, deviceModel: deviceModel ?? null },
     include: {
-      user:        { select: { id: true, name: true, avatar: true, viewsPublic: true } },
+      user:        { select: { id: true, name: true, avatar: true, viewsPublic: true, showDevice: true, statusLabel: true } },
       partnerUser: { select: { id: true, name: true, avatar: true } },
       _count:      { select: { likes: true, comments: true, shares: true, views: true } },
     },
@@ -42,7 +43,7 @@ export async function getFeed(userId: string, page = 1, limit = 10) {
   const now = new Date()
   const baseWhere = { deletedAt: null, expiresAt: { gt: now } }
   const include = {
-    user:        { select: { id: true, name: true, avatar: true, viewsPublic: true, isAdmin: true } },
+    user:        { select: { id: true, name: true, avatar: true, viewsPublic: true, isAdmin: true, showDevice: true, statusLabel: true } },
     partnerUser: { select: { id: true, name: true, avatar: true } },
     _count:      { select: { likes: true, comments: true, shares: true, views: true } },
   }
@@ -238,7 +239,7 @@ export async function getFlashback(userId: string) {
       createdAt: { gte: rangeStart, lte: rangeEnd },
     },
     include: {
-      user: { select: { id: true, name: true, avatar: true, viewsPublic: true } },
+      user: { select: { id: true, name: true, avatar: true, viewsPublic: true, showDevice: true, statusLabel: true } },
       _count: { select: { likes: true, comments: true, shares: true, views: true } },
     },
     orderBy: { createdAt: 'desc' },
