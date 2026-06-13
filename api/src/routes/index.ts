@@ -13,6 +13,8 @@ import challengeRoutes from './challenge.routes'
 import coinRoutes from './coin.routes'
 import momentoRoutes from './momento.routes'
 import notificationRoutes from './notification.routes'
+import friendshipRoutes from './friendship.routes'
+import storeRoutes from './store.routes'
 
 const router = Router()
 
@@ -30,5 +32,7 @@ router.use('/challenges', challengeRoutes)
 router.use('/coins', coinRoutes)
 router.use('/momentos', momentoRoutes)
 router.use('/notifications', notificationRoutes)
+router.use('/friendships', friendshipRoutes)
+router.use('/store', storeRoutes)
 
 export default router

@@ -55,6 +55,37 @@ export async function sendMessage(req: AuthRequest, res: Response) {
   } catch (err) { return handleError(res, err) }
 }
 
+export async function editMessage(req: AuthRequest, res: Response) {
+  try {
+    const { content } = req.body
+    if (!content?.trim()) return badRequest(res, 'content required')
+    const msg = await prisma.message.findUnique({ where: { id: req.params.id } })
+    if (!msg) return notFound(res, 'Message not found')
+    if (msg.senderId !== req.user!.userId) return forbidden(res, 'Not your message')
+    const updated = await prisma.message.update({
+      where: { id: req.params.id },
+      data: { content: content.trim() },
+      include: { sender: { select: { id: true, name: true, avatar: true } }, replyTo: { select: { id: true, content: true, sender: { select: { name: true } } } }, reactions: { select: { emoji: true, userId: true } } },
+    })
+    emitToUser(msg.receiverId, 'message:edited', updated)
+    return ok(res, updated)
+  } catch (err) { return handleError(res, err) }
+}
+
+export async function deleteMessage(req: AuthRequest, res: Response) {
+  try {
+    const msg = await prisma.message.findUnique({ where: { id: req.params.id } })
+    if (!msg) return notFound(res, 'Message not found')
+    if (msg.senderId !== req.user!.userId) return forbidden(res, 'Not your message')
+    // Null out any reply references first to avoid FK constraint errors
+    await prisma.message.updateMany({ where: { replyToId: req.params.id }, data: { replyToId: null } })
+    await prisma.messageReaction.deleteMany({ where: { messageId: req.params.id } })
+    await prisma.message.delete({ where: { id: req.params.id } })
+    emitToUser(msg.receiverId, 'message:deleted', { messageId: req.params.id })
+    return ok(res, { deleted: true })
+  } catch (err) { return handleError(res, err) }
+}
+
 export async function reactToMessage(req: AuthRequest, res: Response) {
   try {
     const { emoji } = req.body
