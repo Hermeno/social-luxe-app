@@ -41,7 +41,15 @@ export async function login(body: LoginBody) {
 export async function getProfile(userId: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, name: true, phone: true, countryCode: true, avatar: true, bio: true, availability: true, ghostMode: true, coinBalance: true, createdAt: true },
+    select: {
+      id: true, name: true, phone: true, countryCode: true,
+      avatar: true, bio: true, availability: true, ghostMode: true,
+      coinBalance: true, viewsPublic: true, contact: true,
+      defaultFollowDuration: true, relationshipStatus: true,
+      partnerName: true, partnerId: true, city: true, district: true,
+      autoReply: true, showDevice: true, statusLabel: true,
+      isAdmin: true, createdAt: true,
+    },
   })
   if (!user) throw new Error('User not found')
   return user
