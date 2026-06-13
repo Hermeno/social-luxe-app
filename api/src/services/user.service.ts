@@ -75,7 +75,7 @@ export async function getUserPosts(userId: string) {
   return prisma.post.findMany({
     where: { userId, deletedAt: null, expiresAt: { gt: new Date() } },
     include: {
-      user: { select: { id: true, name: true, avatar: true } },
+      user: { select: { id: true, name: true, avatar: true, viewsPublic: true, isAdmin: true, showDevice: true, statusLabel: true } },
       _count: { select: { likes: true, comments: true, views: true, shares: true } },
     },
     orderBy: { createdAt: 'desc' },
