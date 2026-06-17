@@ -2,13 +2,13 @@ import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import {
   View,
   Text,
-  TextInput,
   FlatList,
   TouchableOpacity,
   Pressable,
   StyleSheet,
   Dimensions,
   Animated,
+  ActivityIndicator,
   InteractionManager,
 } from 'react-native'
 import { Image } from 'expo-image'
@@ -18,216 +18,57 @@ import { StackNavigationProp } from '@react-navigation/stack'
 import { useFocusEffect } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
-import { Search, MessageCircle, User } from 'lucide-react-native'
+import { Search, ShoppingBag, User, MessageCircle } from 'lucide-react-native'
+import { Feather } from '@expo/vector-icons'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { Post } from '../../types'
 import { useFeed } from '../../hooks/useFeed'
-import { useAuthStore } from '../../store/auth.store'
 import { useFeedStore } from '../../store/feed.store'
-import { useOnlineStore } from '../../store/online.store'
-import { useNotificationStore } from '../../store/notification.store'
 import { useMessageBadgeStore } from '../../store/messageBadge.store'
+import { useAuthStore } from '../../store/auth.store'
+import { useLuxStore } from '../../store/luxStore.store'
 import { AppStackParams } from '../../navigation/AppNavigator'
-import { markPostViewed, getViewedPostIds } from '../../db/database'
+import { markPostViewed, getViewedPostIds, getCache, setCache } from '../../db/database'
 import * as postService from '../../services/post.service'
+import { useT } from '../../i18n'
 import { getOrDownload, prefetchMedia } from '../../db/mediaCache'
-import { colors, fonts, spacing, gradients } from '../../theme'
+import { colors, fonts } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
-import SegmentedRing from '../../components/SegmentedRing'
 import ActionBar from './ActionBar'
 import PostInfo from './PostInfo'
 import CommentSheet from '../../components/CommentSheet'
+import FeedHeader, { FeedUserGroup as UserGroup } from './FeedHeader'
 import { API_BASE } from '../../config'
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window')
-const RING_SIZE      = 65
-const AVATAR_SIZE    = 54
 const IMAGE_DURATION = 30000
 
 type Nav = StackNavigationProp<AppStackParams>
-
-interface UserGroup {
-  user: Post['user']
-  posts: Post[]
-}
 
 function resolveMedia(url: string) {
   return url.startsWith('http') ? url : `${API_BASE}${url}`
 }
 
-function viewerTimeAgo(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime()
-  const m = Math.floor(diff / 60000)
-  if (m < 1)  return 'agora'
-  if (m < 60) return `há ${m}m`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `há ${h}h`
-  return `há ${Math.floor(h / 24)}d`
-}
-
-// ─── Ripple rings (online presence — contained inside the avatar circle) ────
-const NUM_RINGS       = 3
-const RIPPLE_DURATION = 1800
-const RIPPLE_STAGGER  = 520
-
-// Waves start from the centre and expand to fill the circle.
-// The avatar container must have overflow:'hidden' to clip them to the circle.
-function RippleRings({ size }: { size: number }) {
-  const anims = [
-    useRef(new Animated.Value(0)).current,
-    useRef(new Animated.Value(0)).current,
-    useRef(new Animated.Value(0)).current,
-  ]
-
-  useEffect(() => {
-    const TOTAL = RIPPLE_DURATION + (NUM_RINGS - 1) * RIPPLE_STAGGER
-    const loops = anims.map((anim, i) =>
-      Animated.loop(
-        Animated.sequence([
-          Animated.delay(i * RIPPLE_STAGGER),
-          Animated.timing(anim, { toValue: 1, duration: RIPPLE_DURATION, useNativeDriver: true }),
-          Animated.timing(anim, { toValue: 0, duration: 0,              useNativeDriver: true }),
-          Animated.delay((NUM_RINGS - 1 - i) * RIPPLE_STAGGER),
-        ]),
-      ),
-    )
-    loops.forEach((l) => l.start())
-    return () => loops.forEach((l) => l.stop())
-  }, [])
-
-  return (
-    <>
-      {anims.map((anim, i) => {
-        // Scale 0→1: starts as invisible point in centre, expands to fill the circle
-        const scale = anim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] })
-        // Opacity: flashes in quickly, then fades out
-        const opacity = anim.interpolate({
-          inputRange: [0, 0.1, 0.5, 1],
-          outputRange: [0, 0.95, 0.65, 0],
-        })
-        return (
-          <Animated.View
-            key={i}
-            style={{
-              position: 'absolute',
-              width: size, height: size,
-              borderRadius: size / 2,
-              // Filled semi-transparent white — sits on top of photo
-              backgroundColor: 'rgba(255,255,255,0.92)',
-              opacity,
-              transform: [{ scale }],
-            }}
-          />
-        )
-      })}
-    </>
-  )
-}
-
-// ─── Bubble Item ──────────────────────────────────────────────────────────────
-function BubbleItem({
-  item,
-  isActive,
-  viewedCount,
-  index,
-  onPress,
-  onNamePress,
-}: {
-  item: UserGroup
-  isActive: boolean
-  viewedCount: number
-  index: number
-  onPress: () => void
-  onNamePress: () => void
-}) {
-  const isOnlineUser  = useOnlineStore((s) => s.isOnline(item.user.id))
-  const unviewedCount = item.posts.length - viewedCount
-
-  const opacity    = useRef(new Animated.Value(0)).current
-  const entryY     = useRef(new Animated.Value(14)).current
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(opacity, { toValue: 1, duration: 280, delay: index * 55, useNativeDriver: true }),
-      Animated.spring(entryY,  { toValue: 0, speed: 18, bounciness: 7, delay: index * 55, useNativeDriver: true } as any),
-    ]).start()
-  }, [])
-
-  return (
-    <Animated.View style={[s.bubbleItem, { opacity, transform: [{ translateY: entryY }] }]}>
-      {/* Ring — toca para ver posts */}
-      <TouchableOpacity onPress={onPress} activeOpacity={0.75}>
-        <View style={s.ringContainer}>
-          <View style={s.ringWrap}>
-            <SegmentedRing
-              count={item.posts.length}
-              viewedCount={viewedCount}
-              size={RING_SIZE}
-            />
-            {/* Avatar + ripple contained inside the circle */}
-            <View style={s.avatarCenter}>
-              <View style={{ width: AVATAR_SIZE, height: AVATAR_SIZE, borderRadius: AVATAR_SIZE / 2, overflow: 'hidden' }}>
-                <AvatarImage uri={item.user.avatar} size={AVATAR_SIZE} />
-                {/* Ripple inside the circle — clipped by overflow:hidden */}
-                {isOnlineUser && (
-                  <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-                    <RippleRings size={AVATAR_SIZE} />
-                  </View>
-                )}
-              </View>
-            </View>
-          </View>
-
-          {/* ONLINE badge below the avatar */}
-          {isOnlineUser && (
-            <View style={s.onlineBadgeWrap}>
-              <View style={s.onlineBadge}>
-                <Text style={s.onlineBadgeText}>ONLINE</Text>
-              </View>
-            </View>
-          )}
-        </View>
-      </TouchableOpacity>
-
-      {/* Nome — toca para ver perfil */}
-      <TouchableOpacity onPress={onNamePress} activeOpacity={0.6} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-        <Text style={s.bubbleName} numberOfLines={1}>
-          {item.user.name.split(' ')[0]}
-        </Text>
-      </TouchableOpacity>
-    </Animated.View>
-  )
-}
-
 // ─── Progress Bars ────────────────────────────────────────────────────────────
-function ProgressBars({ count, current, progress }: {
-  count: number; current: number; progress: Animated.Value
-}) {
-  return (
-    <View style={s.progressRow}>
-      {Array.from({ length: count }, (_, i) => (
-        <View key={i} style={s.progressTrack}>
-          {i < current ? (
-            <View style={s.progressFull} />
-          ) : i === current ? (
-            <Animated.View
-              style={[s.progressFill, {
-                width: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
-              }]}
-            />
-          ) : null}
-        </View>
-      ))}
-    </View>
-  )
-}
-
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function FeedScreen() {
-  const { posts, refresh, loadMore, prependPost, removePost, updatePost, incrementView } = useFeed()
-  const nav                = useNavigation<Nav>()
-  const { user }           = useAuthStore()
-  const { top, bottom }    = useSafeAreaInsets()
-  const messageBadge = useMessageBadgeStore((s) => s.totalUnread)
+  const { posts, loading, refresh, loadMore, prependPost, removePost, updatePost, incrementView } = useFeed()
+  const t = useT()
+  const tAgo = (iso: string) => {
+    const diff = Date.now() - new Date(iso).getTime()
+    const m = Math.floor(diff / 60000)
+    if (m < 1)  return t.time_now
+    if (m < 60) return `${m}${t.time_m_ago}`
+    const h = Math.floor(m / 60)
+    if (h < 24) return `${h}${t.time_h_ago}`
+    return `${Math.floor(h / 24)}${t.time_d_ago}`
+  }
+  const nav              = useNavigation<Nav>()
+  const { bottom, top }  = useSafeAreaInsets()
+  const messageBadge     = useMessageBadgeStore((s) => s.totalUnread)
+  const user             = useAuthStore((s) => s.user)
+  const storeBadge       = useLuxStore((s) => s.newProductsBadge)
+  const cartCount        = useLuxStore((s) => s.cartCount())
 
   // Consume a post published from CreateScreen → prepend instantly
   const pendingPost       = useFeedStore((s) => s.pendingPost)
@@ -255,12 +96,26 @@ export default function FeedScreen() {
   const [viewerW, setViewerW] = useState(SCREEN_W)
   const [viewerH, setViewerH] = useState(SCREEN_H)
   const [imgH,    setImgH]    = useState<number | null>(null)
+  const [headerH, setHeaderH] = useState(0)
   // Per-post comment and like deltas — persists while FeedScreen stays mounted
   const [commentDeltas, setCommentDeltas] = useState<Record<string, number>>({})
   const [likedPostIds,  setLikedPostIds]  = useState<Set<string>>(new Set())
 
-  // Thumbnail → full-media crossfade opacity
-  const mediaOpacity = useRef(new Animated.Value(0)).current
+  // Persist likes: load on mount, save on change
+  useEffect(() => {
+    getCache<string[]>('liked_post_ids').then((ids) => {
+      if (ids && ids.length > 0) setLikedPostIds(new Set(ids))
+    }).catch(() => {})
+  }, [])
+  useEffect(() => {
+    setCache('liked_post_ids', Array.from(likedPostIds)).catch(() => {})
+  }, [likedPostIds])
+
+  // Overlay opacity that COVERS the video (1 = thumbnail visible, 0 = video visible).
+  // Starts at 1 so the thumbnail is shown while the video loads its first frame.
+  // This inverted approach prevents black flashes: instead of fading the video in,
+  // we fade the thumbnail overlay OUT once the video confirms it's playing.
+  const thumbnailOverlayOpacity = useRef(new Animated.Value(1)).current
 
   const progressAnim     = useRef(new Animated.Value(0)).current
   const progressRef      = useRef<Animated.CompositeAnimation | null>(null)
@@ -275,29 +130,6 @@ export default function FeedScreen() {
   // Tracks the last post we set up playback for — used to distinguish
   // "new post" from "same post, focus regained" in the playback effect
   const prevPostIdRef = useRef<string | null>(null)
-  // True when FeedScreen blurred because a stack screen was pushed on top.
-  // Detected at blur-time by inspecting the parent AppStack route count so
-  // ALL navigate-to-Profile calls are covered, regardless of which component
-  // triggered the navigation (PostInfo, header, bubble names, etc.).
-  const cameFromStackRef = useRef(false)
-
-  // Detect when AppStack pushes a screen on top of Tabs (Profile, Chat, etc.).
-  // Using parent 'state' event fires AFTER state is updated — the old 'blur' listener
-  // fired BEFORE the new route was added, so parentRoutes.length was still 1 (wrong).
-  useEffect(() => {
-    const parentNav = nav.getParent()
-    if (!parentNav) return
-    const unsub = (parentNav as any).addListener('state', (e: any) => {
-      const routes: any[] = e.data?.state?.routes ?? []
-      if (routes.length > 1) {
-        cameFromStackRef.current = true
-        if (postRef.current?.mediaType === 'VIDEO') {
-          mediaOpacity.setValue(0)
-        }
-      }
-    })
-    return unsub
-  }, [nav])
 
   // Track progress value continuously
   useEffect(() => {
@@ -400,9 +232,22 @@ export default function FeedScreen() {
     // If post not in feed yet, leave jumpToPostId set — will retry when flatPosts updates
   }, [jumpToPostId, flatPosts])
 
-  function viewedCountFor(group: UserGroup): number {
-    return group.posts.filter((p) => viewedIds.has(p.id)).length
-  }
+  // ── Stable FeedHeader callbacks ────────────────────────────────────────────
+  const jumpToUserRef = useRef(jumpToUser)
+  jumpToUserRef.current = jumpToUser
+
+  const handleSearchOpen   = useCallback(() => setSearchMode(true), [])
+  const handleSearchClose  = useCallback(() => { setSearchMode(false); setSearchQuery('') }, [])
+  const handleSearchChange = useCallback((q: string) => setSearchQuery(q), [])
+  const handleBubblePress  = useCallback((group: UserGroup) => {
+    jumpToUserRef.current(group)
+    setSearchMode(false)
+    setSearchQuery('')
+  }, [])
+  const handleNamePress    = useCallback((userId: string) => nav.navigate('Profile', { userId }), [nav])
+  const handleCreatePress  = useCallback(() => nav.navigate('Tabs', { screen: 'Create' }), [nav])
+  const handleStorePress   = useCallback(() => nav.navigate('Store'), [nav])
+  const handleProfilePress = useCallback(() => nav.navigate('Profile', {}), [nav])
 
   const currentGroupFirstIdx = useMemo(
     () => (post ? flatPosts.findIndex((p) => p.user.id === post.user.id) : 0),
@@ -466,7 +311,7 @@ export default function FeedScreen() {
     if (isNewPost) {
       progressAnim.setValue(0)
       progressValueRef.current = 0
-      mediaOpacity.setValue(0)
+      thumbnailOverlayOpacity.setValue(1)  // show thumbnail while new video loads
       setImgH(null)
     }
 
@@ -495,13 +340,8 @@ export default function FeedScreen() {
       progressRef.current.start(({ finished }) => { if (finished) goNextRef.current() })
     }
 
-    function revealMedia() {
-      Animated.timing(mediaOpacity, { toValue: 1, duration: 300, useNativeDriver: true }).start()
-    }
-
-    // TEXT posts: show immediately, run timer like an image
+    // TEXT posts: no video overlay needed — show immediately, run timer like an image
     if (post.mediaType === 'TEXT') {
-      mediaOpacity.setValue(1)
       startProgress(IMAGE_DURATION)
       return () => { progressRef.current?.stop() }
     }
@@ -510,6 +350,15 @@ export default function FeedScreen() {
       videoDurRef.current = 0
       let started   = false
       let cancelled = false
+
+      // Fade out the thumbnail overlay after a short delay so iOS has time
+      // to decode and render the first video frame before we reveal it.
+      function revealMedia() {
+        setTimeout(() => {
+          if (cancelled || !isFocusedRef.current) return
+          Animated.timing(thumbnailOverlayOpacity, { toValue: 0, duration: 250, useNativeDriver: true }).start()
+        }, 80)
+      }
 
       const remoteUrl = resolveMedia(post.mediaUrl ?? '')
       const mountDelay = setTimeout(async () => {
@@ -527,7 +376,7 @@ export default function FeedScreen() {
           const dur = Math.round(player.duration * 1000)
           videoDurRef.current = dur
           safePlayer(() => player.play())
-          revealMedia()      // ← crossfade in the video
+          revealMedia()   // ← fade out the thumbnail overlay to reveal the video
           startProgress(dur)
         }
       })
@@ -563,38 +412,20 @@ export default function FeedScreen() {
 
   useFocusEffect(useCallback(() => {
     isFocusedRef.current = true
+    refreshRef.current()
 
-    // Returning from a stack screen (Profile, Chat, etc.) — keep the user on
-    // the same post; do not reset to index 0.
-    const fromStack = cameFromStackRef.current
-    cameFromStackRef.current = false
-
-    if (!fromStack) {
-      const st = useFeedStore.getState()
-      if (!st.pendingPost && !st.jumpToPostId) navigateTo(0)
-      // Refresh only on tab-switch/app-foregrounding — not on stack-return
-      // (Profile visit doesn't change feed data, and the setPosts re-render
-      // is what causes the visible flash).
-      const task = InteractionManager.runAfterInteractions(() => {
-        refreshRef.current()
-      })
-      return () => {
-        isFocusedRef.current = false
-        task.cancel()
-        progressRef.current?.stop()
-        safePlayer(() => player.pause())
-      }
-    }
-
-    // Returning from a stack screen: defer play() until after the back animation
-    // so the native VideoView black-frame flash is never visible. mediaOpacity was
-    // already set to 0 at blur-time (thumbnail shows during the animation).
-    const isVideo = postRef.current?.mediaType === 'VIDEO'
     const task = InteractionManager.runAfterInteractions(() => {
       if (!isFocusedRef.current) return
       resumeFromCurrentRef.current()
-      if (isVideo) {
-        Animated.timing(mediaOpacity, { toValue: 1, duration: 250, useNativeDriver: true }).start()
+
+      // For videos: the overlay was set to 1 when we navigated away (see cleanup below).
+      // Give iOS 150 ms to decode and render the first frame after player.play(),
+      // then fade the thumbnail overlay out. This prevents the black-frame flash.
+      if (postRef.current?.mediaType === 'VIDEO') {
+        setTimeout(() => {
+          if (!isFocusedRef.current) return
+          Animated.timing(thumbnailOverlayOpacity, { toValue: 0, duration: 200, useNativeDriver: true }).start()
+        }, 150)
       }
     })
 
@@ -603,6 +434,11 @@ export default function FeedScreen() {
       task.cancel()
       progressRef.current?.stop()
       safePlayer(() => player.pause())
+      // Snap the overlay back to 1 (show thumbnail) so that when the user
+      // returns, the thumbnail covers the video while the player warms up.
+      if (postRef.current?.mediaType === 'VIDEO') {
+        thumbnailOverlayOpacity.setValue(1)
+      }
     }
   }, []))
 
@@ -648,205 +484,90 @@ export default function FeedScreen() {
     [viewerW, viewerH],
   )
 
+  // Estimated header height: measured via onLayout, falls back to safe-area calc
+  const effectiveHeaderH = headerH || (top + 95)
+
   return (
     <View style={s.container}>
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      {searchMode ? (
-        <View style={[s.searchBar, { paddingTop: top + 4 }]}>
-          <View style={s.searchField}>
-            <Search size={15} strokeWidth={2} color={colors.gray400} />
-            <TextInput
-              autoFocus
-              placeholder="Pesquisar pessoas..."
-              placeholderTextColor={colors.gray400}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              style={s.searchFieldInput}
-            />
-          </View>
-          <TouchableOpacity
-            onPress={() => { setSearchMode(false); setSearchQuery('') }}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Text style={s.searchCancel}>Cancelar</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <View style={[s.header, { paddingTop: top + 4 }]}>
-          <Text style={s.logo}>luxee</Text>
 
-          {/* ── Icon pill ──────────────────────────────────────────── */}
-          <View style={s.pill}>
-            {/* Search */}
-            <TouchableOpacity
-              onPress={() => setSearchMode(true)}
-              activeOpacity={0.65}
-              style={s.pillBtn}
-              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-            >
-              <Search size={24} strokeWidth={1.8} color={colors.gray800} />
-            </TouchableOpacity>
-
-            {/* Profile */}
-            <TouchableOpacity
-              onPress={() => nav.navigate('Profile', {})}
-              activeOpacity={0.65}
-              style={s.pillBtn}
-              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-            >
-              {user?.avatar
-                ? <AvatarImage uri={user.avatar} size={26} />
-                : <User size={20} strokeWidth={1.8} color={colors.gray800} />
-              }
-            </TouchableOpacity>
-
-          </View>
-        </View>
-      )}
-
-      {/* ── User bubble row ────────────────────────────────────────────────── */}
-      <FlatList
-        ref={bubblesRef}
-        horizontal
-        data={filteredGroups}
-        keyExtractor={(g) => g.user.id}
-        showsHorizontalScrollIndicator={false}
-        style={s.bubbleRow}
-        contentContainerStyle={s.bubbleList}
-        onScrollToIndexFailed={() => {}}
-        onEndReachedThreshold={0.5}
-        ListHeaderComponent={
-          !searchMode ? (
-            <TouchableOpacity
-              style={s.bubbleItem}
-              onPress={() => nav.navigate('Create' as any)}
-              activeOpacity={0.75}
-            >
-              <View style={s.ringContainer}>
-                <View style={s.createRing}>
-                  <View style={s.createCircle}>
-                    <Ionicons name="add" size={28} color={colors.white} />
-                  </View>
-                </View>
-              </View>
-              <Text style={s.bubbleName}>Criar</Text>
-            </TouchableOpacity>
-          ) : null
-        }
-        renderItem={({ item, index }) => (
-          <BubbleItem
-            item={item}
-            isActive={post?.user.id === item.user.id}
-            viewedCount={viewedCountFor(item)}
-            index={index}
-            onPress={() => {
-              jumpToUser(item)
-              setSearchMode(false)
-              setSearchQuery('')
-            }}
-            onNamePress={() => nav.navigate('Profile', { userId: item.user.id })}
-          />
-        )}
-        ListEmptyComponent={
-          <View style={s.noBubbles}>
-            <Text style={s.noBubblesText}>
-              {searchQuery ? 'Nenhum resultado' : 'Ainda não há publicações'}
-            </Text>
-          </View>
-        }
+      {/* ── Bubbles strip — topo, fundo branco, parte do fluxo flex ─────────── */}
+      <FeedHeader
+        filteredGroups={filteredGroups}
+        viewedIds={viewedIds}
+        bubblesRef={bubblesRef}
+        activeUserId={post?.user.id}
+        searchMode={searchMode}
+        searchQuery={searchQuery}
+        onSearchClose={handleSearchClose}
+        onSearchChange={handleSearchChange}
+        onBubblePress={handleBubblePress}
+        onNamePress={handleNamePress}
+        onCreatePress={handleCreatePress}
+        transparent={false}
       />
 
-      {/* ── Inline Viewer ──────────────────────────────────────────────────── */}
+      {/* ── Viewer: preenche o espaço entre o header e a tab bar ───────────── */}
       {post ? (
-        <View
-          style={s.viewer}
+        <View style={s.viewer}
           onLayout={(e) => {
             setViewerW(e.nativeEvent.layout.width)
             setViewerH(e.nativeEvent.layout.height)
           }}
         >
-          {/* ── Media: thumbnail → full-media crossfade ──────────────────── */}
-          <View style={s.mediaClip} renderToHardwareTextureAndroid>
-
-            {post.mediaType === 'TEXT' ? (
-              <View style={[s.absLayer, s.textCard, { backgroundColor: post.bgColor ?? '#FF4B6E' }]}>
-                <Text style={s.textCardContent}>{post.caption}</Text>
-              </View>
-            ) : post.mediaType === 'VIDEO' ? (
+          {/* ── Media ──────────────────────────────────────────────────── */}
+          <View style={s.mediaClip}>
+            {post.mediaType === 'TEXT' ? (() => {
+              const parts = post.bgColor?.split('|') ?? []
+              const gc: [string, string] = parts.length === 2 ? [parts[0], parts[1]] : ['#FF6B35', '#E63946']
+              return (
+                <LinearGradient colors={gc} style={[s.absLayer, s.textCard]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+                  <Text style={s.textCardContent}>{post.caption}</Text>
+                </LinearGradient>
+              )
+            })() : post.mediaType === 'VIDEO' ? (
               <>
-                {/* Poster frame enquanto o vídeo carrega */}
                 {post.thumbnailUrl ? (
-                  <Image
-                    source={{ uri: post.thumbnailUrl }}
-                    style={s.absLayer}
-                    contentFit="cover"
-                    cachePolicy="disk"
-                    recyclingKey={`thumb-${post.id}`}
-                  />
+                  <Image source={{ uri: post.thumbnailUrl }} style={s.absLayer} contentFit="cover" cachePolicy="disk" recyclingKey={`thumb-bg-${post.id}`} />
                 ) : null}
-                <Animated.View style={[s.absLayer, { opacity: mediaOpacity }]}>
-                  <VideoView
-                    player={player}
-                    style={StyleSheet.absoluteFill}
-                    contentFit="cover"
-                    nativeControls={false}
-                  />
+                <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="cover" nativeControls={false} />
+                <Animated.View style={[s.absLayer, { opacity: thumbnailOverlayOpacity }]} pointerEvents="none">
+                  {post.thumbnailUrl ? (
+                    <Image source={{ uri: post.thumbnailUrl }} style={s.absLayer} contentFit="cover" cachePolicy="disk" recyclingKey={`thumb-overlay-${post.id}`} />
+                  ) : (
+                    <View style={[s.absLayer, { backgroundColor: '#000' }]} />
+                  )}
                 </Animated.View>
               </>
             ) : (
-              <Image
-                key={post.id}
-                source={{ uri: resolveMedia(post.mediaUrl ?? '') }}
-                style={s.absLayer}
-                contentFit="contain"
-                cachePolicy="disk"
-                recyclingKey={post.id}
-                transition={150}
-              />
+              <Image key={post.id} source={{ uri: resolveMedia(post.mediaUrl ?? '') }} style={s.absLayer} contentFit="contain" cachePolicy="disk" recyclingKey={post.id} transition={150} />
             )}
-
           </View>
 
           {post.mediaType !== 'TEXT' && (
-            <LinearGradient colors={gradients.feedTop} style={s.topGradient} pointerEvents="none" />
+            <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.72)']} style={s.bottomGradient} pointerEvents="none" />
           )}
 
-          {/* Progress bars — top of viewer per design */}
-          {currentGroup && (
-            <View style={s.progressWrap} pointerEvents="none">
-              <ProgressBars
-                count={currentGroup.posts.length}
-                current={currentPostInGroup}
-                progress={progressAnim}
-              />
-            </View>
-          )}
-
-          {/* Top user info overlay */}
-          <View style={s.viewerTopUser} pointerEvents="none">
-            <AvatarImage uri={post.user.avatar} size={34} borderColor="rgba(255,255,255,0.7)" borderWidth={1.5} />
-            <Text style={s.viewerTopName} numberOfLines={1}>{post.user.name}</Text>
-            <Text style={s.viewerTopAge} numberOfLines={1}>· {viewerTimeAgo(post.createdAt)}</Text>
-          </View>
+          {/* User info + follow button + timer + energy bar */}
+          <PostInfo
+            key={post.id}
+            post={post}
+            isActive
+            onExpired={() => {
+              removePost(post.id)
+              navigateTo(Math.max(0, currentIndex - 1))
+            }}
+          />
 
           {post.isAnnouncement && (
             <View style={s.announcementBadge} pointerEvents="none">
               <Ionicons name="megaphone-outline" size={13} color="#fff" />
-              <Text style={s.announcementBadgeText}>anúncio oficial · luxee</Text>
+              <Text style={s.announcementBadgeText}>{t.feed_announcement}</Text>
             </View>
           )}
 
-          {/* Tap zones: Pressable for press-in / press-out (hold-to-pause) */}
-          <Pressable
-            style={[s.leftTap,  { bottom: bottom + 100 }]}
-            onPressIn={handlePressIn}
-            onPressOut={() => handlePressOut(goPrev)}
-          />
-          <Pressable
-            style={[s.rightTap, { bottom: bottom + 100 }]}
-            onPressIn={handlePressIn}
-            onPressOut={() => handlePressOut(goNext)}
-          />
+          {/* Tap zones */}
+          <Pressable style={s.leftTap}  onPressIn={handlePressIn} onPressOut={() => handlePressOut(goPrev)} />
+          <Pressable style={s.rightTap} onPressIn={handlePressIn} onPressOut={() => handlePressOut(goNext)} />
 
           <ActionBar
             post={post}
@@ -861,19 +582,15 @@ export default function FeedScreen() {
         </View>
       ) : (
         <View style={s.emptyViewer}>
-          <View style={s.emptyIconWrap}>
-            <Ionicons name="people-outline" size={48} color="#4C8CE4" />
-          </View>
-          <Text style={s.emptyTitle}>O teu feed está vazio</Text>
-          <Text style={s.emptySub}>Segue pessoas para ver as publicações delas aqui.</Text>
-          <TouchableOpacity
-            style={s.emptyBtn}
-            onPress={() => (nav as any).navigate('Messages')}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="search" size={18} color="#fff" />
-            <Text style={s.emptyBtnText}>Encontrar pessoas a seguir</Text>
-          </TouchableOpacity>
+          {loading ? (
+            <ActivityIndicator size="large" color={colors.primary} />
+          ) : (
+            <>
+              <Ionicons name="sparkles-outline" size={42} color={colors.primaryMid} />
+              <Text style={s.emptyTitle}>{t.feed_empty_title}</Text>
+              <Text style={s.emptySub}>{t.feed_empty_sub}</Text>
+            </>
+          )}
         </View>
       )}
 
@@ -885,156 +602,44 @@ export default function FeedScreen() {
         />
       )}
 
-      {/* ── Floating chat FAB — right side, below action icons ───────────── */}
-      {post && (
-        <>
-          <TouchableOpacity
-            style={[s.fab, { bottom: bottom + 34 }]}
-            onPress={() => (nav as any).navigate('Messages')}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="chatbubble-outline" size={26} color="#fff" style={s.mirrorX} />
+      {/* ── Tab bar branca — fixada em baixo ────────────────────────────────── */}
+      <View style={[s.tabBar, { paddingBottom: Math.max(bottom, 8) }]}>
+        <TouchableOpacity style={s.tabBtn} onPress={handleSearchOpen} activeOpacity={0.7}>
+          <Search size={24} strokeWidth={1.8} color={colors.gray600} />
+        </TouchableOpacity>
+        <TouchableOpacity style={s.tabBtn} onPress={() => nav.navigate('Tabs', { screen: 'Messages' })} activeOpacity={0.7}>
+          <View>
+            <MessageCircle size={24} strokeWidth={1.8} color={colors.gray600} />
             {messageBadge > 0 && (
-              <View style={s.fabBadge}>
-                <Text style={s.fabBadgeTxt}>{messageBadge > 9 ? '9+' : messageBadge}</Text>
+              <View style={s.tabBadge}>
+                <Text style={s.tabBadgeText}>{messageBadge > 9 ? '9+' : String(messageBadge)}</Text>
               </View>
             )}
-          </TouchableOpacity>
-        </>
-      )}
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.tabBtn} onPress={() => nav.navigate('Donations')} activeOpacity={0.7}>
+          <Feather name="hexagon" size={24} color={colors.gray600} />
+        </TouchableOpacity>
+        <TouchableOpacity style={s.tabBtn} onPress={handleStorePress} activeOpacity={0.7}>
+          <View>
+            <ShoppingBag size={24} strokeWidth={1.8} color={colors.gray600} />
+            {(storeBadge > 0 || cartCount > 0) && <View style={s.tabDot} />}
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.tabBtn} onPress={handleProfilePress} activeOpacity={0.7}>
+          {user?.avatar
+            ? <AvatarImage uri={user.avatar} size={26} />
+            : <User size={24} strokeWidth={1.8} color={colors.gray600} />
+          }
+        </TouchableOpacity>
+      </View>
+
     </View>
   )
 }
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
-
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingBottom: 8,
-    backgroundColor: colors.white,
-  },
-  logo: { fontFamily: fonts.semiBold, fontSize: 24, color: colors.gray800, letterSpacing: -0.8 },
-
-  /* icon pill */
-  pill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  pillBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pillDivider: {
-    width: 1,
-    height: 18,
-    backgroundColor: colors.gray200,
-    marginHorizontal: 2,
-  },
-  pillChatBtn: {
-    paddingLeft: 10,
-    paddingRight: 14,
-    paddingVertical: 7,
-  },
-  chatIconWrap: {
-    position: 'relative',
-  },
-  chatBadge: {
-    position: 'absolute',
-    top: -5,
-    right: -6,
-    minWidth: 15,
-    height: 15,
-    borderRadius: 8,
-    backgroundColor: '#FF3B30',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 3,
-    borderWidth: 1.5,
-    borderColor: colors.white,
-  },
-  chatBadgeTxt: {
-    fontSize: 8,
-    fontFamily: fonts.extraBold,
-    color: colors.white,
-    lineHeight: 10,
-  },
-
-  searchBar: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: spacing.md, paddingBottom: 8, gap: 12,
-    backgroundColor: colors.white,
-  },
-  searchField: {
-    flex: 1, flexDirection: 'row', alignItems: 'center',
-    backgroundColor: colors.gray100, borderRadius: 12,
-    paddingHorizontal: 12, paddingVertical: 9, gap: 8,
-  },
-  searchFieldInput: {
-    flex: 1, fontFamily: fonts.regular, fontSize: 15,
-    color: colors.gray800, padding: 0,
-  },
-  searchCancel: { fontFamily: fonts.semiBold, fontSize: 15, color: colors.primary },
-  headerIconWrap: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: colors.gray800,
-    alignItems: 'center', justifyContent: 'center',
-  },
-
-  ringContainer: {
-    width: RING_SIZE, height: RING_SIZE,
-    alignItems: 'center', justifyContent: 'center',
-    overflow: 'visible',
-  },
-  onlineBadgeWrap: {
-    position: 'absolute',
-    bottom: -9,
-    left: 0, right: 0,
-    alignItems: 'center',
-  },
-  onlineBadge: {
-    backgroundColor: '#22C55E',
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderWidth: 1.5,
-    borderColor: colors.white,
-  },
-  onlineBadgeText: {
-    color: colors.white,
-    fontSize: 8,
-    fontFamily: fonts.bold,
-    letterSpacing: 0.6,
-  },
-
-
-  bubbleRow:  { flexGrow: 0, flexShrink: 0 },
-  bubbleList: { paddingHorizontal: 12, paddingTop: 6, paddingBottom: 10, gap: 8 },
-  bubbleItem: { alignItems: 'center', gap: 6, width: RING_SIZE },
-  ringWrap:   { width: RING_SIZE, height: RING_SIZE, alignItems: 'center', justifyContent: 'center' },
-
-  // "Criar" button — mesma dimensão que os avatares com anel
-  createRing: {
-    width: RING_SIZE, height: RING_SIZE,
-    borderRadius: RING_SIZE / 2,
-    borderWidth: 1.5,
-    borderColor: colors.gray200,
-    borderStyle: 'dashed',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  createCircle: {
-    width: AVATAR_SIZE, height: AVATAR_SIZE, borderRadius: AVATAR_SIZE / 2,
-    backgroundColor: colors.primary,
-    alignItems: 'center', justifyContent: 'center',
-  },
-
-  avatarCenter:     { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
-  bubbleName:       { color: '#1A1A1A', fontFamily: fonts.medium, fontSize: 11, textAlign: 'center', letterSpacing: -0.1 },
-  bubbleNameActive: { color: colors.primary },
-  noBubbles:        { paddingHorizontal: 20, paddingVertical: 30 },
-  noBubblesText:    { color: colors.gray400, fontFamily: fonts.regular, fontSize: 13 },
 
   viewer: {
     flex: 1,
@@ -1069,27 +674,39 @@ const s = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 6,
   },
-  topGradient:    { position: 'absolute', top: 0, left: 0, right: 0, height: 90 },
+  bottomGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 200 },
 
-  progressWrap:  { position: 'absolute', top: 12, left: 44, right: 44, zIndex: 22 },
+  progressWrap:  { position: 'absolute', left: 16, right: 80, zIndex: 22 },
 
-  viewerTopUser: {
-    position: 'absolute', top: 30, left: 16, zIndex: 22,
-    flexDirection: 'row', alignItems: 'center', gap: 10,
+  viewerUserInfo: {
+    position: 'absolute', left: 16, right: 80, bottom: 16, zIndex: 22,
   },
-  viewerTopName: {
+  viewerUserRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  viewerUserText: { flex: 1, minWidth: 0 },
+  viewerUserName: {
     color: '#fff', fontFamily: fonts.semiBold, fontSize: 14,
-    letterSpacing: -0.2, flexShrink: 1,
+    letterSpacing: -0.3, flexShrink: 1,
     textShadowColor: 'rgba(0,0,0,0.4)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
-  viewerTopAge: {
-    color: 'rgba(255,255,255,0.7)', fontFamily: fonts.regular, fontSize: 13, flexShrink: 0,
+  viewerUserAge: {
+    color: 'rgba(255,255,255,0.6)', fontFamily: fonts.regular, fontSize: 12, marginTop: 1,
+  },
+  deviceBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3,
+  },
+  deviceBadgeTxt: {
+    color: 'rgba(255,255,255,0.55)', fontFamily: fonts.medium, fontSize: 11, letterSpacing: 0.1,
+  },
+  viewerCaption: {
+    color: 'rgba(255,255,255,0.88)', fontFamily: fonts.regular,
+    fontSize: 13, lineHeight: 18, letterSpacing: -0.1,
+    marginTop: 7, marginLeft: 46,
   },
 
   announcementBadge: {
-    position: 'absolute', top: 54, left: 16, zIndex: 21,
+    position: 'absolute', left: 16, top: 16, zIndex: 21,
     flexDirection: 'row', alignItems: 'center', gap: 5,
     backgroundColor: 'rgba(230,126,34,0.88)',
     paddingHorizontal: 10, paddingVertical: 5,
@@ -1108,43 +725,59 @@ const s = StyleSheet.create({
   progressFull:  { flex: 1, backgroundColor: colors.white },
   progressFill:  { height: '100%', backgroundColor: colors.white },
 
-  leftTap:  { position: 'absolute', left: 0, top: 0, width: SCREEN_W * 0.35, zIndex: 10 },
-  rightTap: { position: 'absolute', left: SCREEN_W * 0.35, right: 80, top: 0, zIndex: 10 },
+  leftTap:  { position: 'absolute', left: 0, top: 0, bottom: 72, width: SCREEN_W * 0.35, zIndex: 10 },
+  rightTap: { position: 'absolute', left: SCREEN_W * 0.35, right: 80, top: 0, bottom: 72, zIndex: 10 },
 
   emptyViewer:  { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 36, gap: 14 },
-  emptyIconWrap:{ width: 88, height: 88, borderRadius: 44, backgroundColor: 'rgba(255,75,110,0.1)', alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
-  emptyTitle:   { fontSize: 20, fontFamily: fonts.semiBold, color: colors.gray800, letterSpacing: -0.4, textAlign: 'center' },
+  emptyTitle:   { fontSize: 18, fontFamily: fonts.semiBold, color: colors.gray800, letterSpacing: -0.3, textAlign: 'center', marginTop: 4 },
   emptySub:     { fontSize: 14, fontFamily: fonts.regular, color: colors.gray400, textAlign: 'center', lineHeight: 20 },
-  emptyBtn:     { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, backgroundColor: '#4C8CE4', paddingHorizontal: 24, paddingVertical: 14, borderRadius: 14 },
-  emptyBtnText: { color: '#fff', fontFamily: fonts.semiBold, fontSize: 15 },
 
-  // Floating chat FAB — bottom right per design
-  fab: {
-    position: 'absolute',
-    right: 14,
-    width: 56, height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.primary,
-    alignItems: 'center', justifyContent: 'center',
-    zIndex: 30,
-    shadowColor: 'rgba(0,0,0,0.45)',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 1,
-    shadowRadius: 18,
-    elevation: 8,
+  // Tab bar branca em baixo
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: colors.white,
+    borderTopWidth: 1,
+    borderTopColor: '#EBEBEB',
+    paddingTop: 10,
   },
-  fabBadge: {
+  tabBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 4,
+  },
+  tabBadge: {
     position: 'absolute',
-    top: -3, right: -3,
-    minWidth: 18, height: 18,
-    borderRadius: 9,
+    top: -5,
+    right: -8,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
     backgroundColor: '#FF3B30',
-    borderWidth: 1.5, borderColor: '#fff',
-    alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: colors.white,
   },
-  fabBadgeTxt: {
-    color: '#fff', fontFamily: fonts.extraBold, fontSize: 10, lineHeight: 12,
+  tabBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontFamily: fonts.bold,
+    lineHeight: 11,
+    includeFontPadding: false,
   },
-  mirrorX: { transform: [{ scaleX: -1 }] },
+  tabDot: {
+    position: 'absolute',
+    top: -3,
+    right: -3,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FF3B30',
+    borderWidth: 1.5,
+    borderColor: colors.white,
+  },
+
+
 })

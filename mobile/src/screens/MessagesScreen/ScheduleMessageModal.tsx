@@ -7,6 +7,7 @@ import { Ionicons, Octicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors, fonts } from '../../theme'
 import type { ScheduledMessage } from '../../services/scheduledMessages.service'
+import { useT } from '../../i18n'
 
 interface Props {
   visible: boolean
@@ -17,40 +18,43 @@ interface Props {
   onCancelScheduled: () => void
 }
 
-const DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
-
-function buildDateOptions() {
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date()
-    d.setDate(d.getDate() + i)
-    d.setHours(0, 0, 0, 0)
-    const label =
-      i === 0 ? 'Hoje' :
-      i === 1 ? 'Amanhã' :
-      `${DAYS[d.getDay()]} ${d.getDate()}`
-    return { label, date: d }
-  })
-}
-
-function formatScheduledDate(isoStr: string): string {
-  const d = new Date(isoStr)
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const dDay = new Date(d)
-  dDay.setHours(0, 0, 0, 0)
-  const diff = Math.round((dDay.getTime() - today.getTime()) / 86_400_000)
-  const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-  if (diff === 0) return `Hoje às ${time}`
-  if (diff === 1) return `Amanhã às ${time}`
-  const day = d.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' })
-  return `${day} às ${time}`
-}
 
 export default function ScheduleMessageModal({
   visible, receiverName, existingMessage,
   onClose, onSchedule, onCancelScheduled,
 }: Props) {
+  const t = useT()
   const { bottom } = useSafeAreaInsets()
+
+  const DAYS = [t.day_sun, t.day_mon, t.day_tue, t.day_wed, t.day_thu, t.day_fri, t.day_sat]
+
+  function buildDateOptions() {
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date()
+      d.setDate(d.getDate() + i)
+      d.setHours(0, 0, 0, 0)
+      const label =
+        i === 0 ? t.time_today :
+        i === 1 ? t.time_tomorrow :
+        `${DAYS[d.getDay()]} ${d.getDate()}`
+      return { label, date: d }
+    })
+  }
+
+  function formatScheduledDate(isoStr: string): string {
+    const d = new Date(isoStr)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const dDay = new Date(d)
+    dDay.setHours(0, 0, 0, 0)
+    const diff = Math.round((dDay.getTime() - today.getTime()) / 86_400_000)
+    const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    if (diff === 0) return `${t.time_today_at} ${time}`
+    if (diff === 1) return `${t.time_tomorrow_at} ${time}`
+    const day = d.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' })
+    return `${day} às ${time}`
+  }
+
   const dateOptions = buildDateOptions()
 
   const [content,  setContent]  = useState('')
@@ -115,14 +119,14 @@ export default function ScheduleMessageModal({
             <View style={m.iconBadge}>
               <Octicons name="stopwatch" size={15} color={colors.primary} />
             </View>
-            <Text style={m.title}>Mensagem agendada</Text>
+            <Text style={m.title}>{t.sched_view_title}</Text>
           </View>
           <TouchableOpacity onPress={onClose} style={m.closeBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Ionicons name="close" size={19} color={colors.gray500} />
           </TouchableOpacity>
         </View>
 
-        <Text style={m.toLine}>Para <Text style={m.toName}>{receiverName}</Text></Text>
+        <Text style={m.toLine}>{t.sched_to} <Text style={m.toName}>{receiverName}</Text></Text>
 
         {/* Message preview */}
         <View style={m.previewBox}>
@@ -143,13 +147,13 @@ export default function ScheduleMessageModal({
         {/* Cancel CTA */}
         <TouchableOpacity style={m.cancelCta} onPress={onCancelScheduled} activeOpacity={0.8}>
           <Ionicons name="trash-outline" size={17} color="#E05C5C" />
-          <Text style={m.cancelCtaTxt}>Cancelar agendamento</Text>
+          <Text style={m.cancelCtaTxt}>{t.sched_cancel_sched}</Text>
         </TouchableOpacity>
 
         {/* Premium teaser */}
         <View style={m.premiumTeaser}>
           <Ionicons name="diamond-outline" size={12} color={colors.gray400} />
-          <Text style={m.premiumTxt}>Múltiplos agendamentos disponíveis em breve</Text>
+          <Text style={m.premiumTxt}>{t.sched_premium}</Text>
         </View>
       </>,
     )
@@ -164,20 +168,20 @@ export default function ScheduleMessageModal({
           <View style={m.iconBadge}>
             <Octicons name="stopwatch" size={15} color={colors.primary} />
           </View>
-          <Text style={m.title}>Agendar mensagem</Text>
+          <Text style={m.title}>{t.sched_title}</Text>
         </View>
         <TouchableOpacity onPress={onClose} style={m.closeBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Ionicons name="close" size={19} color={colors.gray500} />
         </TouchableOpacity>
       </View>
 
-      <Text style={m.toLine}>Para <Text style={m.toName}>{receiverName}</Text></Text>
+      <Text style={m.toLine}>{t.sched_to} <Text style={m.toName}>{receiverName}</Text></Text>
 
       {/* Message input */}
       <View style={m.inputBox}>
         <TextInput
           style={m.input}
-          placeholder="Escreve a mensagem aqui..."
+          placeholder={t.sched_input_ph}
           placeholderTextColor={colors.gray400}
           value={content}
           onChangeText={setContent}
@@ -186,12 +190,12 @@ export default function ScheduleMessageModal({
           textAlignVertical="top"
         />
         {content.length > 380 && (
-          <Text style={m.charCount}>{500 - content.length} restantes</Text>
+          <Text style={m.charCount}>{500 - content.length} {t.sched_remaining}</Text>
         )}
       </View>
 
       {/* Date */}
-      <Text style={m.sectionLabel}>📅  Data</Text>
+      <Text style={m.sectionLabel}>{t.sched_date}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={m.chips}>
         {dateOptions.map((opt, i) => (
           <TouchableOpacity
@@ -206,7 +210,7 @@ export default function ScheduleMessageModal({
       </ScrollView>
 
       {/* Time */}
-      <Text style={m.sectionLabel}>🕐  Hora</Text>
+      <Text style={m.sectionLabel}>{t.sched_time}</Text>
       <View style={m.timeBlock}>
         <View style={m.wheel}>
           <TouchableOpacity style={m.arrowBtn} onPress={() => bumpHour(1)}>
@@ -237,7 +241,7 @@ export default function ScheduleMessageModal({
             color={isPast ? '#E05C5C' : colors.secondary}
           />
           <Text style={[m.statusTxt, isPast && m.statusTxtWarn]}>
-            {isPast ? 'Hora passada' : `${chosen.label} · ${hStr}:${mStr}`}
+            {isPast ? t.sched_past_time : `${chosen.label} · ${hStr}:${mStr}`}
           </Text>
         </View>
       </View>
@@ -252,10 +256,10 @@ export default function ScheduleMessageModal({
         <Octicons name="stopwatch" size={16} color={colors.white} />
         <Text style={m.ctaTxt} numberOfLines={1}>
           {canSubmit
-            ? `Agendar · ${chosen.label} às ${hStr}:${mStr}`
+            ? `${t.sched_btn} · ${chosen.label} às ${hStr}:${mStr}`
             : content.trim().length === 0
-              ? 'Escreve uma mensagem'
-              : 'Escolhe um horário futuro'}
+              ? t.sched_empty_msg
+              : t.sched_past_msg}
         </Text>
       </TouchableOpacity>
     </>,
@@ -264,7 +268,7 @@ export default function ScheduleMessageModal({
 
 const m = StyleSheet.create({
   flex:     { flex: 1 },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.38)' },
+  backdrop: { flex: 1, backgroundColor: 'transparent' },
 
   sheet: {
     backgroundColor: colors.white,

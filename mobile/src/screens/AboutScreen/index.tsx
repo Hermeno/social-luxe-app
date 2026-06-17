@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React from 'react'
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Linking, Alert,
 } from 'react-native'
@@ -7,248 +7,178 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { AppStackParams } from '../../navigation/AppNavigator'
-import { colors, fonts } from '../../theme'
+import { fonts } from '../../theme'
+import { useT } from '../../i18n'
 
 type Nav = StackNavigationProp<AppStackParams>
 
-const APP_VERSION = '1.0.0'
+const T  = '#1A1A1A'
+const S  = '#6E6E73'
+const M  = '#ABABAB'
+const B  = '#CA2851'
+const BD = '#E5E5EA'
+const BG = '#FFFFFF'
+const SX = '#F9F9FB'
+const SEP = '#F0F0F3'
+const CARD_BD = '#EDEDF1'
 
-const PRIVACY_SECTIONS = [
-  {
-    title: '1. Dados que Recolhemos',
-    body: 'Recolhemos informações que forneces ao criar uma conta: nome, endereço de e-mail, foto de perfil, localização aproximada (cidade/distrito) e conteúdo que publicas. Também recolhemos automaticamente dados de utilização, endereço IP e informações do dispositivo para melhorar o serviço.',
-  },
-  {
-    title: '2. Como Usamos os Teus Dados',
-    body: 'Usamos os teus dados para fornecer e melhorar o serviço, personalizar a tua experiência, enviar notificações importantes sobre a conta e garantir a segurança da plataforma. Nunca vendemos os teus dados pessoais a terceiros.',
-  },
-  {
-    title: '3. Partilha de Dados',
-    body: 'Os teus dados não são partilhados com terceiros para fins comerciais. Podemos partilhar dados anonimizados e agregados para análises. Em caso de obrigação legal ou para proteger os direitos dos utilizadores, podemos divulgar informações às autoridades competentes.',
-  },
-  {
-    title: '4. Retenção de Dados',
-    body: 'Conservamos os teus dados enquanto a tua conta estiver activa. Podes solicitar a eliminação da tua conta e todos os dados associados a qualquer momento enviando um e-mail para luxee@gmail.com.',
-  },
-  {
-    title: '5. Segurança',
-    body: 'Implementamos medidas técnicas e organizacionais para proteger os teus dados contra acesso não autorizado, alteração, divulgação ou destruição. Todas as comunicações são encriptadas via HTTPS.',
-  },
-  {
-    title: '6. Os Teus Direitos',
-    body: 'Tens o direito de aceder, corrigir ou eliminar os teus dados pessoais. Podes exportar os teus dados ou revogar o consentimento a qualquer momento através das definições da conta ou contactando-nos directamente.',
-  },
-  {
-    title: '7. Cookies e Tecnologias Similares',
-    body: 'Utilizamos armazenamento local no dispositivo para guardar preferências e melhorar a experiência de utilização. Não utilizamos cookies de rastreamento de terceiros.',
-  },
-  {
-    title: '8. Menores',
-    body: 'O luxee não é destinado a menores de 18 anos. Se tomarmos conhecimento de que recolhemos dados de um menor, eliminaremos imediatamente essa informação.',
-  },
-  {
-    title: '9. Alterações a esta Política',
-    body: 'Podemos actualizar esta política periodicamente. Notificaremos os utilizadores sobre alterações significativas através da aplicação ou por e-mail. O uso continuado do serviço após as alterações constitui aceitação da nova política.',
-  },
-  {
-    title: '10. Contacto',
-    body: 'Para questões sobre privacidade, contacta-nos em luxee@gmail.com ou através do formulário de contacto disponível no nosso site.',
-  },
-]
-
-function AccordionItem({ title, body }: { title: string; body: string }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <TouchableOpacity onPress={() => setOpen((v) => !v)} activeOpacity={0.7} style={s.accordionItem}>
-      <View style={s.accordionHeader}>
-        <Text style={s.accordionTitle}>{title}</Text>
-        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={15} color={colors.gray400} />
-      </View>
-      {open && <Text style={s.accordionBody}>{body}</Text>}
-    </TouchableOpacity>
-  )
+function openLink(url: string) {
+  Linking.openURL(url).catch(() => Alert.alert('Erro', 'Não foi possível abrir o link.'))
 }
 
-function ContactRow({ icon, label, value, onPress }: {
-  icon: string; label: string; value: string; onPress?: () => void
+function LinkRow({ iconBg, iconColor, iconName, title, action, onPress, isLast }: {
+  iconBg: string; iconColor: string; iconName: string
+  title: string; action?: string; onPress?: () => void; isLast?: boolean
 }) {
   return (
-    <TouchableOpacity style={s.contactRow} onPress={onPress} activeOpacity={onPress ? 0.65 : 1}>
-      <Ionicons name={icon as any} size={16} color={colors.gray400} />
-      <View style={{ flex: 1 }}>
-        <Text style={s.contactLabel}>{label}</Text>
-        <Text style={s.contactValue}>{value}</Text>
+    <TouchableOpacity
+      style={[lr.row, !isLast && lr.sep]}
+      onPress={onPress}
+      activeOpacity={onPress ? 0.7 : 1}
+    >
+      <View style={[lr.icon, { backgroundColor: iconBg }]}>
+        <Ionicons name={iconName as any} size={17} color={iconColor} />
       </View>
-      {onPress && <Ionicons name="chevron-forward" size={14} color={colors.gray400} />}
+      <Text style={lr.title}>{title}</Text>
+      {action ? (
+        <Text style={lr.action}>{action}</Text>
+      ) : (
+        <Ionicons name="chevron-forward" size={17} color="#C4C4CC" />
+      )}
     </TouchableOpacity>
   )
 }
-
-function SectionTitle({ children }: { children: string }) {
-  return <Text style={s.sectionTitle}>{children}</Text>
-}
-
-function Divider() {
-  return <View style={s.divider} />
-}
+const lr = StyleSheet.create({
+  row:    { flexDirection: 'row', alignItems: 'center', gap: 13, padding: 13, paddingHorizontal: 14 },
+  sep:    { borderBottomWidth: 1, borderBottomColor: SEP },
+  icon:   { width: 32, height: 32, borderRadius: 9, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  title:  { flex: 1, fontFamily: fonts.semiBold, fontSize: 15, color: T },
+  action: { fontFamily: fonts.semiBold, fontSize: 12, color: B },
+})
 
 export default function AboutScreen() {
   const nav = useNavigation<Nav>()
   const { top, bottom } = useSafeAreaInsets()
-
-  function openLink(url: string) {
-    Linking.openURL(url).catch(() => Alert.alert('Erro', 'Não foi possível abrir o link.'))
-  }
+  const t = useT()
 
   return (
-    <View style={[s.container, { paddingTop: top }]}>
-      {/* Header */}
-      <View style={s.header}>
-        <TouchableOpacity onPress={() => nav.goBack()} style={s.backBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Ionicons name="chevron-back" size={26} color={colors.gray800} />
+    <View style={s.screen}>
+      <View style={[s.header, { paddingTop: top + 8 }]}>
+        <TouchableOpacity onPress={() => nav.goBack()} style={s.backBtn} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+          <Ionicons name="chevron-back" size={20} color={T} />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>sobre o luxee</Text>
-        <View style={{ width: 44 }} />
+        <Text style={s.headerTitle}>{t.about_title}</Text>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: bottom + 40 }}>
-
-        {/* App identity */}
-        <View style={s.identity}>
-          <Text style={s.appName}>luxee</Text>
-          <Text style={s.appTagline}>a tua rede social sem fronteiras</Text>
-          <Text style={s.appMeta}>versão {APP_VERSION} · moçambique 🇲🇿</Text>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[s.content, { paddingBottom: bottom + 32 }]}
+      >
+        <View style={s.hero}>
+          <View style={s.appIcon}>
+            <Text style={s.appIconLetter}>l</Text>
+          </View>
+          <View style={s.appNameRow}>
+            <Text style={s.appName}>luxee</Text>
+            <View style={s.appDot} />
+          </View>
+          <Text style={s.appVersion}>{t.version} 1.0.0 · build 1</Text>
         </View>
 
-        <Divider />
+        <Text style={s.description}>{t.about_desc}</Text>
 
-        {/* Criador */}
-        <SectionTitle>CRIADOR</SectionTitle>
-        <View style={s.creatorBlock}>
-          <Text style={s.creatorName}>Herminio A. Macamo</Text>
-          <Text style={s.creatorRole}>Desenvolvedor de Software</Text>
-          <Text style={s.creatorLocation}>Chibuto, Gaza — Moçambique</Text>
+        <View style={s.devCard}>
+          <View style={s.devInitials}>
+            <Text style={s.devInitialsTxt}>HM</Text>
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={s.devLabel}>{t.about_madeBy}</Text>
+            <Text style={s.devName}>Hermínio A. Macamo</Text>
+            <Text style={s.devLocation}>Chibuto · Gaza · Moçambique 🇲🇿</Text>
+          </View>
         </View>
 
-        <Divider />
+        <View style={[s.card, { marginTop: 12 }]}>
+          <LinkRow
+            iconBg="rgba(76,140,228,0.12)" iconColor={B} iconName="call-outline"
+            title="+258 84 205 9826" action="Ligar"
+            onPress={() => openLink('tel:+258842059826')}
+          />
+          <LinkRow
+            iconBg="rgba(76,140,228,0.12)" iconColor={B} iconName="mail-outline"
+            title="herminiomacamo6@gmail.com" action="Email"
+            onPress={() => openLink('mailto:herminiomacamo6@gmail.com')}
+            isLast
+          />
+        </View>
 
-        {/* Contacto */}
-        <SectionTitle>CONTACTO</SectionTitle>
-        <ContactRow
-          icon="mail-outline"
-          label="e-mail da app"
-          value="luxee@gmail.com"
-          onPress={() => openLink('mailto:luxee@gmail.com')}
-        />
-        <ContactRow
-          icon="mail-outline"
-          label="e-mail pessoal"
-          value="herminiomacamo6@gmail.com"
-          onPress={() => openLink('mailto:herminiomacamo6@gmail.com')}
-        />
-        <ContactRow
-          icon="logo-whatsapp"
-          label="whatsapp / chamada"
-          value="+258 84 205 9826"
-          onPress={() => openLink('https://wa.me/258842059826')}
-        />
-        <ContactRow
-          icon="location-outline"
-          label="país de origem"
-          value="Chibuto, Gaza — Moçambique"
-        />
+        <View style={[s.card, { marginTop: 12 }]}>
+          <LinkRow
+            iconBg="rgba(76,140,228,0.12)" iconColor={B} iconName="document-text-outline"
+            title={t.about_terms}
+            onPress={() => {}}
+          />
+          <LinkRow
+            iconBg="rgba(76,140,228,0.12)" iconColor={B} iconName="lock-closed-outline"
+            title={t.about_privacyLink}
+            onPress={() => {}}
+          />
+          <LinkRow
+            iconBg="rgba(76,140,228,0.12)" iconColor={B} iconName="star-outline"
+            title={t.about_rate} isLast
+            onPress={() => {}}
+          />
+        </View>
 
-        <Divider />
-
-        {/* Política de Privacidade */}
-        <SectionTitle>POLÍTICA DE PRIVACIDADE</SectionTitle>
-        <Text style={s.introText}>
-          A tua privacidade é uma prioridade para nós. Esta política descreve como recolhemos,
-          usamos e protegemos os teus dados pessoais.{'\n'}
-          Última actualização: Junho 2026
-        </Text>
-        {PRIVACY_SECTIONS.map((sec) => (
-          <AccordionItem key={sec.title} title={sec.title} body={sec.body} />
-        ))}
-
-        <Divider />
-
-        {/* Termos de Uso */}
-        <SectionTitle>TERMOS DE USO</SectionTitle>
-        <Text style={s.introText}>
-          Ao usar o luxee concordas em não publicar conteúdo ofensivo, ilegal ou que viole
-          direitos de terceiros. O luxee reserva-se o direito de remover conteúdo ou suspender
-          contas que violem estas regras. O serviço é fornecido "como está" e podemos alterar
-          ou descontinuar funcionalidades a qualquer momento com aviso prévio.{'\n\n'}
-          Para questões legais: luxee@gmail.com
-        </Text>
-
-        <Divider />
-
-        <Text style={s.footer}>© 2026 luxee · feito com ❤️ em moçambique</Text>
-
+        <View style={s.footer}>
+          <Text style={s.footerTxt}>{t.feito_com} </Text>
+          <Ionicons name="heart" size={14} color="#FF3B30" />
+          <Text style={s.footerTxt}> {t.about_footer} 🇲🇿</Text>
+        </View>
+        <Text style={s.copyright}>{t.about_copyright}</Text>
       </ScrollView>
     </View>
   )
 }
 
 const s = StyleSheet.create({
-  container:  { flex: 1, backgroundColor: '#fff' },
+  screen:  { flex: 1, backgroundColor: BG },
+  header:  { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingBottom: 10 },
+  backBtn: { width: 40, height: 40, borderRadius: 999, backgroundColor: BG, borderWidth: 1, borderColor: BD, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontFamily: fonts.extraBold, fontSize: 26, letterSpacing: -0.6, color: T },
+  content: { paddingHorizontal: 16, gap: 0 },
 
-  header: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 10,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1, borderBottomColor: colors.gray200,
+  hero: { alignItems: 'center', marginTop: 24, marginBottom: 20, gap: 14 },
+  appIcon: {
+    width: 96, height: 96, borderRadius: 28, backgroundColor: B,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: B, shadowOffset: { width: 0, height: 18 }, shadowOpacity: 0.5, shadowRadius: 30,
+    elevation: 12,
   },
-  backBtn:     { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: {
-    flex: 1, textAlign: 'center',
-    fontSize: 16, fontFamily: fonts.semiBold, color: colors.gray800, letterSpacing: -0.2,
+  appIconLetter: { fontFamily: fonts.extraBold, fontSize: 42, color: BG, letterSpacing: -2 },
+  appNameRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 7 },
+  appName:    { fontFamily: fonts.extraBold, fontSize: 30, color: T, letterSpacing: -1 },
+  appDot:     { width: 9, height: 9, borderRadius: 999, backgroundColor: B, marginTop: 11 },
+  appVersion: { fontFamily: fonts.medium, fontSize: 13, color: M },
+
+  description: { fontFamily: fonts.medium, fontSize: 15, lineHeight: 23, color: S, textAlign: 'center', paddingHorizontal: 6, marginBottom: 20 },
+
+  devCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 13,
+    padding: 14, borderRadius: 18,
+    backgroundColor: 'rgba(76,140,228,0.06)',
+    borderWidth: 1, borderColor: 'rgba(76,140,228,0.18)',
+    marginBottom: 0,
   },
+  devInitials: { width: 46, height: 46, borderRadius: 14, backgroundColor: B, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  devInitialsTxt: { fontFamily: fonts.extraBold, fontSize: 18, color: BG, letterSpacing: -0.5 },
+  devLabel:   { fontFamily: fonts.medium, fontSize: 11, color: B, letterSpacing: 0.6, textTransform: 'uppercase' },
+  devName:    { fontFamily: fonts.bold, fontSize: 15, color: T, letterSpacing: -0.3, marginTop: 2 },
+  devLocation:{ fontFamily: fonts.medium, fontSize: 12, color: S, marginTop: 1 },
 
-  identity: {
-    paddingHorizontal: 20, paddingTop: 28, paddingBottom: 24,
-    alignItems: 'flex-start',
-  },
-  appName:    { fontSize: 32, fontFamily: fonts.extraBold, color: colors.gray800, letterSpacing: -1 },
-  appTagline: { fontSize: 14, fontFamily: fonts.regular, color: colors.gray400, marginTop: 4 },
-  appMeta:    { fontSize: 12, fontFamily: fonts.regular, color: colors.gray400, marginTop: 8 },
+  card: { backgroundColor: SX, borderWidth: 1, borderColor: CARD_BD, borderRadius: 18, overflow: 'hidden' },
 
-  divider: { height: 1, backgroundColor: colors.gray200, marginHorizontal: 20, marginVertical: 4 },
-
-  sectionTitle: {
-    fontSize: 11, fontFamily: fonts.bold, color: colors.gray400,
-    letterSpacing: 1.2, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 10,
-  },
-
-  creatorBlock: { paddingHorizontal: 20, paddingBottom: 16, gap: 3 },
-  creatorName:  { fontSize: 16, fontFamily: fonts.semiBold, color: colors.gray800 },
-  creatorRole:  { fontSize: 13, fontFamily: fonts.regular, color: colors.gray600 },
-  creatorLocation: { fontSize: 13, fontFamily: fonts.regular, color: colors.gray400, marginTop: 2 },
-
-  contactRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
-    paddingHorizontal: 20, paddingVertical: 13,
-  },
-  contactLabel: { fontSize: 11, fontFamily: fonts.regular, color: colors.gray400, marginBottom: 1 },
-  contactValue: { fontSize: 14, fontFamily: fonts.medium, color: colors.gray800 },
-
-  introText: {
-    fontSize: 13, fontFamily: fonts.regular, color: colors.gray600,
-    lineHeight: 21, paddingHorizontal: 20, paddingBottom: 8,
-  },
-
-  accordionItem: {
-    paddingHorizontal: 20, paddingVertical: 13,
-    borderTopWidth: 1, borderTopColor: colors.gray200,
-  },
-  accordionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  accordionTitle:  { fontSize: 13, fontFamily: fonts.semiBold, color: colors.gray800, flex: 1, paddingRight: 8 },
-  accordionBody:   { fontSize: 13, fontFamily: fonts.regular, color: colors.gray600, lineHeight: 21, marginTop: 8 },
-
-  footer: {
-    textAlign: 'center', fontSize: 12, fontFamily: fonts.regular,
-    color: colors.gray400, paddingVertical: 24,
-  },
+  footer:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 24 },
+  footerTxt: { fontFamily: fonts.semiBold, fontSize: 13, color: S },
+  copyright: { textAlign: 'center', fontFamily: fonts.medium, fontSize: 12, color: M, marginTop: 6, marginBottom: 8 },
 })

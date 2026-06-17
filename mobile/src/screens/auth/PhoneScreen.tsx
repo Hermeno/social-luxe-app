@@ -147,7 +147,7 @@ export default function PhoneScreen() {
           <Text style={s.legalLink}>Termos</Text>
           {' '}e a{' '}
           <Text style={s.legalLink}>Política de Privacidade</Text>
-          {' '}da Luxee.
+          {' '}da luxee.
         </Text>
 
       </View>
@@ -155,7 +155,7 @@ export default function PhoneScreen() {
   )
 }
 
-const B  = '#4C8CE4'
+const B  = '#CA2851'
 const T  = '#1A1A1A'
 const S  = '#6E6E73'
 const M  = '#ABABAB'

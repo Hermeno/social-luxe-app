@@ -21,7 +21,7 @@ function timeAgo(date: string) {
 export default function CommentItem({ comment, onReply }: Props) {
   return (
     <View style={s.container}>
-      <AvatarImage uri={comment.user.avatar} size={36} />
+      <AvatarImage uri={comment.user.avatar} name={comment.user.name} size={36} />
       <View style={s.body}>
         <Text style={s.name}>{comment.user.name}</Text>
         <Text style={s.text}>{comment.content}</Text>

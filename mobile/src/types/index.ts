@@ -20,6 +20,8 @@ export interface User {
   city?: string | null
   district?: string | null
   autoReply?: string | null
+  showDevice?: boolean
+  statusLabel?: string | null
   isAdmin?: boolean
 }
 
@@ -33,12 +35,13 @@ export interface Post {
   bgColor: string | null   // background colour for TEXT posts
   expiresAt: string
   extended: boolean
+  deviceModel?: string | null
   createdAt: string
   partnerUserId?: string | null
   partnerAccepted?: boolean
   partnerUser?: { id: string; name: string; avatar: string | null } | null
   isAnnouncement?: boolean
-  user: Pick<User, 'id' | 'name' | 'avatar' | 'viewsPublic'>
+  user: Pick<User, 'id' | 'name' | 'avatar' | 'viewsPublic' | 'showDevice' | 'statusLabel'>
   _count: { likes: number; comments: number; shares: number; views: number }
 }
 

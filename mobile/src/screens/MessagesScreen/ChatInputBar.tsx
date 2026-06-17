@@ -1,11 +1,13 @@
 import React, { useRef, useEffect } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  Animated, Platform,
+  Animated, Platform, Alert,
 } from 'react-native'
 import * as Haptics from 'expo-haptics'
+import * as ImagePicker from 'expo-image-picker'
 import { Ionicons } from '@expo/vector-icons'
 import { colors, fonts } from '../../theme'
+import { useT } from '../../i18n'
 
 interface ReplyPreview {
   senderName: string
@@ -24,9 +26,10 @@ interface Props {
 }
 
 export default function ChatInputBar({
-  value, onChange, onSend,
+  value, onChange, onSend, onSendFile,
   replyingTo, onCancelReply, onSchedulePress,
 }: Props) {
+  const t = useT()
   const hasText   = value.trim().length > 0
   const sendScale = useRef(new Animated.Value(1)).current
 
@@ -47,6 +50,25 @@ export default function ChatInputBar({
     onSend()
   }
 
+  async function handleAttach() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (status !== 'granted') {
+      Alert.alert('Permission required', 'Allow access to photos to send images.')
+      return
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.85,
+      allowsMultipleSelection: false,
+    })
+    if (result.canceled || !result.assets?.length) return
+    const asset = result.assets[0]
+    const uri      = asset.uri
+    const mimeType = asset.mimeType ?? 'image/jpeg'
+    const fileName = asset.fileName ?? uri.split('/').pop() ?? 'image.jpg'
+    await onSendFile(uri, mimeType, fileName)
+  }
+
   return (
     <View style={s.container}>
 
@@ -57,7 +79,7 @@ export default function ChatInputBar({
           <View style={s.replyTexts}>
             <Text style={s.replyName}>{replyingTo.senderName}</Text>
             <Text style={s.replyContent} numberOfLines={1}>
-              {replyingTo.content ?? '📎 Ficheiro'}
+              {replyingTo.content ?? t.chat_file}
             </Text>
           </View>
           <TouchableOpacity
@@ -74,7 +96,7 @@ export default function ChatInputBar({
       <View style={s.row}>
 
         {/* + attachment button */}
-        <TouchableOpacity style={s.attachBtn} activeOpacity={0.7}>
+        <TouchableOpacity style={s.attachBtn} activeOpacity={0.7} onPress={handleAttach}>
           <Ionicons name="add" size={22} color={colors.primary} />
         </TouchableOpacity>
 
@@ -82,7 +104,7 @@ export default function ChatInputBar({
         <View style={s.inputWrap}>
           <TextInput
             style={s.input}
-            placeholder="Mensagem..."
+            placeholder={t.chat_input_ph}
             placeholderTextColor={colors.gray400}
             value={value}
             onChangeText={onChange}

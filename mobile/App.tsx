@@ -1,5 +1,5 @@
 import 'react-native-gesture-handler'
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
@@ -13,11 +13,12 @@ import {
 } from '@expo-google-fonts/google-sans-flex'
 import * as Notifications from 'expo-notifications'
 import * as Location from 'expo-location'
-import { Platform, View, Image } from 'react-native'
+import { Platform, View, Text, StyleSheet } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import RootNavigator from './src/navigation/RootNavigator'
 import { connectSocket, disconnectSocket } from './src/socket'
 import { useAuthStore } from './src/store/auth.store'
+import { useI18n } from './src/i18n'
 import { useNotificationStore } from './src/store/notification.store'
 import { useFriendsStore } from './src/store/friends.store'
 import { useMessageBadgeStore } from './src/store/messageBadge.store'
@@ -26,8 +27,8 @@ import { api, onTokenExpired } from './src/services/api'
 
 const CHANNEL_ID  = 'messages'
 const PROJECT_ID  = '19550566-94a8-4992-8d1e-25df68e87569'
+const DARK        = '#0A0A0A'
 
-// Show alerts even when the app is in the foreground
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -38,14 +39,13 @@ Notifications.setNotificationHandler({
   }),
 })
 
-// Android 8+ requires a notification channel or notifications are silently dropped
 async function ensureChannel() {
   if (Platform.OS !== 'android') return
   await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
     name: 'Mensagens',
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 250, 250, 250],
-    lightColor: '#4C8CE4',
+    lightColor: '#CA2851',
     sound: 'default',
     enableVibrate: true,
     showBadge: true,
@@ -61,7 +61,6 @@ async function registerForPushNotificationsAsync(): Promise<string | null> {
       finalStatus = status
     }
     if (finalStatus !== 'granted') return null
-    // projectId is required for standalone APK builds
     const tokenData = await Notifications.getExpoPushTokenAsync({ projectId: PROJECT_ID })
     return tokenData.data
   } catch {
@@ -69,7 +68,7 @@ async function registerForPushNotificationsAsync(): Promise<string | null> {
   }
 }
 
-function showMessageNotification(senderName: string, body: string, data: object) {
+function showMessageNotification(senderName: string, body: string, data: Record<string, unknown>) {
   Notifications.scheduleNotificationAsync({
     content: {
       title: senderName,
@@ -78,7 +77,7 @@ function showMessageNotification(senderName: string, body: string, data: object)
       sound: 'default',
       ...(Platform.OS === 'android' ? { channelId: CHANNEL_ID } : {}),
     },
-    trigger: null, // show immediately
+    trigger: null,
   }).catch(() => {})
 }
 
@@ -98,7 +97,6 @@ function SocketManager() {
 
     const socket = connectSocket(token)
 
-    // ── Load initial unread count immediately on login ──────────────
     api.get('/users/connections')
       .then((r) => {
         const connections: { unreadCount: number }[] = r.data.data ?? r.data ?? []
@@ -107,7 +105,6 @@ function SocketManager() {
       })
       .catch(() => {})
 
-    // ── Real-time: increment badge + local notification for incoming messages ──
     function onNewMessage(msg: any) {
       const myId = useAuthStore.getState().user?.id
       if (!msg.senderId || msg.senderId === myId) return
@@ -168,7 +165,6 @@ function SocketManager() {
   return null
 }
 
-// Auto-logout when server returns 401 (expired token)
 function TokenExpiryWatcher() {
   const { logout } = useAuthStore()
   useEffect(() => {
@@ -177,7 +173,6 @@ function TokenExpiryWatcher() {
   return null
 }
 
-// Sends device location to backend once after login (for proximity feed)
 function LocationSync() {
   const { isAuthenticated } = useAuthStore()
 
@@ -199,7 +194,12 @@ function LocationSync() {
   return null
 }
 
-// Polls followers every 30s to detect new followers and update badge
+function LangInit() {
+  const { init } = useI18n()
+  useEffect(() => { init() }, [])
+  return null
+}
+
 function FollowerPoller() {
   const { isAuthenticated } = useAuthStore()
   const { setFollowerCount } = useFriendsStore()
@@ -222,34 +222,70 @@ function FollowerPoller() {
 
 export default function App() {
   const [fontsLoaded] = useFonts({
-    'Jakarta-Regular': GoogleSansFlex_400Regular,
-    'Jakarta-Medium': GoogleSansFlex_500Medium,
-    'Jakarta-SemiBold': GoogleSansFlex_600SemiBold,
-    'Jakarta-Bold': GoogleSansFlex_700Bold,
-    'Jakarta-ExtraBold': GoogleSansFlex_800ExtraBold,
+    'Jakarta-Regular':    GoogleSansFlex_400Regular,
+    'Jakarta-Medium':     GoogleSansFlex_500Medium,
+    'Jakarta-SemiBold':   GoogleSansFlex_600SemiBold,
+    'Jakarta-Bold':       GoogleSansFlex_700Bold,
+    'Jakarta-ExtraBold':  GoogleSansFlex_800ExtraBold,
   })
 
-  if (!fontsLoaded) {
-    return (
-      <View style={{ flex: 1, backgroundColor: '#4C8CE4', justifyContent: 'center', alignItems: 'center' }}>
-        <Image
-          source={require('./assets/splash-logo.png')}
-          style={{ width: 160, height: 160, resizeMode: 'contain' }}
-        />
-      </View>
-    )
-  }
+  const { isLoading: authLoading, isAuthenticated, loadUser } = useAuthStore()
+  const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null)
 
+  useEffect(() => { loadUser() }, [])
+
+  useEffect(() => {
+    if (!isAuthenticated) { setOnboardingDone(null); return }
+    AsyncStorage.getItem('onboarding_done')
+      .then((v) => setOnboardingDone(v === '1'))
+      .catch(() => setOnboardingDone(true))
+  }, [isAuthenticated])
+
+  const ready =
+    fontsLoaded &&
+    !authLoading &&
+    (!isAuthenticated || onboardingDone !== null)
+
+  // GestureHandlerRootView + SafeAreaProvider are ALWAYS mounted.
+  // This avoids a blank frame that appears when swapping two completely
+  // different component trees (the old if (!ready) return <View> pattern).
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#4C8CE4' }}>
-      <SafeAreaProvider>
+    <GestureHandlerRootView style={s.root}>
+      <SafeAreaProvider style={s.root}>
         <StatusBar style="light" />
-        <TokenExpiryWatcher />
-        <SocketManager />
-        <FollowerPoller />
-        <LocationSync />
-        <RootNavigator />
+        {!ready ? (
+          // Dark splash — stays on screen while fonts, auth, and onboarding resolve.
+          // Uses system bold so it renders before custom fonts are available.
+          <View style={s.splash}>
+            <Text style={s.splashWord} allowFontScaling={false}>luxee</Text>
+          </View>
+        ) : (
+          <>
+            <LangInit />
+            <TokenExpiryWatcher />
+            <SocketManager />
+            <FollowerPoller />
+            <LocationSync />
+            <RootNavigator
+              onboardingDone={onboardingDone}
+              setOnboardingDone={setOnboardingDone}
+            />
+          </>
+        )}
       </SafeAreaProvider>
     </GestureHandlerRootView>
   )
 }
+
+const s = StyleSheet.create({
+  root:       { flex: 1, backgroundColor: DARK },
+  splash:     { flex: 1, backgroundColor: DARK, justifyContent: 'center', alignItems: 'center' },
+  // System-bold "luxee" — rendered before custom fonts load so no flicker on transition
+  splashWord: {
+    fontSize: 44,
+    color: '#FFFFFF',
+    fontWeight: '800',
+    letterSpacing: -3,
+    includeFontPadding: false,
+  },
+})

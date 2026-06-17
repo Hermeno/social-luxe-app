@@ -24,8 +24,6 @@ export async function processQueue(): Promise<void> {
   if (processing || !isConnected()) return
   processing = true
 
-  console.log('[SyncQueue] Processing pending operations...')
-
   try {
     await flushLikes()
     await flushGenericQueue()

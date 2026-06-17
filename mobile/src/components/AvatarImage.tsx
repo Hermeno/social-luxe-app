@@ -1,19 +1,26 @@
 import React from 'react'
-import { View, StyleSheet, ViewStyle } from 'react-native'
+import { View, Text, StyleSheet, ViewStyle } from 'react-native'
 import { Image } from 'expo-image'
-import { Ionicons } from '@expo/vector-icons'
-import { colors } from '../theme'
+import { colors, fonts } from '../theme'
 import { API_BASE } from '../config'
 
 interface Props {
   uri: string | null | undefined
+  name?: string | null
   size?: number
   style?: ViewStyle
   borderColor?: string
   borderWidth?: number
 }
 
-export default function AvatarImage({ uri, size = 44, style, borderColor, borderWidth = 0 }: Props) {
+function initials(name?: string | null): string {
+  if (!name?.trim()) return '?'
+  const words = name.trim().split(/\s+/)
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase()
+  return (words[0][0] + words[1][0]).toUpperCase()
+}
+
+export default function AvatarImage({ uri, name, size = 44, style, borderColor, borderWidth = 0 }: Props) {
   const radius = size / 2
   const resolvedUri = uri
     ? uri.startsWith('http') || uri.startsWith('file') ? uri : `${API_BASE}${uri}`
@@ -46,12 +53,13 @@ export default function AvatarImage({ uri, size = 44, style, borderColor, border
 
   return (
     <View style={[containerStyle, s.placeholder]}>
-      <Ionicons name="person" size={size * 0.45} color={colors.gray400} />
+      <Text style={[s.initials, { fontSize: size * 0.35 }]}>{initials(name)}</Text>
     </View>
   )
 }
 
 const s = StyleSheet.create({
   container:   { overflow: 'hidden' },
-  placeholder: { backgroundColor: '#E8E8E8', alignItems: 'center', justifyContent: 'center' },
+  placeholder: { backgroundColor: '#D8E6FA', alignItems: 'center', justifyContent: 'center' },
+  initials:    { fontFamily: fonts.bold, color: '#CA2851', letterSpacing: 0.5 },
 })

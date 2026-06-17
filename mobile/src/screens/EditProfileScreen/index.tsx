@@ -1,738 +1,433 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  Switch,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-  ActivityIndicator,
+  View, Text, TextInput, ScrollView, TouchableOpacity, StyleSheet,
+  ActivityIndicator, Alert, Modal, FlatList,
 } from 'react-native'
 import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
+import * as ImagePicker from 'expo-image-picker'
 import { useAuthStore } from '../../store/auth.store'
-import { api } from '../../services/api'
-import { searchUsers, UserSummary } from '../../services/user.service'
 import { AppStackParams } from '../../navigation/AppNavigator'
-import { colors, fonts, spacing, radius } from '../../theme'
+import { fonts } from '../../theme'
 import { API_BASE } from '../../config'
-
-function resolveAvatar(url: string | null) {
-  if (!url) return null
-  return url.startsWith('http') ? url : `${API_BASE}${url}`
-}
+import { api } from '../../services/api'
+import { useT } from '../../i18n'
 
 type Nav = StackNavigationProp<AppStackParams>
 
-const AVAILABILITY = [
-  { label: 'Disponível', value: 'Disponível' },
-  { label: 'Ocupado',    value: 'Ocupado'    },
-  { label: 'Ausente',    value: 'Ausente'    },
+const T  = '#1A1A1A'
+const S  = '#6E6E73'
+const M  = '#ABABAB'
+const B  = '#CA2851'
+const BD = '#E5E5EA'
+const BG = '#FFFFFF'
+const SX = '#F9F9FB'
+const CARD_BD = '#EDEDF1'
+const G  = '#22C55E'
+
+const STATUS_PRESETS = [
+  { label: '👑 Rico',               value: 'Rico' },
+  { label: '💼 Empresário',         value: 'Empresário' },
+  { label: '🔥 Influencer',         value: 'Influencer' },
+  { label: '🩺 Médico',             value: 'Médico' },
+  { label: '💊 Enfermeiro',         value: 'Enfermeiro' },
+  { label: '⚙️ Engenheiro',         value: 'Engenheiro' },
+  { label: '📊 Engenheiro de Dados', value: 'Engenheiro de Dados' },
+  { label: '🎨 Designer',           value: 'Designer' },
+  { label: '📸 Fotógrafo',          value: 'Fotógrafo' },
+  { label: '⚖️ Advogado',           value: 'Advogado' },
+  { label: '🏋️ Atleta',             value: 'Atleta' },
+  { label: '🎵 Artista',            value: 'Artista' },
+  { label: '🤪 Maluco',             value: 'Maluco' },
+  { label: '🎯 Importante',         value: 'Importante' },
+  { label: '📚 Professor',          value: 'Professor' },
+  { label: '🏗️ Arquitecto',         value: 'Arquitecto' },
+  { label: '🌍 Viajante',           value: 'Viajante' },
 ]
 
-const FOLLOW_DURATIONS = [
-  { label: '1 dia',      value: '1d'      },
-  { label: '1 semana',   value: '1w'      },
-  { label: '1 mês',      value: '1m'      },
-  { label: '1 ano',      value: '1y'      },
-  { label: 'Para sempre', value: 'forever' },
-]
-
-const RELATIONSHIP_STATUS = [
-  { label: 'Solteiro/a',    value: 'single'          },
-  { label: 'Casado/a',      value: 'married'         },
-  { label: 'Relacionamento', value: 'in_relationship' },
-]
+function Toggle({ value }: { value: boolean }) {
+  return (
+    <View style={[tog.track, value && tog.on]}>
+      <View style={[tog.thumb, value && tog.thumbOn]} />
+    </View>
+  )
+}
+const tog = StyleSheet.create({
+  track:   { width: 46, height: 28, borderRadius: 999, backgroundColor: BD, padding: 2, justifyContent: 'center', flexShrink: 0 },
+  on:      { backgroundColor: B },
+  thumb:   { width: 24, height: 24, borderRadius: 999, backgroundColor: BG, alignSelf: 'flex-start', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.2, shadowRadius: 2, elevation: 2 },
+  thumbOn: { alignSelf: 'flex-end' },
+})
 
 export default function EditProfileScreen() {
   const nav = useNavigation<Nav>()
   const { top, bottom } = useSafeAreaInsets()
   const { user, refreshUser } = useAuthStore()
+  const t = useT()
 
-  const [name,                 setName]                 = useState(user?.name ?? '')
-  const [bio,                  setBio]                  = useState(user?.bio ?? '')
-  const [contact,              setContact]              = useState(user?.contact ?? '')
-  const [avail,                setAvail]                = useState(user?.availability ?? 'Disponível')
-  const [followDuration,       setFollowDuration]       = useState(user?.defaultFollowDuration ?? 'forever')
-  const [relStatus,            setRelStatus]            = useState(user?.relationshipStatus ?? '')
-  const [partnerName,          setPartnerName]          = useState(user?.partnerName ?? '')
-  const [partnerId,            setPartnerId]            = useState(user?.partnerId ?? '')
-  const [district,             setDistrict]             = useState(user?.district ?? '')
-  const [city,                 setCity]                 = useState(user?.city ?? '')
-  const [autoReply,            setAutoReply]            = useState(user?.autoReply ?? '')
-  const [viewsPublic,          setViewsPublic]          = useState(user?.viewsPublic ?? false)
-  const [saving,               setSaving]               = useState(false)
+  const [name,        setName]        = useState(user?.name ?? '')
+  const [bio,         setBio]         = useState(user?.bio ?? '')
+  const [avatar,      setAvatar]      = useState<string | null>(null)
+  const [showDevice,  setShowDevice]  = useState(user?.showDevice ?? false)
+  const [statusLabel, setStatusLabel] = useState(user?.statusLabel ?? '')
+  const [statusModal, setStatusModal] = useState(false)
+  const [customInput, setCustomInput] = useState('')
+  const [saving,      setSaving]      = useState(false)
 
-  // Partner search
-  const [partnerQuery,    setPartnerQuery]    = useState(user?.partnerName ?? '')
-  const [partnerResults,  setPartnerResults]  = useState<UserSummary[]>([])
-  const [partnerSearching,setPartnerSearching]= useState(false)
-  const [partnerSelected, setPartnerSelected] = useState(!!user?.partnerId)
-  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
+  // Sync from store whenever user object updates (e.g. after refreshUser)
   useEffect(() => {
-    if (partnerSelected || partnerQuery.trim().length < 2) {
-      setPartnerResults([])
+    setShowDevice(user?.showDevice ?? false)
+    setStatusLabel(user?.statusLabel ?? '')
+  }, [user?.showDevice, user?.statusLabel])
+
+  const avatarUri = avatar
+    ?? (user?.avatar ? (user.avatar.startsWith('http') ? user.avatar : `${API_BASE}${user.avatar}`) : null)
+
+  const isDirty =
+    name !== (user?.name ?? '') ||
+    bio  !== (user?.bio  ?? '') ||
+    !!avatar ||
+    showDevice  !== (user?.showDevice  ?? false) ||
+    statusLabel !== (user?.statusLabel ?? '')
+
+  async function pickAvatar() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (status !== 'granted') {
+      Alert.alert(t.profile_perm_title, t.profile_perm_msg)
       return
     }
-    if (searchTimer.current) clearTimeout(searchTimer.current)
-    setPartnerSearching(true)
-    searchTimer.current = setTimeout(async () => {
-      try {
-        const results = await searchUsers(partnerQuery.trim())
-        setPartnerResults(results.filter((u) => u.id !== user?.id).slice(0, 5))
-      } catch {}
-      setPartnerSearching(false)
-    }, 350)
-    return () => { if (searchTimer.current) clearTimeout(searchTimer.current) }
-  }, [partnerQuery, partnerSelected])
-
-  function selectPartner(u: UserSummary) {
-    setPartnerName(u.name)
-    setPartnerId(u.id)
-    setPartnerQuery(u.name)
-    setPartnerSelected(true)
-    setPartnerResults([])
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'] as any,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.85,
+    })
+    if (!result.canceled && result.assets?.[0]) {
+      setAvatar(result.assets[0].uri)
+    }
   }
-
-  function clearPartner() {
-    setPartnerName('')
-    setPartnerId('')
-    setPartnerQuery('')
-    setPartnerSelected(false)
-    setPartnerResults([])
-  }
-
-  const showPartnerFields = relStatus === 'married' || relStatus === 'in_relationship'
-  const showPartnerInfo   = relStatus === 'married' && partnerId.trim().length > 0
 
   async function handleSave() {
-    if (!name.trim()) {
-      Alert.alert('Nome obrigatório', 'Por favor insere o teu nome.')
-      return
-    }
+    if (!name.trim()) { Alert.alert(t.error, t.ep_nameEmpty); return }
     setSaving(true)
     try {
-      // Save all profile fields EXCEPT partnerId (handled separately via request flow)
-      await api.put('/users/profile', {
-        name:                  name.trim(),
-        bio:                   bio.trim(),
-        contact:               contact.trim() || null,
-        availability:          avail,
-        defaultFollowDuration: followDuration,
-        relationshipStatus:    relStatus || null,
-        district:              district.trim() || null,
-        city:                  city.trim() || null,
-        autoReply:             autoReply.trim() || null,
-        viewsPublic,
-      })
-
-      // If a NEW partner was selected (different from current), send a partner request
-      const newPartnerId = showPartnerFields ? partnerId.trim() : ''
-      const currentPartnerId = user?.partnerId ?? ''
-      if (newPartnerId && newPartnerId !== currentPartnerId) {
-        try {
-          await api.post('/users/partner-request', { receiverId: newPartnerId })
-          Alert.alert('Pedido enviado 💑', `O pedido de associação foi enviado para ${partnerName}. Aguarda a aceitação.`)
-        } catch (e: any) {
-          const msg = e?.response?.data?.message ?? 'Não foi possível enviar o pedido de associação.'
-          Alert.alert('Pedido de associação', msg)
-        }
+      const formData = new FormData()
+      formData.append('name', name.trim())
+      formData.append('bio', bio.trim())
+      formData.append('showDevice', String(showDevice))
+      formData.append('statusLabel', statusLabel.trim())
+      if (avatar) {
+        const fileName = avatar.split('/').pop() ?? 'avatar.jpg'
+        const mimeType = fileName.endsWith('.png') ? 'image/png' : 'image/jpeg'
+        formData.append('avatar', { uri: avatar, name: fileName, type: mimeType } as any)
       }
-
+      await api.put('/users/profile', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
       await refreshUser()
       nav.goBack()
-    } catch {
-      Alert.alert('Erro', 'Não foi possível guardar as alterações.')
+    } catch (e: any) {
+      Alert.alert(t.error, e.message ?? t.ep_saveError)
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <View style={[s.root, { paddingTop: top }]}>
-      {/* ── Header ── */}
-      <View style={s.header}>
-        <TouchableOpacity
-          style={s.headerBtn}
-          onPress={() => nav.goBack()}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons name="chevron-back" size={26} color={colors.gray800} />
+    <View style={s.screen}>
+      {/* Header */}
+      <View style={[s.header, { paddingTop: top + 8 }]}>
+        <TouchableOpacity onPress={() => nav.goBack()} style={s.backBtn} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+          <Ionicons name="chevron-back" size={20} color={T} />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>Editar Perfil</Text>
+        <Text style={s.headerTitle}>{t.ep_title}</Text>
         <TouchableOpacity
-          style={[s.saveHeaderBtn, saving && s.saveHeaderBtnDisabled]}
+          style={[s.saveBtn, (!isDirty || saving) && s.saveBtnDisabled]}
           onPress={handleSave}
-          disabled={saving}
+          disabled={!isDirty || saving}
+          hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
         >
           {saving
-            ? <ActivityIndicator size="small" color={colors.white} />
-            : <Text style={s.saveHeaderBtnText}>Guardar</Text>
+            ? <ActivityIndicator size="small" color={BG} />
+            : <Text style={s.saveBtnTxt}>{t.save}</Text>
           }
         </TouchableOpacity>
       </View>
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 8}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[s.content, { paddingBottom: bottom + 32 }]}
+        keyboardShouldPersistTaps="handled"
       >
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={[s.scroll, { paddingBottom: bottom + spacing.xl }]}
-        >
-
-          {/* ── Informações básicas ── */}
-          <SectionHeader title="Informações básicas" />
-          <View style={s.section}>
-            <TextInput
-              style={s.input}
-              value={name}
-              onChangeText={setName}
-              placeholder="Nome"
-              placeholderTextColor={colors.gray400}
-              returnKeyType="next"
-            />
-            <View style={s.divider} />
-            <TextInput
-              style={[s.input, s.multilineInput]}
-              value={bio}
-              onChangeText={setBio}
-              placeholder="Bio"
-              placeholderTextColor={colors.gray400}
-              multiline
-              returnKeyType="done"
-            />
-            <View style={s.divider} />
-            <TextInput
-              style={s.input}
-              value={contact}
-              onChangeText={setContact}
-              placeholder="Telefone, email ou rede social"
-              placeholderTextColor={colors.gray400}
-              autoCapitalize="none"
-              keyboardType="default"
-              returnKeyType="next"
-            />
-          </View>
-
-          {/* ── Disponibilidade ── */}
-          <SectionHeader title="Disponibilidade" />
-          <View style={s.pillSection}>
-            {AVAILABILITY.map((a) => (
-              <TouchableOpacity
-                key={a.value}
-                style={[s.pill, avail === a.value && s.pillActive]}
-                onPress={() => setAvail(a.value)}
-                activeOpacity={0.75}
-              >
-                <Text style={[s.pillText, avail === a.value && s.pillTextActive]}>
-                  {a.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* ── Duração padrão de seguimento ── */}
-          <SectionHeader title="Duração padrão de seguimento" />
-          <Text style={s.descText}>
-            Quando alguém te segue, quanto tempo dura por defeito?
-          </Text>
-          <View style={s.pillSection}>
-            {FOLLOW_DURATIONS.map((d) => (
-              <TouchableOpacity
-                key={d.value}
-                style={[s.pill, followDuration === d.value && s.pillActive]}
-                onPress={() => setFollowDuration(d.value)}
-                activeOpacity={0.75}
-              >
-                <Text style={[s.pillText, followDuration === d.value && s.pillTextActive]}>
-                  {d.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* ── Estado civil ── */}
-          <SectionHeader title="Estado civil" />
-          <View style={s.pillSection}>
-            {RELATIONSHIP_STATUS.map((r) => (
-              <TouchableOpacity
-                key={r.value}
-                style={[s.pill, relStatus === r.value && s.pillActive]}
-                onPress={() => setRelStatus(relStatus === r.value ? '' : r.value)}
-                activeOpacity={0.75}
-              >
-                <Text style={[s.pillText, relStatus === r.value && s.pillTextActive]}>
-                  {r.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {showPartnerFields && (
-            <View style={{ marginTop: spacing.sm }}>
-              {/* Search field */}
-              <View style={s.section}>
-                <View style={s.partnerSearchRow}>
-                  <TextInput
-                    style={[s.input, { flex: 1, backgroundColor: 'transparent' }]}
-                    value={partnerQuery}
-                    onChangeText={(t) => { setPartnerQuery(t); setPartnerSelected(false) }}
-                    placeholder="Pesquisar parceiro/a..."
-                    placeholderTextColor={colors.gray400}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    returnKeyType="search"
-                  />
-                  {partnerSearching && <ActivityIndicator size="small" color={colors.primary} style={{ marginRight: 12 }} />}
-                  {partnerSelected && (
-                    <TouchableOpacity onPress={clearPartner} style={{ marginRight: 12 }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                      <Ionicons name="close-circle" size={18} color={colors.gray400} />
-                    </TouchableOpacity>
-                  )}
+        {/* Avatar */}
+        <View style={s.avatarSection}>
+          <TouchableOpacity style={s.avatarWrap} onPress={pickAvatar} activeOpacity={0.8}>
+            {avatarUri
+              ? <Image source={{ uri: avatarUri }} style={s.avatar} contentFit="cover" />
+              : <View style={[s.avatar, s.avatarFallback]}>
+                  <Text style={s.avatarInitial}>{name?.[0]?.toUpperCase() ?? '?'}</Text>
                 </View>
-
-                {/* Selected partner chip */}
-                {partnerSelected && partnerId ? (
-                  <View style={s.partnerChip}>
-                    <Ionicons name="heart" size={13} color={colors.primary} />
-                    <Text style={s.partnerChipText} numberOfLines={1}>{partnerName}</Text>
-                    <Text style={s.partnerChipId} numberOfLines={1}>associado</Text>
-                  </View>
-                ) : null}
-              </View>
-
-              {/* Search results dropdown */}
-              {partnerResults.length > 0 && (
-                <View style={s.dropdown}>
-                  {partnerResults.map((u, i) => (
-                    <TouchableOpacity
-                      key={u.id}
-                      style={[s.dropdownItem, i < partnerResults.length - 1 && s.dropdownDivider]}
-                      onPress={() => selectPartner(u)}
-                      activeOpacity={0.7}
-                    >
-                      {u.avatar ? (
-                        <Image
-                          source={{ uri: resolveAvatar(u.avatar) ?? '' }}
-                          style={s.dropdownAvatar}
-                          contentFit="cover"
-                        />
-                      ) : (
-                        <View style={[s.dropdownAvatar, s.dropdownAvatarFallback]}>
-                          <Text style={s.dropdownAvatarInitial}>{u.name[0]?.toUpperCase()}</Text>
-                        </View>
-                      )}
-                      <View style={{ flex: 1 }}>
-                        <Text style={s.dropdownName} numberOfLines={1}>{u.name}</Text>
-                        {u.bio ? <Text style={s.dropdownBio} numberOfLines={1}>{u.bio}</Text> : null}
-                      </View>
-                      <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-
-              {/* Notes */}
-              <View style={s.partnerNote}>
-                <Ionicons name="information-circle-outline" size={13} color={colors.gray400} />
-                <Text style={s.partnerNoteText}>
-                  O parceiro receberá um pedido de associação
-                </Text>
-              </View>
-              {showPartnerInfo && (
-                <View style={s.partnerInfo}>
-                  <Ionicons name="heart-outline" size={13} color={colors.primary} />
-                  <Text style={s.partnerInfoText}>
-                    Quando associados, ambos os perfis mostrarão as duas fotos juntas
-                  </Text>
-                </View>
-              )}
-            </View>
-          )}
-
-          {/* ── Localização ── */}
-          <SectionHeader title="Localização" />
-          <View style={s.section}>
-            <TextInput
-              style={s.input}
-              value={district}
-              onChangeText={setDistrict}
-              placeholder="Distrito"
-              placeholderTextColor={colors.gray400}
-              returnKeyType="next"
-            />
-            <View style={s.divider} />
-            <TextInput
-              style={s.input}
-              value={city}
-              onChangeText={setCity}
-              placeholder="Cidade / Município / Vila"
-              placeholderTextColor={colors.gray400}
-              returnKeyType="done"
-            />
-          </View>
-
-          {/* ── Mensagem automática ── */}
-          <SectionHeader title="Mensagem automática" />
-          <Text style={s.descText}>
-            Enviada automaticamente quando não estás online
-          </Text>
-          <View style={s.section}>
-            <TextInput
-              style={[s.input, s.multilineInput]}
-              value={autoReply}
-              onChangeText={setAutoReply}
-              placeholder="Ex: Estou ocupado, respondo em breve..."
-              placeholderTextColor={colors.gray400}
-              multiline
-              maxLength={200}
-              returnKeyType="done"
-            />
-            <Text style={s.charCount}>{autoReply.length}/200</Text>
-          </View>
-
-          {/* ── Privacidade ── */}
-          <SectionHeader title="Privacidade" />
-          <View style={s.section}>
-            <View style={s.toggleRow}>
-              <View style={s.toggleLeft}>
-                <Ionicons name="eye-outline" size={18} color={colors.gray600} />
-                <View style={s.toggleTextWrap}>
-                  <Text style={s.toggleLabel}>Visualizações públicas</Text>
-                  <Text style={s.toggleSub}>
-                    {viewsPublic
-                      ? 'Todos podem ver o total de views'
-                      : 'Apenas tu vês o total de views'}
-                  </Text>
-                </View>
-              </View>
-              <Switch
-                value={viewsPublic}
-                onValueChange={setViewsPublic}
-                trackColor={{ false: colors.gray200, true: `${colors.primary}60` }}
-                thumbColor={viewsPublic ? colors.primary : colors.white}
-              />
-            </View>
-          </View>
-
-          {/* ── Save button (bottom) ── */}
-          <TouchableOpacity
-            style={[s.saveBtn, saving && s.saveBtnDisabled]}
-            onPress={handleSave}
-            disabled={saving}
-            activeOpacity={0.85}
-          >
-            {saving
-              ? <ActivityIndicator size="small" color={colors.white} />
-              : <Text style={s.saveBtnText}>Guardar alterações</Text>
             }
+            <View style={s.cameraBadge}>
+              <Ionicons name="camera" size={14} color={BG} />
+            </View>
           </TouchableOpacity>
+          <TouchableOpacity onPress={pickAvatar}>
+            <Text style={s.changePhotoTxt}>{t.ep_changePhoto}</Text>
+          </TouchableOpacity>
+        </View>
 
-        </ScrollView>
-      </KeyboardAvoidingView>
+        {/* Name */}
+        <View style={s.section}>
+          <Text style={s.sectionLabel}>{t.ep_info}</Text>
+          <View style={s.card}>
+            <FieldRow label={t.ep_name} value={name} onChange={setName} placeholder={t.ep_name} maxLength={40} isLast />
+          </View>
+        </View>
+
+        {/* Bio */}
+        <View style={s.section}>
+          <Text style={s.sectionLabel}>{t.ep_bio}</Text>
+          <View style={s.card}>
+            <View style={s.bioWrap}>
+              <TextInput
+                style={s.bioInput}
+                value={bio}
+                onChangeText={setBio}
+                placeholder={t.ep_bioPlaceholder}
+                placeholderTextColor={M}
+                multiline
+                maxLength={160}
+                textAlignVertical="top"
+              />
+              <Text style={s.charCount}>{bio.length}/160</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Identidade no Post */}
+        <View style={s.section}>
+          <Text style={s.sectionLabel}>Identidade no Post</Text>
+          <View style={s.card}>
+            {/* Device toggle */}
+            <TouchableOpacity style={s.identRow} onPress={() => setShowDevice((v) => !v)} activeOpacity={0.8}>
+              <View style={[s.identIcon, { backgroundColor: 'rgba(76,140,228,0.12)' }]}>
+                <Ionicons name="phone-portrait-outline" size={16} color={B} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.identTitle}>Mostrar dispositivo</Text>
+                <Text style={s.identSub}>{showDevice ? 'Visível nas publicações' : 'Oculto'}</Text>
+              </View>
+              <Toggle value={showDevice} />
+            </TouchableOpacity>
+
+            {/* Status badge */}
+            <TouchableOpacity style={[s.identRow, s.identRowLast]} onPress={() => setStatusModal(true)} activeOpacity={0.8}>
+              <View style={[s.identIcon, { backgroundColor: 'rgba(255,200,60,0.15)' }]}>
+                <Ionicons name="ribbon-outline" size={16} color="#B8860B" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.identTitle}>Badge de status</Text>
+                <Text style={s.identSub} numberOfLines={1}>{statusLabel || 'Nenhum'}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={M} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Phone (read-only) */}
+        <View style={s.section}>
+          <Text style={s.sectionLabel}>{t.ep_connections}</Text>
+          <View style={s.card}>
+            <View style={s.fieldRow}>
+              <View style={s.fieldLabelWrap}>
+                <Ionicons name="call-outline" size={16} color={B} style={{ marginRight: 7 }} />
+                <Text style={s.fieldLabel}>{t.ep_phone}</Text>
+              </View>
+              <View style={s.fieldValueRight}>
+                <Text style={s.fieldValueMuted}>{user?.phone ?? ''}</Text>
+                <View style={s.verifiedBadge}>
+                  <Ionicons name="checkmark" size={11} color={BG} />
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+      </ScrollView>
+
+      {/* Status picker modal */}
+      <Modal visible={statusModal} animationType="slide" transparent onRequestClose={() => setStatusModal(false)}>
+        <TouchableOpacity style={sm.overlay} activeOpacity={1} onPress={() => setStatusModal(false)} />
+        <View style={[sm.sheet, { paddingBottom: bottom + 20 }]}>
+          <View style={sm.handle} />
+          <Text style={sm.title}>Escolhe um badge de status</Text>
+
+          <View style={sm.customRow}>
+            <TextInput
+              style={sm.customInput}
+              placeholder="Escreve o teu próprio..."
+              placeholderTextColor={M}
+              value={customInput}
+              onChangeText={setCustomInput}
+              maxLength={28}
+            />
+            <TouchableOpacity
+              style={[sm.customBtn, !customInput.trim() && sm.customBtnOff]}
+              onPress={() => {
+                if (!customInput.trim()) return
+                setStatusLabel(customInput.trim())
+                setCustomInput('')
+                setStatusModal(false)
+              }}
+              activeOpacity={0.75}
+            >
+              <Text style={sm.customBtnTxt}>OK</Text>
+            </TouchableOpacity>
+          </View>
+
+          <FlatList
+            data={[{ label: '❌ Remover badge', value: '' }, ...STATUS_PRESETS]}
+            keyExtractor={(item) => item.value}
+            numColumns={2}
+            columnWrapperStyle={{ gap: 8 }}
+            contentContainerStyle={{ gap: 8, paddingTop: 4 }}
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => {
+              const selected = statusLabel === item.value && item.value !== ''
+              return (
+                <TouchableOpacity
+                  style={[sm.chip, selected && sm.chipSelected, item.value === '' && sm.chipRemove]}
+                  onPress={() => {
+                    setStatusLabel(item.value)
+                    setStatusModal(false)
+                  }}
+                  activeOpacity={0.75}
+                >
+                  <Text style={[sm.chipTxt, selected && sm.chipTxtSelected, item.value === '' && sm.chipTxtRemove]}>
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              )
+            }}
+          />
+        </View>
+      </Modal>
     </View>
   )
 }
 
-function SectionHeader({ title }: { title: string }) {
+function FieldRow({ label, value, onChange, placeholder, prefix, maxLength, autoCapitalize, isLast }: {
+  label: string; value: string; onChange: (v: string) => void; placeholder?: string
+  prefix?: string; maxLength?: number; autoCapitalize?: 'none' | 'sentences'
+  isLast?: boolean
+}) {
   return (
-    <Text style={s.sectionHeader}>{title.toUpperCase()}</Text>
+    <View style={[fr.row, !isLast && fr.sep]}>
+      <Text style={fr.label}>{label}</Text>
+      <View style={fr.inputWrap}>
+        {prefix && <Text style={fr.prefix}>{prefix}</Text>}
+        <TextInput
+          style={fr.input}
+          value={value}
+          onChangeText={onChange}
+          placeholder={placeholder}
+          placeholderTextColor={M}
+          maxLength={maxLength}
+          autoCapitalize={autoCapitalize ?? 'words'}
+        />
+      </View>
+    </View>
   )
 }
+const fr = StyleSheet.create({
+  row:      { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13, paddingHorizontal: 14 },
+  sep:      { borderBottomWidth: 1, borderBottomColor: '#F0F0F3' },
+  label:    { fontFamily: fonts.semiBold, fontSize: 14, color: S, width: 88, flexShrink: 0 },
+  inputWrap:{ flex: 1, flexDirection: 'row', alignItems: 'center' },
+  prefix:   { fontFamily: fonts.semiBold, fontSize: 15, color: M },
+  input:    { flex: 1, fontFamily: fonts.semiBold, fontSize: 15, color: T, padding: 0 },
+})
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.white },
-
-  // Header
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.sm,
-    gap: 8,
-  },
-  headerBtn: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    flex: 1,
-    fontSize: 17,
-    fontFamily: fonts.bold,
-    color: colors.gray800,
-    textAlign: 'center',
-  },
-  saveHeaderBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 7,
-    minWidth: 72,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveHeaderBtnDisabled: { opacity: 0.5 },
-  saveHeaderBtnText: {
-    fontSize: 13,
-    fontFamily: fonts.semiBold,
-    color: colors.white,
-  },
-
-  // Scroll
-  scroll: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-    gap: 0,
-  },
-
-  // Section header label
-  sectionHeader: {
-    fontSize: 11,
-    fontFamily: fonts.bold,
-    color: colors.gray400,
-    letterSpacing: 1,
-    marginTop: spacing.lg,
-    marginBottom: spacing.sm,
-  },
-
-  // Section card
-  section: {
-    backgroundColor: colors.gray100,
-    borderRadius: radius.md,
-    overflow: 'hidden',
-  },
-
-  // Divider inside section
-  divider: {
-    height: 1,
-    backgroundColor: colors.gray200,
-    marginHorizontal: spacing.md,
-  },
-
-  // Input
-  input: {
-    backgroundColor: colors.gray100,
-    borderRadius: 0,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    fontSize: 15,
-    fontFamily: fonts.regular,
-    color: colors.gray800,
-  },
-  multilineInput: {
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
-
-  // Char count
-  charCount: {
-    fontSize: 11,
-    fontFamily: fonts.regular,
-    color: colors.gray400,
-    textAlign: 'right',
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.sm,
-  },
-
-  // Pills
-  pillSection: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  pill: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.full,
-    borderWidth: 1.5,
-    borderColor: colors.gray200,
-    backgroundColor: colors.gray100,
-  },
-  pillActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  pillText: {
-    fontSize: 13,
-    fontFamily: fonts.medium,
-    color: colors.gray600,
-  },
-  pillTextActive: {
-    color: colors.white,
-    fontFamily: fonts.semiBold,
-  },
-
-  // Description text
-  descText: {
-    fontSize: 12,
-    fontFamily: fonts.regular,
-    color: colors.gray400,
-    marginBottom: spacing.sm,
-    lineHeight: 17,
-  },
-
-  // Partner search
-  partnerSearchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  partnerChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: `${colors.primary}12`,
-    marginHorizontal: spacing.md,
-    marginBottom: spacing.sm,
-    borderRadius: radius.full,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    alignSelf: 'flex-start',
-  },
-  partnerChipText: {
-    fontSize: 13,
-    fontFamily: fonts.semiBold,
-    color: colors.primary,
-  },
-  partnerChipId: {
-    fontSize: 11,
-    fontFamily: fonts.regular,
-    color: colors.primary,
-    opacity: 0.7,
-  },
-
-  // Dropdown
-  dropdown: {
-    backgroundColor: colors.white,
-    borderRadius: radius.md,
-    marginTop: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 6,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: colors.gray200,
-  },
-  dropdownItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: 12,
-    gap: 10,
-  },
-  dropdownDivider: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.gray200,
-  },
-  dropdownAvatar: {
-    width: 38, height: 38, borderRadius: 19,
-  },
-  dropdownAvatarFallback: {
-    backgroundColor: colors.gray200,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dropdownAvatarInitial: {
-    fontSize: 15,
-    fontFamily: fonts.bold,
-    color: colors.gray600,
-  },
-  dropdownName: {
-    fontSize: 14,
-    fontFamily: fonts.semiBold,
-    color: colors.gray800,
-  },
-  dropdownBio: {
-    fontSize: 12,
-    fontFamily: fonts.regular,
-    color: colors.gray400,
-    marginTop: 1,
-  },
-
-  // Partner note
-  partnerNote: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    marginTop: spacing.sm,
-    paddingHorizontal: 2,
-  },
-  partnerNoteText: {
-    fontSize: 11,
-    fontFamily: fonts.regular,
-    color: colors.gray400,
-    flex: 1,
-    lineHeight: 15,
-  },
-  partnerInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 2,
-    marginTop: 4,
-  },
-  partnerInfoText: {
-    fontSize: 11,
-    fontFamily: fonts.medium,
-    color: colors.primary,
-    flex: 1,
-    lineHeight: 15,
-  },
-
-  // Toggle row (privacy)
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-  },
-  toggleLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flex: 1,
-  },
-  toggleTextWrap: { flex: 1, gap: 2 },
-  toggleLabel: {
-    fontSize: 14,
-    fontFamily: fonts.semiBold,
-    color: colors.gray800,
-  },
-  toggleSub: {
-    fontSize: 11,
-    fontFamily: fonts.regular,
-    color: colors.gray400,
-  },
-
-  // Bottom save button
+  screen:  { flex: 1, backgroundColor: BG },
+  header:  { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingBottom: 10 },
+  backBtn: { width: 40, height: 40, borderRadius: 999, backgroundColor: BG, borderWidth: 1, borderColor: BD, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { flex: 1, fontFamily: fonts.extraBold, fontSize: 22, letterSpacing: -0.5, color: T },
   saveBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: spacing.xl,
-    minHeight: 50,
+    paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, backgroundColor: B,
+    minWidth: 80, alignItems: 'center',
   },
-  saveBtnDisabled: { opacity: 0.5 },
-  saveBtnText: {
-    fontSize: 15,
-    fontFamily: fonts.bold,
-    color: colors.white,
+  saveBtnDisabled: { backgroundColor: BD },
+  saveBtnTxt: { fontFamily: fonts.bold, fontSize: 14, color: BG },
+  content: { paddingHorizontal: 16, paddingTop: 8, gap: 0 },
+
+  avatarSection: { alignItems: 'center', marginBottom: 24, gap: 10 },
+  avatarWrap:    { width: 88, height: 88, borderRadius: 44, position: 'relative' },
+  avatar:        { width: 88, height: 88, borderRadius: 44 },
+  avatarFallback:{ backgroundColor: `${B}15`, alignItems: 'center', justifyContent: 'center' },
+  avatarInitial: { fontFamily: fonts.bold, fontSize: 32, color: B },
+  cameraBadge:   {
+    position: 'absolute', bottom: 0, right: 0,
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: B, borderWidth: 2, borderColor: BG,
+    alignItems: 'center', justifyContent: 'center',
   },
+  changePhotoTxt: { fontFamily: fonts.bold, fontSize: 14, color: B },
+
+  section:      { marginBottom: 16 },
+  sectionLabel: { fontFamily: fonts.bold, fontSize: 11, color: M, letterSpacing: 1, textTransform: 'uppercase', paddingLeft: 6, paddingBottom: 8 },
+  card:         { backgroundColor: SX, borderWidth: 1, borderColor: CARD_BD, borderRadius: 18, overflow: 'hidden' },
+
+  bioWrap:  { padding: 14 },
+  bioInput: { fontFamily: fonts.medium, fontSize: 15, color: T, minHeight: 80, padding: 0 },
+  charCount:{ fontFamily: fonts.medium, fontSize: 11, color: M, textAlign: 'right', marginTop: 6 },
+
+  fieldRow:       { flexDirection: 'row', alignItems: 'center', padding: 13, paddingHorizontal: 14 },
+  fieldLabelWrap: { flexDirection: 'row', alignItems: 'center', width: 110, flexShrink: 0 },
+  fieldLabel:     { fontFamily: fonts.semiBold, fontSize: 14, color: S },
+  fieldValueRight:{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  fieldValueMuted:{ fontFamily: fonts.medium, fontSize: 15, color: M, flex: 1 },
+  verifiedBadge:  { width: 18, height: 18, borderRadius: 9, backgroundColor: G, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+
+  // Identidade no Post rows
+  identRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 13,
+    padding: 13, paddingHorizontal: 14,
+    borderBottomWidth: 1, borderBottomColor: '#F0F0F3',
+  },
+  identRowLast: { borderBottomWidth: 0 },
+  identIcon: { width: 32, height: 32, borderRadius: 9, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  identTitle: { fontFamily: fonts.semiBold, fontSize: 15, color: T },
+  identSub:   { fontFamily: fonts.medium, fontSize: 12, color: M, marginTop: 1 },
+})
+
+const sm = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.38)' },
+  sheet: {
+    backgroundColor: BG,
+    borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    padding: 20, maxHeight: '72%',
+  },
+  handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: BD, alignSelf: 'center', marginBottom: 16 },
+  title:  { fontFamily: fonts.extraBold, fontSize: 18, color: T, marginBottom: 14, letterSpacing: -0.3 },
+
+  customRow:    { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  customInput:  {
+    flex: 1, backgroundColor: SX, borderWidth: 1, borderColor: CARD_BD,
+    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10,
+    fontFamily: fonts.medium, fontSize: 14, color: T,
+  },
+  customBtn:    { backgroundColor: B, borderRadius: 12, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center' },
+  customBtnOff: { backgroundColor: BD },
+  customBtnTxt: { fontFamily: fonts.bold, fontSize: 14, color: BG },
+
+  chip:           { flex: 1, backgroundColor: SX, borderWidth: 1, borderColor: CARD_BD, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12, alignItems: 'center' },
+  chipSelected:   { backgroundColor: `${B}15`, borderColor: B },
+  chipRemove:     { backgroundColor: 'rgba(255,59,48,0.07)', borderColor: 'rgba(255,59,48,0.2)' },
+  chipTxt:        { fontFamily: fonts.medium, fontSize: 13, color: T, textAlign: 'center' },
+  chipTxtSelected:{ color: B, fontFamily: fonts.bold },
+  chipTxtRemove:  { color: '#FF3B30' },
 })

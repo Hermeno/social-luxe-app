@@ -13,9 +13,10 @@ export async function createPost(
   bgColor?: string,
   partnerUserId?: string,
   isAnnouncement?: boolean,
+  deviceModel?: string,
 ) {
   if (mediaType === 'TEXT') {
-    const res = await api.post<ApiResponse<Post>>('/posts', { caption, bgColor, partnerUserId, isAnnouncement })
+    const res = await api.post<ApiResponse<Post>>('/posts', { caption, bgColor, partnerUserId, isAnnouncement, deviceModel })
     return res.data.data
   }
 
@@ -26,6 +27,7 @@ export async function createPost(
   if (caption)        form.append('caption', caption)
   if (partnerUserId)  form.append('partnerUserId', partnerUserId)
   if (isAnnouncement) form.append('isAnnouncement', 'true')
+  if (deviceModel)    form.append('deviceModel', deviceModel)
   const res = await api.post<ApiResponse<Post>>('/posts', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })

@@ -17,6 +17,7 @@ import { AppStackParams } from '../../navigation/AppNavigator'
 import { colors, fonts, spacing, radius } from '../../theme'
 import { getCache, setCache } from '../../db/database'
 import { isConnected } from '../../services/netinfo.service'
+import { useT } from '../../i18n'
 
 type Nav = StackNavigationProp<AppStackParams>
 
@@ -29,6 +30,7 @@ function timeAgo(date: string) {
 }
 
 export default function GroupsScreen() {
+  const t = useT()
   const nav = useNavigation<Nav>()
   const { top, bottom } = useSafeAreaInsets()
   const [groups, setGroups] = useState<Group[]>([])
@@ -56,7 +58,7 @@ export default function GroupsScreen() {
         <TouchableOpacity onPress={() => nav.goBack()} style={s.backBtn}>
           <Ionicons name="chevron-back" size={26} color={colors.gray800} />
         </TouchableOpacity>
-        <Text style={s.title}>Grupos</Text>
+        <Text style={s.title}>{t.groups_title}</Text>
         <View style={{ width: 36 }} />
       </View>
 
@@ -73,8 +75,8 @@ export default function GroupsScreen() {
           ListEmptyComponent={
             <View style={s.center}>
               <Ionicons name="people-outline" size={56} color={colors.gray200} />
-              <Text style={s.emptyText}>Nenhum grupo ainda</Text>
-              <Text style={s.emptySubtext}>Crie um grupo para conversar com amigos</Text>
+              <Text style={s.emptyText}>{t.groups_empty}</Text>
+              <Text style={s.emptySubtext}>{t.groups_empty_sub}</Text>
             </View>
           }
           renderItem={({ item }) => (
@@ -89,7 +91,7 @@ export default function GroupsScreen() {
               <View style={s.info}>
                 <Text style={s.groupName}>{item.name}</Text>
                 <Text style={s.lastMsg} numberOfLines={1}>
-                  {item.lastMessage?.content ?? 'Nenhuma mensagem'}
+                  {item.lastMessage?.content ?? t.groups_no_msg}
                 </Text>
               </View>
               <View style={s.right}>

@@ -32,12 +32,13 @@ import {
   setSyncMeta,
 } from '../../db/database'
 import { isConnected } from '../../services/netinfo.service'
+import { useT } from '../../i18n'
 
 type Route  = RouteProp<AppStackParams, 'Chat'>
 type NavProp = StackNavigationProp<AppStackParams>
 
 const CHAT_BG        = '#FFFFFF'
-const MINE_COLOR     = '#4C8CE4'
+const MINE_COLOR     = '#CA2851'
 const THEIRS_COLOR   = '#F0F2F5'
 const WALLPAPER_TILE = require('../../../assets/preview_light.png')
 const REACTION_EMOJIS = ['❤️', '😂', '😮', '😢', '🔥', '👏']
@@ -47,14 +48,6 @@ function formatTime(dateStr: string) {
   return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }
 
-function formatDateLabel(dateStr: string) {
-  const d   = new Date(dateStr)
-  const now = new Date()
-  const diff = Math.floor((now.getTime() - d.getTime()) / 86400000)
-  if (diff === 0) return 'Hoje'
-  if (diff === 1) return 'Ontem'
-  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
-}
 
 function sameDay(a: string, b: string) {
   const da = new Date(a), db = new Date(b)
@@ -258,6 +251,7 @@ function DateSep({ label }: { label: string }) {
 type LocalMessage = Message & { _pending?: boolean; _failed?: boolean }
 
 export default function ChatScreen() {
+  const tr         = useT()
   const { user }   = useAuthStore()
   const route      = useRoute<Route>()
   const nav        = useNavigation<NavProp>()
@@ -267,17 +261,25 @@ export default function ChatScreen() {
   const [text, setText]                 = useState('')
   const [isTyping, setIsTyping]         = useState(false)
   const [replyingTo, setReplyingTo]     = useState<Message | null>(null)
-  const [emojiTargetMsg, setEmojiTargetMsg] = useState<Message | null>(null)
-  const [showScheduler, setShowScheduler]   = useState(false)
-  const [scheduledMsg, setScheduledMsg]     = useState<scheduledSvc.ScheduledMessage | null>(null)
+  const [emojiTargetMsg, setEmojiTargetMsg]   = useState<Message | null>(null)
+  const [contextMenuMsg, setContextMenuMsg]   = useState<Message | null>(null)
+  const [editingMsg, setEditingMsg]           = useState<Message | null>(null)
+  const [showScheduler, setShowScheduler]     = useState(false)
+  const [scheduledMsg, setScheduledMsg]       = useState<scheduledSvc.ScheduledMessage | null>(null)
 
   const listRef     = useRef<FlatList>(null)
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { bottom, top } = useSafeAreaInsets()
   const isOnline        = useOnlineStore((s) => s.isOnline(userId))
 
-  // Tracks whether we've done the first scroll-to-end for this session
-  const initialScrollRef = useRef(false)
+  const formatDateLabel = useCallback((dateStr: string) => {
+    const d    = new Date(dateStr)
+    const now  = new Date()
+    const diff = Math.floor((now.getTime() - d.getTime()) / 86400000)
+    if (diff === 0) return tr.time_today
+    if (diff === 1) return tr.time_yesterday
+    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+  }, [t])
 
   // ── Load: SQLite first → background network sync (5-min TTL) ────────────
   const loadMessages = useCallback(async (ignoreCache = false) => {
@@ -323,7 +325,6 @@ export default function ChatScreen() {
   }, [userId])
 
   useEffect(() => {
-    initialScrollRef.current = false
     loadMessages()
   }, [loadMessages])
 
@@ -354,7 +355,7 @@ export default function ChatScreen() {
       // Persist immediately to SQLite
       upsertCachedMessage(userId, msg).catch(() => {})
 
-      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80)
+      listRef.current?.scrollToOffset({ offset: 0, animated: true })
 
       if (msg.senderId === userId)
         getSocket()?.emit('message:read', { messageId: msg.id, senderId: userId })
@@ -374,13 +375,25 @@ export default function ChatScreen() {
       }))
     }
 
+    function onEdited(msg: Message) {
+      setMessages((prev) => prev.map((m) => m.id === msg.id ? { ...m, content: msg.content } : m))
+    }
+
+    function onDeleted({ messageId }: { messageId: string }) {
+      setMessages((prev) => prev.filter((m) => m.id !== messageId))
+    }
+
     socket.on('message:new',      onNewMessage)
     socket.on('message:typing',   onTyping)
     socket.on('message:reaction', onReaction)
+    socket.on('message:edited',   onEdited)
+    socket.on('message:deleted',  onDeleted)
     return () => {
       socket.off('message:new',      onNewMessage)
       socket.off('message:typing',   onTyping)
       socket.off('message:reaction', onReaction)
+      socket.off('message:edited',   onEdited)
+      socket.off('message:deleted',  onDeleted)
     }
   }, [userId, user?.id])
 
@@ -421,8 +434,8 @@ export default function ChatScreen() {
     const label = scheduledAt.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
     Toast.show({
       type: 'success',
-      text1: 'Mensagem agendada ✓',
-      text2: `Será enviada ${label} às ${time}`,
+      text1: tr.chat_scheduled_ok,
+      text2: `${label} às ${time}`,
       visibilityTime: 3500,
     })
   }
@@ -432,7 +445,7 @@ export default function ChatScreen() {
     await scheduledSvc.cancel(scheduledMsg.id)
     setScheduledMsg(null)
     setShowScheduler(false)
-    Toast.show({ type: 'info', text1: 'Agendamento cancelado', visibilityTime: 2500 })
+    Toast.show({ type: 'info', text1: tr.chat_sched_cancelled, visibilityTime: 2500 })
   }
 
   const checkAndSendDue = useCallback(async () => {
@@ -448,11 +461,11 @@ export default function ChatScreen() {
           return [...prev, sent]
         })
         upsertCachedMessage(userId, sent).catch(() => {})
-        setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80)
+        listRef.current?.scrollToOffset({ offset: 0, animated: true })
 
         Toast.show({
           type: 'success',
-          text1: '📬 Mensagem agendada enviada',
+          text1: tr.chat_sched_sent,
           text2: sm.content.length > 40 ? sm.content.slice(0, 40) + '...' : sm.content,
           visibilityTime: 3000,
         })
@@ -464,8 +477,8 @@ export default function ChatScreen() {
           setScheduledMsg(null)
           Toast.show({
             type: 'error',
-            text1: 'Mensagem agendada cancelada',
-            text2: 'A conta do destinatário foi removida.',
+            text1: tr.chat_sched_cancelled,
+            text2: tr.chat_deleted_acc_msg2,
             visibilityTime: 4000,
           })
         }
@@ -516,7 +529,7 @@ export default function ChatScreen() {
     setMessages((prev) => [...prev, optimistic])
     upsertCachedMessage(userId, optimistic as unknown as Message).catch(() => {})
     pushToInbox(tempId, isImage ? null : fileName, optimistic.createdAt)
-    setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80)
+    listRef.current?.scrollToOffset({ offset: 0, animated: true })
 
     try {
       const sent = await msgService.sendMessage(userId, isImage ? undefined : fileName, fileUri, undefined, mimeType, fileName)
@@ -527,12 +540,41 @@ export default function ChatScreen() {
         m.id === tempId ? { ...m, _pending: false, _failed: true } : m,
       ))
       if (err?.response?.status === 404 || err?.response?.status === 410) {
-        Toast.show({ type: 'error', text1: 'Conta removida', text2: 'Este utilizador apagou a sua conta.', visibilityTime: 3500 })
+        Toast.show({ type: 'error', text1: tr.chat_deleted_acc, text2: tr.chat_deleted_acc_msg, visibilityTime: 3500 })
       }
     }
   }
 
+  async function handleDeleteMessage(messageId: string) {
+    try {
+      await msgService.deleteMessage(messageId)
+      setMessages((prev) => prev.filter((m) => m.id !== messageId))
+    } catch {
+      Toast.show({ type: 'error', text1: 'Falha ao excluir mensagem', visibilityTime: 2500 })
+    }
+  }
+
+  function handleMessageLongPress(msg: Message) {
+    setContextMenuMsg(msg)
+  }
+
   async function handleSend() {
+    // Edit mode: update existing message instead of sending a new one
+    if (editingMsg) {
+      const content = text.trim()
+      if (!content) return
+      const msgId = editingMsg.id
+      setEditingMsg(null)
+      setText('')
+      try {
+        const updated = await msgService.editMessage(msgId, content)
+        setMessages((prev) => prev.map((m) => m.id === msgId ? { ...m, content: updated.content } : m))
+      } catch {
+        Toast.show({ type: 'error', text1: 'Falha ao editar mensagem', visibilityTime: 2500 })
+      }
+      return
+    }
+
     const content = text.trim()
     if (!content) return
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
@@ -567,7 +609,7 @@ export default function ChatScreen() {
     setText('')
     setReplyingTo(null)
     getSocket()?.emit('message:typing', { toUserId: userId, isTyping: false })
-    setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80)
+    listRef.current?.scrollToOffset({ offset: 0, animated: true })
 
     try {
       const sent = await msgService.sendMessage(userId, content, undefined, replyToId)
@@ -579,7 +621,7 @@ export default function ChatScreen() {
       ))
       upsertCachedMessage(userId, { ...optimistic, _pending: false, _failed: true } as unknown as Message).catch(() => {})
       if (err?.response?.status === 404 || err?.response?.status === 410) {
-        Toast.show({ type: 'error', text1: 'Conta removida', text2: 'Este utilizador apagou a sua conta.', visibilityTime: 3500 })
+        Toast.show({ type: 'error', text1: tr.chat_deleted_acc, text2: tr.chat_deleted_acc_msg, visibilityTime: 3500 })
       }
     }
   }
@@ -646,18 +688,12 @@ export default function ChatScreen() {
         >
           <FlatList
             ref={listRef}
-            data={items}
+            data={[...items].reverse()}
             keyExtractor={(item) => item.kind === 'msg' ? item.msg.id : item.key}
             style={t.list}
             contentContainerStyle={t.listContent}
             showsVerticalScrollIndicator={false}
-            maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
-            onContentSizeChange={() => {
-              if (!initialScrollRef.current && items.length > 0) {
-                initialScrollRef.current = true
-                listRef.current?.scrollToEnd({ animated: false })
-              }
-            }}
+            inverted
             renderItem={({ item }) =>
               item.kind === 'date'
                 ? <DateSep label={item.label} />
@@ -667,7 +703,7 @@ export default function ChatScreen() {
                     isFirst={item.isFirst}
                     isLast={item.isLast}
                     myUserId={user?.id ?? ''}
-                    onLongPress={setEmojiTargetMsg}
+                    onLongPress={handleMessageLongPress}
                     onReply={setReplyingTo}
                   />
             }
@@ -675,6 +711,21 @@ export default function ChatScreen() {
 
           {isTyping && <TypingBubble />}
         </ImageBackground>
+
+        {editingMsg && (
+          <View style={t.editBanner}>
+            <Ionicons name="pencil-outline" size={14} color={colors.primary} />
+            <Text style={t.editBannerText} numberOfLines={1}>
+              Editando: {editingMsg.content}
+            </Text>
+            <TouchableOpacity
+              onPress={() => { setEditingMsg(null); setText('') }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="close" size={16} color={colors.gray400} />
+            </TouchableOpacity>
+          </View>
+        )}
 
         <ChatInputBar
           value={text}
@@ -690,6 +741,53 @@ export default function ChatScreen() {
           onSchedulePress={() => setShowScheduler(true)}
         />
 
+        {/* Context menu (long-press) */}
+        {contextMenuMsg && (
+          <Modal transparent animationType="fade" visible onRequestClose={() => setContextMenuMsg(null)}>
+            <Pressable style={t.emojiOverlay} onPress={() => setContextMenuMsg(null)}>
+              <View style={t.ctxMenu}>
+                <TouchableOpacity style={t.ctxItem} onPress={() => {
+                  setEmojiTargetMsg(contextMenuMsg)
+                  setContextMenuMsg(null)
+                }}>
+                  <Ionicons name="happy-outline" size={20} color={colors.gray600} />
+                  <Text style={t.ctxLabel}>Reagir</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={t.ctxItem} onPress={() => {
+                  setReplyingTo(contextMenuMsg)
+                  setContextMenuMsg(null)
+                }}>
+                  <Ionicons name="arrow-undo-outline" size={20} color={colors.gray600} />
+                  <Text style={t.ctxLabel}>Responder</Text>
+                </TouchableOpacity>
+
+                {contextMenuMsg.senderId === user?.id && contextMenuMsg.content && (
+                  <TouchableOpacity style={t.ctxItem} onPress={() => {
+                    setEditingMsg(contextMenuMsg)
+                    setText(contextMenuMsg.content ?? '')
+                    setContextMenuMsg(null)
+                  }}>
+                    <Ionicons name="pencil-outline" size={20} color={colors.gray600} />
+                    <Text style={t.ctxLabel}>Editar</Text>
+                  </TouchableOpacity>
+                )}
+
+                {contextMenuMsg.senderId === user?.id && (
+                  <TouchableOpacity style={[t.ctxItem, t.ctxItemDanger]} onPress={() => {
+                    handleDeleteMessage(contextMenuMsg.id)
+                    setContextMenuMsg(null)
+                  }}>
+                    <Ionicons name="trash-outline" size={20} color="#FF4444" />
+                    <Text style={[t.ctxLabel, t.ctxLabelDanger]}>Excluir</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </Pressable>
+          </Modal>
+        )}
+
+        {/* Emoji reaction picker */}
         {emojiTargetMsg && (
           <Modal transparent animationType="fade" visible onRequestClose={() => setEmojiTargetMsg(null)}>
             <EmojiPicker onPick={handleReact} onClose={() => setEmojiTargetMsg(null)} />
@@ -838,6 +936,35 @@ const t = StyleSheet.create({
     backgroundColor: '#F2F2F7', paddingHorizontal: 12, paddingVertical: 4,
     borderRadius: 10,
   },
+
+  // ── Edit banner ───────────────────────────────────────────────────────────
+  editBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: `${colors.primary}0D`,
+    paddingHorizontal: 14, paddingVertical: 8,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: `${colors.primary}30`,
+  },
+  editBannerText: { flex: 1, fontSize: 13, fontFamily: fonts.regular, color: colors.gray600 },
+
+  // ── Context menu ──────────────────────────────────────────────────────────
+  ctxMenu: {
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    minWidth: 200,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.18, shadowRadius: 16 },
+      android: { elevation: 10 },
+    }),
+  },
+  ctxItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    paddingHorizontal: 20, paddingVertical: 15,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.gray100,
+  },
+  ctxItemDanger: { borderBottomWidth: 0 },
+  ctxLabel:      { fontSize: 15, fontFamily: fonts.medium, color: colors.gray800 },
+  ctxLabelDanger:{ color: '#FF4444' },
 
   // ── Typing dots ───────────────────────────────────────────────────────────
   typingWrap:   { paddingHorizontal: 12, paddingBottom: 4 },

@@ -10,6 +10,7 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import Toast from 'react-native-toast-message'
 import { Post } from '../types'
 import { syncFeed, forceSyncFeed } from '../db/sync'
+import { onConnectivityChange } from '../services/netinfo.service'
 import {
   cachePosts,
   getCachedPosts,
@@ -160,6 +161,26 @@ export function useFeed() {
       await queueLike(postId, liked).catch(() => {})
     }
   }, [])
+
+  // ── Purge expired posts from in-memory state every 30s ───────────────────
+  useEffect(() => {
+    const id = setInterval(() => {
+      const now = Date.now()
+      setPosts((prev) => prev.filter((p) => {
+        if (!p.expiresAt || (p as any).isAnnouncement) return true
+        return new Date(p.expiresAt).getTime() > now
+      }))
+    }, 30_000)
+    return () => clearInterval(id)
+  }, [])
+
+  // ── Connectivity recovery: re-fetch if we come online after an empty load ─
+  useEffect(() => {
+    const unsub = onConnectivityChange((connected) => {
+      if (connected) refresh()
+    })
+    return unsub
+  }, [refresh])
 
   // ── Real-time: socket new posts ───────────────────────────────────────────
   useEffect(() => {

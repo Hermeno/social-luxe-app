@@ -27,14 +27,12 @@ export function useSync() {
     if (syncingRef.current || !isConnected()) return
     syncingRef.current = true
     setSyncing(true)
-    console.log('[useSync] Running background sync...')
     try {
       await processQueue()
       const ts = await getSyncMeta('feed_last_sync')
       setLastSync(ts ? parseInt(ts, 10) : null)
-      console.log('[useSync] Sync complete')
-    } catch (err) {
-      console.log('[useSync] Sync error:', err)
+    } catch {
+      // silent — offline or transient error
     } finally {
       syncingRef.current = false
       setSyncing(false)
@@ -48,10 +46,7 @@ export function useSync() {
     // Listen to connectivity changes
     const unsubConn = onConnectivityChange((connected) => {
       setOnline(connected)
-      if (connected) {
-        console.log('[useSync] Back online — processing queue')
-        runSync()
-      }
+      if (connected) runSync()
     })
 
     // Periodic sync every 5 minutes

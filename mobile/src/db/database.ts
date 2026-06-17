@@ -2,11 +2,14 @@ import * as SQLite from 'expo-sqlite'
 import { Post, Message, Connection } from '../types'
 
 let db: SQLite.SQLiteDatabase | null = null
+let initPromise: Promise<SQLite.SQLiteDatabase> | null = null
 
 export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (db) return db
-  db = await SQLite.openDatabaseAsync('luxe.db')
-  await db.execAsync(`
+  if (initPromise) return initPromise
+  initPromise = (async () => {
+    const database = await SQLite.openDatabaseAsync('luxe.db')
+    await database.execAsync(`
     PRAGMA journal_mode = WAL;
 
     -- Posts cache with sync status
@@ -91,15 +94,21 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
     );
   `)
 
-  // Schema migrations — add columns if they don't exist yet
-  await db.execAsync(`
-    ALTER TABLE posts_cache ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'synced';
-  `).catch(() => {})
-  await db.execAsync(`
-    ALTER TABLE posts_cache ADD COLUMN updated_at INTEGER;
-  `).catch(() => {})
+    // Schema migrations — add columns if they don't exist yet
+    await database.execAsync(`
+      ALTER TABLE posts_cache ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'synced';
+    `).catch(() => {})
+    await database.execAsync(`
+      ALTER TABLE posts_cache ADD COLUMN updated_at INTEGER;
+    `).catch(() => {})
 
-  return db
+    db = database
+    return database
+  })().catch((err) => {
+    initPromise = null
+    throw err
+  })
+  return initPromise
 }
 
 // ── Posts cache ────────────────────────────────────────────────────────────────
@@ -120,12 +129,38 @@ export async function cachePosts(posts: Post[], status: SyncStatus = 'synced'): 
 
 export async function getCachedPosts(): Promise<Post[]> {
   const database = await getDb()
+  const now = Date.now()
   const rows = await database.getAllAsync<{ data: string }>(
     `SELECT data FROM posts_cache
      WHERE sync_status != 'deleted'
      ORDER BY cached_at DESC LIMIT 100`,
   )
-  return rows.map((r) => JSON.parse(r.data) as Post)
+  return rows
+    .map((r) => JSON.parse(r.data) as Post)
+    .filter((p) => {
+      if (!p.expiresAt || (p as any).isAnnouncement) return true
+      return new Date(p.expiresAt).getTime() > now
+    })
+}
+
+export async function purgeExpiredPosts(): Promise<void> {
+  const database = await getDb()
+  const now = Date.now()
+  const rows = await database.getAllAsync<{ id: string; data: string }>(
+    `SELECT id, data FROM posts_cache WHERE sync_status = 'synced'`,
+  )
+  const expiredIds = rows
+    .filter((r) => {
+      try {
+        const p = JSON.parse(r.data) as Post
+        if ((p as any).isAnnouncement) return false
+        return p.expiresAt && new Date(p.expiresAt).getTime() <= now
+      } catch { return false }
+    })
+    .map((r) => r.id)
+  if (expiredIds.length === 0) return
+  const ph = expiredIds.map(() => '?').join(',')
+  await database.runAsync(`DELETE FROM posts_cache WHERE id IN (${ph})`, expiredIds)
 }
 
 export async function updateCachedPost(postId: string, partial: Partial<Post>): Promise<void> {
@@ -169,6 +204,7 @@ export async function clearStaleCache(): Promise<void> {
     `DELETE FROM posts_cache WHERE cached_at < ? AND sync_status = 'synced'`,
     [cutoff],
   )
+  await purgeExpiredPosts()
 }
 
 // ── Users cache ────────────────────────────────────────────────────────────────

@@ -2,8 +2,10 @@ import NetInfo, { NetInfoState } from '@react-native-community/netinfo'
 
 type Listener = (isConnected: boolean) => void
 
-// Start pessimistic — updated immediately by NetInfo.fetch() in initNetInfo
-let _isConnected = false
+// Optimistic start — NetInfo.fetch() corrects this within ~100ms.
+// Pessimistic (false) caused a race: useFocusEffect fired before fetch() resolved,
+// so the feed skipped its background sync and stayed empty on first open.
+let _isConnected = true
 const listeners = new Set<Listener>()
 
 function applyState(connected: boolean) {

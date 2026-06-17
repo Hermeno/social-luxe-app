@@ -17,6 +17,7 @@ import { getCache, setCache } from '../../db/database'
 import { isConnected } from '../../services/netinfo.service'
 import AvatarImage from '../../components/AvatarImage'
 import FollowSplitButton from '../../components/FollowSplitButton'
+import { useT } from '../../i18n'
 
 type Nav = StackNavigationProp<AppStackParams>
 
@@ -45,14 +46,15 @@ interface RowProps {
 }
 
 function UserRow({ user, followed, loadingFollow, onFollow, onPress }: RowProps) {
+  const t = useT()
   const sub = user.bio?.trim()
-    || (user._count?.followers ? `${fmtCount(user._count.followers)} seguidores` : null)
+    || (user._count?.followers ? `${fmtCount(user._count.followers)} ${t.followers}` : null)
 
   return (
     <View style={s.row}>
       {/* Left: avatar + info → navigate to profile */}
       <TouchableOpacity style={s.rowLeft} onPress={onPress} activeOpacity={0.7}>
-        <AvatarImage uri={user.avatar} size={48} />
+        <AvatarImage uri={user.avatar} name={user.name} size={48} />
         <View style={s.rowInfo}>
           <Text style={s.rowName} numberOfLines={1}>{user.name}</Text>
           {!!sub && <Text style={s.rowSub} numberOfLines={1}>{sub}</Text>}
@@ -92,6 +94,7 @@ function SkeletonRow() {
 export default function SearchScreen() {
   const nav     = useNavigation<Nav>()
   const { top } = useSafeAreaInsets()
+  const t       = useT()
 
   const [query,         setQuery]         = useState('')
   const [results,       setResults]       = useState<UserResult[]>([])
@@ -170,7 +173,7 @@ export default function SearchScreen() {
         wasFollowed ? next.add(userId) : next.delete(userId)
         return next
       })
-      Toast.show({ type: 'error', text1: 'Sem ligação', text2: 'Não foi possível seguir.', visibilityTime: 2500 })
+      Toast.show({ type: 'error', text1: t.search_no_network, text2: t.search_follow_err, visibilityTime: 2500 })
     } finally {
       setFollowPending((prev) => {
         const next = new Set(prev)
@@ -212,7 +215,7 @@ export default function SearchScreen() {
           <TextInput
             ref={inputRef}
             style={s.searchInput}
-            placeholder="Pesquisar pessoas..."
+            placeholder={t.search_ph}
             placeholderTextColor={colors.gray400}
             value={query}
             onChangeText={setQuery}
@@ -235,7 +238,7 @@ export default function SearchScreen() {
       {/* ── Section label ──────────────────────────────────────────────────── */}
       <View style={s.sectionRow}>
         <Text style={s.sectionLabel}>
-          {isSearching ? 'Resultados' : 'Sugeridos para ti'}
+          {isSearching ? t.search_results : t.search_suggested}
         </Text>
         {isSearching && !loadingSearch && (
           <Text style={s.sectionCount}>{results.length}</Text>
@@ -262,8 +265,8 @@ export default function SearchScreen() {
           <View style={s.emptyIcon}>
             <Ionicons name="search-outline" size={32} color={colors.gray400} />
           </View>
-          <Text style={s.emptyTitle}>Nenhum resultado</Text>
-          <Text style={s.emptySub}>Tenta pesquisar por outro nome</Text>
+          <Text style={s.emptyTitle}>{t.search_no_results}</Text>
+          <Text style={s.emptySub}>{t.search_no_results_sub}</Text>
         </View>
       )}
 
@@ -272,8 +275,8 @@ export default function SearchScreen() {
           <View style={s.emptyIcon}>
             <Ionicons name="people-outline" size={32} color={colors.gray400} />
           </View>
-          <Text style={s.emptyTitle}>Sem sugestões</Text>
-          <Text style={s.emptySub}>Usa a pesquisa para encontrar pessoas</Text>
+          <Text style={s.emptyTitle}>{t.search_no_suggestions}</Text>
+          <Text style={s.emptySub}>{t.search_no_suggestions_sub}</Text>
         </View>
       )}
 

@@ -84,7 +84,7 @@ export default function EditProfileSheet({ visible, onClose }: Props) {
 }
 
 const s = StyleSheet.create({
-  backdrop:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
+  backdrop:      { flex: 1, backgroundColor: 'transparent' },
   sheet:         { backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: spacing.lg, gap: spacing.md },
   handle:        { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.gray200, alignSelf: 'center', marginBottom: spacing.sm },
   title:         { fontSize: 18, fontFamily: fonts.bold, color: colors.gray800, textAlign: 'center' },

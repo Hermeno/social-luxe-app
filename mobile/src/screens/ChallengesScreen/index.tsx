@@ -56,7 +56,7 @@ export default function ChallengesScreen() {
   }, [])
 
   function handleParticipate(challenge: Challenge) {
-    nav.navigate('Create' as any, { challengeHashtag: `#${challenge.hashtag}` })
+    nav.navigate('Tabs', { screen: 'Create' })
   }
 
   return (

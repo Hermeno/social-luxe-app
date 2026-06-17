@@ -1,6 +1,7 @@
 import React from 'react'
+import { NavigatorScreenParams } from '@react-navigation/native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
-import { createStackNavigator } from '@react-navigation/stack'
+import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack'
 import FeedScreen from '../screens/FeedScreen'
 import MessagesScreen from '../screens/MessagesScreen'
 import CreateScreen from '../screens/CreateScreen'
@@ -22,11 +23,30 @@ import CreateStoryScreen from '../screens/CreateStoryScreen'
 import HighlightsScreen from '../screens/HighlightsScreen'
 import AboutScreen from '../screens/AboutScreen'
 import VerifiedScreen from '../screens/VerifiedScreen'
+import SettingsScreen from '../screens/SettingsScreen'
+import PrivacyScreen from '../screens/PrivacyScreen'
+import NotifSettingsScreen from '../screens/NotifSettingsScreen'
+import AppearanceScreen from '../screens/AppearanceScreen'
+import LanguageScreen from '../screens/LanguageScreen'
+import HelpScreen from '../screens/HelpScreen'
+import StoreScreen from '../screens/StoreScreen'
+import ProductDetailScreen from '../screens/ProductDetailScreen'
+import CreateListingScreen from '../screens/CreateListingScreen'
+import CartScreen from '../screens/CartScreen'
+import MyStoreScreen from '../screens/MyStoreScreen'
+import DonationsScreen from '../screens/DonationsScreen'
+import CreateDonationScreen from '../screens/DonationsScreen/CreateDonationScreen'
 import { Post } from '../types'
 import { StoryGroup } from '../services/story.service'
 
+export type AppTabParams = {
+  Feed: undefined
+  Messages: undefined
+  Create: undefined
+}
+
 export type AppStackParams = {
-  Tabs: undefined
+  Tabs: NavigatorScreenParams<AppTabParams>
   Profile: { userId?: string }
   Chat: { userId: string; userName: string; userAvatar: string | null }
   About: undefined
@@ -43,15 +63,22 @@ export type AppStackParams = {
   Notifications: undefined
   PostViewer: { posts: Post[]; startIndex: number }
   EditProfile: undefined
+  Settings: undefined
+  Privacy: undefined
+  NotifSettings: undefined
+  Appearance: undefined
+  Language: undefined
+  Help: undefined
   StoryViewer: { groups: StoryGroup[]; startGroupIndex: number }
   CreateStory: undefined
   Highlights: { userId: string }
-}
-
-export type AppTabParams = {
-  Feed: undefined
-  Messages: undefined
-  Create: undefined
+  Store: undefined
+  ProductDetail: { productId: string }
+  CreateListing: undefined
+  Cart: undefined
+  MyStore: undefined
+  Donations: undefined
+  CreateDonation: undefined
 }
 
 const Stack = createStackNavigator<AppStackParams>()
@@ -69,7 +96,33 @@ function Tabs() {
 
 export default function AppNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        // Custom interpolator: only the INCOMING card translates in from the right.
+        // The background card (Feed/etc.) stays completely static — no scale, no
+        // opacity change. This eliminates the black-flash on Android caused by the
+        // default interpolator animating the back card.
+        cardStyleInterpolator: ({ current, layouts }) => ({
+          cardStyle: {
+            transform: [{
+              translateX: current.progress.interpolate({
+                inputRange:  [0, 1],
+                outputRange: [layouts.screen.width, 0],
+                extrapolate: 'clamp',
+              }),
+            }],
+          },
+          overlayStyle: {
+            opacity: current.progress.interpolate({
+              inputRange:  [0, 1],
+              outputRange: [0, 0.08],
+              extrapolate: 'clamp',
+            }),
+          },
+        }),
+      }}
+    >
       <Stack.Screen name="Tabs" component={Tabs} />
       <Stack.Screen name="Profile" component={ProfileScreen} />
       <Stack.Screen name="Chat" component={ChatScreen} />
@@ -89,6 +142,19 @@ export default function AppNavigator() {
       <Stack.Screen name="Highlights" component={HighlightsScreen} />
       <Stack.Screen name="About" component={AboutScreen} />
       <Stack.Screen name="Verified" component={VerifiedScreen} />
+      <Stack.Screen name="Settings" component={SettingsScreen} />
+      <Stack.Screen name="Privacy" component={PrivacyScreen} />
+      <Stack.Screen name="NotifSettings" component={NotifSettingsScreen} />
+      <Stack.Screen name="Appearance" component={AppearanceScreen} />
+      <Stack.Screen name="Language" component={LanguageScreen} />
+      <Stack.Screen name="Help" component={HelpScreen} />
+      <Stack.Screen name="Store" component={StoreScreen} />
+      <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
+      <Stack.Screen name="CreateListing" component={CreateListingScreen} />
+      <Stack.Screen name="Cart" component={CartScreen} />
+      <Stack.Screen name="MyStore" component={MyStoreScreen} />
+      <Stack.Screen name="Donations" component={DonationsScreen} />
+      <Stack.Screen name="CreateDonation" component={CreateDonationScreen} />
     </Stack.Navigator>
   )
 }

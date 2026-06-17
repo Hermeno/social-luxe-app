@@ -7,7 +7,7 @@ const TIER_COLORS = [
   '#4A9EFF',               // tier 2 — azul
   '#A855F7',               // tier 3 — roxo
   '#F59E0B',               // tier 4 — ouro
-  '#4C8CE4',               // tier 5 — rosa (primary)
+  '#CA2851',               // tier 5 — rosa (primary)
 ]
 
 interface Props {

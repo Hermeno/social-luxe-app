@@ -11,17 +11,17 @@
     "splash": {
       "image": "./assets/splash-logo.png",
       "resizeMode": "contain",
-      "backgroundColor": "#4C8CE4"
+      "backgroundColor": "#0A0A0A"
     },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.luxee.app",
       "buildNumber": "1",
       "infoPlist": {
-        "NSCameraUsageDescription": "Permite ao Luxee aceder à câmara para publicar fotos.",
-        "NSPhotoLibraryUsageDescription": "Permite ao Luxee aceder à galeria para publicar fotos.",
-        "NSMicrophoneUsageDescription": "Permite ao Luxee gravar áudio em vídeos.",
-        "NSLocationWhenInUseUsageDescription": "Permite ao Luxee mostrar publicações e perfis próximos de ti."
+        "NSCameraUsageDescription": "Permite ao luxee aceder à câmara para publicar fotos.",
+        "NSPhotoLibraryUsageDescription": "Permite ao luxee aceder à galeria para publicar fotos.",
+        "NSMicrophoneUsageDescription": "Permite ao luxee gravar áudio em vídeos.",
+        "NSLocationWhenInUseUsageDescription": "Permite ao luxee mostrar publicações e perfis próximos de ti."
       }
     },
     "android": {
@@ -43,8 +43,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Permite ao Luxee aceder às tuas fotos.",
-          "cameraPermission": "Permite ao Luxee usar a câmara."
+          "photosPermission": "Permite ao luxee aceder às tuas fotos.",
+          "cameraPermission": "Permite ao luxee usar a câmara."
         }
       ],
       "expo-audio",

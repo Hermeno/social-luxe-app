@@ -41,6 +41,15 @@ export async function sendMessage(
   return res.data.data
 }
 
+export async function deleteMessage(messageId: string): Promise<void> {
+  await api.delete(`/messages/${messageId}`)
+}
+
+export async function editMessage(messageId: string, content: string): Promise<Message> {
+  const res = await api.patch<ApiResponse<Message>>(`/messages/${messageId}`, { content })
+  return res.data.data
+}
+
 export async function sendVoiceMessage(receiverId: string, audioUri: string): Promise<Message> {
   const form = new FormData()
   form.append('receiverId', receiverId)

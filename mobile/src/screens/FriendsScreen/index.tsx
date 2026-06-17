@@ -15,6 +15,7 @@ import AvatarImage from '../../components/AvatarImage'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { getCache, setCache } from '../../db/database'
 import { isConnected } from '../../services/netinfo.service'
+import { useT } from '../../i18n'
 
 type Nav = StackNavigationProp<AppStackParams>
 type Tab = 'discover' | 'following' | 'followers'
@@ -46,6 +47,7 @@ function UserRow({
 }
 
 function FollowButton({ userId, initialFollowing }: { userId: string; initialFollowing: boolean }) {
+  const t = useT()
   const [following, setFollowing] = useState(initialFollowing)
   const [loading, setLoading]     = useState(false)
 
@@ -71,7 +73,7 @@ function FollowButton({ userId, initialFollowing }: { userId: string; initialFol
       disabled={loading}
     >
       <Text style={[s.followTxt, following && s.followingTxt]}>
-        {following ? 'Seguindo' : 'Seguir'}
+        {following ? t.following : t.follow}
       </Text>
     </Pressable>
   )
@@ -80,6 +82,7 @@ function FollowButton({ userId, initialFollowing }: { userId: string; initialFol
 export default function FriendsScreen() {
   const { top }  = useSafeAreaInsets()
   const nav      = useNavigation<Nav>()
+  const t = useT()
   const { setFollowerCount, clearBadge } = useFriendsStore()
 
   const [tab, setTab]               = useState<Tab>('discover')
@@ -146,15 +149,15 @@ export default function FriendsScreen() {
         <TouchableOpacity onPress={() => nav.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Ionicons name="chevron-back" size={28} color={colors.gray800} />
         </TouchableOpacity>
-        <Text style={s.title}>Pessoas</Text>
+        <Text style={s.title}>{t.friends_title}</Text>
       </View>
 
       {/* ── Tabs ── */}
       <View style={s.tabs}>
         {([
-          { key: 'discover',  label: 'Descobrir' },
-          { key: 'following', label: `Seguindo (${following.length})` },
-          { key: 'followers', label: `Seguidores (${followers.length})` },
+          { key: 'discover',  label: t.friends_discover },
+          { key: 'following', label: `${t.friends_following} (${following.length})` },
+          { key: 'followers', label: `${t.friends_followers} (${followers.length})` },
         ] as { key: Tab; label: string }[]).map(({ key, label }) => (
           <TouchableOpacity
             key={key}
@@ -169,7 +172,7 @@ export default function FriendsScreen() {
       {tab === 'discover' && (
         <TextInput
           style={s.search}
-          placeholder="Buscar pessoas..."
+          placeholder={t.friends_search_ph}
           placeholderTextColor={colors.gray400}
           value={query}
           onChangeText={setQuery}
@@ -188,7 +191,7 @@ export default function FriendsScreen() {
               rightSlot={<FollowButton userId={item.id} initialFollowing={followingIds.has(item.id)} />}
             />
           )}
-          ListEmptyComponent={<Text style={s.empty}>Nenhum usuário encontrado</Text>}
+          ListEmptyComponent={<Text style={s.empty}>{t.friends_no_users}</Text>}
         />
       )}
 
@@ -207,7 +210,7 @@ export default function FriendsScreen() {
           ListEmptyComponent={
             <View style={s.emptyWrap}>
               <Ionicons name="person-add-outline" size={44} color={colors.gray200} />
-              <Text style={s.empty}>Você ainda não segue ninguém</Text>
+              <Text style={s.empty}>{t.friends_no_following}</Text>
             </View>
           }
         />
@@ -233,7 +236,7 @@ export default function FriendsScreen() {
           ListEmptyComponent={
             <View style={s.emptyWrap}>
               <Ionicons name="people-outline" size={44} color={colors.gray200} />
-              <Text style={s.empty}>Nenhum seguidor ainda</Text>
+              <Text style={s.empty}>{t.friends_no_followers}</Text>
             </View>
           }
         />

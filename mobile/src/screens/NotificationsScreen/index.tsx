@@ -5,6 +5,8 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation, useFocusEffect } from '@react-navigation/native'
+import { StackNavigationProp } from '@react-navigation/stack'
+import { AppStackParams } from '../../navigation/AppNavigator'
 import { Ionicons } from '@expo/vector-icons'
 import { useNotificationStore, AppNotification } from '../../store/notification.store'
 import { api } from '../../services/api'
@@ -14,6 +16,7 @@ import { getPartnerPostInvites, respondPartnerPost } from '../../services/post.s
 import { Post } from '../../types'
 import AvatarImage from '../../components/AvatarImage'
 import { colors, fonts, spacing, radius } from '../../theme'
+import { useT } from '../../i18n'
 
 interface PartnerRequest {
   id: string
@@ -22,13 +25,6 @@ interface PartnerRequest {
   sender: { id: string; name: string; avatar: string | null; bio: string | null }
 }
 
-function timeAgo(date: string) {
-  const diff = Date.now() - new Date(date).getTime()
-  const m = Math.floor(diff / 60000)
-  if (m < 60) return `${m}m atrás`
-  if (m < 1440) return `${Math.floor(m / 60)}h atrás`
-  return `${Math.floor(m / 1440)}d atrás`
-}
 
 function notifIcon(type: AppNotification['type']): string {
   switch (type) {
@@ -45,21 +41,30 @@ function notifIcon(type: AppNotification['type']): string {
 
 function notifColor(type: AppNotification['type']): string {
   switch (type) {
-    case 'like':            return '#4C8CE4'
+    case 'like':            return '#CA2851'
     case 'comment':         return '#3B82F6'
     case 'reaction':        return '#F59E0B'
     case 'message':         return '#10B981'
     case 'coin':            return '#8B5CF6'
-    case 'extend_vote':     return '#EC4899'
+    case 'extend_vote':     return '#CA2851'
     case 'partner_request': return '#FF4B6E'
     default:                return '#6B7280'
   }
 }
 
 export default function NotificationsScreen() {
-  const nav = useNavigation()
+  const nav = useNavigation<StackNavigationProp<AppStackParams>>()
   const { top } = useSafeAreaInsets()
   const { notifications, badge, markAllRead, setPartnerRequestBadge } = useNotificationStore()
+  const t = useT()
+
+  const tAgo = (date: string) => {
+    const diff = Date.now() - new Date(date).getTime()
+    const m = Math.floor(diff / 60000)
+    if (m < 60) return `${m}${t.time_m_ago}`
+    if (m < 1440) return `${Math.floor(m / 60)}${t.time_h_ago}`
+    return `${Math.floor(m / 1440)}${t.time_d_ago}`
+  }
 
   const [partnerRequests,  setPartnerRequests]  = useState<PartnerRequest[]>([])
   const [postInvites,      setPostInvites]      = useState<Post[]>([])
@@ -106,13 +111,13 @@ export default function NotificationsScreen() {
     setCache('partner_requests', remaining).catch(() => {})
     try {
       await api.put(`/users/partner-requests/${id}/${accept ? 'accept' : 'reject'}`)
-      if (accept) Alert.alert('💑 Associação aceite!', 'Os vossos perfis estão agora ligados.')
+      if (accept) Alert.alert(t.notifs_partner_accepted, t.notifs_partner_accepted_msg)
     } catch {
       // Rollback
       setPartnerRequests(partnerRequests)
       setPartnerRequestBadge(partnerRequests.length)
       setCache('partner_requests', partnerRequests).catch(() => {})
-      Alert.alert('Erro', 'Não foi possível processar o pedido.')
+      Alert.alert(t.error, t.notifs_err_msg)
     }
     setRespondingId(null)
   }
@@ -123,11 +128,11 @@ export default function NotificationsScreen() {
     <View style={[s.container, { paddingTop: top }]}>
       {/* Header */}
       <View style={s.header}>
-        <TouchableOpacity onPress={() => (nav as any).goBack()} style={s.backBtn}>
+        <TouchableOpacity onPress={() => nav.goBack()} style={s.backBtn}>
           <Ionicons name="chevron-back" size={26} color={colors.gray800} />
         </TouchableOpacity>
         <View style={s.titleWrap}>
-          <Text style={s.title}>Notificações</Text>
+          <Text style={s.title}>{t.notifs_title}</Text>
           {totalBadge > 0 && (
             <View style={s.badge}>
               <Text style={s.badgeText}>{totalBadge > 99 ? '99+' : totalBadge}</Text>
@@ -136,7 +141,7 @@ export default function NotificationsScreen() {
         </View>
         {badge > 0 && (
           <TouchableOpacity onPress={markAllRead} activeOpacity={0.75}>
-            <Text style={s.markAllText}>Marcar lido</Text>
+            <Text style={s.markAllText}>{t.notifs_mark_read}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -153,7 +158,7 @@ export default function NotificationsScreen() {
               <View style={s.partnerSection}>
                 <View style={s.sectionTitleRow}>
                   <Ionicons name="heart-circle" size={16} color="#FF4B6E" />
-                  <Text style={s.sectionTitle}>PEDIDOS DE ASSOCIAÇÃO</Text>
+                  <Text style={s.sectionTitle}>{t.notifs_partner_reqs}</Text>
                 </View>
 
                 {loadingPartner && partnerRequests.length === 0 && (
@@ -162,11 +167,11 @@ export default function NotificationsScreen() {
 
                 {partnerRequests.map((req) => (
                   <View key={req.id} style={s.partnerCard}>
-                    <AvatarImage uri={req.sender.avatar} size={50} />
+                    <AvatarImage uri={req.sender.avatar} name={req.sender.name} size={50} />
                     <View style={s.partnerInfo}>
                       <Text style={s.partnerName}>{req.sender.name}</Text>
                       <Text style={s.partnerSub}>
-                        {req.sender.bio ?? 'Quer associar a conta contigo 💑'}
+                        {req.sender.bio ?? t.notifs_partner_req_msg}
                       </Text>
                     </View>
                     <View style={s.partnerActions}>
@@ -178,7 +183,7 @@ export default function NotificationsScreen() {
                       >
                         {respondingId === req.id
                           ? <ActivityIndicator size="small" color="#fff" />
-                          : <Text style={s.acceptTxt}>Aceitar</Text>
+                          : <Text style={s.acceptTxt}>{t.notifs_accept}</Text>
                         }
                       </TouchableOpacity>
                       <TouchableOpacity
@@ -200,13 +205,13 @@ export default function NotificationsScreen() {
               <View style={[s.partnerSection, { backgroundColor: '#F0F4FF', marginTop: 8 }]}>
                 <View style={s.sectionTitleRow}>
                   <Ionicons name="images-outline" size={15} color={colors.primary} />
-                  <Text style={[s.sectionTitle, { color: colors.primary }]}>POSTS COM A TUA PARTICIPAÇÃO</Text>
+                  <Text style={[s.sectionTitle, { color: colors.primary }]}>{t.notifs_collab}</Text>
                 </View>
                 {postInvites.map((post) => (
                   <View key={post.id} style={s.partnerCard}>
-                    <AvatarImage uri={post.user.avatar} size={44} />
+                    <AvatarImage uri={post.user.avatar} name={post.user.name} size={44} />
                     <View style={s.partnerInfo}>
-                      <Text style={s.partnerName}>{post.user.name} incluiu-te num post</Text>
+                      <Text style={s.partnerName}>{`${post.user.name} ${t.notifs_collab_included}`}</Text>
                       {post.caption ? <Text style={s.partnerSub} numberOfLines={1}>{post.caption}</Text> : null}
                     </View>
                     <View style={s.partnerActions}>
@@ -218,7 +223,7 @@ export default function NotificationsScreen() {
                         }}
                         activeOpacity={0.8}
                       >
-                        <Text style={s.acceptTxt}>Aceitar</Text>
+                        <Text style={s.acceptTxt}>{t.notifs_accept}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={s.rejectBtn}
@@ -246,8 +251,8 @@ export default function NotificationsScreen() {
           partnerRequests.length === 0 ? (
             <View style={s.center}>
               <Ionicons name="notifications-outline" size={56} color={colors.gray200} />
-              <Text style={s.emptyText}>Sem notificações</Text>
-              <Text style={s.emptySubtext}>Você está em dia com tudo!</Text>
+              <Text style={s.emptyText}>{t.notifs_empty}</Text>
+              <Text style={s.emptySubtext}>{t.notifs_empty_sub}</Text>
             </View>
           ) : null
         }
@@ -258,7 +263,7 @@ export default function NotificationsScreen() {
             </View>
             <View style={s.notifBody}>
               <Text style={s.notifMessage}>{item.message}</Text>
-              <Text style={s.notifTime}>{timeAgo(item.createdAt)}</Text>
+              <Text style={s.notifTime}>{tAgo(item.createdAt)}</Text>
             </View>
             {!item.read && <View style={s.unreadDot} />}
           </View>

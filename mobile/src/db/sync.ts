@@ -15,6 +15,7 @@ import {
   getCachedPosts,
   clearStaleCache,
   purgeSyncedDeletes,
+  purgeExpiredPosts,
   getSyncMeta,
   setSyncMeta,
   getPendingLocalPostIds,
@@ -38,15 +39,14 @@ export async function syncFeed(onRefresh: (posts: Post[]) => void): Promise<Post
   // 2. Serve from SQLite immediately
   const cached = await getCachedPosts()
 
-  // 3. Background sync — only if connected
-  if (isConnected()) {
-    backgroundSyncFeed(onRefresh).catch(() => {})
-  }
+  // 3. Background sync — always trigger; backgroundSyncFeed handles offline gracefully
+  backgroundSyncFeed(onRefresh).catch(() => {})
 
   return cached
 }
 
 async function backgroundSyncFeed(onRefresh: (posts: Post[]) => void): Promise<void> {
+  if (!isConnected()) return
   try {
     // Flush any pending offline operations first
     await processQueue()
@@ -60,6 +60,7 @@ async function backgroundSyncFeed(onRefresh: (posts: Post[]) => void): Promise<v
     // Cache only the posts that are NOT locally pending (don't overwrite unsync'd edits)
     const toCache = fresh.filter((p) => !pendingIds.has(p.id))
     await cachePosts(toCache, 'synced')
+    await purgeExpiredPosts()  // remove what server no longer returns
     await setSyncMeta('feed_last_sync', Date.now().toString())
 
     // Merge for UI: local pending posts + fresh non-pending posts
@@ -91,6 +92,7 @@ export async function forceSyncFeed(): Promise<Post[]> {
   await processQueue()
   const fresh = await postService.getFeed(1)
   await cachePosts(fresh, 'synced')
+  await purgeExpiredPosts()
   await setSyncMeta('feed_last_sync', Date.now().toString())
   return fresh
 }

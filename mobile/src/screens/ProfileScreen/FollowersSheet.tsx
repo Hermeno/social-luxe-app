@@ -69,7 +69,7 @@ export default function FollowersSheet({ visible, mode, userId, onClose }: Props
             }
             renderItem={({ item }) => (
               <TouchableOpacity style={s.item} onPress={() => handleUserPress(item)} activeOpacity={0.7}>
-                <AvatarImage uri={item.avatar} size={46} />
+                <AvatarImage uri={item.avatar} name={item.name} size={46} />
                 <View style={s.info}>
                   <Text style={s.name}>{item.name}</Text>
                   {item.bio ? <Text style={s.bio} numberOfLines={1}>{item.bio}</Text> : null}
