@@ -1,5 +1,12 @@
 import { prisma } from '../config/database'
 
+async function extendPostLife(postId: string, minutes: number) {
+  const post = await prisma.post.findUnique({ where: { id: postId }, select: { expiresAt: true, isAnnouncement: true } })
+  if (!post || post.isAnnouncement) return
+  const base = Math.max(post.expiresAt.getTime(), Date.now())
+  await prisma.post.update({ where: { id: postId }, data: { expiresAt: new Date(base + minutes * 60_000) } })
+}
+
 export async function getComments(postId: string) {
   return prisma.comment.findMany({
     where: { postId, parentId: null },
@@ -15,10 +22,12 @@ export async function getComments(postId: string) {
 }
 
 export async function addComment(userId: string, postId: string, content: string, parentId?: string) {
-  return prisma.comment.create({
+  const comment = await prisma.comment.create({
     data: { userId, postId, content, parentId },
     include: { user: { select: { id: true, name: true, avatar: true } } },
   })
+  extendPostLife(postId, 30).catch(() => {})  // +30 min — fire-and-forget
+  return comment
 }
 
 export async function deleteComment(userId: string, commentId: string) {

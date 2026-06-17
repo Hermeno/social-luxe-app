@@ -1,5 +1,6 @@
 import cron from 'node-cron'
 import { prisma } from '../config/database'
+import { expireDonations } from '../services/donation.service'
 
 async function expireFollows() {
   const result = await prisma.follow.deleteMany({
@@ -10,7 +11,13 @@ async function expireFollows() {
   }
 }
 
+async function runExpiry() {
+  await expireFollows()
+  const n = await expireDonations()
+  if (n > 0) console.log(`[Cron] Expired ${n} donation(s)`)
+}
+
 export function startFollowExpiryJob() {
-  cron.schedule('*/30 * * * *', expireFollows)
-  console.log('[Cron] Follow expiry job started')
+  cron.schedule('*/5 * * * *', runExpiry)
+  console.log('[Cron] Follow + donation expiry job started')
 }

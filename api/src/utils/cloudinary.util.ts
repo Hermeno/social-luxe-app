@@ -16,16 +16,14 @@ export function uploadToCloudinary(
     ? {
         folder,
         resource_type: 'video' as const,
-        // Keep original quality — no re-encoding quality loss
-        quality:     100,
-        // Copy original codec without re-encoding when possible
-        video_codec: 'auto',
+        quality:     'auto:good',   // Cloudinary picks optimal bitrate
+        video_codec: 'h264',        // web-compatible, smaller files
+        audio_codec: 'aac',
       }
     : {
         folder,
         resource_type: 'image' as const,
-        // Preserve full image quality — no lossy compression on upload
-        quality: 100,
+        quality: 'auto:best',
       }
 
   return new Promise((resolve, reject) => {

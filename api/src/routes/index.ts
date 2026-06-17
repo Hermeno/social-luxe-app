@@ -15,6 +15,7 @@ import momentoRoutes from './momento.routes'
 import notificationRoutes from './notification.routes'
 import friendshipRoutes from './friendship.routes'
 import storeRoutes from './store.routes'
+import donationRoutes from './donation.routes'
 
 const router = Router()
 
@@ -34,5 +35,6 @@ router.use('/momentos', momentoRoutes)
 router.use('/notifications', notificationRoutes)
 router.use('/friendships', friendshipRoutes)
 router.use('/store', storeRoutes)
+router.use('/donations', donationRoutes)
 
 export default router

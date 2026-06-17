@@ -58,14 +58,16 @@ export async function getFollowStatus(req: Request, res: Response) {
   }
 }
 
+const activeFollow = { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }
+
 export async function getMyFollowers(req: Request, res: Response) {
   try {
     const rows = await prisma.follow.findMany({
-      where:   { followingId: req.user!.userId },
+      where:   { followingId: req.user!.userId, ...activeFollow },
       orderBy: { createdAt: 'desc' },
-      select:  { follower: { select: { id: true, name: true, avatar: true, bio: true } }, createdAt: true },
+      select:  { follower: { select: { id: true, name: true, avatar: true, bio: true } }, createdAt: true, expiresAt: true },
     })
-    return ok(res, rows.map((r) => ({ ...r.follower, followedAt: r.createdAt })))
+    return ok(res, rows.map((r) => ({ ...r.follower, followedAt: r.createdAt, expiresAt: r.expiresAt })))
   } catch (err) {
     return handleError(res, err, 'getMyFollowers')
   }
@@ -74,11 +76,11 @@ export async function getMyFollowers(req: Request, res: Response) {
 export async function getMyFollowing(req: Request, res: Response) {
   try {
     const rows = await prisma.follow.findMany({
-      where:   { followerId: req.user!.userId },
+      where:   { followerId: req.user!.userId, ...activeFollow },
       orderBy: { createdAt: 'desc' },
-      select:  { following: { select: { id: true, name: true, avatar: true, bio: true } }, createdAt: true },
+      select:  { following: { select: { id: true, name: true, avatar: true, bio: true } }, createdAt: true, expiresAt: true },
     })
-    return ok(res, rows.map((r) => ({ ...r.following, followedAt: r.createdAt })))
+    return ok(res, rows.map((r) => ({ ...r.following, followedAt: r.createdAt, expiresAt: r.expiresAt })))
   } catch (err) {
     return handleError(res, err, 'getMyFollowing')
   }
@@ -87,11 +89,11 @@ export async function getMyFollowing(req: Request, res: Response) {
 export async function getUserFollowers(req: Request, res: Response) {
   try {
     const rows = await prisma.follow.findMany({
-      where:   { followingId: req.params.id },
+      where:   { followingId: req.params.id, ...activeFollow },
       orderBy: { createdAt: 'desc' },
-      select:  { follower: { select: { id: true, name: true, avatar: true, bio: true } }, createdAt: true },
+      select:  { follower: { select: { id: true, name: true, avatar: true, bio: true } }, createdAt: true, expiresAt: true },
     })
-    return ok(res, rows.map((r) => ({ ...r.follower, followedAt: r.createdAt })))
+    return ok(res, rows.map((r) => ({ ...r.follower, followedAt: r.createdAt, expiresAt: r.expiresAt })))
   } catch (err) {
     return handleError(res, err, 'getUserFollowers')
   }
@@ -100,11 +102,11 @@ export async function getUserFollowers(req: Request, res: Response) {
 export async function getUserFollowing(req: Request, res: Response) {
   try {
     const rows = await prisma.follow.findMany({
-      where:   { followerId: req.params.id },
+      where:   { followerId: req.params.id, ...activeFollow },
       orderBy: { createdAt: 'desc' },
-      select:  { following: { select: { id: true, name: true, avatar: true, bio: true } }, createdAt: true },
+      select:  { following: { select: { id: true, name: true, avatar: true, bio: true } }, createdAt: true, expiresAt: true },
     })
-    return ok(res, rows.map((r) => ({ ...r.following, followedAt: r.createdAt })))
+    return ok(res, rows.map((r) => ({ ...r.following, followedAt: r.createdAt, expiresAt: r.expiresAt })))
   } catch (err) {
     return handleError(res, err, 'getUserFollowing')
   }

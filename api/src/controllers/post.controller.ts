@@ -1,4 +1,5 @@
 import { Response } from 'express'
+import multer from 'multer'
 import * as postService from '../services/post.service'
 import * as commentService from '../services/comment.service'
 import { ok, created, badRequest, serverError, notFound, forbidden } from '../utils/response'
@@ -7,7 +8,7 @@ import { AuthRequest } from '../types'
 import { MediaType } from '@prisma/client'
 import { sendPush } from '../services/notification.service'
 import { prisma } from '../config/database'
-import { uploadToCloudinary } from '../utils/cloudinary.util'
+import { uploadToCloudinary, withThumbnails } from '../utils/cloudinary.util'
 import { emitToUser } from '../socket'
 
 export async function createPost(req: AuthRequest, res: Response) {
@@ -64,6 +65,13 @@ export async function createPost(req: AuthRequest, res: Response) {
 
     return created(res, post)
   } catch (err: unknown) {
+    if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({ success: false, message: 'Ficheiro demasiado grande. Máximo 100 MB.' })
+    }
+    const cloudinaryTooBig = typeof (err as any)?.message === 'string' && (err as any).message.includes('File size too large')
+    if (cloudinaryTooBig) {
+      return res.status(413).json({ success: false, message: 'Ficheiro demasiado grande. Máximo 100 MB.' })
+    }
     console.error('[createPost]', err)
     return serverError(res)
   }
@@ -80,7 +88,7 @@ export async function getPartnerPostInvites(req: AuthRequest, res: Response) {
       },
       orderBy: { createdAt: 'desc' },
     })
-    return ok(res, posts)
+    return ok(res, withThumbnails(posts))
   } catch (err) { return handleError(res, err, 'getPartnerPostInvites') }
 }
 

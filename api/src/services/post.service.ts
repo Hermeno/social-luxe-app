@@ -134,6 +134,14 @@ export async function getFeed(userId: string, page = 1, limit = 10) {
   return withThumbnails(posts)
 }
 
+// Extend a post's expiry by `minutes`. Announcements are never touched.
+async function extendLife(postId: string, minutes: number) {
+  const post = await prisma.post.findUnique({ where: { id: postId }, select: { expiresAt: true, isAnnouncement: true } })
+  if (!post || post.isAnnouncement) return
+  const base = Math.max(post.expiresAt.getTime(), Date.now())
+  await prisma.post.update({ where: { id: postId }, data: { expiresAt: new Date(base + minutes * 60_000) } })
+}
+
 export async function likePost(userId: string, postId: string) {
   const existing = await prisma.like.findUnique({ where: { userId_postId: { userId, postId } } })
   if (existing) {
@@ -141,6 +149,7 @@ export async function likePost(userId: string, postId: string) {
     return { liked: false }
   }
   await prisma.like.create({ data: { userId, postId } })
+  extendLife(postId, 10).catch(() => {})   // +10 min — fire-and-forget
   return { liked: true }
 }
 
@@ -184,7 +193,9 @@ export async function updatePostCaption(userId: string, postId: string, caption:
 export async function sharePost(userId: string, postId: string) {
   const post = await prisma.post.findUnique({ where: { id: postId } })
   if (!post || post.deletedAt) throw new Error('Post not found')
-  return prisma.share.create({ data: { userId, postId } })
+  const share = await prisma.share.create({ data: { userId, postId } })
+  extendLife(postId, 60).catch(() => {})   // +1h — fire-and-forget
+  return share
 }
 
 export async function voteExtendPost(userId: string, postId: string) {

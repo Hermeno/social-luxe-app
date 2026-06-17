@@ -106,6 +106,9 @@ model User {
   partnerPosts     Post[]              @relation("PostPartner")
   products         Product[]
   productSaves     ProductSave[]
+  donationsGiven   Donation[]         @relation("DonorDonations")
+  donationsReceived Donation[]        @relation("RequesterDonations")
+  donationFeedbacks DonationFeedback[] @relation("FeedbackGiver")
 }
 
 // ─── Post ────────────────────────────────────────────────────────────────────
@@ -568,6 +571,53 @@ model ProductSave {
   user    User    @relation(fields: [userId],    references: [id], onDelete: Cascade)
 
   @@unique([productId, userId])
+}
+
+// ─── Donations (Piedade) ─────────────────────────────────────────────────────
+
+enum DonationType {
+  ITEM
+  FINANCIAL
+}
+
+enum DonationStatus {
+  AVAILABLE
+  RESERVED
+  DELIVERED
+  EXPIRED
+}
+
+model Donation {
+  id          String         @id @default(cuid())
+  title       String
+  description String?
+  photos      String[]
+  lat         Float
+  lng         Float
+  radiusKm    Float          @default(10)
+  type        DonationType
+  status      DonationStatus @default(AVAILABLE)
+  expiresAt   DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  donorId     String
+  donor       User           @relation("DonorDonations",     fields: [donorId],     references: [id])
+  requesterId String?
+  requester   User?          @relation("RequesterDonations", fields: [requesterId], references: [id])
+  feedbacks   DonationFeedback[]
+}
+
+model DonationFeedback {
+  id         String   @id @default(cuid())
+  donationId String
+  fromUserId String
+  rating     Int
+  comment    String?
+  createdAt  DateTime @default(now())
+
+  donation   Donation @relation(fields: [donationId], references: [id], onDelete: Cascade)
+  from       User     @relation("FeedbackGiver", fields: [fromUserId], references: [id])
 }
 
 // ─── PasswordReset ────────────────────────────────────────────────────────────

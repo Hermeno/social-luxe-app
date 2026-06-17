@@ -1,4 +1,5 @@
 import { prisma } from '../config/database'
+import { withThumbnails } from '../utils/cloudinary.util'
 
 const USER_SELECT = {
   id: true, name: true, avatar: true, bio: true, availability: true,
@@ -72,7 +73,7 @@ export async function getUserById(userId: string) {
 }
 
 export async function getUserPosts(userId: string) {
-  return prisma.post.findMany({
+  const posts = await prisma.post.findMany({
     where: { userId, deletedAt: null, expiresAt: { gt: new Date() } },
     include: {
       user: { select: { id: true, name: true, avatar: true, viewsPublic: true, isAdmin: true, showDevice: true, statusLabel: true } },
@@ -80,6 +81,7 @@ export async function getUserPosts(userId: string) {
     },
     orderBy: { createdAt: 'desc' },
   })
+  return withThumbnails(posts)
 }
 
 export async function toggleGhostMode(userId: string, ghostMode: boolean) {
