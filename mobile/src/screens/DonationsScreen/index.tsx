@@ -10,14 +10,18 @@ import { colors, fonts } from '../../theme'
 export default function DonationsScreen() {
   const { top } = useSafeAreaInsets()
   const nav = useNavigation()
+  const canGoBack = nav.canGoBack()
 
   return (
     <View style={s.screen}>
       {/* Header */}
       <View style={[s.header, { paddingTop: top + 12 }]}>
-        <TouchableOpacity onPress={() => nav.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Ionicons name="chevron-back" size={26} color="#1A1A1A" />
-        </TouchableOpacity>
+        {canGoBack
+          ? <TouchableOpacity onPress={() => nav.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="chevron-back" size={26} color={colors.dark} />
+            </TouchableOpacity>
+          : <View style={{ width: 26 }} />
+        }
         <Text style={s.headerTitle}>Piedade</Text>
         <View style={{ width: 26 }} />
       </View>
@@ -58,7 +62,7 @@ const s = StyleSheet.create({
   headerTitle: {
     fontSize: 17,
     fontFamily: fonts.bold,
-    color: '#1A1A1A',
+    color: colors.dark,
     letterSpacing: -0.2,
   },
 
@@ -82,7 +86,7 @@ const s = StyleSheet.create({
   title: {
     fontSize: 20,
     fontFamily: fonts.bold,
-    color: '#1A1A1A',
+    color: colors.dark,
     letterSpacing: -0.4,
     textAlign: 'center',
   },

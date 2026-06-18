@@ -95,9 +95,10 @@ const ts = StyleSheet.create({
 interface Props {
   onboardingDone: boolean | null
   setOnboardingDone: (v: boolean) => void
+  defaultTab: 'Feed' | 'Messages'
 }
 
-export default function RootNavigator({ onboardingDone, setOnboardingDone }: Props) {
+export default function RootNavigator({ onboardingDone, setOnboardingDone, defaultTab }: Props) {
   const { isAuthenticated, token } = useAuthStore()
   const { online } = useSync()
   const { setTotalUnread } = useMessageBadgeStore()
@@ -154,7 +155,7 @@ export default function RootNavigator({ onboardingDone, setOnboardingDone }: Pro
         ? <AuthNavigator />
         : !onboardingDone
           ? <OnboardingScreen onDone={() => setOnboardingDone(true)} />
-          : <AppNavigator />
+          : <AppNavigator defaultTab={defaultTab} />
       }
       <Toast config={toastConfig} position="bottom" bottomOffset={110} />
     </NavigationContainer>

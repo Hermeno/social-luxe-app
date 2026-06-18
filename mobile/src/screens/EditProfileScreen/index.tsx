@@ -9,12 +9,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import * as ImagePicker from 'expo-image-picker'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useAuthStore } from '../../store/auth.store'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { fonts } from '../../theme'
 import { API_BASE } from '../../config'
 import { api } from '../../services/api'
 import { useT } from '../../i18n'
+
+export const DEFAULT_TAB_KEY = 'default_tab'
+export type DefaultTab = 'Feed' | 'Messages'
 
 type Nav = StackNavigationProp<AppStackParams>
 
@@ -76,12 +80,24 @@ export default function EditProfileScreen() {
   const [statusModal, setStatusModal] = useState(false)
   const [customInput, setCustomInput] = useState('')
   const [saving,      setSaving]      = useState(false)
+  const [defaultTab,  setDefaultTab]  = useState<DefaultTab>('Feed')
 
   // Sync from store whenever user object updates (e.g. after refreshUser)
   useEffect(() => {
     setShowDevice(user?.showDevice ?? false)
     setStatusLabel(user?.statusLabel ?? '')
   }, [user?.showDevice, user?.statusLabel])
+
+  useEffect(() => {
+    AsyncStorage.getItem(DEFAULT_TAB_KEY)
+      .then(val => { if (val === 'Messages') setDefaultTab('Messages') })
+      .catch(() => {})
+  }, [])
+
+  function handleDefaultTab(tab: DefaultTab) {
+    setDefaultTab(tab)
+    AsyncStorage.setItem(DEFAULT_TAB_KEY, tab).catch(() => {})
+  }
 
   const avatarUri = avatar
     ?? (user?.avatar ? (user.avatar.startsWith('http') ? user.avatar : `${API_BASE}${user.avatar}`) : null)
@@ -236,6 +252,47 @@ export default function EditProfileScreen() {
               <Ionicons name="chevron-forward" size={16} color={M} />
             </TouchableOpacity>
           </View>
+        </View>
+
+        {/* Ecrã inicial */}
+        <View style={s.section}>
+          <Text style={s.sectionLabel}>Ecrã inicial</Text>
+          <View style={s.tabPickerRow}>
+            <TouchableOpacity
+              style={[s.tabCard, defaultTab === 'Feed' && s.tabCardActive]}
+              onPress={() => handleDefaultTab('Feed')}
+              activeOpacity={0.8}
+            >
+              <View style={[s.tabCardIcon, defaultTab === 'Feed' && s.tabCardIconActive]}>
+                <Ionicons name="home-outline" size={22} color={defaultTab === 'Feed' ? BG : S} />
+              </View>
+              <Text style={[s.tabCardLabel, defaultTab === 'Feed' && s.tabCardLabelActive]}>Feed</Text>
+              <Text style={s.tabCardSub}>Publicações</Text>
+              {defaultTab === 'Feed' && (
+                <View style={s.tabCardCheck}>
+                  <Ionicons name="checkmark" size={11} color={BG} />
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[s.tabCard, defaultTab === 'Messages' && s.tabCardActive]}
+              onPress={() => handleDefaultTab('Messages')}
+              activeOpacity={0.8}
+            >
+              <View style={[s.tabCardIcon, defaultTab === 'Messages' && s.tabCardIconActive]}>
+                <Ionicons name="chatbubble-outline" size={22} color={defaultTab === 'Messages' ? BG : S} />
+              </View>
+              <Text style={[s.tabCardLabel, defaultTab === 'Messages' && s.tabCardLabelActive]}>Chat</Text>
+              <Text style={s.tabCardSub}>Mensagens</Text>
+              {defaultTab === 'Messages' && (
+                <View style={s.tabCardCheck}>
+                  <Ionicons name="checkmark" size={11} color={BG} />
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+          <Text style={s.tabPickerHint}>Aplica-se na próxima abertura do app</Text>
         </View>
 
         {/* Phone (read-only) */}
@@ -402,6 +459,34 @@ const s = StyleSheet.create({
   identIcon: { width: 32, height: 32, borderRadius: 9, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   identTitle: { fontFamily: fonts.semiBold, fontSize: 15, color: T },
   identSub:   { fontFamily: fonts.medium, fontSize: 12, color: M, marginTop: 1 },
+
+  // Ecrã inicial picker
+  tabPickerRow: { flexDirection: 'row', gap: 12 },
+  tabCard: {
+    flex: 1, alignItems: 'center', gap: 6,
+    backgroundColor: SX, borderWidth: 1.5, borderColor: CARD_BD,
+    borderRadius: 18, paddingVertical: 18, paddingHorizontal: 12,
+    position: 'relative',
+  },
+  tabCardActive: { borderColor: B, backgroundColor: `${B}08` },
+  tabCardIcon: {
+    width: 44, height: 44, borderRadius: 14,
+    backgroundColor: '#EBEBEF',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  tabCardIconActive: { backgroundColor: B },
+  tabCardLabel:      { fontFamily: fonts.bold, fontSize: 15, color: T },
+  tabCardLabelActive:{ color: B },
+  tabCardSub:        { fontFamily: fonts.medium, fontSize: 11, color: M },
+  tabCardCheck: {
+    position: 'absolute', top: 10, right: 10,
+    width: 18, height: 18, borderRadius: 9,
+    backgroundColor: B, alignItems: 'center', justifyContent: 'center',
+  },
+  tabPickerHint: {
+    fontFamily: fonts.medium, fontSize: 11, color: M,
+    textAlign: 'center', marginTop: 8,
+  },
 })
 
 const sm = StyleSheet.create({

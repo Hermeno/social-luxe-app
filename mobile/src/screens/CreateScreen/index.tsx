@@ -39,6 +39,24 @@ const GRADIENTS: [string, string][] = [
   ['#F72585', '#7209B7'],
   ['#06D6A0', '#1B9AAA'],
   ['#FFB347', '#FF6B6B'],
+  // dark / night
+  ['#0D0D0D', '#1C1C3E'],
+  ['#232526', '#414345'],
+  ['#141E30', '#243B55'],
+  ['#0F2027', '#2C5364'],
+  // deep blue
+  ['#000428', '#004E92'],
+  ['#4568DC', '#B06AB3'],
+  // electric / vivid
+  ['#FC466B', '#3F5EFB'],
+  ['#11998E', '#38EF7D'],
+  // gold / warm
+  ['#F7971E', '#FFD200'],
+  // earth / dusk
+  ['#2C3E50', '#FD746C'],
+  ['#B24592', '#F15F79'],
+  // soft / pastel
+  ['#A8EDEA', '#FED6E3'],
 ]
 
 type Media = { uri: string; type: 'image' | 'video' }

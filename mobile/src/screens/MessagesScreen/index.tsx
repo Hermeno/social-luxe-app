@@ -13,6 +13,7 @@ import { StackNavigationProp } from '@react-navigation/stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFocusEffect } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
+import { Home } from 'lucide-react-native'
 import * as Haptics from 'expo-haptics'
 import Toast from 'react-native-toast-message'
 import * as msgService from '../../services/message.service'
@@ -35,6 +36,7 @@ import { getSocket } from '../../socket'
 import { useAuthStore } from '../../store/auth.store'
 import { isConnected } from '../../services/netinfo.service'
 import { useMessageBadgeStore } from '../../store/messageBadge.store'
+import { useFeedStore } from '../../store/feed.store'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { colors, fonts } from '../../theme'
 import { useT } from '../../i18n'
@@ -292,6 +294,7 @@ export default function MessagesScreen() {
   const { user }        = useAuthStore()
   const inputRef        = useRef<TextInput>(null)
   const { setTotalUnread, increment } = useMessageBadgeStore()
+  const newPostsCount = useFeedStore((s) => s.newPostsCount)
 
   const [connections,    setConnections]    = useState<Connection[]>([])
   const [viewedIds,      setViewedIds]      = useState<Set<string>>(new Set())
@@ -579,6 +582,24 @@ export default function MessagesScreen() {
           </View>
 
           <TouchableOpacity
+            onPress={() => (nav as any).jumpTo('Feed')}
+            activeOpacity={0.75}
+            style={s.homeBtn}
+          >
+            <Home size={20} strokeWidth={2} color="#111111" />
+            {newPostsCount > 0 && (
+              <View style={s.homeBadgeWrap}>
+                <View style={s.homeBadgePill}>
+                  <Text style={s.homeBadgeTxt}>
+                    {newPostsCount > 99 ? '99+' : String(newPostsCount)}
+                  </Text>
+                </View>
+                <View style={s.homeBadgeTail} />
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
             onPress={() => nav.navigate('Profile', { userId: user?.id })}
             activeOpacity={0.75}
           >
@@ -735,6 +756,52 @@ const s = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 2,
     borderColor: `${colors.primary}40`,
+  },
+
+  /* ── Home button + badge ── */
+  homeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F4F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  homeBadgeWrap: {
+    position: 'absolute',
+    bottom: 38,
+    alignSelf: 'center',
+    alignItems: 'center',
+  },
+  homeBadgePill: {
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    minWidth: 22,
+    alignItems: 'center',
+    ...Platform.select({
+      ios:     { shadowColor: colors.primary, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.4, shadowRadius: 5 },
+      android: { elevation: 4 },
+    }),
+  },
+  homeBadgeTxt: {
+    color: '#fff',
+    fontSize: 11,
+    fontFamily: fonts.bold,
+    lineHeight: 14,
+    includeFontPadding: false,
+  },
+  homeBadgeTail: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 5,
+    borderRightWidth: 5,
+    borderTopWidth: 6,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: colors.primary,
+    marginTop: -1,
   },
 
   /* ── Section label ── */

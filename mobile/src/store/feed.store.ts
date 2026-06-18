@@ -13,6 +13,8 @@ interface FeedStore {
   setNewPostsCount: (count: number) => void
   jumpToPostId: string | null
   setJumpToPostId: (id: string | null) => void
+  openSearch: boolean
+  setOpenSearch: (v: boolean) => void
 }
 
 export const useFeedStore = create<FeedStore>((set) => ({
@@ -22,4 +24,6 @@ export const useFeedStore = create<FeedStore>((set) => ({
   setNewPostsCount: (count) => set({ newPostsCount: count }),
   jumpToPostId:     null,
   setJumpToPostId:  (id)    => set({ jumpToPostId: id }),
+  openSearch:       false,
+  setOpenSearch:    (v)     => set({ openSearch: v }),
 }))

@@ -30,7 +30,7 @@ export default function ChatHeader({
       </TouchableOpacity>
 
       <TouchableOpacity onPress={onProfilePress} activeOpacity={0.75}>
-        <AvatarImage uri={avatarUri} name={userName} size={44} />
+        <AvatarImage uri={avatarUri} name={userName} size={44} borderWidth={0} borderColor="transparent" />
       </TouchableOpacity>
 
       <View style={s.info}>

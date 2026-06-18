@@ -42,7 +42,9 @@ import { StoryGroup } from '../services/story.service'
 export type AppTabParams = {
   Feed: undefined
   Messages: undefined
-  Create: undefined
+  Create: undefined          // accessed via FeedHeader / ChallengesScreen, not shown in tab bar
+  Donations: undefined
+  Profile: { userId?: string }
 }
 
 export type AppStackParams = {
@@ -84,17 +86,23 @@ export type AppStackParams = {
 const Stack = createStackNavigator<AppStackParams>()
 const Tab = createBottomTabNavigator<AppTabParams>()
 
-function Tabs() {
+function Tabs({ defaultTab }: { defaultTab: 'Feed' | 'Messages' }) {
   return (
-    <Tab.Navigator tabBar={(props) => <TabBar {...props} />} screenOptions={{ headerShown: false }}>
-      <Tab.Screen name="Feed" component={FeedScreen} />
-      <Tab.Screen name="Messages" component={MessagesScreen} />
-      <Tab.Screen name="Create" component={CreateScreen} />
+    <Tab.Navigator
+      initialRouteName={defaultTab}
+      tabBar={(props) => <TabBar {...props} />}
+      screenOptions={{ headerShown: false }}
+    >
+      <Tab.Screen name="Feed"      component={FeedScreen} />
+      <Tab.Screen name="Messages"  component={MessagesScreen} />
+      <Tab.Screen name="Create"    component={CreateScreen} />
+      <Tab.Screen name="Donations" component={DonationsScreen} />
+      <Tab.Screen name="Profile"   component={ProfileScreen} />
     </Tab.Navigator>
   )
 }
 
-export default function AppNavigator() {
+export default function AppNavigator({ defaultTab }: { defaultTab: 'Feed' | 'Messages' }) {
   return (
     <Stack.Navigator
       screenOptions={{
@@ -123,7 +131,7 @@ export default function AppNavigator() {
         }),
       }}
     >
-      <Stack.Screen name="Tabs" component={Tabs} />
+      <Stack.Screen name="Tabs">{() => <Tabs defaultTab={defaultTab} />}</Stack.Screen>
       <Stack.Screen name="Profile" component={ProfileScreen} />
       <Stack.Screen name="Chat" component={ChatScreen} />
       {/* COMMUNITY BLOCKED FOR LAUNCH

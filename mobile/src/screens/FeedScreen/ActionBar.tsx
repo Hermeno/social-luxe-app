@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   View, Text, TouchableOpacity, StyleSheet, Share, Modal, Alert, TextInput,
+  Animated,
 } from 'react-native'
 import * as Haptics from 'expo-haptics'
-import { Ionicons, SimpleLineIcons } from '@expo/vector-icons'
+import { Heart, MessageCircle, Send, Eye, MoreVertical, Pencil, Trash2 } from 'lucide-react-native'
 import { Post } from '../../types'
 import { colors, fonts } from '../../theme'
 import * as postService from '../../services/post.service'
@@ -20,6 +21,14 @@ interface Props {
   onEdited?: (id: string, caption: string) => void
   newPostsCount?: number
   commentCount?: number
+}
+
+type HeartP = {
+  id:  number
+  tx:  Animated.Value
+  ty:  Animated.Value
+  s:   Animated.Value
+  o:   Animated.Value
 }
 
 function fmt(n: number) {
@@ -44,6 +53,44 @@ export default React.memo(function ActionBar({
   const [showMenu,  setShowMenu]  = useState(false)
   const [editMode,  setEditMode]  = useState(false)
   const [editText,  setEditText]  = useState(post.caption ?? '')
+  const [hearts,    setHearts]    = useState<HeartP[]>([])
+  const heartIdRef = useRef(0)
+
+  function burstHearts() {
+    const newHearts: HeartP[] = []
+    for (let i = 0; i < 10; i++) {
+      const tx = new Animated.Value(0)
+      const ty = new Animated.Value(0)
+      const s  = new Animated.Value(0)
+      const o  = new Animated.Value(1)
+      const id = ++heartIdRef.current
+
+      const angle  = Math.random() * Math.PI * 2
+      const dist   = 28 + Math.random() * 54
+      const finalX = Math.cos(angle) * dist
+      const finalY = Math.sin(angle) * dist
+      const finalS = 0.5 + Math.random() * 0.9
+      const dur    = 550 + Math.random() * 220
+
+      Animated.parallel([
+        Animated.sequence([
+          Animated.spring(s, { toValue: finalS, speed: 55, bounciness: 16, useNativeDriver: true }),
+          Animated.timing(s, { toValue: 0, duration: 160, useNativeDriver: true }),
+        ]),
+        Animated.timing(tx, { toValue: finalX, duration: dur, useNativeDriver: true }),
+        Animated.timing(ty, { toValue: finalY, duration: dur, useNativeDriver: true }),
+        Animated.sequence([
+          Animated.delay(180 + i * 18),
+          Animated.timing(o, { toValue: 0, duration: 380, useNativeDriver: true }),
+        ]),
+      ]).start(() => {
+        setHearts((prev) => prev.filter((h) => h.id !== id))
+      })
+
+      newHearts.push({ id, tx, ty, s, o })
+    }
+    setHearts((prev) => [...prev, ...newHearts])
+  }
 
   useEffect(() => {
     setLiked(likedProp)
@@ -57,6 +104,7 @@ export default React.memo(function ActionBar({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     const was = liked; const prev = likeCount
     setLiked(!was); setLikeCount((c) => was ? c - 1 : c + 1); onLikeChange?.(!was)
+    if (!was) burstHearts()
     try {
       const res = await postService.likePost(post.id)
       setLiked(res.liked); onLikeChange?.(res.liked)
@@ -103,25 +151,43 @@ export default React.memo(function ActionBar({
             onLongPress={() => setShowReactions(true)}
             activeOpacity={0.75}
           >
-            <SimpleLineIcons
-              name="heart"
+            <Heart
               size={26}
+              strokeWidth={2}
               color={liked ? '#FF4B6E' : '#fff'}
-              style={s.iconShadow}
+              fill={liked ? '#FF4B6E' : 'transparent'}
             />
             <Text style={s.label}>{fmt(likeCount)}</Text>
+
+            {/* Heart burst particles */}
+            {hearts.map((h) => (
+              <Animated.View
+                key={h.id}
+                pointerEvents="none"
+                style={[
+                  s.burstHeart,
+                  {
+                    opacity: h.o,
+                    transform: [
+                      { translateX: h.tx },
+                      { translateY: h.ty },
+                      { scale: h.s },
+                    ],
+                  },
+                ]}
+              >
+                <Heart size={14} strokeWidth={0} color="#FF4B6E" fill="#FF4B6E" />
+              </Animated.View>
+            ))}
           </TouchableOpacity>
         )}
 
         {/* Comment */}
         {!isAnnouncement && (
           <TouchableOpacity style={s.btn} onPress={onCommentPress} activeOpacity={0.75}>
-            <Ionicons
-              name="chatbubble-outline"
-              size={26}
-              color="#fff"
-              style={[s.iconShadow, s.mirrorX]}
-            />
+            <View style={s.mirrorX}>
+              <MessageCircle size={26} strokeWidth={2} color="#fff" />
+            </View>
             <Text style={s.label}>{fmt(commentCountProp ?? post._count?.comments ?? 0)}</Text>
           </TouchableOpacity>
         )}
@@ -129,14 +195,14 @@ export default React.memo(function ActionBar({
         {/* Share */}
         {!isAnnouncement && (
           <TouchableOpacity style={s.btn} onPress={handleShare} activeOpacity={0.75}>
-            <Ionicons name="paper-plane-outline" size={25} color="#fff" style={s.iconShadow} />
+            <Send size={25} strokeWidth={2} color="#fff" />
             <Text style={s.label}>{fmt(shareCount)}</Text>
           </TouchableOpacity>
         )}
 
         {/* Views */}
         <View style={[s.btn, { opacity: (isSelf || post.user.viewsPublic) ? 1 : 0 }]}>
-          <Ionicons name="eye-outline" size={26} color="#fff" style={s.iconShadow} />
+          <Eye size={26} strokeWidth={2} color="#fff" />
           <Text style={s.label}>{fmt(post._count?.views ?? 0)}</Text>
         </View>
 
@@ -147,7 +213,7 @@ export default React.memo(function ActionBar({
             onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowMenu(true) }}
             activeOpacity={0.75}
           >
-            <Ionicons name="ellipsis-horizontal" size={22} color="rgba(255,255,255,0.82)" style={s.iconShadow} />
+            <MoreVertical size={22} strokeWidth={2} color="rgba(255,255,255,0.82)" />
           </TouchableOpacity>
         )}
       </View>
@@ -162,12 +228,12 @@ export default React.memo(function ActionBar({
         <TouchableOpacity style={s.overlay} activeOpacity={1} onPress={() => setShowMenu(false)}>
           <View style={s.menu}>
             <TouchableOpacity style={s.menuItem} onPress={() => { setShowMenu(false); setEditText(post.caption ?? ''); setEditMode(true) }}>
-              <Ionicons name="pencil-outline" size={20} color={colors.gray800} />
+              <Pencil size={20} strokeWidth={2} color={colors.gray800} />
               <Text style={s.menuItemText}>{t.feed_edit_caption}</Text>
             </TouchableOpacity>
             <View style={s.menuDivider} />
             <TouchableOpacity style={s.menuItem} onPress={handleDelete}>
-              <Ionicons name="trash-outline" size={20} color="#E53E3E" />
+              <Trash2 size={20} strokeWidth={2} color="#E53E3E" />
               <Text style={[s.menuItemText, { color: '#E53E3E' }]}>{t.feed_delete_title}</Text>
             </TouchableOpacity>
           </View>
@@ -229,14 +295,14 @@ const s = StyleSheet.create({
     paddingBottom: 4,
   },
 
-  // Sombra para ícones font-based (Ionicons, SimpleLineIcons)
-  iconShadow: {
-    textShadowColor: 'rgba(0,0,0,0.28)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-  },
-
   mirrorX: { transform: [{ scaleX: -1 }] },
+
+  burstHeart: {
+    position: 'absolute',
+    top: 24,    // centro vertical do ícone de coração (paddingTop 11 + metade do ícone 26)
+    left: 19,   // centro horizontal (52/2 - 7)
+    zIndex: 30,
+  },
 
   label: {
     color: '#fff',

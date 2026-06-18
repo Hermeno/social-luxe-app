@@ -5,11 +5,11 @@
     "version": "1.0.0",
     "sdkVersion": "54.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/files/luxee-chat-icon-1024.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-logo.png",
+      "image": "./assets/files/luxee-splash-iphone.png",
       "resizeMode": "contain",
       "backgroundColor": "#0A0A0A"
     },
@@ -22,12 +22,17 @@
         "NSPhotoLibraryUsageDescription": "Permite ao luxee aceder à galeria para publicar fotos.",
         "NSMicrophoneUsageDescription": "Permite ao luxee gravar áudio em vídeos.",
         "NSLocationWhenInUseUsageDescription": "Permite ao luxee mostrar publicações e perfis próximos de ti."
+      },
+      "splash": {
+        "image": "./assets/files/luxee-splash-iphone.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#0A0A0A"
       }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png",
-        "backgroundColor": "#4C8CE4"
+        "foregroundImage": "./assets/files/luxee-chat-icon-1024.png",
+        "backgroundColor": "#0A0A0A"
       },
       "package": "com.luxee.app",
       "versionCode": 1,
@@ -36,9 +41,15 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS"
-      ]
+      ],
+      "splash": {
+        "image": "./assets/files/luxee-splash-android.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#0A0A0A"
+      }
     },
     "plugins": [
+      "expo-splash-screen",
       "expo-video",
       [
         "expo-image-picker",
@@ -52,8 +63,8 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/icon.png",
-          "color": "#4C8CE4",
+          "icon": "./assets/files/luxee-chat-icon-1024.png",
+          "color": "#CA2851",
           "defaultChannel": "messages"
         }
       ]

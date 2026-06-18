@@ -109,7 +109,7 @@ const BubbleItem = memo(function BubbleItem({
             />
             <View style={bs.avatarCenter}>
               <View style={{ width: AVATAR_SIZE, height: AVATAR_SIZE, borderRadius: AVATAR_SIZE / 2, overflow: 'hidden' }}>
-                <AvatarImage uri={item.user.avatar} size={AVATAR_SIZE} />
+                <AvatarImage uri={item.user.avatar} size={AVATAR_SIZE} borderWidth={0} borderColor="transparent" />
                 {isOnlineUser && (
                   <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
                     <RippleRings size={AVATAR_SIZE} />

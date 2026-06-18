@@ -18,15 +18,12 @@ import { StackNavigationProp } from '@react-navigation/stack'
 import { useFocusEffect } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
-import { Search, ShoppingBag, User, MessageCircle } from 'lucide-react-native'
-import { Feather } from '@expo/vector-icons'
+import { Search } from 'lucide-react-native'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { Post } from '../../types'
 import { useFeed } from '../../hooks/useFeed'
 import { useFeedStore } from '../../store/feed.store'
-import { useMessageBadgeStore } from '../../store/messageBadge.store'
 import { useAuthStore } from '../../store/auth.store'
-import { useLuxStore } from '../../store/luxStore.store'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { markPostViewed, getViewedPostIds, getCache, setCache } from '../../db/database'
 import * as postService from '../../services/post.service'
@@ -64,11 +61,8 @@ export default function FeedScreen() {
     return `${Math.floor(h / 24)}${t.time_d_ago}`
   }
   const nav              = useNavigation<Nav>()
-  const { bottom, top }  = useSafeAreaInsets()
-  const messageBadge     = useMessageBadgeStore((s) => s.totalUnread)
+  const { top }          = useSafeAreaInsets()
   const user             = useAuthStore((s) => s.user)
-  const storeBadge       = useLuxStore((s) => s.newProductsBadge)
-  const cartCount        = useLuxStore((s) => s.cartCount())
 
   // Consume a post published from CreateScreen → prepend instantly
   const pendingPost       = useFeedStore((s) => s.pendingPost)
@@ -76,6 +70,8 @@ export default function FeedScreen() {
   const setNewPostsCount  = useFeedStore((s) => s.setNewPostsCount)
   const jumpToPostId      = useFeedStore((s) => s.jumpToPostId)
   const setJumpToPostId   = useFeedStore((s) => s.setJumpToPostId)
+  const openSearch        = useFeedStore((s) => s.openSearch)
+  const setOpenSearch     = useFeedStore((s) => s.setOpenSearch)
 
   useEffect(() => {
     if (!pendingPost) return
@@ -83,6 +79,14 @@ export default function FeedScreen() {
     // currentIndex is derived from currentPostId — no manual correction needed
     setPendingPost(null)
   }, [pendingPost])
+
+  // TabBar Search button → open search overlay
+  useFocusEffect(useCallback(() => {
+    if (openSearch) {
+      setSearchMode(true)
+      setOpenSearch(false)
+    }
+  }, [openSearch]))
 
   const jumpToPostIdRef = useRef(jumpToPostId)
   jumpToPostIdRef.current = jumpToPostId
@@ -246,8 +250,6 @@ export default function FeedScreen() {
   }, [])
   const handleNamePress    = useCallback((userId: string) => nav.navigate('Profile', { userId }), [nav])
   const handleCreatePress  = useCallback(() => nav.navigate('Tabs', { screen: 'Create' }), [nav])
-  const handleStorePress   = useCallback(() => nav.navigate('Store'), [nav])
-  const handleProfilePress = useCallback(() => nav.navigate('Profile', {}), [nav])
 
   const currentGroupFirstIdx = useMemo(
     () => (post ? flatPosts.findIndex((p) => p.user.id === post.user.id) : 0),
@@ -602,38 +604,6 @@ export default function FeedScreen() {
         />
       )}
 
-      {/* ── Tab bar branca — fixada em baixo ────────────────────────────────── */}
-      <View style={[s.tabBar, { paddingBottom: Math.max(bottom, 8) }]}>
-        <TouchableOpacity style={s.tabBtn} onPress={handleSearchOpen} activeOpacity={0.7}>
-          <Search size={24} strokeWidth={1.8} color={colors.gray600} />
-        </TouchableOpacity>
-        <TouchableOpacity style={s.tabBtn} onPress={() => nav.navigate('Tabs', { screen: 'Messages' })} activeOpacity={0.7}>
-          <View>
-            <MessageCircle size={24} strokeWidth={1.8} color={colors.gray600} />
-            {messageBadge > 0 && (
-              <View style={s.tabBadge}>
-                <Text style={s.tabBadgeText}>{messageBadge > 9 ? '9+' : String(messageBadge)}</Text>
-              </View>
-            )}
-          </View>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.tabBtn} onPress={() => nav.navigate('Donations')} activeOpacity={0.7}>
-          <Feather name="hexagon" size={24} color={colors.gray600} />
-        </TouchableOpacity>
-        <TouchableOpacity style={s.tabBtn} onPress={handleStorePress} activeOpacity={0.7}>
-          <View>
-            <ShoppingBag size={24} strokeWidth={1.8} color={colors.gray600} />
-            {(storeBadge > 0 || cartCount > 0) && <View style={s.tabDot} />}
-          </View>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.tabBtn} onPress={handleProfilePress} activeOpacity={0.7}>
-          {user?.avatar
-            ? <AvatarImage uri={user.avatar} size={26} />
-            : <User size={24} strokeWidth={1.8} color={colors.gray600} />
-          }
-        </TouchableOpacity>
-      </View>
-
     </View>
   )
 }
@@ -732,52 +702,6 @@ const s = StyleSheet.create({
   emptyTitle:   { fontSize: 18, fontFamily: fonts.semiBold, color: colors.gray800, letterSpacing: -0.3, textAlign: 'center', marginTop: 4 },
   emptySub:     { fontSize: 14, fontFamily: fonts.regular, color: colors.gray400, textAlign: 'center', lineHeight: 20 },
 
-  // Tab bar branca em baixo
-  tabBar: {
-    flexDirection: 'row',
-    backgroundColor: colors.white,
-    borderTopWidth: 1,
-    borderTopColor: '#EBEBEB',
-    paddingTop: 10,
-  },
-  tabBtn: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 4,
-  },
-  tabBadge: {
-    position: 'absolute',
-    top: -5,
-    right: -8,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#FF3B30',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 3,
-    borderWidth: 1.5,
-    borderColor: colors.white,
-  },
-  tabBadgeText: {
-    color: '#fff',
-    fontSize: 9,
-    fontFamily: fonts.bold,
-    lineHeight: 11,
-    includeFontPadding: false,
-  },
-  tabDot: {
-    position: 'absolute',
-    top: -3,
-    right: -3,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#FF3B30',
-    borderWidth: 1.5,
-    borderColor: colors.white,
-  },
 
 
 })

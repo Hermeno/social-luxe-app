@@ -1,4 +1,5 @@
 import 'react-native-gesture-handler'
+import * as SplashScreen from 'expo-splash-screen'
 import React, { useEffect, useRef, useState } from 'react'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
@@ -13,7 +14,7 @@ import {
 } from '@expo-google-fonts/google-sans-flex'
 import * as Notifications from 'expo-notifications'
 import * as Location from 'expo-location'
-import { Platform, View, Text, StyleSheet } from 'react-native'
+import { Image, Platform, StyleSheet, View } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import RootNavigator from './src/navigation/RootNavigator'
 import { connectSocket, disconnectSocket } from './src/socket'
@@ -24,6 +25,10 @@ import { useFriendsStore } from './src/store/friends.store'
 import { useMessageBadgeStore } from './src/store/messageBadge.store'
 import { getMyFollowers } from './src/services/follow.service'
 import { api, onTokenExpired } from './src/services/api'
+
+// Hold the native splash screen open until we explicitly release it.
+// Must be called before any rendering occurs.
+SplashScreen.preventAutoHideAsync().catch(() => {})
 
 const CHANNEL_ID  = 'messages'
 const PROJECT_ID  = '19550566-94a8-4992-8d1e-25df68e87569'
@@ -231,8 +236,15 @@ export default function App() {
 
   const { isLoading: authLoading, isAuthenticated, loadUser } = useAuthStore()
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null)
+  const [defaultTab, setDefaultTab] = useState<'Feed' | 'Messages' | null>(null)
 
   useEffect(() => { loadUser() }, [])
+
+  useEffect(() => {
+    AsyncStorage.getItem('default_tab')
+      .then((v) => setDefaultTab(v === 'Messages' ? 'Messages' : 'Feed'))
+      .catch(() => setDefaultTab('Feed'))
+  }, [])
 
   useEffect(() => {
     if (!isAuthenticated) { setOnboardingDone(null); return }
@@ -244,20 +256,31 @@ export default function App() {
   const ready =
     fontsLoaded &&
     !authLoading &&
+    defaultTab !== null &&
     (!isAuthenticated || onboardingDone !== null)
 
-  // GestureHandlerRootView + SafeAreaProvider are ALWAYS mounted.
-  // This avoids a blank frame that appears when swapping two completely
-  // different component trees (the old if (!ready) return <View> pattern).
+  // Release the native splash only after the full app tree is painted.
+  // useEffect fires post-commit, so the screen is already rendered when
+  // the native splash fades — zero blank frames.
+  useEffect(() => {
+    if (ready) {
+      SplashScreen.hideAsync().catch(() => {})
+    }
+  }, [ready])
+
   return (
     <GestureHandlerRootView style={s.root}>
       <SafeAreaProvider style={s.root}>
         <StatusBar style="light" />
         {!ready ? (
-          // Dark splash — stays on screen while fonts, auth, and onboarding resolve.
-          // Uses system bold so it renders before custom fonts are available.
-          <View style={s.splash}>
-            <Text style={s.splashWord} allowFontScaling={false}>luxee</Text>
+          // JS-level dark cover: visível no Expo Go (onde a splash nativa não é controlável)
+          // e invisível em builds standalone (a splash nativa cobre antes do hideAsync).
+          <View style={s.cover}>
+            <Image
+              source={require('./assets/files/luxee-splash-iphone.png')}
+              style={s.splashImg}
+              resizeMode="contain"
+            />
           </View>
         ) : (
           <>
@@ -269,6 +292,7 @@ export default function App() {
             <RootNavigator
               onboardingDone={onboardingDone}
               setOnboardingDone={setOnboardingDone}
+              defaultTab={defaultTab ?? 'Feed'}
             />
           </>
         )}
@@ -278,14 +302,7 @@ export default function App() {
 }
 
 const s = StyleSheet.create({
-  root:       { flex: 1, backgroundColor: DARK },
-  splash:     { flex: 1, backgroundColor: DARK, justifyContent: 'center', alignItems: 'center' },
-  // System-bold "luxee" — rendered before custom fonts load so no flicker on transition
-  splashWord: {
-    fontSize: 44,
-    color: '#FFFFFF',
-    fontWeight: '800',
-    letterSpacing: -3,
-    includeFontPadding: false,
-  },
+  root:      { flex: 1, backgroundColor: DARK },
+  cover:     { flex: 1, backgroundColor: DARK, alignItems: 'center', justifyContent: 'center' },
+  splashImg: { width: '100%', height: '100%' },
 })

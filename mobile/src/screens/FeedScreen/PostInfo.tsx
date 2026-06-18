@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import {
-  Animated, View, Text, TouchableOpacity, StyleSheet,
+  Animated, View, Text, TouchableOpacity, StyleSheet, Image,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
@@ -13,9 +13,37 @@ import { useT } from '../../i18n'
 import { useAuthStore } from '../../store/auth.store'
 import { toggleFollow, getFollowStatus } from '../../services/follow.service'
 import { getCache } from '../../db/database'
+import * as postService from '../../services/post.service'
+import { API_BASE } from '../../config'
 import AvatarImage from '../../components/AvatarImage'
 import FollowSplitButton, { FollowDuration } from '../../components/FollowSplitButton'
 import { AppStackParams } from '../../navigation/AppNavigator'
+
+const MAX_COMMENTERS = 4
+
+type CommenterThumb = { id: string; name: string; avatar: string | null }
+
+function uniqueCommenters(
+  comments: Array<{ user: CommenterThumb }>,
+  post: { user: { id: string } },
+): CommenterThumb[] {
+  const seen = new Set<string>()
+  seen.add(post.user.id) // exclui o autor do post
+  const result: CommenterThumb[] = []
+  for (const c of comments) {
+    if (!c.user?.id || seen.has(c.user.id)) continue
+    seen.add(c.user.id)
+    result.push(c.user)
+    if (result.length >= MAX_COMMENTERS) break
+  }
+  return result
+}
+
+function resolveAvatar(uri: string | null | undefined): string | null {
+  if (!uri) return null
+  if (uri.startsWith('http') || uri.startsWith('file://')) return uri
+  return `${API_BASE}${uri}`
+}
 
 type Nav = StackNavigationProp<AppStackParams>
 
@@ -93,6 +121,7 @@ export default function PostInfo({ post, isActive, onExpired }: Props) {
   const [following, setFollowing]         = useState(() => followCache.get(post.user.id) ?? false)
   const [loadingFollow, setLoadingFollow] = useState(false)
   const [now, setNow]                     = useState(Date.now)
+  const [commenters, setCommenters]       = useState<CommenterThumb[]>([])
 
   const caption   = post.caption ?? ''
   const isLong    = caption.length > 80
@@ -148,9 +177,37 @@ export default function PostInfo({ post, isActive, onExpired }: Props) {
   useEffect(() => {
     setExpanded(false)
     setFollowing(followCache.get(post.user.id) ?? false)
+    setCommenters([])
     // Animate energy bar in
     energyAnim.setValue(0)
     Animated.timing(energyAnim, { toValue: energyPct, duration: 900, useNativeDriver: false }).start()
+  }, [post.id])
+
+  // Carrega avatares dos comentadores — cache SQLite primeiro, API em background
+  useEffect(() => {
+    if (post._count.comments === 0) return
+    let cancelled = false
+
+    async function load() {
+      // 1. Cache instantâneo (populado quando CommentSheet abre)
+      const cached = await getCache<Array<{ user: CommenterThumb }>>(`comments:${post.id}`)
+        .catch(() => null)
+      if (!cancelled && cached && cached.length > 0) {
+        setCommenters(uniqueCommenters(cached, post))
+      }
+      // 2. Se sem cache, busca silenciosamente em background
+      if (!cached || cached.length === 0) {
+        try {
+          const fresh = await postService.getComments(post.id)
+          if (!cancelled && fresh.length > 0) {
+            setCommenters(uniqueCommenters(fresh as any, post))
+          }
+        } catch {}
+      }
+    }
+
+    load()
+    return () => { cancelled = true }
   }, [post.id])
 
   // Follow status fetch
@@ -266,6 +323,31 @@ export default function PostInfo({ post, isActive, onExpired }: Props) {
             )}
           </View>
         </View>
+
+        {/* Avatares dos comentadores */}
+        {commenters.length > 0 && (
+          <View style={s.commentersRow}>
+            {commenters.map((c, i) => {
+              const uri = resolveAvatar(c.avatar)
+              return (
+                <View key={c.id} style={[s.commenterAvatar, { marginLeft: i === 0 ? 0 : -9, zIndex: MAX_COMMENTERS - i }]}>
+                  {uri ? (
+                    <Image source={{ uri }} style={s.commenterImg} />
+                  ) : (
+                    <View style={[s.commenterImg, s.commenterFallback]}>
+                      <Text style={s.commenterInitial}>{c.name?.[0]?.toUpperCase() ?? '?'}</Text>
+                    </View>
+                  )}
+                </View>
+              )
+            })}
+            <Text style={s.commentersLabel}>
+              {post._count.comments > 1
+                ? `+${post._count.comments - 1} comentário${post._count.comments > 2 ? 's' : ''}`
+                : 'comentou'}
+            </Text>
+          </View>
+        )}
 
         {/* Caption */}
         {caption.length > 0 && post.mediaType !== 'TEXT' && (
@@ -390,6 +472,36 @@ const s = StyleSheet.create({
     fontSize: 10,
     letterSpacing: 0.3,
     textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+
+  // ── Commenter avatars ────────────────────────────────────────────────────────
+  commentersRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: -2,
+  },
+  commenterAvatar: {
+    width: 22, height: 22, borderRadius: 11,
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.85)',
+    overflow: 'hidden',
+  },
+  commenterImg: { width: '100%', height: '100%' },
+  commenterFallback: {
+    backgroundColor: 'rgba(202,40,81,0.7)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  commenterInitial: {
+    color: '#fff', fontSize: 9, fontFamily: fonts.bold,
+  },
+  commentersLabel: {
+    color: 'rgba(255,255,255,0.65)',
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    marginLeft: 6,
+    letterSpacing: -0.1,
+    textShadowColor: 'rgba(0,0,0,0.3)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },
