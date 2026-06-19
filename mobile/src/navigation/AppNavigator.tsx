@@ -91,7 +91,7 @@ function Tabs({ defaultTab }: { defaultTab: 'Feed' | 'Messages' }) {
     <Tab.Navigator
       initialRouteName={defaultTab}
       tabBar={(props) => <TabBar {...props} />}
-      screenOptions={{ headerShown: false }}
+      screenOptions={{ headerShown: false, tabBarStyle: { position: 'absolute' } }}
     >
       <Tab.Screen name="Feed"      component={FeedScreen} />
       <Tab.Screen name="Messages"  component={MessagesScreen} />

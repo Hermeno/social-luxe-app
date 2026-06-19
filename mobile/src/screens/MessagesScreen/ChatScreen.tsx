@@ -1,11 +1,12 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react'
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import {
-  View, Text, FlatList, StyleSheet, ImageBackground,
+  View, Text, FlatList, StyleSheet, ImageBackground, ActivityIndicator,
   KeyboardAvoidingView, Platform, Animated, Pressable, TouchableOpacity, Modal, StatusBar, AppState,
 } from 'react-native'
 import { Image } from 'expo-image'
 import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { RouteProp, useNavigation, useRoute, useFocusEffect } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -143,6 +144,94 @@ function ReplyQuote({ replyTo, mine }: { replyTo: NonNullable<Message['replyTo']
   )
 }
 
+// ── Audio player ─────────────────────────────────────────────────────────────
+const WAVE_BARS  = 30
+const WAVE_BAR_W = 2.5
+const WAVE_H     = 22
+
+function getWaveform(seed: string): number[] {
+  let h = 5381
+  for (let i = 0; i < seed.length; i++) h = ((h << 5) + h) ^ seed.charCodeAt(i)
+  return Array.from({ length: WAVE_BARS }, (_, i) => {
+    const v = Math.abs(Math.sin((h & 0xffff) * 0.0001 + i * 0.85) * Math.cos(i * 0.4 + 0.5))
+    return Math.max(0.15, Math.min(1, v * 2.2))
+  })
+}
+
+function fmtSec(s: number) {
+  const ss = Math.max(0, Math.floor(s))
+  return `${Math.floor(ss / 60)}:${String(ss % 60).padStart(2, '0')}`
+}
+
+function AudioPlayer({ uri, mine, pending }: { uri: string; mine: boolean; pending: boolean }) {
+  const player  = useAudioPlayer(uri)
+  const status  = useAudioPlayerStatus(player)
+
+  const playing   = status.playing ?? false
+  const duration  = status.duration ?? 0
+  const pos       = status.currentTime ?? 0
+  const buffering = (status as any).isBuffering ?? (status as any).buffering ?? false
+  const progress  = duration > 0 ? Math.min(1, pos / duration) : 0
+  const filled    = Math.floor(progress * WAVE_BARS)
+  const isLoading = !playing && duration === 0 && !pending
+
+  const waveform = useMemo(() => getWaveform(uri), [uri])
+
+  function handlePlayPause() {
+    if (playing) { player.pause(); return }
+    if (duration > 0 && pos >= duration - 0.05) player.seekTo(0)
+    player.play()
+  }
+
+  const btnBg     = mine ? 'rgba(255,255,255,0.22)' : colors.primary
+  const fillColor = mine ? '#fff'                   : colors.primary
+  const emptyColor= mine ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.13)'
+  const timeColor = mine ? 'rgba(255,255,255,0.78)' : colors.gray500
+  const iconColor = '#fff'
+
+  return (
+    <View style={t.audio}>
+      {/* Play / Pause / Loading */}
+      <TouchableOpacity
+        onPress={handlePlayPause}
+        style={[t.audioBtn, { backgroundColor: btnBg }]}
+        disabled={pending || buffering}
+        activeOpacity={0.75}
+      >
+        {buffering || (playing && duration === 0)
+          ? <ActivityIndicator size="small" color={iconColor} />
+          : <Ionicons
+              name={playing ? 'pause' : 'play'}
+              size={16}
+              color={iconColor}
+              style={playing ? undefined : { marginLeft: 2 }}
+            />
+        }
+      </TouchableOpacity>
+
+      {/* Waveform */}
+      <View style={t.waveform}>
+        {waveform.map((h, i) => (
+          <View
+            key={i}
+            style={{
+              width: WAVE_BAR_W,
+              height: WAVE_H * h,
+              borderRadius: 2,
+              backgroundColor: i < filled ? fillColor : emptyColor,
+            }}
+          />
+        ))}
+      </View>
+
+      {/* Time */}
+      <Text style={[t.audioTime, { color: timeColor }]}>
+        {pos > 0.05 ? fmtSec(pos) : (duration > 0 ? fmtSec(duration) : '--:--')}
+      </Text>
+    </View>
+  )
+}
+
 // ── Message bubble ────────────────────────────────────────────────────────────
 interface BubbleProps {
   msg: Message & { _pending?: boolean; _failed?: boolean }
@@ -156,12 +245,15 @@ interface BubbleProps {
 
 function MessageBubble({ msg, mine, isFirst, isLast, myUserId, onLongPress, onReply }: BubbleProps) {
   const mediaUri = msg.mediaUrl
-    ? (msg.mediaUrl.startsWith('http') ? msg.mediaUrl : `${API_BASE}${msg.mediaUrl}`)
+    ? (msg.mediaUrl.startsWith('http') || msg.mediaUrl.startsWith('file://')
+        ? msg.mediaUrl
+        : `${API_BASE}${msg.mediaUrl}`)
     : null
 
   const allReactions = msg.reactions ?? []
-  const isFile = !mediaUri && !!msg.content && !!msg.content.match(/\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|zip|rar)$/i)
-  const isText = !!msg.content && !isFile
+  const isAudio = !!msg.content?.match(/\.(m4a|mp3|aac|wav|ogg)$/i)
+  const isFile  = !isAudio && !mediaUri && !!msg.content && !!msg.content.match(/\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|zip|rar)$/i)
+  const isText  = !!msg.content && !isFile && !isAudio
 
   return (
     // FIX: row must be flex:1 so that maxWidth:'80%' on bubbleOuter
@@ -186,7 +278,7 @@ function MessageBubble({ msg, mine, isFirst, isLast, myUserId, onLongPress, onRe
 
             {msg.replyTo && <ReplyQuote replyTo={msg.replyTo} mine={mine} />}
 
-            {mediaUri && (
+            {mediaUri && !isAudio && (
               <Image
                 source={{ uri: mediaUri }}
                 style={t.mediaBubble}
@@ -194,6 +286,15 @@ function MessageBubble({ msg, mine, isFirst, isLast, myUserId, onLongPress, onRe
                 cachePolicy="disk"
                 recyclingKey={mediaUri}
                 transition={100}
+              />
+            )}
+
+            {isAudio && (
+              <AudioPlayer
+                key={mediaUri ?? msg.content!}
+                uri={mediaUri ?? msg.content!}
+                mine={mine}
+                pending={!!msg._pending}
               />
             )}
 
@@ -266,6 +367,9 @@ export default function ChatScreen() {
   const [editingMsg, setEditingMsg]           = useState<Message | null>(null)
   const [showScheduler, setShowScheduler]     = useState(false)
   const [scheduledMsg, setScheduledMsg]       = useState<scheduledSvc.ScheduledMessage | null>(null)
+  const [loadingMore, setLoadingMore]         = useState(false)
+  const [hasMorePages, setHasMorePages]       = useState(false)
+  const msgPageRef = useRef(1)
 
   const listRef     = useRef<FlatList>(null)
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -302,6 +406,8 @@ export default function ChatScreen() {
     try {
       const fresh = await msgService.getMessages(userId, 1)
       const sorted = [...fresh].reverse()
+      msgPageRef.current = 1
+      setHasMorePages(fresh.length >= 30)
 
       setMessages((prev) => {
         const pendingLocal   = prev.filter((m) => m._pending || m._failed)
@@ -323,6 +429,34 @@ export default function ChatScreen() {
       ])
     } catch {}
   }, [userId])
+
+  // ── Load older messages (scroll to top triggers this on inverted list) ──────
+  const loadMoreMessages = useCallback(async () => {
+    if (loadingMore || !hasMorePages || !isConnected()) return
+    setLoadingMore(true)
+    try {
+      const nextPage = msgPageRef.current + 1
+      const older = await msgService.getMessages(userId, nextPage)
+      if (older.length === 0) {
+        setHasMorePages(false)
+        setLoadingMore(false)
+        return
+      }
+      const sorted = [...older].reverse()
+      setMessages((prev) => {
+        const prevIds = new Set(prev.map((m) => m.id))
+        const newOnes = sorted.filter((m) => !prevIds.has(m.id))
+        if (newOnes.length === 0) { setHasMorePages(false); return prev }
+        const merged = [...newOnes, ...prev]
+        merged.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+        return merged
+      })
+      await cacheMessages(userId, sorted).catch(() => {})
+      msgPageRef.current = nextPage
+      if (older.length < 30) setHasMorePages(false)
+    } catch {}
+    setLoadingMore(false)
+  }, [loadingMore, hasMorePages, userId])
 
   useEffect(() => {
     loadMessages()
@@ -545,6 +679,46 @@ export default function ChatScreen() {
     }
   }
 
+  async function handleSendAudio(uri: string, durationMs: number) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+    const tempId   = `pending-audio-${Date.now()}`
+    const fileName = `audio_${Date.now()}.m4a`
+
+    const optimistic: LocalMessage = {
+      id:         tempId,
+      senderId:   user!.id,
+      receiverId: userId,
+      content:    fileName,
+      mediaUrl:   uri,   // local URI — lets AudioPlayer play immediately
+      readAt:     null,
+      replyToId:  null,
+      createdAt:  new Date().toISOString(),
+      sender:   { id: user!.id, name: user!.name ?? '', avatar: user!.avatar ?? null },
+      receiver: { id: userId, name: userName, avatar: userAvatar ?? null },
+      replyTo:  null,
+      _pending: true,
+    }
+
+    setMessages((prev) => [...prev, optimistic])
+    upsertCachedMessage(userId, optimistic as unknown as Message).catch(() => {})
+    pushToInbox(tempId, '🎤 Áudio', optimistic.createdAt)
+    listRef.current?.scrollToOffset({ offset: 0, animated: true })
+
+    try {
+      const sent = await msgService.sendMessage(userId, fileName, uri, undefined, 'audio/m4a', fileName)
+      // Prefer server mediaUrl (Cloudinary) but fall back to local URI if server didn't return one
+      const finalMediaUrl = sent.mediaUrl ?? uri
+      setMessages((prev) => prev.map((m) =>
+        m.id === tempId ? { ...sent, mediaUrl: finalMediaUrl, receiver: optimistic.receiver } : m,
+      ))
+      await replacePendingMessage(tempId, { ...sent, mediaUrl: finalMediaUrl }, userId).catch(() => {})
+    } catch {
+      setMessages((prev) => prev.map((m) =>
+        m.id === tempId ? { ...m, _pending: false, _failed: true } : m,
+      ))
+    }
+  }
+
   async function handleDeleteMessage(messageId: string) {
     try {
       await msgService.deleteMessage(messageId)
@@ -694,6 +868,11 @@ export default function ChatScreen() {
             contentContainerStyle={t.listContent}
             showsVerticalScrollIndicator={false}
             inverted
+            onEndReached={loadMoreMessages}
+            onEndReachedThreshold={0.3}
+            ListFooterComponent={loadingMore ? (
+              <ActivityIndicator size="small" color="#999" style={{ paddingVertical: 14 }} />
+            ) : null}
             renderItem={({ item }) =>
               item.kind === 'date'
                 ? <DateSep label={item.label} />
@@ -732,6 +911,7 @@ export default function ChatScreen() {
           onChange={handleTextChange}
           onSend={handleSend}
           onSendFile={handleSendFile}
+          onSendAudio={handleSendAudio}
           otherUserId={userId}
           replyingTo={replyingTo ? {
             senderName: replyingTo.sender.name,
@@ -739,6 +919,7 @@ export default function ChatScreen() {
           } : null}
           onCancelReply={() => setReplyingTo(null)}
           onSchedulePress={() => setShowScheduler(true)}
+          bottomInset={bottom}
         />
 
         {/* Context menu (long-press) */}
@@ -804,8 +985,6 @@ export default function ChatScreen() {
         />
       </KeyboardAvoidingView>
 
-      {/* Safe-area spacer — outside KAV so it's never affected by keyboard events */}
-      {bottom > 0 && <View style={{ height: bottom, backgroundColor: colors.white }} />}
     </View>
   )
 }
@@ -862,6 +1041,24 @@ const t = StyleSheet.create({
   bubblePending:     { opacity: 0.55 },
 
   mediaBubble: { width: 220, height: 220, borderRadius: R - 4, marginBottom: 5 },
+
+  // ── Audio player ─────────────────────────────────────────────────────────
+  audio: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 2, minWidth: 210,
+  },
+  audioBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  waveform: {
+    flex: 1,
+    height: WAVE_H,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 1.5,
+  },
+  audioTime: { fontSize: 12, fontFamily: fonts.medium, minWidth: 36, textAlign: 'right' },
 
   // ── Text ─────────────────────────────────────────────────────────────────
   msgText:   {

@@ -1,5 +1,5 @@
-import React from 'react'
-import { View, TouchableOpacity, StyleSheet, Text, Image } from 'react-native'
+import React, { useRef, useEffect } from 'react'
+import { View, TouchableOpacity, StyleSheet, Text, Image, Animated } from 'react-native'
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Search, Home, MessageCircle, User, Squircle } from 'lucide-react-native'
@@ -8,9 +8,56 @@ import { useMessageBadgeStore } from '../../store/messageBadge.store'
 import { useFeedStore } from '../../store/feed.store'
 import { useAuthStore } from '../../store/auth.store'
 
-const SZ       = 24
-const ACTIVE   = colors.black
-const INACTIVE = colors.gray400
+const SZ = 24
+
+function MessageBadge({ count, iconColor }: { count: number; iconColor: string }) {
+  const scale  = useRef(new Animated.Value(0)).current
+  const wobble = useRef(new Animated.Value(0)).current
+  const prev   = useRef(0)
+
+  useEffect(() => {
+    if (count > 0 && prev.current === 0) {
+      // First appearance — spring pop-in
+      Animated.spring(scale, {
+        toValue: 1,
+        tension: 260,
+        friction: 7,
+        useNativeDriver: true,
+      }).start()
+    } else if (count > prev.current && count > 0) {
+      // New message arrived — quick wiggle
+      Animated.sequence([
+        Animated.timing(wobble, { toValue:  4, duration: 60, useNativeDriver: true }),
+        Animated.timing(wobble, { toValue: -4, duration: 60, useNativeDriver: true }),
+        Animated.timing(wobble, { toValue:  2, duration: 50, useNativeDriver: true }),
+        Animated.timing(wobble, { toValue:  0, duration: 50, useNativeDriver: true }),
+      ]).start()
+    } else if (count === 0) {
+      scale.setValue(0)
+    }
+    prev.current = count
+  }, [count])
+
+  if (count === 0) return null
+
+  const label = count > 99 ? '99+' : String(count)
+
+  return (
+    <Animated.View
+      style={[
+        s.badgeAnchor,
+        { transform: [{ scale }, { translateX: wobble }] },
+      ]}
+    >
+      {/* Pill bubble */}
+      <View style={s.badgePill}>
+        <Text style={s.badgeTxt}>{label}</Text>
+      </View>
+      {/* Downward-pointing triangle tip */}
+      <View style={s.badgeTip} />
+    </Animated.View>
+  )
+}
 
 export default function TabBar({ state, navigation }: BottomTabBarProps) {
   const { bottom }    = useSafeAreaInsets()
@@ -19,7 +66,10 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
   const setOpenSearch = useFeedStore((s) => s.setOpenSearch)
   const avatar        = useAuthStore((s) => s.user?.avatar ?? null)
 
-  const activeTab = state.routes[state.index].name
+  const activeTab  = state.routes[state.index].name
+  const onFeed     = activeTab === 'Feed'
+  const iconActive = onFeed ? '#ffffff' : colors.black
+  const iconInactv = onFeed ? 'rgba(255,255,255,0.5)' : colors.gray400
 
   function goTo(tab: string) {
     const route = state.routes.find((r) => r.name === tab)
@@ -33,90 +83,86 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
     if (activeTab !== 'Feed') goTo('Feed')
   }
 
-  const searchActive  = activeTab === 'Feed' && openSearch
-  const homeActive    = activeTab === 'Feed' && !openSearch
-  const msgActive     = activeTab === 'Messages'
-  const donActive     = activeTab === 'Donations'
-  const profActive    = activeTab === 'Profile'
+  const searchActive = activeTab === 'Feed' && openSearch
+  const homeActive   = activeTab === 'Feed' && !openSearch
+  const msgActive    = activeTab === 'Messages'
+  const donActive    = activeTab === 'Donations'
+  const profActive   = activeTab === 'Profile'
 
   return (
-    <View style={[s.bar, { paddingBottom: Math.max(bottom, 8) }]}>
+    <View style={s.root}>
+      <View style={[s.bar, { paddingBottom: Math.max(bottom, 8) }]}>
 
-      {/* Search */}
-      <TouchableOpacity style={s.btn} onPress={handleSearch} activeOpacity={0.7}>
-        <Search
-          size={SZ}
-          strokeWidth={searchActive ? 2.5 : 2}
-          color={searchActive ? ACTIVE : INACTIVE}
-        />
-      </TouchableOpacity>
+        {/* Search */}
+        <TouchableOpacity style={s.btn} onPress={handleSearch} activeOpacity={0.7}>
+          <Search
+            size={SZ}
+            strokeWidth={searchActive ? 2.5 : 2}
+            color={searchActive ? iconActive : iconInactv}
+          />
+        </TouchableOpacity>
 
-      {/* Home → Feed */}
-      <TouchableOpacity style={s.btn} onPress={() => goTo('Feed')} activeOpacity={0.7}>
-        <Home
-          size={SZ}
-          strokeWidth={homeActive ? 2.5 : 2}
-          color={homeActive ? ACTIVE : INACTIVE}
-          fill={homeActive ? ACTIVE : 'transparent'}
-        />
-      </TouchableOpacity>
+        {/* Home → Feed */}
+        <TouchableOpacity style={s.btn} onPress={() => goTo('Feed')} activeOpacity={0.7}>
+          <Home
+            size={SZ}
+            strokeWidth={homeActive ? 2.5 : 2}
+            color={homeActive ? iconActive : iconInactv}
+            fill={homeActive ? iconActive : 'transparent'}
+          />
+        </TouchableOpacity>
 
-      {/* Messages (center) — tail pointing right via mirrorX */}
-      <TouchableOpacity style={s.btn} onPress={() => goTo('Messages')} activeOpacity={0.7}>
-        <View style={s.relative}>
+        {/* Messages — badge tooltip above, centered */}
+        <TouchableOpacity style={s.btn} onPress={() => goTo('Messages')} activeOpacity={0.7}>
+          <MessageBadge count={messageBadge} iconColor={iconInactv} />
           <View style={s.mirrorX}>
             <MessageCircle
               size={SZ}
               strokeWidth={msgActive ? 2.5 : 2}
-              color={msgActive ? colors.white : INACTIVE}
-              fill={msgActive ? ACTIVE : 'transparent'}
+              color={msgActive ? iconActive : iconInactv}
+              fill={msgActive ? iconActive : 'transparent'}
             />
           </View>
-          {messageBadge > 0 && (
-            <View style={s.badge}>
-              <Text style={s.badgeTxt}>{messageBadge > 9 ? '9+' : String(messageBadge)}</Text>
-            </View>
-          )}
-        </View>
-      </TouchableOpacity>
+        </TouchableOpacity>
 
-      {/* Donations (Piedade) */}
-      <TouchableOpacity style={s.btn} onPress={() => goTo('Donations')} activeOpacity={0.7}>
-        <Squircle
-          size={SZ}
-          strokeWidth={donActive ? 2.5 : 2}
-          color={donActive ? ACTIVE : INACTIVE}
-          fill={donActive ? ACTIVE : 'transparent'}
-        />
-      </TouchableOpacity>
-
-      {/* Profile */}
-      <TouchableOpacity style={s.btn} onPress={() => goTo('Profile')} activeOpacity={0.7}>
-        {avatar ? (
-          <Image
-            source={{ uri: avatar }}
-            style={[s.avatar, profActive && s.avatarActive]}
-          />
-        ) : (
-          <User
+        {/* Donations */}
+        <TouchableOpacity style={s.btn} onPress={() => goTo('Donations')} activeOpacity={0.7}>
+          <Squircle
             size={SZ}
-            strokeWidth={profActive ? 2.5 : 2}
-            color={profActive ? ACTIVE : INACTIVE}
-            fill={profActive ? ACTIVE : 'transparent'}
+            strokeWidth={donActive ? 2.5 : 2}
+            color={donActive ? iconActive : iconInactv}
+            fill={donActive ? iconActive : 'transparent'}
           />
-        )}
-      </TouchableOpacity>
+        </TouchableOpacity>
 
+        {/* Profile */}
+        <TouchableOpacity style={s.btn} onPress={() => goTo('Profile')} activeOpacity={0.7}>
+          {avatar ? (
+            <Image source={{ uri: avatar }} style={s.avatar} />
+          ) : (
+            <User
+              size={SZ}
+              strokeWidth={profActive ? 2.5 : 2}
+              color={profActive ? iconActive : iconInactv}
+              fill={profActive ? iconActive : 'transparent'}
+            />
+          )}
+        </TouchableOpacity>
+
+      </View>
     </View>
   )
 }
 
+const PILL_BG = colors.primary
+
 const s = StyleSheet.create({
+  root: {
+    position: 'absolute',
+    bottom: 0, left: 0, right: 0,
+  },
   bar: {
     flexDirection: 'row',
-    backgroundColor: colors.white,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#EBEBEB',
     paddingTop: 10,
   },
   btn: {
@@ -124,37 +170,50 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 4,
+    overflow: 'visible',
   },
-  relative: { position: 'relative' },
-  mirrorX:  { transform: [{ scaleX: -1 }] },
-  badge: {
+  mirrorX: { transform: [{ scaleX: -1 }] },
+
+  // Badge — positioned above the icon, centered on the btn
+  badgeAnchor: {
     position: 'absolute',
-    top: -5,
-    right: -8,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: colors.primary,
+    top: -24,
+    left: 0, right: 0,
+    alignItems: 'center',
+  },
+  badgePill: {
+    backgroundColor: PILL_BG,
+    borderRadius: 7,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    minWidth: 26,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 3,
-    borderWidth: 1.5,
-    borderColor: colors.white,
   },
   badgeTxt: {
-    color: colors.white,
-    fontSize: 9,
+    color: '#fff',
+    fontSize: 11,
     fontFamily: fonts.bold,
-    lineHeight: 11,
+    lineHeight: 16,
     includeFontPadding: false,
+    letterSpacing: 0.2,
   },
+  // Downward triangle connecting pill to icon
+  badgeTip: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 5,
+    borderRightWidth: 5,
+    borderTopWidth: 6,
+    borderStyle: 'solid',
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: PILL_BG,
+  },
+
   avatar: {
     width: SZ,
     height: SZ,
     borderRadius: SZ / 2,
-    borderWidth: 0,
-  },
-  avatarActive: {
-    borderWidth: 0,
   },
 })

@@ -3,11 +3,17 @@ import {
   View, Text, TouchableOpacity, StyleSheet, Share, Modal, Alert, TextInput,
   Animated,
 } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
 import { Heart, MessageCircle, Send, Eye, MoreVertical, Pencil, Trash2 } from 'lucide-react-native'
+
+const FULL_LIFE_MS = 24 * 60 * 60 * 1000
+const DYING_THRESH  =  2 * 60 * 60 * 1000
+const BATTERY_H     = 28
 import { Post } from '../../types'
 import { colors, fonts } from '../../theme'
 import * as postService from '../../services/post.service'
+import { updateCachedPost } from '../../db/database'
 import ReactionPicker from '../../components/ReactionPicker'
 import { useAuthStore } from '../../store/auth.store'
 import { useT } from '../../i18n'
@@ -42,6 +48,8 @@ export default React.memo(function ActionBar({
   onLikeChange, onDeleted, onEdited, newPostsCount = 0,
   commentCount: commentCountProp,
 }: Props) {
+  const { bottom: safeBottom } = useSafeAreaInsets()
+  const tabOffset = 42 + Math.max(safeBottom, 8)
   const { user }   = useAuthStore()
   const t          = useT()
   const isSelf     = user?.id === post.userId
@@ -55,6 +63,46 @@ export default React.memo(function ActionBar({
   const [editText,  setEditText]  = useState(post.caption ?? '')
   const [hearts,    setHearts]    = useState<HeartP[]>([])
   const heartIdRef = useRef(0)
+
+  // ── Battery ────────────────────────────────────────────────────────────────
+  const [nowBat, setNowBat] = useState(Date.now)
+
+  const expiresMs   = post.expiresAt ? new Date(post.expiresAt).getTime() : 0
+  const remainingMs = Math.max(0, expiresMs - nowBat)
+  const energyPct   = expiresMs > 0 ? Math.min(100, (remainingMs / FULL_LIFE_MS) * 100) : 0
+  const isDyingPost = remainingMs > 0 && remainingMs < DYING_THRESH
+
+  // Initialize at the real level so bar doesn't animate from empty on first render
+  const fillAnim     = useRef(new Animated.Value(energyPct)).current
+  const batPulseAnim = useRef(new Animated.Value(1)).current
+
+  const fillColor = fillAnim.interpolate({
+    inputRange:  [0,        15,        40,        100],
+    outputRange: ['#CA2851', '#FF6766', '#FFB173', 'rgba(255,255,255,0.85)'],
+  })
+
+  useEffect(() => {
+    const id = setInterval(() => setNowBat(Date.now()), 30_000)
+    return () => clearInterval(id)
+  }, [])
+
+  useEffect(() => {
+    Animated.timing(fillAnim, { toValue: energyPct, duration: 600, useNativeDriver: false }).start()
+  }, [post.id])
+
+  useEffect(() => {
+    if (!isDyingPost) { batPulseAnim.setValue(1); return }
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(batPulseAnim, { toValue: 0.3, duration: 700, useNativeDriver: true }),
+      Animated.timing(batPulseAnim, { toValue: 1,   duration: 700, useNativeDriver: true }),
+    ]))
+    loop.start()
+    return () => loop.stop()
+  }, [isDyingPost])
+
+  const fillHeight = fillAnim.interpolate({
+    inputRange: [0, 100], outputRange: [0, BATTERY_H - 3],
+  })
 
   function burstHearts() {
     const newHearts: HeartP[] = []
@@ -101,15 +149,21 @@ export default React.memo(function ActionBar({
   }, [post.id])
 
   async function handleLike() {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     const was = liked; const prev = likeCount
-    setLiked(!was); setLikeCount((c) => was ? c - 1 : c + 1); onLikeChange?.(!was)
+    const optimisticCount = was ? prev - 1 : prev + 1
+    setLiked(!was); setLikeCount(optimisticCount); onLikeChange?.(!was)
     if (!was) burstHearts()
+    updateCachedPost(post.id, { _count: { ...post._count, likes: optimisticCount } }).catch(() => {})
     try {
       const res = await postService.likePost(post.id)
       setLiked(res.liked); onLikeChange?.(res.liked)
-      setLikeCount((c) => res.liked !== !was ? prev + (res.liked ? 1 : -1) : c)
-    } catch { setLiked(was); setLikeCount(prev); onLikeChange?.(was) }
+      const confirmedCount = res.liked !== !was ? prev + (res.liked ? 1 : -1) : optimisticCount
+      setLikeCount(confirmedCount)
+      updateCachedPost(post.id, { _count: { ...post._count, likes: confirmedCount } }).catch(() => {})
+    } catch {
+      setLiked(was); setLikeCount(prev); onLikeChange?.(was)
+      updateCachedPost(post.id, { _count: { ...post._count, likes: prev } }).catch(() => {})
+    }
   }
 
   async function handleShare() {
@@ -141,7 +195,7 @@ export default React.memo(function ActionBar({
   return (
     <>
       {/* Vertical column — right edge, alinhado com user info */}
-      <View style={[s.column, { bottom: 16 }]}>
+      <View style={[s.column, { bottom: 16 + tabOffset }]}>
 
         {/* Like */}
         {!isAnnouncement && (
@@ -198,6 +252,15 @@ export default React.memo(function ActionBar({
             <Send size={25} strokeWidth={2} color="#fff" />
             <Text style={s.label}>{fmt(shareCount)}</Text>
           </TouchableOpacity>
+        )}
+
+        {/* Battery life */}
+        {!isAnnouncement && expiresMs > 0 && (
+          <Animated.View style={[s.batteryWrap, { opacity: isDyingPost ? batPulseAnim : 1 }]}>
+            <View style={s.batteryBody}>
+              <Animated.View style={[s.batteryFill, { height: fillHeight, backgroundColor: fillColor }]} />
+            </View>
+          </Animated.View>
         )}
 
         {/* Views */}
@@ -312,6 +375,27 @@ const s = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.28)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
+  },
+
+  // ── Battery ──────────────────────────────────────────────────────────────
+  batteryWrap: {
+    width: 52,
+    alignItems: 'center',
+    paddingVertical: 9,
+  },
+  batteryBody: {
+    width: 14,
+    height: BATTERY_H,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.65)',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  batteryFill: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
   },
 
   // ── Modais ──────────────────────────────────────────────────────────────────

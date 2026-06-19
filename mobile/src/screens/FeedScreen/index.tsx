@@ -2,7 +2,6 @@ import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import {
   View,
   Text,
-  FlatList,
   TouchableOpacity,
   Pressable,
   StyleSheet,
@@ -12,13 +11,11 @@ import {
   InteractionManager,
 } from 'react-native'
 import { Image } from 'expo-image'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { useFocusEffect } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
-import { Search } from 'lucide-react-native'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { Post } from '../../types'
 import { useFeed } from '../../hooks/useFeed'
@@ -30,7 +27,6 @@ import * as postService from '../../services/post.service'
 import { useT } from '../../i18n'
 import { getOrDownload, prefetchMedia } from '../../db/mediaCache'
 import { colors, fonts } from '../../theme'
-import AvatarImage from '../../components/AvatarImage'
 import ActionBar from './ActionBar'
 import PostInfo from './PostInfo'
 import CommentSheet from '../../components/CommentSheet'
@@ -61,7 +57,6 @@ export default function FeedScreen() {
     return `${Math.floor(h / 24)}${t.time_d_ago}`
   }
   const nav              = useNavigation<Nav>()
-  const { top }          = useSafeAreaInsets()
   const user             = useAuthStore((s) => s.user)
 
   // Consume a post published from CreateScreen → prepend instantly
@@ -100,18 +95,21 @@ export default function FeedScreen() {
   const [viewerW, setViewerW] = useState(SCREEN_W)
   const [viewerH, setViewerH] = useState(SCREEN_H)
   const [imgH,    setImgH]    = useState<number | null>(null)
-  const [headerH, setHeaderH] = useState(0)
   // Per-post comment and like deltas — persists while FeedScreen stays mounted
   const [commentDeltas, setCommentDeltas] = useState<Record<string, number>>({})
   const [likedPostIds,  setLikedPostIds]  = useState<Set<string>>(new Set())
+  const likedLoadedRef = useRef(false)
 
-  // Persist likes: load on mount, save on change
+  // Persist likes: load on mount, save on change (guard prevents the initial
+  // empty-Set render from overwriting the cache before the async load resolves)
   useEffect(() => {
     getCache<string[]>('liked_post_ids').then((ids) => {
+      likedLoadedRef.current = true
       if (ids && ids.length > 0) setLikedPostIds(new Set(ids))
-    }).catch(() => {})
+    }).catch(() => { likedLoadedRef.current = true })
   }, [])
   useEffect(() => {
+    if (!likedLoadedRef.current) return
     setCache('liked_post_ids', Array.from(likedPostIds)).catch(() => {})
   }, [likedPostIds])
 
@@ -125,7 +123,6 @@ export default function FeedScreen() {
   const progressRef      = useRef<Animated.CompositeAnimation | null>(null)
   const progressValueRef = useRef(0)   // always tracks current animated value
   const pressStartRef    = useRef(0)
-  const bubblesRef       = useRef<FlatList>(null)
 
   // Keep refs in sync for callbacks that can't depend on state
   const postRef      = useRef<Post | undefined>(undefined)
@@ -152,6 +149,13 @@ export default function FeedScreen() {
   }, [])
 
   const player = useVideoPlayer(null, (p) => { p.loop = false; p.muted = false })
+  // Release the native player on unmount so Expo Go reload doesn't crash via stale JSI callback
+  useEffect(() => {
+    return () => {
+      try { player.pause() } catch {}
+      try { (player as any).release?.() } catch {}
+    }
+  }, [])
   // Stores the actual loaded video duration (seconds → ms) so progress and resume use the real length
   const videoDurRef = useRef(0)
 
@@ -248,7 +252,6 @@ export default function FeedScreen() {
     setSearchMode(false)
     setSearchQuery('')
   }, [])
-  const handleNamePress    = useCallback((userId: string) => nav.navigate('Profile', { userId }), [nav])
   const handleCreatePress  = useCallback(() => nav.navigate('Tabs', { screen: 'Create' }), [nav])
 
   const currentGroupFirstIdx = useMemo(
@@ -453,15 +456,6 @@ export default function FeedScreen() {
     if (urls.length > 0) prefetchMedia(urls)
   }, [currentIndex])
 
-  // Keep active bubble in view
-  useEffect(() => {
-    if (!post) return
-    const groupIdx = userGroups.findIndex((g) => g.user.id === post.user.id)
-    if (groupIdx >= 0) {
-      bubblesRef.current?.scrollToIndex({ index: groupIdx, animated: true, viewPosition: 0.5 })
-    }
-  }, [currentIndex])
-
   // ── Hold-to-pause handlers ────────────────────────────────────────────────
   function handlePressIn() {
     pressStartRef.current = Date.now()
@@ -486,29 +480,10 @@ export default function FeedScreen() {
     [viewerW, viewerH],
   )
 
-  // Estimated header height: measured via onLayout, falls back to safe-area calc
-  const effectiveHeaderH = headerH || (top + 95)
-
   return (
     <View style={s.container}>
 
-      {/* ── Bubbles strip — topo, fundo branco, parte do fluxo flex ─────────── */}
-      <FeedHeader
-        filteredGroups={filteredGroups}
-        viewedIds={viewedIds}
-        bubblesRef={bubblesRef}
-        activeUserId={post?.user.id}
-        searchMode={searchMode}
-        searchQuery={searchQuery}
-        onSearchClose={handleSearchClose}
-        onSearchChange={handleSearchChange}
-        onBubblePress={handleBubblePress}
-        onNamePress={handleNamePress}
-        onCreatePress={handleCreatePress}
-        transparent={false}
-      />
-
-      {/* ── Viewer: preenche o espaço entre o header e a tab bar ───────────── */}
+      {/* ── Viewer: fills full screen from top to bottom ────────────────────── */}
       {post ? (
         <View style={s.viewer}
           onLayout={(e) => {
@@ -532,12 +507,13 @@ export default function FeedScreen() {
                   <Image source={{ uri: post.thumbnailUrl }} style={s.absLayer} contentFit="cover" cachePolicy="disk" recyclingKey={`thumb-bg-${post.id}`} />
                 ) : null}
                 <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="cover" nativeControls={false} />
-                <Animated.View style={[s.absLayer, { opacity: thumbnailOverlayOpacity }]} pointerEvents="none">
+                <Animated.View style={[s.absLayer, s.videoOverlay, { opacity: thumbnailOverlayOpacity }]} pointerEvents="none">
                   {post.thumbnailUrl ? (
                     <Image source={{ uri: post.thumbnailUrl }} style={s.absLayer} contentFit="cover" cachePolicy="disk" recyclingKey={`thumb-overlay-${post.id}`} />
-                  ) : (
-                    <View style={[s.absLayer, { backgroundColor: '#000' }]} />
-                  )}
+                  ) : null}
+                  <View style={s.spinnerWrap}>
+                    <ActivityIndicator size="large" color="rgba(255,255,255,0.75)" />
+                  </View>
                 </Animated.View>
               </>
             ) : (
@@ -584,17 +560,24 @@ export default function FeedScreen() {
         </View>
       ) : (
         <View style={s.emptyViewer}>
-          {loading ? (
-            <ActivityIndicator size="large" color={colors.primary} />
-          ) : (
-            <>
-              <Ionicons name="sparkles-outline" size={42} color={colors.primaryMid} />
-              <Text style={s.emptyTitle}>{t.feed_empty_title}</Text>
-              <Text style={s.emptySub}>{t.feed_empty_sub}</Text>
-            </>
-          )}
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[s.emptyTitle, { color: 'rgba(255,255,255,0.75)' }]}>Preparando teu feed...</Text>
         </View>
       )}
+
+      {/* ── Floating header — absolute overlay over the viewer ──────────────── */}
+      <FeedHeader
+        filteredGroups={filteredGroups}
+        viewedIds={viewedIds}
+        activeUserId={post?.user.id}
+        searchMode={searchMode}
+        searchQuery={searchQuery}
+        onSearchClose={handleSearchClose}
+        onSearchChange={handleSearchChange}
+        onSearchPress={handleSearchOpen}
+        onBubblePress={handleBubblePress}
+        onCreatePress={handleCreatePress}
+      />
 
       {commentPost && (
         <CommentSheet
@@ -609,7 +592,7 @@ export default function FeedScreen() {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.white },
+  container: { flex: 1, backgroundColor: colors.black },
 
   viewer: {
     flex: 1,
@@ -626,6 +609,15 @@ const s = StyleSheet.create({
   absLayer: {
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
+  },
+  videoOverlay: {
+    backgroundColor: '#111',
+  },
+  spinnerWrap: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   textCard: {
     alignItems: 'center',

@@ -8,7 +8,15 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (db) return db
   if (initPromise) return initPromise
   initPromise = (async () => {
-    const database = await SQLite.openDatabaseAsync('luxe.db')
+    // Retry once — on Expo Go reload the previous native DB handle may still be alive,
+    // causing the first open to fail. A short pause lets the native side GC the old handle.
+    let database: SQLite.SQLiteDatabase
+    try {
+      database = await SQLite.openDatabaseAsync('luxe.db')
+    } catch {
+      await new Promise<void>((r) => setTimeout(r, 120))
+      database = await SQLite.openDatabaseAsync('luxe.db')
+    }
     await database.execAsync(`
     PRAGMA journal_mode = WAL;
 

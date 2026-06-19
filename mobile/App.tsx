@@ -14,7 +14,7 @@ import {
 } from '@expo-google-fonts/google-sans-flex'
 import * as Notifications from 'expo-notifications'
 import * as Location from 'expo-location'
-import { Image, Platform, StyleSheet, View } from 'react-native'
+import { Image, Platform, StyleSheet, Text, View } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import RootNavigator from './src/navigation/RootNavigator'
 import { connectSocket, disconnectSocket } from './src/socket'
@@ -32,7 +32,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {})
 
 const CHANNEL_ID  = 'messages'
 const PROJECT_ID  = '19550566-94a8-4992-8d1e-25df68e87569'
-const DARK        = '#0A0A0A'
+const DARK        = '#0E0E12'
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -277,10 +277,11 @@ export default function App() {
           // e invisível em builds standalone (a splash nativa cobre antes do hideAsync).
           <View style={s.cover}>
             <Image
-              source={require('./assets/files/luxee-splash-iphone.png')}
-              style={s.splashImg}
+              source={require('./assets/files/luxee-splash-icon.png')}
+              style={s.splashIcon}
               resizeMode="contain"
             />
+            <Text style={s.splashText}>luxee</Text>
           </View>
         ) : (
           <>
@@ -302,7 +303,11 @@ export default function App() {
 }
 
 const s = StyleSheet.create({
-  root:      { flex: 1, backgroundColor: DARK },
-  cover:     { flex: 1, backgroundColor: DARK, alignItems: 'center', justifyContent: 'center' },
-  splashImg: { width: '100%', height: '100%' },
+  root:       { flex: 1, backgroundColor: DARK },
+  cover:      { flex: 1, backgroundColor: DARK, alignItems: 'center', justifyContent: 'center' },
+  splashIcon: { width: 96, height: 96 },
+  splashText: {
+    position: 'absolute', bottom: 52,
+    color: '#FFFFFF', fontSize: 28, fontFamily: 'Jakarta-Bold', letterSpacing: 8,
+  },
 })

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react'
 import {
   View, Text, TouchableOpacity, FlatList, StyleSheet,
-  Animated, Dimensions, KeyboardAvoidingView, Platform,
+  Animated, Dimensions, KeyboardAvoidingView, Platform, Modal,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
@@ -42,39 +42,47 @@ export default function CommentSheet({ post, onClose, onCommentAdded }: Props) {
   // KAV wraps the OUTER overlay so it can correctly measure its own position
   // relative to the screen (not inside a transformed Animated.View)
   return (
-    <KeyboardAvoidingView
-      style={s.overlay}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={0}
+    <Modal
+      visible
+      transparent
+      statusBarTranslucent
+      animationType="none"
+      onRequestClose={handleClose}
     >
-      <TouchableOpacity style={s.backdrop} onPress={handleClose} activeOpacity={1} />
-      <Animated.View style={[s.sheet, { transform: [{ translateY: slideAnim }] }]}>
-        <View style={s.header}>
-          <Text style={s.title}><Text style={s.count}>{fmt(post._count.comments)}</Text> Comentários</Text>
-          <TouchableOpacity onPress={handleClose}>
-            <Ionicons name="close" size={22} color={colors.gray800} />
-          </TouchableOpacity>
-        </View>
-        <View style={s.handle} />
-        <FlatList
-          data={comments}
-          keyExtractor={(c) => c.id}
-          renderItem={({ item }) => <CommentItem comment={item} onReply={setReplyTo} />}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 8 }}
-          keyboardShouldPersistTaps="handled"
-        />
-        <CommentInputArea
-          text={text}
-          onChange={setText}
-          onSend={handleSend}
-          sending={sending}
-          replyTo={replyTo}
-          onCancelReply={() => setReplyTo(null)}
-          bottomInset={bottom}
-        />
-      </Animated.View>
-    </KeyboardAvoidingView>
+      <KeyboardAvoidingView
+        style={s.overlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
+      >
+        <TouchableOpacity style={s.backdrop} onPress={handleClose} activeOpacity={1} />
+        <Animated.View style={[s.sheet, { transform: [{ translateY: slideAnim }] }]}>
+          <View style={s.header}>
+            <Text style={s.title}><Text style={s.count}>{fmt(post._count.comments)}</Text> Comentários</Text>
+            <TouchableOpacity onPress={handleClose}>
+              <Ionicons name="close" size={22} color={colors.gray800} />
+            </TouchableOpacity>
+          </View>
+          <View style={s.handle} />
+          <FlatList
+            data={comments}
+            keyExtractor={(c) => c.id}
+            renderItem={({ item }) => <CommentItem comment={item} onReply={setReplyTo} />}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 8 }}
+            keyboardShouldPersistTaps="handled"
+          />
+          <CommentInputArea
+            text={text}
+            onChange={setText}
+            onSend={handleSend}
+            sending={sending}
+            replyTo={replyTo}
+            onCancelReply={() => setReplyTo(null)}
+            bottomInset={bottom}
+          />
+        </Animated.View>
+      </KeyboardAvoidingView>
+    </Modal>
   )
 }
 

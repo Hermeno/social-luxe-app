@@ -671,7 +671,7 @@ export default function MessagesScreen() {
             data={connections}
             keyExtractor={(c) => c.user.id}
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={[s.list, { paddingBottom: bottom + 24 }]}
+            contentContainerStyle={[s.list, { paddingBottom: Math.max(bottom, 8) + 66 }]}
             ItemSeparatorComponent={() => <View style={s.sep} />}
             renderItem={({ item, index }) => (
               <ConvoRow

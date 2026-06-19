@@ -1,4 +1,4 @@
-import { api } from './api'
+import { api, uploadApi } from './api'
 import { ApiResponse, Post, Comment } from '../types'
 
 export async function getFeed(page = 1): Promise<Post[]> {
@@ -28,7 +28,7 @@ export async function createPost(
   if (partnerUserId)  form.append('partnerUserId', partnerUserId)
   if (isAnnouncement) form.append('isAnnouncement', 'true')
   if (deviceModel)    form.append('deviceModel', deviceModel)
-  const res = await api.post<ApiResponse<Post>>('/posts', form, {
+  const res = await uploadApi.post<ApiResponse<Post>>('/posts', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
   return res.data.data

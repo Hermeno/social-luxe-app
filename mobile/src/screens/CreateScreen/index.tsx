@@ -86,7 +86,7 @@ export default function CreateScreen() {
 
   const MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 
-  async function addMedia(mediaTypes: ImagePicker.MediaType) {
+  async function addMedia(mediaTypes: ImagePicker.MediaType | ImagePicker.MediaType[]) {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (status !== 'granted') return Alert.alert(t.profile_perm_title, t.profile_perm_msg)
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -97,13 +97,28 @@ export default function CreateScreen() {
     })
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0]
-      if (asset.fileSize && asset.fileSize > MAX_UPLOAD_BYTES) {
+
+      // Duration guard: 90 seconds max. On iOS the native picker already shows the trim
+      // UI when videoMaxDuration=90, so this mainly catches Android gallery picks.
+      if (asset.type === 'video' && asset.duration && asset.duration > 91_000) {
+        const secs = Math.round(asset.duration / 1000)
+        const mm   = Math.floor(secs / 60)
+        const ss   = String(secs % 60).padStart(2, '0')
         Alert.alert(
-          'Ficheiro demasiado grande',
-          `Máximo 50 MB por vídeo. Este tem ${Math.round(asset.fileSize / 1024 / 1024)} MB.\n\nTenta escolher um vídeo mais curto.`,
+          'Vídeo demasiado longo',
+          `Máximo 1:30. Este vídeo tem ${mm}:${ss}.\n\nEscolhe um clipe mais curto.`,
         )
         return
       }
+
+      if (asset.fileSize && asset.fileSize > MAX_UPLOAD_BYTES) {
+        Alert.alert(
+          'Ficheiro demasiado grande',
+          `Máximo 50 MB. Este tem ${Math.round(asset.fileSize / 1024 / 1024)} MB.`,
+        )
+        return
+      }
+
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
       const isVideo = asset.type === 'video'
       setMedia([{ uri: asset.uri, type: isVideo ? 'video' : 'image' }])
@@ -200,7 +215,7 @@ export default function CreateScreen() {
               {/* Change media button — top-right corner of the preview */}
               <TouchableOpacity
                 style={s.changeMediaBtn}
-                onPress={() => addMedia(media[0]?.type === 'video' ? 'videos' : 'images')}
+                onPress={() => addMedia(['images', 'videos'])}
                 activeOpacity={0.85}
               >
                 <Ionicons name="swap-horizontal" size={14} color="#fff" />
@@ -238,52 +253,16 @@ export default function CreateScreen() {
         /* ── No media: big picker cards + text post option ────────── */
         <View style={s.noMediaWrap}>
 
-          {/* Big media picker cards */}
+          {/* Single media picker */}
           <View style={s.pickerRow}>
-            {/* Photo */}
-            <TouchableOpacity style={s.pickerCard} onPress={() => addMedia('images')} activeOpacity={0.82}>
-              <LinearGradient
-                colors={['#CA2851', '#FF6766', '#FFB173']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={s.pickerBorder}
-              >
-                <View style={s.pickerInner}>
-                  <LinearGradient
-                    colors={['#CA2851', '#FFB173']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={s.pickerIconBg}
-                  >
-                    <Ionicons name="image" size={34} color="#fff" />
-                  </LinearGradient>
-                  <Text style={s.pickerTitle}>Foto</Text>
-                  <Text style={s.pickerSub}>Escolher da galeria</Text>
+            <TouchableOpacity style={s.pickerCard} onPress={() => addMedia(['images', 'videos'])} activeOpacity={0.82}>
+              <View style={s.pickerInner}>
+                <View style={s.pickerIconBg}>
+                  <Ionicons name="image" size={34} color="#555" />
                 </View>
-              </LinearGradient>
-            </TouchableOpacity>
-
-            {/* Video */}
-            <TouchableOpacity style={s.pickerCard} onPress={() => addMedia('videos')} activeOpacity={0.82}>
-              <LinearGradient
-                colors={['#CA2851', '#FF6766', '#FFB173']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={s.pickerBorder}
-              >
-                <View style={s.pickerInner}>
-                  <LinearGradient
-                    colors={['#FF6766', '#FFB173']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={s.pickerIconBg}
-                  >
-                    <Ionicons name="videocam" size={34} color="#fff" />
-                  </LinearGradient>
-                  <Text style={s.pickerTitle}>Vídeo</Text>
-                  <Text style={s.pickerSub}>Escolher da galeria</Text>
-                </View>
-              </LinearGradient>
+                <Text style={s.pickerTitle}>Foto ou Vídeo</Text>
+                <Text style={s.pickerSub}>Escolher da galeria</Text>
+              </View>
             </TouchableOpacity>
           </View>
 
@@ -341,7 +320,7 @@ export default function CreateScreen() {
       )}
 
       {/* ── Toolbar ────────────────────────────────────────────────── */}
-      <View style={[s.toolbar, { paddingBottom: bottom + 10 }]}>
+      <View style={[s.toolbar, { paddingBottom: Math.max(bottom, 8) + 52 }]}>
         {!hasMedia && (
           <>
             <TouchableOpacity style={s.toolBtn} onPress={() => textRef.current?.focus()} activeOpacity={0.7}>
@@ -424,31 +403,28 @@ const s = StyleSheet.create({
   /* ── No-media wrapper ── */
   noMediaWrap: { flex: 1 },
 
-  /* ── Big picker cards ── */
+  /* ── Big picker card ── */
   pickerRow: {
-    flexDirection: 'row',
-    gap: 14,
     paddingHorizontal: 16,
     paddingTop: 20,
     paddingBottom: 8,
   },
-  pickerCard: { flex: 1 },
-  pickerBorder: {
-    borderRadius: 22,
-    padding: 1.5,
-  },
+  pickerCard: {},
   pickerInner: {
     backgroundColor: '#FAFAFA',
-    borderRadius: 21,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderColor: '#E5E5EA',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 28,
+    paddingVertical: 36,
     gap: 10,
   },
   pickerIconBg: {
     width: 68,
     height: 68,
     borderRadius: 18,
+    backgroundColor: '#EBEBF0',
     alignItems: 'center',
     justifyContent: 'center',
   },

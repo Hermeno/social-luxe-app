@@ -2,9 +2,10 @@ import React, { useState, useRef, useEffect } from 'react'
 import {
   Animated, View, Text, TouchableOpacity, StyleSheet, Image,
 } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
-import Svg, { Polygon } from 'react-native-svg'
+import Svg, { Polygon, Path } from 'react-native-svg'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { Post } from '../../types'
@@ -66,42 +67,46 @@ async function ensureFollowCacheWarmed(): Promise<void> {
   } catch {}
 }
 
-// ─── Sand Timer ───────────────────────────────────────────────────────────────
-// Upper chamber: inverted triangle (wide top → pinch)
-// Sand fills from the pinch point upward, shrinking as pct drops (0–100)
-function SandTimer({ pct, color }: { pct: number; color: string }) {
-  const W = 12, H = 18, PX = 6, PY = 9
-  const p  = Math.max(0, Math.min(100, pct)) / 100
-  const sx = PX * p          // half-width of sand's top edge
-  const sy = PY * (1 - p)    // y-position of sand's top edge
+// ─── Hourglass Icon (Lucide style) ───────────────────────────────────────────
+// Viewbox 24×24. Funnel corners: top (7,2)–(17,2), pinch (12,12), bottom (7,22)–(17,22)
+// Upper sand shrinks toward pinch as pct drops; lower sand grows from bottom.
+function HourglassIcon({ pct, color }: { pct: number; color: string }) {
+  const p = Math.max(0, Math.min(100, pct)) / 100   // 1 = full, 0 = empty
+
+  // Upper chamber sand: triangle from (12-p*5, 12-p*10) → (12+p*5, 12-p*10) → (12,12)
+  const upY  = 12 - p * 10
+  const upHW = p * 5
+
+  // Lower chamber sand: quad from (7,22)→(17,22)→(12+p*5, 12+p*10)→(12-p*5, 12+p*10)
+  const loY  = 12 + p * 10
+  const loHW = p * 5
 
   return (
-    <Svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
-      {/* Upper chamber outline */}
-      <Polygon
-        points={`0,0 ${W},0 ${PX},${PY}`}
-        fill="none"
-        stroke={color}
-        strokeWidth={1.1}
-        strokeLinejoin="round"
-        opacity={0.38}
-      />
-      {/* Sand in upper chamber */}
-      {p > 0.015 && (
+    <Svg width={15} height={15} viewBox="0 0 24 24" fill="none">
+      {/* Sand in upper chamber (shrinks as time passes) */}
+      {p > 0.02 && (
         <Polygon
-          points={`${PX - sx},${sy} ${PX + sx},${sy} ${PX},${PY}`}
+          points={`${12 - upHW},${upY} ${12 + upHW},${upY} 12,12`}
           fill={color}
-          opacity={0.88}
+          opacity={0.82}
         />
       )}
-      {/* Lower chamber outline */}
-      <Polygon
-        points={`${PX},${PY} 0,${H} ${W},${H}`}
-        fill="none"
+      {/* Sand in lower chamber (grows as time passes) */}
+      {p < 0.98 && (
+        <Polygon
+          points={`7,22 17,22 ${12 + loHW},${loY} ${12 - loHW},${loY}`}
+          fill={color}
+          opacity={0.82}
+        />
+      )}
+      {/* Hourglass outline — exact Lucide paths */}
+      <Path
+        d="M5 22h14M5 2h14M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"
         stroke={color}
-        strokeWidth={1.1}
+        strokeWidth={1.7}
+        strokeLinecap="round"
         strokeLinejoin="round"
-        opacity={0.38}
+        opacity={0.92}
       />
     </Svg>
   )
@@ -113,7 +118,12 @@ interface Props {
   onExpired?: () => void
 }
 
+// Height of tab bar above the device safe-area bottom (paddingTop + icon row)
+const TAB_BAR_ABOVE_SAFE = 42
+
 export default function PostInfo({ post, isActive, onExpired }: Props) {
+  const { bottom: safeBottom } = useSafeAreaInsets()
+  const tabOffset = TAB_BAR_ABOVE_SAFE + Math.max(safeBottom, 8)
   const { user }    = useAuthStore()
   const nav         = useNavigation<Nav>()
   const t           = useT()
@@ -131,7 +141,6 @@ export default function PostInfo({ post, isActive, onExpired }: Props) {
   // Animated values
   const slideAnim  = useRef(new Animated.Value(10)).current
   const pulseAnim  = useRef(new Animated.Value(1)).current
-  const energyAnim = useRef(new Animated.Value(0)).current
 
   // Warm the follow cache from SQLite on first mount — runs once per session.
   // After warm, re-check this post's author so the button shows the right state immediately.
@@ -178,9 +187,6 @@ export default function PostInfo({ post, isActive, onExpired }: Props) {
     setExpanded(false)
     setFollowing(followCache.get(post.user.id) ?? false)
     setCommenters([])
-    // Animate energy bar in
-    energyAnim.setValue(0)
-    Animated.timing(energyAnim, { toValue: energyPct, duration: 900, useNativeDriver: false }).start()
   }, [post.id])
 
   // Carrega avatares dos comentadores — cache SQLite primeiro, API em background
@@ -240,11 +246,7 @@ export default function PostInfo({ post, isActive, onExpired }: Props) {
   const isDying     = remainingMs > 0 && remainingMs < DYING_THRESH
   const isExpired   = expiresMs > 0 && remainingMs === 0
 
-  const barWidth = energyAnim.interpolate({
-    inputRange: [0, 100], outputRange: ['0%', '100%'],
-  })
-
-  // Dying pulse on bar
+  // Dying pulse
   useEffect(() => {
     if (!isDying) { pulseAnim.setValue(1); return }
     const loop = Animated.loop(
@@ -257,24 +259,19 @@ export default function PostInfo({ post, isActive, onExpired }: Props) {
     return () => loop.stop()
   }, [isDying])
 
-  // Also animate bar when energyPct updates (live tick)
-  useEffect(() => {
-    Animated.timing(energyAnim, { toValue: energyPct, duration: 400, useNativeDriver: false }).start()
-  }, [energyPct])
-
   function timeLeft() {
     if (isExpired) return 'Expirado'
     const h = Math.floor(remainingMs / 3_600_000)
-    const m = Math.floor((remainingMs % 3_600_000) / 60_000)
-    if (h === 0) return `${m}m restantes`
-    return `${h}h ${m}m`
+    if (h > 0) return `${h}h`
+    const m = Math.floor(remainingMs / 60_000)
+    return `${m}m`
   }
 
   const clockColor = isDying ? '#FF3B30' : 'rgba(255,255,255,0.65)'
 
   return (
     <>
-      <Animated.View style={[s.container, { bottom: 16, transform: [{ translateY: slideAnim }] }]}>
+      <Animated.View style={[s.container, { bottom: 16 + tabOffset, transform: [{ translateY: slideAnim }] }]}>
 
         {/* Avatar(s) + Name + follow */}
         <View style={s.userRow}>
@@ -301,9 +298,13 @@ export default function PostInfo({ post, isActive, onExpired }: Props) {
 
             {post.user.statusLabel ? (
               <TouchableOpacity onPress={() => nav.navigate('Profile', { userId: post.user.id })} activeOpacity={0.8}>
-                <View style={s.statusBadge}>
+                <LinearGradient
+                  colors={['rgba(8,8,40,0.10)', 'rgba(16,16,64,0.12)']}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                  style={s.statusBadge}
+                >
                   <Text style={s.statusText} numberOfLines={1}>{post.user.statusLabel}</Text>
-                </View>
+                </LinearGradient>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity onPress={() => nav.navigate('Profile', { userId: post.user.id })} activeOpacity={0.8}>
@@ -363,14 +364,14 @@ export default function PostInfo({ post, isActive, onExpired }: Props) {
         {!post.isAnnouncement && (
           <View style={s.timerRow}>
             <Animated.View style={{ opacity: isDying ? pulseAnim : 1 }}>
-              <SandTimer pct={energyPct} color={clockColor} />
+              <HourglassIcon pct={energyPct} color={clockColor} />
             </Animated.View>
             <Text style={[s.timer, isDying && s.timerDying]}> {timeLeft()}</Text>
 
             {post.user.showDevice && (
               <LinearGradient
-                colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.10)']}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                colors={['rgba(8,8,40,0.10)', 'rgba(16,16,64,0.12)']}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                 style={s.deviceBadge}
               >
                 <Ionicons name="phone-portrait-outline" size={10} color="rgba(255,255,255,0.75)" />
@@ -380,26 +381,6 @@ export default function PostInfo({ post, isActive, onExpired }: Props) {
           </View>
         )}
 
-        {/* ── Barra de energia com gradiente ───────────────────────────────── */}
-        {!post.isAnnouncement && expiresMs > 0 && (
-          <View style={s.energyWrap}>
-            <View style={s.energyTrack}>
-              <Animated.View style={[s.energyClip, { width: barWidth }]}>
-                <LinearGradient
-                  colors={['#CA2851', '#FF6766', '#FFB173']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={s.energyGradient}
-                />
-              </Animated.View>
-            </View>
-            {isDying && (
-              <Animated.Text style={[s.dyingLabel, { opacity: pulseAnim }]}>
-                ⚡ Morrendo... interaja para salvar
-              </Animated.Text>
-            )}
-          </View>
-        )}
 
       </Animated.View>
     </>
@@ -427,8 +408,7 @@ const s = StyleSheet.create({
 
   statusBadge: {
     borderRadius: 20, paddingHorizontal: 9, paddingVertical: 4,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)',
-    backgroundColor: 'rgba(255,255,255,0.13)', maxWidth: 160,
+    maxWidth: 160,
   },
   statusText: {
     color: 'rgba(255,255,255,0.88)', fontFamily: fonts.medium, fontSize: 11, letterSpacing: 0.1,
@@ -437,7 +417,7 @@ const s = StyleSheet.create({
   deviceBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 7, paddingVertical: 2, borderRadius: 20,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', marginLeft: 8,
+    marginLeft: 8,
   },
   deviceText: { color: 'rgba(255,255,255,0.75)', fontFamily: fonts.medium, fontSize: 10, letterSpacing: 0.3 },
 
@@ -448,34 +428,6 @@ const s = StyleSheet.create({
   timer:      { color: 'rgba(255,255,255,0.65)', fontFamily: fonts.medium, fontSize: 12, letterSpacing: 0.1 },
   timerDying: { color: '#FF3B30' },
 
-  // ── Energy bar ──────────────────────────────────────────────────────────────
-  energyWrap:  { gap: 4 },
-  energyTrack: {
-    height: 4,
-    backgroundColor: 'rgba(255,255,255,0.14)',
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  energyClip: {
-    height: '100%',
-    overflow: 'hidden',
-    borderRadius: 4,
-  },
-  energyGradient: {
-    position: 'absolute',
-    left: 0, top: 0, bottom: 0,
-    width: 320,   // wider than any phone — gradient spans full potential bar
-  },
-  dyingLabel: {
-    color: '#FF6766',
-    fontFamily: fonts.bold,
-    fontSize: 10,
-    letterSpacing: 0.3,
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-
   // ── Commenter avatars ────────────────────────────────────────────────────────
   commentersRow: {
     flexDirection: 'row',
@@ -484,7 +436,6 @@ const s = StyleSheet.create({
   },
   commenterAvatar: {
     width: 22, height: 22, borderRadius: 11,
-    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.85)',
     overflow: 'hidden',
   },
   commenterImg: { width: '100%', height: '100%' },

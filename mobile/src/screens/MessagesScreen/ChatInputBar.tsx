@@ -1,10 +1,11 @@
-import React, { useRef, useEffect } from 'react'
+import React, { useRef, useEffect, useState } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   Animated, Platform, Alert,
 } from 'react-native'
 import * as Haptics from 'expo-haptics'
 import * as ImagePicker from 'expo-image-picker'
+import { useAudioRecorder, AudioModule, RecordingPresets } from 'expo-audio'
 import { Ionicons } from '@expo/vector-icons'
 import { colors, fonts } from '../../theme'
 import { useT } from '../../i18n'
@@ -19,20 +20,86 @@ interface Props {
   onChange: (t: string) => void
   onSend: () => void
   onSendFile: (uri: string, mimeType: string, fileName: string) => Promise<void>
+  onSendAudio: (uri: string, durationMs: number) => Promise<void>
   otherUserId: string
   replyingTo: ReplyPreview | null
   onCancelReply: () => void
   onSchedulePress?: () => void
+  bottomInset?: number
+}
+
+function fmtMs(ms: number) {
+  const s = Math.floor(ms / 1000)
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
 export default function ChatInputBar({
-  value, onChange, onSend, onSendFile,
+  value, onChange, onSend, onSendFile, onSendAudio,
   replyingTo, onCancelReply, onSchedulePress,
+  bottomInset = 0,
 }: Props) {
   const t = useT()
   const hasText   = value.trim().length > 0
   const sendScale = useRef(new Animated.Value(1)).current
+  const recPulse  = useRef(new Animated.Value(1)).current
 
+  // ── Recording ───────────────────────────────────────────────────────────────
+  const recorder       = useAudioRecorder(RecordingPresets.HIGH_QUALITY)
+  const [isRec, setIsRec]       = useState(false)
+  const [recMs, setRecMs]       = useState(0)
+  const recStartRef = useRef(0)
+  const recTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Pulsing red dot while recording
+  useEffect(() => {
+    if (!isRec) { recPulse.setValue(1); return }
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(recPulse, { toValue: 0.35, duration: 600, useNativeDriver: true }),
+      Animated.timing(recPulse, { toValue: 1,   duration: 600, useNativeDriver: true }),
+    ]))
+    loop.start()
+    return () => loop.stop()
+  }, [isRec])
+
+  async function startRecording() {
+    try {
+      const perm = await AudioModule.requestRecordingPermissionsAsync()
+      if (!perm.granted) {
+        Alert.alert('Permissão necessária', 'Permite acesso ao microfone para enviar áudios.')
+        return
+      }
+      await recorder.prepareToRecordAsync()
+      await recorder.record()
+      recStartRef.current = Date.now()
+      setIsRec(true)
+      setRecMs(0)
+      recTimerRef.current = setInterval(() => setRecMs(Date.now() - recStartRef.current), 100)
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+    } catch {}
+  }
+
+  async function stopRecording() {
+    if (recTimerRef.current) { clearInterval(recTimerRef.current); recTimerRef.current = null }
+    const durationMs = Date.now() - recStartRef.current
+    setIsRec(false)
+    setRecMs(0)
+    try {
+      await recorder.stop()
+      // Give the recorder a tick to flush the URI
+      await new Promise<void>((r) => setTimeout(r, 80))
+      const uri = recorder.uri
+      if (!uri || durationMs < 600) {
+        if (durationMs >= 600) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
+        return
+      }
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+      await onSendAudio(uri, durationMs)
+    } catch (e) {
+      console.warn('[AudioRec] stopRecording error:', e)
+    }
+  }
+
+  // ── Send button pop animation ────────────────────────────────────────────────
   const prevHasText = useRef(hasText)
   useEffect(() => {
     if (hasText && !prevHasText.current) {
@@ -46,7 +113,6 @@ export default function ChatInputBar({
 
   function handleSend() {
     if (!hasText) return
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     onSend()
   }
 
@@ -62,15 +128,17 @@ export default function ChatInputBar({
       allowsMultipleSelection: false,
     })
     if (result.canceled || !result.assets?.length) return
-    const asset = result.assets[0]
+    const asset    = result.assets[0]
     const uri      = asset.uri
     const mimeType = asset.mimeType ?? 'image/jpeg'
     const fileName = asset.fileName ?? uri.split('/').pop() ?? 'image.jpg'
     await onSendFile(uri, mimeType, fileName)
   }
 
+  const pb = Platform.OS === 'ios' ? 8 + bottomInset : 10
+
   return (
-    <View style={s.container}>
+    <View style={[s.container, { paddingBottom: pb }]}>
 
       {/* Reply preview banner */}
       {replyingTo && (
@@ -95,7 +163,7 @@ export default function ChatInputBar({
       {/* Input row */}
       <View style={s.row}>
 
-        {/* + attachment button */}
+        {/* + attachment */}
         <TouchableOpacity style={s.attachBtn} activeOpacity={0.7} onPress={handleAttach}>
           <Ionicons name="add" size={22} color={colors.primary} />
         </TouchableOpacity>
@@ -114,7 +182,7 @@ export default function ChatInputBar({
           />
         </View>
 
-        {/* Clock / schedule button */}
+        {/* Schedule */}
         <TouchableOpacity
           onPress={onSchedulePress}
           hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
@@ -123,22 +191,18 @@ export default function ChatInputBar({
           <Ionicons name="time-outline" size={22} color={colors.gray400} />
         </TouchableOpacity>
 
-        {/* Send button */}
-        <Animated.View style={{ transform: [{ scale: sendScale }] }}>
-          <TouchableOpacity
-            style={[s.sendBtn, hasText ? s.sendBtnActive : s.sendBtnIdle]}
-            onPress={handleSend}
-            disabled={!hasText}
-            activeOpacity={0.75}
-          >
-            <Ionicons
-              name="send"
-              size={17}
-              color={hasText ? colors.white : colors.gray400}
-              style={s.sendIcon}
-            />
-          </TouchableOpacity>
-        </Animated.View>
+        {/* Send button (mic hidden until audio is ready) */}
+        {hasText && (
+          <Animated.View style={{ transform: [{ scale: sendScale }] }}>
+            <TouchableOpacity
+              style={[s.actionBtn, s.actionBtnActive]}
+              onPress={handleSend}
+              activeOpacity={0.75}
+            >
+              <Ionicons name="send" size={17} color={colors.white} style={s.sendIcon} />
+            </TouchableOpacity>
+          </Animated.View>
+        )}
 
       </View>
     </View>
@@ -151,7 +215,6 @@ const s = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.gray200,
     paddingTop: 9,
-    paddingBottom: Platform.OS === 'ios' ? 8 : 10,
     paddingHorizontal: 14,
     ...Platform.select({
       ios: {
@@ -183,60 +246,53 @@ const s = StyleSheet.create({
     borderTopRightRadius: 2,
     borderBottomRightRadius: 2,
   },
-  replyTexts:  { flex: 1, gap: 1 },
-  replyName:   { fontSize: 12, fontFamily: fonts.semiBold, color: colors.primary },
-  replyContent:{ fontSize: 12, fontFamily: fonts.regular, color: colors.gray500 },
-  replyClose:  { padding: 4, borderRadius: 12, backgroundColor: `${colors.gray400}18` },
+  replyTexts:   { flex: 1, gap: 1 },
+  replyName:    { fontSize: 12, fontFamily: fonts.semiBold, color: colors.primary },
+  replyContent: { fontSize: 12, fontFamily: fonts.regular, color: colors.gray500 },
+  replyClose:   { padding: 4, borderRadius: 12, backgroundColor: `${colors.gray400}18` },
 
   // Row
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
 
   // + button
   attachBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 36, height: 36, borderRadius: 18,
     backgroundColor: '#F2F2F7',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
 
   // Input
   inputWrap: {
-    flex: 1,
-    height: 40,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: colors.gray200,
+    flex: 1, height: 40,
+    borderRadius: 22, borderWidth: 1, borderColor: colors.gray200,
     backgroundColor: '#F9F9FB',
-    paddingHorizontal: 14,
-    justifyContent: 'center',
+    paddingHorizontal: 14, justifyContent: 'center',
   },
   input: {
-    fontSize: 15,
-    fontFamily: fonts.regular,
-    color: colors.gray800,
-    padding: 0,
-    margin: 0,
-    lineHeight: 20,
-    maxHeight: 80,
+    fontSize: 15, fontFamily: fonts.regular, color: colors.gray800,
+    padding: 0, margin: 0, lineHeight: 20, maxHeight: 80,
   },
 
-  // Send button
-  sendBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
+  // Recording overlay
+  recRow: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 4,
   },
-  sendBtnActive: {
+  recDot: {
+    width: 10, height: 10, borderRadius: 5, backgroundColor: '#CA2851',
+  },
+  recTimer: {
+    fontFamily: fonts.semiBold, fontSize: 15, color: colors.gray800, letterSpacing: 0.5,
+  },
+  recHint: {
+    fontFamily: fonts.regular, fontSize: 13, color: colors.gray400,
+  },
+
+  // Action button (send / mic)
+  actionBtn: {
+    width: 38, height: 38, borderRadius: 19,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  actionBtnActive: {
     backgroundColor: colors.primary,
     ...Platform.select({
       ios: {
@@ -248,8 +304,7 @@ const s = StyleSheet.create({
       android: { elevation: 4 },
     }),
   },
-  sendBtnIdle: {
-    backgroundColor: '#F2F2F7',
-  },
+  actionBtnIdle:      { backgroundColor: `${colors.primary}18` },
+  actionBtnRecording: { backgroundColor: '#CA2851' },
   sendIcon: { marginLeft: 2 },
 })

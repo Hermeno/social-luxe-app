@@ -433,7 +433,7 @@ export default function ProfileScreen() {
             <Text style={s.emptyGridText}>{t.profile_no_posts}</Text>
           </View>
         }
-        contentContainerStyle={{ paddingBottom: bottom + 16 }}
+        contentContainerStyle={{ paddingBottom: Math.max(bottom, 8) + 58 }}
       />
       {isOwn && profile && <QRModal visible={showQR} userId={profile.id} userName={profile.name} onClose={() => setShowQR(false)} />}
       <FollowersSheet visible={showFollowSheet} mode={followSheetMode} userId={targetId} onClose={() => setShowFollowSheet(false)} />
