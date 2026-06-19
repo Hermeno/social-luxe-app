@@ -9,16 +9,21 @@ export function uploadToCloudinary(
   mimetype: string,
   folder: string = 'luxe',
 ): Promise<string> {
-  const isVideo      = mimetype.startsWith('video')
-  const resourceType = isVideo ? 'video' : 'image'
+  const isVideo = mimetype.startsWith('video')
+  const isAudio = mimetype.startsWith('audio')
 
   const options = isVideo
     ? {
         folder,
         resource_type: 'video' as const,
-        quality:     'auto:good',   // Cloudinary picks optimal bitrate
-        video_codec: 'h264',        // web-compatible, smaller files
+        quality:     'auto:good',
+        video_codec: 'h264',
         audio_codec: 'aac',
+      }
+    : isAudio
+    ? {
+        folder,
+        resource_type: 'video' as const,  // Cloudinary uses 'video' for audio too
       }
     : {
         folder,
@@ -67,24 +72,22 @@ export async function deleteFromCloudinary(url: string): Promise<void> {
 const THUMB_TRANSFORM = 'w_400,h_400,c_fill,e_blur:700,q_3'
 
 export function generateThumbnailUrl(mediaUrl: string | null, mediaType: MediaType): string {
-  if (mediaType === MediaType.TEXT || !mediaUrl || !mediaUrl.includes('cloudinary.com')) return mediaUrl ?? ''
+  if (mediaType === MediaType.TEXT || !mediaUrl) return ''
 
-  try {
-    if (mediaType === MediaType.VIDEO) {
-      // Video → first frame as blurred JPEG
-      return mediaUrl.replace(
-        '/video/upload/',
-        `/video/upload/so_0,${THUMB_TRANSFORM},f_jpg/`,
-      )
+  if (mediaUrl.includes('cloudinary.com')) {
+    try {
+      if (mediaType === MediaType.VIDEO) {
+        return mediaUrl.replace('/video/upload/', `/video/upload/so_0,${THUMB_TRANSFORM},f_jpg/`)
+      }
+      return mediaUrl.replace('/image/upload/', `/image/upload/${THUMB_TRANSFORM}/`)
+    } catch {
+      return mediaUrl
     }
-    // Image → blurred tiny version
-    return mediaUrl.replace(
-      '/image/upload/',
-      `/image/upload/${THUMB_TRANSFORM}/`,
-    )
-  } catch {
-    return mediaUrl
   }
+
+  // R2 or other storage: images use the original URL as thumbnail; videos have no thumbnail
+  // (client renders ActivityIndicator while the video player warms up)
+  return mediaType === MediaType.VIDEO ? '' : mediaUrl
 }
 
 // ── Attach thumbnailUrl to post objects ────────────────────────────────────────

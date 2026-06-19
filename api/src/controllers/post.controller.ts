@@ -9,6 +9,7 @@ import { MediaType } from '@prisma/client'
 import { sendPush } from '../services/notification.service'
 import { prisma } from '../config/database'
 import { uploadToCloudinary, withThumbnails } from '../utils/cloudinary.util'
+import { deleteFromR2, isR2Url } from '../utils/r2.util'
 import { emitToUser } from '../socket'
 
 export async function createPost(req: AuthRequest, res: Response) {
@@ -180,17 +181,20 @@ export async function deletePost(req: AuthRequest, res: Response) {
   try {
     const result = await postService.deletePost(req.user!.userId, req.params.id)
 
-    // Delete from Cloudinary (fire-and-forget — don't block the response)
-    if (result.mediaUrl && result.mediaUrl.includes('cloudinary.com')) {
+    // Delete media from storage (fire-and-forget)
+    if (result.mediaUrl) {
       ;(async () => {
         try {
-          // Extract public_id: everything after /upload/vXXXXX/ up to the extension
-          const match = result.mediaUrl!.match(/\/upload\/(?:v\d+\/)?(.+)\.[^.]+$/)
-          if (match) {
-            const publicId    = match[1]
-            const resourceType = result.mediaType === 'VIDEO' ? 'video' : 'image'
-            const { cloudinary } = await import('../config/cloudinary')
-            await cloudinary.uploader.destroy(publicId, { resource_type: resourceType })
+          if (isR2Url(result.mediaUrl)) {
+            await deleteFromR2(result.mediaUrl!)
+          } else if (result.mediaUrl!.includes('cloudinary.com')) {
+            const match = result.mediaUrl!.match(/\/upload\/(?:v\d+\/)?(.+)\.[^.]+$/)
+            if (match) {
+              const { cloudinary } = await import('../config/cloudinary')
+              await cloudinary.uploader.destroy(match[1], {
+                resource_type: result.mediaType === 'VIDEO' ? 'video' : 'image',
+              })
+            }
           }
         } catch {}
       })()
