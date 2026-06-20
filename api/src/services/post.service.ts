@@ -39,6 +39,37 @@ function haversine(lat1: number, lng1: number, lat2: number, lng2: number) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
+// Fetch up to 4 unique non-author commenters per post in a single DB query.
+// This is called once per feed load — O(1) queries regardless of post count.
+async function attachRecentCommenters(posts: any[]): Promise<any[]> {
+  const postIds = posts.filter((p) => p._count.comments > 0).map((p) => p.id)
+  if (postIds.length === 0) return posts.map((p) => ({ ...p, recentCommenters: [] }))
+
+  const comments = await prisma.comment.findMany({
+    where:   { postId: { in: postIds }, parentId: null },
+    select:  { postId: true, userId: true, user: { select: { id: true, name: true, avatar: true } } },
+    orderBy: { createdAt: 'desc' },
+  })
+
+  const byPost = new Map<string, typeof comments>()
+  for (const c of comments) {
+    if (!byPost.has(c.postId)) byPost.set(c.postId, [])
+    byPost.get(c.postId)!.push(c)
+  }
+
+  return posts.map((p) => {
+    const seen = new Set<string>([p.userId])
+    const recentCommenters: Array<{ id: string; name: string; avatar: string | null }> = []
+    for (const c of byPost.get(p.id) ?? []) {
+      if (seen.has(c.userId)) continue
+      seen.add(c.userId)
+      recentCommenters.push(c.user)
+      if (recentCommenters.length >= 4) break
+    }
+    return { ...p, recentCommenters }
+  })
+}
+
 export async function getFeed(userId: string, page = 1, limit = 10) {
   const now = new Date()
   const baseWhere = { deletedAt: null, expiresAt: { gt: now } }
@@ -84,7 +115,7 @@ export async function getFeed(userId: string, page = 1, limit = 10) {
       skip: (page - 1) * limit,
       take: limit,
     })
-    return withThumbnails(posts)
+    return attachRecentCommenters(withThumbnails(posts))
   }
 
   // New user: show posts from people within 40 km (or all if no location)
@@ -119,7 +150,7 @@ export async function getFeed(userId: string, page = 1, limit = 10) {
         skip: (page - 1) * limit,
         take: limit,
       })
-      return withThumbnails(posts)
+      return attachRecentCommenters(withThumbnails(posts))
     }
   }
 
@@ -131,7 +162,7 @@ export async function getFeed(userId: string, page = 1, limit = 10) {
     skip: (page - 1) * limit,
     take: limit,
   })
-  return withThumbnails(posts)
+  return attachRecentCommenters(withThumbnails(posts))
 }
 
 // Extend a post's expiry by `minutes`. Announcements are never touched.
