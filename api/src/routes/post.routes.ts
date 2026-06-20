@@ -26,5 +26,8 @@ router.post('/:id/comments', postController.addComment)
 router.post('/:id/react', reactionController.react)
 router.delete('/:id/react', reactionController.removeReaction)
 router.get('/:id/reactions', reactionController.getReactions)
+router.get('/:id/stickers', postController.getStickers)
+router.post('/:id/stickers', postController.addSticker)
+router.delete('/:id/stickers/:stickerId', postController.removeSticker)
 
 export default router

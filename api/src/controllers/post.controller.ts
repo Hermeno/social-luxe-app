@@ -44,7 +44,8 @@ export async function createPost(req: AuthRequest, res: Response) {
       isAnnouncement = true
     }
 
-    const post = await postService.createPost(req.user!.userId, mediaUrl, mediaType, caption, bgColor, partnerUserId ?? undefined, isAnnouncement, deviceModel ?? undefined)
+    const stickersEnabled = req.body.stickersEnabled === true || req.body.stickersEnabled === 'true'
+    const post = await postService.createPost(req.user!.userId, mediaUrl, mediaType, caption, bgColor, partnerUserId ?? undefined, isAnnouncement, deviceModel ?? undefined, stickersEnabled)
 
     // Notify partner of post invitation
     if (partnerUserId) {
@@ -231,6 +232,29 @@ export async function getExtendVotes(req: AuthRequest, res: Response) {
   try {
     const result = await postService.getExtendVotes(req.params.id)
     return ok(res, result)
+  } catch (err) { return handleError(res, err) }
+}
+
+export async function getStickers(req: AuthRequest, res: Response) {
+  try {
+    const stickers = await postService.getStickers(req.params.id)
+    return ok(res, stickers)
+  } catch (err) { return handleError(res, err) }
+}
+
+export async function addSticker(req: AuthRequest, res: Response) {
+  try {
+    const { emoji, x, y } = req.body
+    if (!emoji || x === undefined || y === undefined) return badRequest(res, 'emoji, x, y required')
+    const sticker = await postService.addSticker(req.user!.userId, req.params.id, emoji, Number(x), Number(y))
+    return created(res, sticker)
+  } catch (err) { return handleError(res, err) }
+}
+
+export async function removeSticker(req: AuthRequest, res: Response) {
+  try {
+    await postService.removeSticker(req.user!.userId, req.params.stickerId)
+    return ok(res, null)
   } catch (err) { return handleError(res, err) }
 }
 

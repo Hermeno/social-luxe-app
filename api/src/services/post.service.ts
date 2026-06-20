@@ -13,12 +13,13 @@ export async function createPost(
   partnerUserId?: string,
   isAnnouncement?: boolean,
   deviceModel?: string,
+  stickersEnabled?: boolean,
 ) {
   const expiresAt = isAnnouncement
     ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
     : new Date(Date.now() + POST_INITIAL_HOURS * 60 * 60 * 1000)
   const post = await prisma.post.create({
-    data: { userId, mediaUrl, mediaType, caption, bgColor, expiresAt, partnerUserId: partnerUserId ?? null, isAnnouncement: isAnnouncement ?? false, deviceModel: deviceModel ?? null },
+    data: { userId, mediaUrl, mediaType, caption, bgColor, expiresAt, partnerUserId: partnerUserId ?? null, isAnnouncement: isAnnouncement ?? false, deviceModel: deviceModel ?? null, stickersEnabled: stickersEnabled ?? false },
     include: {
       user:        { select: { id: true, name: true, avatar: true, viewsPublic: true, showDevice: true, statusLabel: true } },
       partnerUser: { select: { id: true, name: true, avatar: true } },
@@ -39,6 +40,34 @@ function haversine(lat1: number, lng1: number, lat2: number, lng2: number) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
+// ─── Sticker service functions ───────────────────────────────────────────────
+
+export async function getStickers(postId: string) {
+  return prisma.postSticker.findMany({
+    where:   { postId },
+    include: { user: { select: { id: true, name: true, avatar: true } } },
+    orderBy: { createdAt: 'asc' },
+  })
+}
+
+export async function addSticker(userId: string, postId: string, emoji: string, x: number, y: number) {
+  const post = await prisma.post.findUnique({ where: { id: postId }, select: { stickersEnabled: true } })
+  if (!post?.stickersEnabled) throw new Error('Stickers not enabled for this post')
+  return prisma.postSticker.create({
+    data:    { postId, userId, emoji, x, y },
+    include: { user: { select: { id: true, name: true, avatar: true } } },
+  })
+}
+
+export async function removeSticker(userId: string, stickerId: string) {
+  const sticker = await prisma.postSticker.findUnique({ where: { id: stickerId } })
+  if (!sticker) throw new Error('Not found')
+  if (sticker.userId !== userId) throw new Error('Not authorized')
+  await prisma.postSticker.delete({ where: { id: stickerId } })
+}
+
+// ─── Feed meta helpers ────────────────────────────────────────────────────────
+
 // Fetch up to 4 unique non-author commenters per post in a single DB query.
 // This is called once per feed load — O(1) queries regardless of post count.
 async function attachRecentCommenters(posts: any[]): Promise<any[]> {
@@ -57,6 +86,21 @@ async function attachRecentCommenters(posts: any[]): Promise<any[]> {
     byPost.get(c.postId)!.push(c)
   }
 
+  // Fetch stickers for all posts with stickersEnabled in one query
+  const stickerEnabledIds = posts.filter((p) => p.stickersEnabled).map((p) => p.id)
+  const allStickers = stickerEnabledIds.length > 0
+    ? await prisma.postSticker.findMany({
+        where:   { postId: { in: stickerEnabledIds } },
+        include: { user: { select: { id: true, name: true, avatar: true } } },
+        orderBy: { createdAt: 'asc' },
+      })
+    : []
+  const stickersByPost = new Map<string, typeof allStickers>()
+  for (const s of allStickers) {
+    if (!stickersByPost.has(s.postId)) stickersByPost.set(s.postId, [])
+    stickersByPost.get(s.postId)!.push(s)
+  }
+
   return posts.map((p) => {
     const seen = new Set<string>([p.userId])
     const recentCommenters: Array<{ id: string; name: string; avatar: string | null }> = []
@@ -66,7 +110,7 @@ async function attachRecentCommenters(posts: any[]): Promise<any[]> {
       recentCommenters.push(c.user)
       if (recentCommenters.length >= 4) break
     }
-    return { ...p, recentCommenters }
+    return { ...p, recentCommenters, stickers: stickersByPost.get(p.id) ?? [] }
   })
 }
 
