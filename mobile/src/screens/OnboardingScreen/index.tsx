@@ -9,7 +9,6 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
-import * as Haptics from 'expo-haptics'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { api } from '../../services/api'
 import { useAuthStore } from '../../store/auth.store'
@@ -74,7 +73,6 @@ function SetPhotoStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => vo
     if (status !== 'granted') { Alert.alert('Permissão necessária', 'Precisamos acesso à câmara.'); return }
     const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.85 })
     if (!result.canceled && result.assets[0]) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
       setAvatarUri(result.assets[0].uri)
     }
   }
@@ -84,7 +82,6 @@ function SetPhotoStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => vo
     if (status !== 'granted') { Alert.alert('Permissão necessária', 'Precisamos acesso à galeria.'); return }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', allowsEditing: true, aspect: [1, 1], quality: 0.85 })
     if (!result.canceled && result.assets[0]) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
       setAvatarUri(result.assets[0].uri)
     }
   }
@@ -254,7 +251,6 @@ function InterestsStep({ onDone, onBack }: { onDone: () => void; onBack: () => v
   const { scale, bounce } = useBounce()
 
   function toggle(tag: string) {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     setSelected((prev) => {
       const next = new Set(prev)
       next.has(tag) ? next.delete(tag) : next.add(tag)
@@ -263,7 +259,6 @@ function InterestsStep({ onDone, onBack }: { onDone: () => void; onBack: () => v
   }
 
   async function handleDone() {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
     bounce(async () => {
       setFinishing(true)
       try {

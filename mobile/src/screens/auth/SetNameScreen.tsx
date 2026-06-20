@@ -7,7 +7,6 @@ import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
-import * as Haptics from 'expo-haptics'
 import { useAuthStore } from '../../store/auth.store'
 import { AuthStackParams } from '../../navigation/AuthNavigator'
 import { fonts } from '../../theme'
@@ -48,13 +47,11 @@ export default function SetNameScreen() {
 
   async function handleRegister() {
     if (!canCreate) return
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     bounce(async () => {
       setLoading(true)
       try {
         await register(trimmed, phone, countryCode, password, password)
       } catch (e: unknown) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
         Alert.alert('Erro', e instanceof Error ? e.message : 'Não foi possível criar a conta')
       } finally { setLoading(false) }
     })

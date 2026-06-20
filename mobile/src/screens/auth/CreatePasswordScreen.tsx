@@ -7,7 +7,6 @@ import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
-import * as Haptics from 'expo-haptics'
 import { AuthStackParams } from '../../navigation/AuthNavigator'
 import { fonts } from '../../theme'
 
@@ -69,7 +68,6 @@ export default function CreatePasswordScreen() {
 
   function handleNext() {
     if (!canNext) return Alert.alert('', 'A senha não cumpre todos os requisitos')
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     bounce(() => nav.navigate('SetName', { phone, countryCode, password }))
   }
 

@@ -6,7 +6,6 @@ import {
 } from 'react-native'
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
-import * as Haptics from 'expo-haptics'
 import * as ImagePicker from 'expo-image-picker'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
@@ -120,7 +119,6 @@ export default function CreateScreen() {
         return
       }
 
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
       const isVideo = asset.type === 'video'
       setMedia([{ uri: asset.uri, type: isVideo ? 'video' : 'image' }])
     }
@@ -140,7 +138,6 @@ export default function CreateScreen() {
   async function handlePublish() {
     if (!canPublish) return
     setLoading(true)
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
     try {
       const partnerId   = hasPartner && includePartner && !isAnnouncement ? user!.partnerId! : undefined
       const deviceModel = getDeviceModel()
@@ -149,11 +146,9 @@ export default function CreateScreen() {
         : await createPost(null, 'TEXT', caption.trim(), `${gradient[0]}|${gradient[1]}`, partnerId, isAnnouncement, deviceModel, stickersEnabled)
       if (newPost) setPendingPost(newPost)
       setCaption(''); setMedia([]); setGradientIdx(0); setIsAnnouncement(false); setStickersEnabled(false)
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       toast.success(t.feed_published, isAnnouncement ? t.feed_announcement_sub : t.feed_published_sub)
       nav.navigate('Feed' as never)
     } catch (e: unknown) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
       const status = (e as any)?.response?.status
       const msg = status === 413
         ? 'Vídeo demasiado grande. Máximo 100 MB.'
@@ -252,8 +247,12 @@ export default function CreateScreen() {
       ) : (
 
         /* ── No media: big picker cards + text post option ────────── */
-        <View style={s.noMediaWrap}>
-
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={s.noMediaContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           {/* Single media picker */}
           <View style={s.pickerRow}>
             <TouchableOpacity style={s.pickerCard} onPress={() => addMedia(['images', 'videos'])} activeOpacity={0.82}>
@@ -284,7 +283,7 @@ export default function CreateScreen() {
             {GRADIENTS.map((g, i) => (
               <TouchableOpacity
                 key={i}
-                onPress={() => { setGradientIdx(i); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light) }}
+                onPress={() => { setGradientIdx(i) }}
                 style={[s.colorCircleWrap, gradientIdx === i && s.colorCircleSelected]}
                 activeOpacity={0.8}
               >
@@ -293,7 +292,7 @@ export default function CreateScreen() {
             ))}
           </ScrollView>
 
-          {/* Text gradient card */}
+          {/* Text gradient card — fixed height so it never gets squished behind keyboard */}
           <TouchableOpacity
             style={s.textCardWrap}
             activeOpacity={1}
@@ -317,7 +316,7 @@ export default function CreateScreen() {
             </LinearGradient>
           </TouchableOpacity>
 
-        </View>
+        </ScrollView>
       )}
 
       {/* ── Toolbar ────────────────────────────────────────────────── */}
@@ -413,7 +412,7 @@ const s = StyleSheet.create({
   publishTxt:     { fontFamily: fonts.semiBold, fontSize: 14, color: '#fff' },
 
   /* ── No-media wrapper ── */
-  noMediaWrap: { flex: 1 },
+  noMediaContent: { paddingBottom: 24 },
 
   /* ── Big picker card ── */
   pickerRow: {
@@ -475,7 +474,7 @@ const s = StyleSheet.create({
   colorCircle: { width: '100%', height: '100%', borderRadius: 16 },
 
   /* ── Text gradient card ── */
-  textCardWrap: { flex: 1, marginHorizontal: 16, marginTop: 6, marginBottom: 8 },
+  textCardWrap: { height: 220, marginHorizontal: 16, marginTop: 6, marginBottom: 8 },
   textCard: {
     flex: 1, borderRadius: 26,
     alignItems: 'center', justifyContent: 'center',

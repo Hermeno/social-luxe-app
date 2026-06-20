@@ -3,7 +3,6 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   Animated, Platform, Alert,
 } from 'react-native'
-import * as Haptics from 'expo-haptics'
 import * as ImagePicker from 'expo-image-picker'
 import { useAudioRecorder, AudioModule, RecordingPresets } from 'expo-audio'
 import { Ionicons } from '@expo/vector-icons'
@@ -74,7 +73,6 @@ export default function ChatInputBar({
       setIsRec(true)
       setRecMs(0)
       recTimerRef.current = setInterval(() => setRecMs(Date.now() - recStartRef.current), 100)
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
     } catch {}
   }
 
@@ -89,10 +87,8 @@ export default function ChatInputBar({
       await new Promise<void>((r) => setTimeout(r, 80))
       const uri = recorder.uri
       if (!uri || durationMs < 600) {
-        if (durationMs >= 600) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
         return
       }
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
       await onSendAudio(uri, durationMs)
     } catch (e) {
       console.warn('[AudioRec] stopRecording error:', e)

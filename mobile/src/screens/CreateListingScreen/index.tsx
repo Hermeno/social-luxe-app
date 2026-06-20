@@ -17,7 +17,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import * as ImagePicker from 'expo-image-picker'
-import * as Haptics from 'expo-haptics'
 import { ChevronLeft, ChevronRight, Plus, X, Check, Camera, Truck, MapPin, Tag, Info, Lock } from 'lucide-react-native'
 import { colors, fonts, spacing, radius } from '../../theme'
 import { AppStackParams } from '../../navigation/AppNavigator'
@@ -142,7 +141,6 @@ function _CreateListingScreenFull() {
     if (step === 0 && !validateStep0()) return
     if (step === 1 && !validateStep1()) return
     if (step === 2) { handleSubmit(); return }
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     animateNext()
     if (step === 1) loadListingFee()
     setStep((s) => s + 1)
@@ -150,7 +148,6 @@ function _CreateListingScreenFull() {
 
   function goPrev() {
     if (step === 0) { nav.goBack(); return }
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     animateNext()
     setStep((s) => s - 1)
   }
@@ -211,7 +208,6 @@ function _CreateListingScreenFull() {
         tags: [category, type],
       }
       await storeService.createListing(user.id, user.name, user.avatar ?? null, payload)
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       Alert.alert('Publicado!', 'O teu produto já está na luxee store.', [
         { text: 'Ver loja', onPress: () => { nav.goBack(); nav.navigate('Store') } },
         { text: 'OK', onPress: () => nav.goBack() },

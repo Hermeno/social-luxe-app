@@ -7,7 +7,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { Ionicons } from '@expo/vector-icons'
-import * as Haptics from 'expo-haptics'
 import Toast from 'react-native-toast-message'
 import { api } from '../../services/api'
 import { AppStackParams } from '../../navigation/AppNavigator'
@@ -150,7 +149,6 @@ export default function SearchScreen() {
 
   const handleFollow = useCallback(async (userId: string, duration: FollowDuration = 'forever') => {
     if (followPending.has(userId)) return
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
 
     const wasFollowed = followed.has(userId)
     setFollowed((prev) => {

@@ -7,7 +7,6 @@ import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
-import * as Haptics from 'expo-haptics'
 import { useAuthStore } from '../../store/auth.store'
 import { AuthStackParams } from '../../navigation/AuthNavigator'
 import { fonts } from '../../theme'
@@ -65,13 +64,11 @@ export default function LoginPasswordScreen() {
 
   async function handleLogin() {
     if (!password) return
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     bounce(async () => {
       setLoading(true); setError(false)
       try {
         await login(phone, password)
       } catch {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
         setError(true); shake()
       } finally { setLoading(false) }
     })

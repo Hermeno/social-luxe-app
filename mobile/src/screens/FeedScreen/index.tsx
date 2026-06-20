@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   InteractionManager,
   Alert,
+  PanResponder,
 } from 'react-native'
 import { Image } from 'expo-image'
 import { useNavigation } from '@react-navigation/native'
@@ -106,16 +107,36 @@ export default function FeedScreen() {
   const [pendingSticker, setPendingSticker] = useState<StickerChoice | null>(null)
   const [localStickers, setLocalStickers] = useState<Record<string, PostSticker[]>>({})
   const [voteState, setVoteState] = useState<Record<string, { voted: boolean; extraMs: number; loading: boolean }>>({})
-  // Drag position for the sticker being placed
-  const dragX = useRef(new Animated.Value(0)).current
-  const dragY = useRef(new Animated.Value(0)).current
-  // Center the drag emoji whenever placement mode opens
-  useEffect(() => {
-    if (pendingSticker && viewerW && viewerH) {
-      dragX.setValue(viewerW / 2)
-      dragY.setValue(viewerH / 3)
-    }
-  }, [pendingSticker !== null])
+  // Refs needed inside PanResponder (avoids stale closure in useMemo)
+  const pendingStickerRef    = useRef(pendingSticker)
+  pendingStickerRef.current  = pendingSticker
+  const stickerPickerRef     = useRef(stickerPickerOpen)
+  stickerPickerRef.current   = stickerPickerOpen
+  // playerRef assigned below after `player` is declared (line ~213)
+  const playerRef            = useRef<ReturnType<typeof useVideoPlayer> | null>(null)
+  const pauseTimerRef        = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isHoldingRef         = useRef(false)
+
+  // PanResponder — horizontal swipe navigates between posts.
+  // NEVER claims on touch-start (onStartShouldSetPanResponder: false) so child
+  // buttons (ActionBar, PostInfo) always win their own taps via the bubble phase.
+  // Only claims once the user has made a clear horizontal movement (>20 px and
+  // more horizontal than vertical), which a tap never triggers.
+  const swipePanResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => false,
+    onMoveShouldSetPanResponder: (_, gs) =>
+      !pendingStickerRef.current &&
+      !stickerPickerRef.current &&
+      Math.abs(gs.dx) > 20 &&
+      Math.abs(gs.dx) > Math.abs(gs.dy) * 1.5,
+
+    onPanResponderRelease: (_, gs) => {
+      if (Math.abs(gs.dx) > 50 && Math.abs(gs.dx) > Math.abs(gs.dy)) {
+        if (gs.dx > 0) goPrevRef.current()
+        else           goNextRef.current()
+      }
+    },
+  }), [])
   const likedLoadedRef = useRef(false)
 
   // Persist likes: load on mount, save on change (guard prevents the initial
@@ -167,6 +188,7 @@ export default function FeedScreen() {
   }, [])
 
   const player = useVideoPlayer(null, (p) => { p.loop = false; p.muted = false })
+  playerRef.current = player
   // Release the native player on unmount so Expo Go reload doesn't crash via stale JSI callback
   useEffect(() => {
     return () => {
@@ -560,22 +582,6 @@ export default function FeedScreen() {
   const currentVoteExtraMs = post ? (voteState[post.id]?.extraMs ?? 0) : 0
   const currentVoteLoading = post ? (voteState[post.id]?.loading ?? false) : false
 
-  // ── Hold-to-pause handlers ────────────────────────────────────────────────
-  function handlePressIn() {
-    pressStartRef.current = Date.now()
-    progressRef.current?.stop()
-    safePlayer(() => player.pause())
-  }
-
-  function handlePressOut(navigate: () => void) {
-    const held = Date.now() - pressStartRef.current
-    if (held < 220) {
-      navigate()          // Short tap → navigate
-    } else {
-      resumeFromCurrent() // Long hold → resume from current position
-    }
-  }
-
   // ── Viewer dimensions measured for reliable native clipping ───────────────
   const videoStyle = useMemo(
     () => viewerH > 0
@@ -590,7 +596,8 @@ export default function FeedScreen() {
       {/* ── Current post viewer (slides with swipe gesture) ─────────────────── */}
       {/* ── Viewer: fills full screen from top to bottom ────────────────────── */}
       {post ? (
-        <View style={s.viewer}
+        <View
+          style={s.viewer}
           onLayout={(e) => {
             setViewerW(e.nativeEvent.layout.width)
             setViewerH(e.nativeEvent.layout.height)
@@ -624,6 +631,14 @@ export default function FeedScreen() {
             ) : (
               <Image key={post.id} source={{ uri: resolveMedia(post.mediaUrl ?? '') }} style={s.absLayer} contentFit="contain" cachePolicy="disk" recyclingKey={post.id} transition={150} />
             )}
+
+            {/* Swipe capture: sits on top of all media (last in mediaClip = highest z).
+                ActionBar/PostInfo are outside mediaClip so they always win their own taps.
+                onStart=false means we never steal taps; onMove threshold means we only
+                claim clear horizontal swipes — fingers on video/image can still swipe. */}
+            {!pendingSticker && (
+              <View style={s.absLayer} {...swipePanResponder.panHandlers} />
+            )}
           </View>
 
           {post.mediaType !== 'TEXT' && (
@@ -653,59 +668,46 @@ export default function FeedScreen() {
             </View>
           )}
 
-          {/* Overlay de posicionamento de sticker — drag and release */}
+          {/* Sticker placement overlay — tap anywhere to place */}
           {pendingSticker && (
-            <View
+            <Pressable
               style={s.stickerPlacementOverlay}
-              onStartShouldSetResponder={() => true}
-              onMoveShouldSetResponder={() => true}
-              onResponderTerminationRequest={() => false}
-              onResponderGrant={(e) => {
-                dragX.setValue(e.nativeEvent.locationX)
-                dragY.setValue(e.nativeEvent.locationY)
-              }}
-              onResponderMove={(e) => {
-                dragX.setValue(Math.max(0, Math.min(viewerW, e.nativeEvent.locationX)))
-                dragY.setValue(Math.max(0, Math.min(viewerH, e.nativeEvent.locationY)))
-              }}
-              onResponderRelease={(e) => {
-                const x = Math.max(0, Math.min(100, (e.nativeEvent.locationX / viewerW) * 100))
-                const y = Math.max(0, Math.min(100, (e.nativeEvent.locationY / viewerH) * 100))
+              onPress={(e) => {
+                const x = Math.max(2, Math.min(98, (e.nativeEvent.locationX / viewerW) * 100))
+                const y = Math.max(2, Math.min(98, (e.nativeEvent.locationY / viewerH) * 100))
                 handlePlaceSticker(x, y)
               }}
             >
-              {/* Dim — no touch interaction */}
               <View style={s.stickerPlacementDecoLayer} pointerEvents="none" />
-
-              {/* Hint at top */}
               <View style={s.stickerDragHintWrap} pointerEvents="none">
-                <Text style={s.stickerDragHintText}>Arraste e solte onde quiser</Text>
+                <Text style={s.stickerDragHintEmoji}>{pendingSticker.type === 'message' ? '💌' : pendingSticker.emoji}</Text>
+                <Text style={s.stickerDragHintText}>Toque onde deseja colocar</Text>
               </View>
-
-              {/* Emoji follows the finger */}
-              <Animated.Text
-                pointerEvents="none"
-                style={[
-                  s.stickerDragEmoji,
-                  { transform: [{ translateX: dragX }, { translateY: dragY }] },
-                ]}
-              >
-                {pendingSticker.type === 'message' ? '💌' : pendingSticker.emoji}
-              </Animated.Text>
-
-              {/* Cancel — claims its own touch so parent responder doesn't fire */}
               <Pressable style={s.stickerPlacementCancel} onPress={() => { setPendingSticker(null); resumeFromCurrent() }}>
                 <Text style={s.stickerPlacementCancelTxt}>Cancelar</Text>
               </Pressable>
-            </View>
+            </Pressable>
           )}
 
-          {/* Tap zones — left = previous, right = next (só quando não estamos a posicionar) */}
-          {!pendingSticker && (
-            <>
-              <Pressable style={s.leftTap}  onPressIn={handlePressIn} onPressOut={() => handlePressOut(goPrev)} />
-              <Pressable style={s.rightTap} onPressIn={handlePressIn} onPressOut={() => handlePressOut(goNext)} />
-            </>
+          {/* StickerLayer INSIDE viewer, BEFORE ActionBar.
+              Touch order (last child = first to receive tap in Fabric):
+                ActionBar (last)  → buttons win  ✓
+                StickerLayer      → sticker taps win over swipeView  ✓
+                mediaClip/swipe   → falls through to swipe gesture  ✓ */}
+          {post.stickersEnabled && (
+            <StickerLayer
+              stickers={currentStickers}
+              containerW={viewerW}
+              containerH={viewerH}
+              onLongPress={handleRemoveSticker}
+              currentUserId={user?.id}
+              postOwnerId={post.userId}
+              onMessageOpen={() => {
+                progressRef.current?.stop()
+                safePlayer(() => player.pause())
+              }}
+              onMessageClose={() => resumeFromCurrent()}
+            />
           )}
 
           <ActionBar
@@ -716,7 +718,6 @@ export default function FeedScreen() {
                   Alert.alert('Limite atingido', 'Este post já tem 50 stickers.')
                   return
                 }
-                // Pause post so it doesn't advance while picker is open
                 progressRef.current?.stop()
                 safePlayer(() => player.pause())
                 setStickerPickerOpen(true)
@@ -738,18 +739,6 @@ export default function FeedScreen() {
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={[s.emptyTitle, { color: 'rgba(255,255,255,0.75)' }]}>Preparando teu feed...</Text>
         </View>
-      )}
-
-      {/* ── Sticker layer — fora do viewer para não competir com os tap zones ── */}
-      {post?.stickersEnabled && (
-        <StickerLayer
-          stickers={currentStickers}
-          containerW={viewerW}
-          containerH={viewerH}
-          onLongPress={handleRemoveSticker}
-          currentUserId={user?.id}
-          postOwnerId={post.userId}
-        />
       )}
 
       {/* ── Floating header — absolute overlay over the viewer ──────────────── */}
@@ -888,8 +877,6 @@ const s = StyleSheet.create({
   progressFull:  { flex: 1, backgroundColor: colors.white },
   progressFill:  { height: '100%', backgroundColor: colors.white },
 
-  leftTap:  { position: 'absolute', left: 0, top: 0, bottom: 72, width: SCREEN_W * 0.35, zIndex: 10 },
-  rightTap: { position: 'absolute', left: SCREEN_W * 0.35, right: 80, top: 0, bottom: 72, zIndex: 10 },
 
   stickerPlacementOverlay: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
@@ -900,26 +887,17 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.45)',
   },
   stickerDragHintWrap: {
-    position: 'absolute', top: 56, left: 0, right: 0,
-    alignItems: 'center',
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center', justifyContent: 'center', gap: 10,
   },
+  stickerDragHintEmoji: { fontSize: 64, textAlign: 'center' },
   stickerDragHintText: {
     color: '#fff', fontSize: 15, fontFamily: fonts.semiBold,
     textAlign: 'center', letterSpacing: -0.2,
     textShadowColor: 'rgba(0,0,0,0.5)',
     textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
-    backgroundColor: 'rgba(0,0,0,0.32)',
-    borderRadius: 16, paddingHorizontal: 16, paddingVertical: 6,
-  },
-  // Emoji draggável — posição absoluta centrada no dedo via transform
-  stickerDragEmoji: {
-    position: 'absolute',
-    left: -28,  // metade do emoji (≈56px) para centrar no dedo
-    top:  -28,
-    fontSize: 56,
-    textShadowColor: 'rgba(0,0,0,0.35)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.42)',
+    borderRadius: 16, paddingHorizontal: 18, paddingVertical: 8,
   },
   stickerPlacementCancel: {
     position: 'absolute', bottom: 110,

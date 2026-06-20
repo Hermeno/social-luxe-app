@@ -15,7 +15,6 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { LinearGradient } from 'expo-linear-gradient'
 import { ChevronLeft, ShoppingBag, Heart, Star, MapPin, Truck, Check, Share2, Shield } from 'lucide-react-native'
-import * as Haptics from 'expo-haptics'
 import { colors, fonts, spacing, radius } from '../../theme'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { Product } from '../../types/store.types'
@@ -57,7 +56,6 @@ export default function ProductDetailScreen() {
 
   function handleAddToCart() {
     if (!product || product.status !== 'active') return
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
     addToCart(product)
     setAdded(true)
     Animated.sequence([
@@ -94,7 +92,7 @@ export default function ProductDetailScreen() {
         <View style={s.headerRight}>
           <TouchableOpacity
             style={s.headerIconBtn}
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); toggleSave(productId) }}
+            onPress={() => { toggleSave(productId) }}
             activeOpacity={0.8}
           >
             <Heart size={20} color={isSaved ? colors.accent : colors.white} fill={isSaved ? colors.accent : 'transparent'} />
@@ -265,7 +263,7 @@ export default function ProductDetailScreen() {
       {/* ── Bottom CTA ──────────────────────────────────────────────────── */}
       {product.status === 'active' && (
         <View style={[s.cta, { paddingBottom: bottom + 16 }]}>
-          <TouchableOpacity style={s.ctaSave} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); toggleSave(productId) }} activeOpacity={0.8}>
+          <TouchableOpacity style={s.ctaSave} onPress={() => { toggleSave(productId) }} activeOpacity={0.8}>
             <Heart size={22} color={isSaved ? colors.accent : colors.gray600} fill={isSaved ? colors.accent : 'transparent'} />
           </TouchableOpacity>
           <Animated.View style={[{ flex: 1 }, { transform: [{ scale: btnScale }] }]}>

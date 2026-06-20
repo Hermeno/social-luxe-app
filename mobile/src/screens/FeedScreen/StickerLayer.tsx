@@ -1,5 +1,8 @@
-import React, { useState, useRef } from 'react'
-import { View, Text, StyleSheet, Modal, Animated, Pressable } from 'react-native'
+import React, { useState, useRef, useEffect } from 'react'
+import {
+  View, Text, StyleSheet, Animated,
+  TouchableOpacity, Pressable, Modal,
+} from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { PostSticker } from '../../types'
@@ -8,223 +11,254 @@ import AvatarImage from '../../components/AvatarImage'
 import { colors, fonts } from '../../theme'
 import { API_BASE } from '../../config'
 
-type Nav = StackNavigationProp<AppStackParams>
-
 function resolveAvatar(uri: string | null | undefined): string | null {
   if (!uri) return null
   return uri.startsWith('http') || uri.startsWith('file://') ? uri : `${API_BASE}${uri}`
 }
 
-const SPARKS = ['✨','⭐','🌟','💫','✨','⭐','🌟','💫','⚡','🌠','✨','⭐','🌟','💫','✨','⭐','🌟','💫','✨','🌠','⭐','🌟','💫','✨','⭐','🌟','⚡','💫','✨','⭐']
+type Particle = {
+  id: number
+  tx: Animated.Value
+  ty: Animated.Value
+  s:  Animated.Value
+  o:  Animated.Value
+}
 
 // ─── StickerItem ─────────────────────────────────────────────────────────────
-// Separate component so each item can have its own refs for long-press timing.
-// Uses the raw RN responder system (onStartShouldSetResponder) which ALWAYS
-// wins in Fabric — unlike Pressable/TouchableOpacity which lose to sibling
-// Pressables behind them when pointerEvents="box-none" is in the chain.
 interface ItemProps {
-  s: PostSticker
-  left: number
-  top: number
-  type: 'emoji' | 'message' | 'gift'
-  canDelete: boolean
-  onTap: () => void
-  onLongPress: () => void
+  sticker:       PostSticker
+  left:          number
+  top:           number
+  type:          'emoji' | 'message' | 'gift'
+  canDelete:     boolean
+  onTap:         () => void
+  onLongPress:   () => void
   onAuthorPress: () => void
 }
 
-function StickerItem({ s, left, top, type, canDelete, onTap, onLongPress, onAuthorPress }: ItemProps) {
-  const longTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const didLong   = useRef(false)
+function StickerItem({ sticker, left, top, type, canDelete, onTap, onLongPress, onAuthorPress }: ItemProps) {
+  const [particles, setParticles] = useState<Particle[]>([])
+  const pidRef = useRef(0)
 
-  function clearLong() {
-    if (longTimer.current) { clearTimeout(longTimer.current); longTimer.current = null }
+  function burst() {
+    const batch: Particle[] = []
+    for (let i = 0; i < 22; i++) {
+      const tx = new Animated.Value(0)
+      const ty = new Animated.Value(0)
+      const s  = new Animated.Value(0)
+      const o  = new Animated.Value(1)
+      const id = ++pidRef.current
+
+      const angle  = Math.random() * Math.PI * 2
+      const dist   = 280 + Math.random() * 420
+      const finalX = Math.cos(angle) * dist
+      const finalY = Math.sin(angle) * dist
+      const finalS = 0.9 + Math.random() * 1.4
+      const dur    = 1800 + Math.random() * 900
+
+      Animated.parallel([
+        Animated.sequence([
+          Animated.spring(s, { toValue: finalS, speed: 30, bounciness: 14, useNativeDriver: true }),
+          Animated.timing(s, { toValue: 0, duration: 300, useNativeDriver: true }),
+        ]),
+        Animated.timing(tx, { toValue: finalX, duration: dur, useNativeDriver: true }),
+        Animated.timing(ty, { toValue: finalY, duration: dur, useNativeDriver: true }),
+        Animated.sequence([
+          Animated.delay(700 + i * 30),
+          Animated.timing(o, { toValue: 0, duration: 900, useNativeDriver: true }),
+        ]),
+      ]).start(() => setParticles(prev => prev.filter(p => p.id !== id)))
+
+      batch.push({ id, tx, ty, s, o })
+    }
+    setParticles(prev => [...prev, ...batch])
   }
+
+  // Use emoji as additional check — '💌' is always a message sticker
+  const isMessage = type === 'message' || sticker.emoji === '💌'
+  const displayEmoji = isMessage ? '💌' : sticker.emoji
 
   return (
     <View style={[st.item, { left: left - 28, top: top - 28 }]}>
-      {/* ── Main emoji touch area ── */}
-      <View
-        style={st.emojiHit}
-        onStartShouldSetResponder={() => true}
-        onMoveShouldSetResponder={() => false}
-        onResponderTerminationRequest={() => false}
-        onResponderGrant={() => {
-          didLong.current = false
-          if (canDelete) {
-            longTimer.current = setTimeout(() => {
-              didLong.current = true
-              longTimer.current = null
-              onLongPress()
-            }, 480)
-          }
-        }}
-        onResponderMove={() => clearLong()}
-        onResponderRelease={() => {
-          clearLong()
-          if (!didLong.current) onTap()
-        }}
-        onResponderTerminate={() => clearLong()}
-      >
-        <Text style={[st.emoji, type === 'message' && st.messagePulse]}>
-          {type === 'message' ? '💌' : s.emoji}
-        </Text>
-        {type === 'gift' && <Text style={st.giftHint}>✨</Text>}
-      </View>
 
-      {/* ── Author badge ── */}
-      <View
-        style={st.authorBadge}
-        onStartShouldSetResponder={() => true}
-        onMoveShouldSetResponder={() => false}
-        onResponderTerminationRequest={() => false}
-        onResponderRelease={() => onAuthorPress()}
+      <TouchableOpacity
+        activeOpacity={0.75}
+        onPress={() => {
+          if (!isMessage) burst()
+          onTap()
+        }}
+        onLongPress={canDelete ? () => {
+          onLongPress()
+        } : undefined}
+        delayLongPress={500}
       >
-        <AvatarImage
-          uri={resolveAvatar(s.user.avatar)}
-          size={18}
-          borderWidth={1}
-          borderColor="rgba(255,255,255,0.9)"
-        />
-        <Text style={st.authorName} numberOfLines={1}>{s.user.name.split(' ')[0]}</Text>
-      </View>
+        <View style={st.emojiWrap}>
+          <Text style={st.emoji}>{displayEmoji}</Text>
+          {!isMessage && type === 'gift' && <Text style={st.giftBadge}>✨</Text>}
+        </View>
+
+        {particles.map(p => (
+          <Animated.Text
+            key={p.id}
+            pointerEvents="none"
+            style={[st.particle, {
+              opacity: p.o,
+              transform: [{ translateX: p.tx }, { translateY: p.ty }, { scale: p.s }],
+            }]}
+          >
+            {sticker.emoji}
+          </Animated.Text>
+        ))}
+      </TouchableOpacity>
+
+      <TouchableOpacity onPress={onAuthorPress} activeOpacity={0.8}>
+        <View style={st.author}>
+          <AvatarImage
+            uri={resolveAvatar(sticker.user.avatar)}
+            size={16}
+            borderWidth={1}
+            borderColor="rgba(255,255,255,0.85)"
+          />
+          <Text style={st.authorName} numberOfLines={1}>
+            {sticker.user.name.split(' ')[0]}
+          </Text>
+        </View>
+      </TouchableOpacity>
+
     </View>
   )
 }
 
-// ─── Particle types ──────────────────────────────────────────────────────────
-type Particle = { id: number; emoji: string; x: Animated.Value; y: Animated.Value; scale: Animated.Value; opacity: Animated.Value }
-type Explosion = { id: string; originX: number; originY: number; particles: Particle[] }
+// ─── Message card — small compact bubble, Modal so fica acima de tudo ────────
+interface MsgCardProps {
+  sticker: PostSticker
+  onClose: () => void
+}
+
+function MessageCard({ sticker, onClose }: MsgCardProps) {
+  const scaleAnim = useRef(new Animated.Value(0.88)).current
+  const opacAnim  = useRef(new Animated.Value(0)).current
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(scaleAnim, { toValue: 1, speed: 30, bounciness: 10, useNativeDriver: true }),
+      Animated.timing(opacAnim,  { toValue: 1, duration: 140, useNativeDriver: true }),
+    ]).start()
+  }, [])
+
+  function dismiss() {
+    Animated.parallel([
+      Animated.timing(scaleAnim, { toValue: 0.9, duration: 110, useNativeDriver: true }),
+      Animated.timing(opacAnim,  { toValue: 0,   duration: 110, useNativeDriver: true }),
+    ]).start(onClose)
+  }
+
+  const message = sticker.content?.trim()
+
+  return (
+    <Modal transparent animationType="none" visible onRequestClose={dismiss}>
+      <Pressable style={st.msgBackdrop} onPress={dismiss}>
+        {/* Stop tap propagation inside card */}
+        <Pressable onPress={() => {}}>
+          <Animated.View style={[st.msgCard, { opacity: opacAnim, transform: [{ scale: scaleAnim }] }]}>
+
+            {/* Row: avatar + name + close */}
+            <View style={st.msgRow}>
+              <AvatarImage
+                uri={resolveAvatar(sticker.user.avatar)}
+                size={38}
+                borderWidth={2}
+                borderColor={colors.primary}
+              />
+              <Text style={st.msgName} numberOfLines={1}>
+                {sticker.user.name.split(' ')[0]}
+              </Text>
+              <TouchableOpacity
+                onPress={dismiss}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                style={st.msgCloseBtn}
+              >
+                <Text style={st.msgCloseTxt}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Message text */}
+            {message
+              ? <Text style={st.msgText}>{message}</Text>
+              : <Text style={st.msgEmpty}>💌 sem mensagem</Text>
+            }
+
+          </Animated.View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  )
+}
 
 // ─── StickerLayer ─────────────────────────────────────────────────────────────
 interface Props {
-  stickers: PostSticker[]
-  containerW: number
-  containerH: number
-  onLongPress?: (stickerId: string) => void
-  currentUserId?: string
-  postOwnerId?: string
+  stickers:        PostSticker[]
+  containerW:      number
+  containerH:      number
+  onLongPress?:    (id: string) => void
+  currentUserId?:  string
+  postOwnerId?:    string
+  onMessageOpen?:  () => void
+  onMessageClose?: () => void
 }
 
-export default function StickerLayer({ stickers, containerW, containerH, onLongPress, currentUserId, postOwnerId }: Props) {
+export default function StickerLayer({ stickers, containerW, containerH, onLongPress, currentUserId, postOwnerId, onMessageOpen, onMessageClose }: Props) {
   const nav = useNavigation<StackNavigationProp<AppStackParams>>()
   const [messageSticker, setMessageSticker] = useState<PostSticker | null>(null)
-  const [explosions, setExplosions] = useState<Explosion[]>([])
-  const fadeTimers = useRef<ReturnType<typeof setTimeout>[]>([])
 
-  function triggerExplosion(sticker: PostSticker) {
-    const originX = (sticker.x / 100) * containerW
-    const originY = (sticker.y / 100) * containerH
-    const expId   = `${sticker.id}-${Date.now()}`
-
-    const particles: Particle[] = Array.from({ length: 28 }, (_, i) => {
-      const angle = (i / 28) * Math.PI * 2 + (Math.random() - 0.5) * 0.5
-      const dist  = 80 + Math.random() * 260
-      const tx    = Math.cos(angle) * dist
-      const ty    = Math.sin(angle) * dist
-      const dur   = 650 + Math.random() * 350
-
-      const x      = new Animated.Value(0)
-      const y      = new Animated.Value(0)
-      const scale  = new Animated.Value(0.3)
-      const opacity = new Animated.Value(1)
-
-      // Move + scale — flat parallel, zero nesting
-      Animated.parallel([
-        Animated.timing(x,     { toValue: tx,  duration: dur, useNativeDriver: true }),
-        Animated.timing(y,     { toValue: ty,  duration: dur, useNativeDriver: true }),
-        Animated.timing(scale, { toValue: 0.8 + Math.random() * 0.5, duration: 220, useNativeDriver: true }),
-      ]).start()
-
-      // Fade starts halfway through — plain setTimeout avoids Animated.sequence issues
-      const t = setTimeout(
-        () => Animated.timing(opacity, { toValue: 0, duration: Math.round(dur * 0.5), useNativeDriver: true }).start(),
-        Math.round(dur * 0.5),
-      )
-      fadeTimers.current.push(t)
-
-      return { id: i, emoji: SPARKS[i % SPARKS.length], x, y, scale, opacity }
-    })
-
-    setExplosions(prev => [...prev, { id: expId, originX, originY, particles }])
-    const cleanup = setTimeout(() => setExplosions(prev => prev.filter(e => e.id !== expId)), 1400)
-    fadeTimers.current.push(cleanup)
-  }
+  // Pause the feed while the message card is open, resume when it closes
+  useEffect(() => {
+    if (messageSticker) {
+      onMessageOpen?.()
+    } else {
+      onMessageClose?.()
+    }
+  }, [!!messageSticker])
 
   if (!stickers.length || !containerW || !containerH) return null
 
   return (
-    // box-none on the outer layer so empty areas still pass touches to viewer nav
-    <View style={[StyleSheet.absoluteFill, { zIndex: 16 }]} pointerEvents="box-none">
+    <View style={[StyleSheet.absoluteFill, { zIndex: 14 }]} pointerEvents="box-none">
 
-      {/* ── Sticker items ──────────────────────────────────────────────────── */}
-      {stickers.map((s) => {
-        const left = (s.x / 100) * containerW
-        const top  = (s.y / 100) * containerH
-        const type = (s.type ?? 'emoji') as 'emoji' | 'message' | 'gift'
+      {stickers.map(stk => {
+        const left = (stk.x / 100) * containerW
+        const top  = (stk.y / 100) * containerH
+        // Use emoji as additional fallback for type detection
+        const type = (stk.emoji === '💌' ? 'message' : (stk.type ?? 'emoji')) as 'emoji' | 'message' | 'gift'
         const canDelete = !!currentUserId &&
-          (s.user.id === currentUserId || postOwnerId === currentUserId)
+          (stk.user.id === currentUserId || postOwnerId === currentUserId)
 
         return (
           <StickerItem
-            key={s.id}
-            s={s}
+            key={stk.id}
+            sticker={stk}
             left={left}
             top={top}
             type={type}
             canDelete={canDelete}
             onTap={() => {
-              if (type === 'message') setMessageSticker(s)
-              else if (type === 'gift') triggerExplosion(s)
+              const isMsg = type === 'message' || stk.emoji === '💌'
+              if (isMsg) setMessageSticker(stk)
             }}
-            onLongPress={() => onLongPress?.(s.id)}
-            onAuthorPress={() => nav.navigate('Profile', { userId: s.user.id })}
+            onLongPress={() => onLongPress?.(stk.id)}
+            onAuthorPress={() => nav.navigate('Profile', { userId: stk.user.id })}
           />
         )
       })}
 
-      {/* ── Firework particles ──────────────────────────────────────────────── */}
-      {explosions.map((exp) =>
-        exp.particles.map((p) => (
-          <Animated.Text
-            key={`${exp.id}-${p.id}`}
-            pointerEvents="none"
-            style={[st.particle, {
-              left: exp.originX,
-              top:  exp.originY,
-              transform: [{ translateX: p.x }, { translateY: p.y }, { scale: p.scale }],
-              opacity: p.opacity,
-            }]}
-          >
-            {p.emoji}
-          </Animated.Text>
-        ))
+      {/* Modal fica acima de ActionBar, FeedHeader e tudo o resto */}
+      {messageSticker && (
+        <MessageCard
+          sticker={messageSticker}
+          onClose={() => setMessageSticker(null)}
+        />
       )}
 
-      {/* ── Message modal ───────────────────────────────────────────────────── */}
-      <Modal transparent animationType="fade" visible={!!messageSticker} onRequestClose={() => setMessageSticker(null)}>
-        <Pressable style={st.msgBackdrop} onPress={() => setMessageSticker(null)}>
-          <View style={st.msgCard}>
-            <Pressable style={st.msgCloseBtn} onPress={() => setMessageSticker(null)}>
-              <Text style={st.msgCloseTxt}>✕</Text>
-            </Pressable>
-            <Text style={st.msgCardEmoji}>💌</Text>
-            <Text style={st.msgCardContent}>{messageSticker?.content}</Text>
-            <View style={st.msgCardFooter}>
-              <AvatarImage
-                uri={resolveAvatar(messageSticker?.user.avatar)}
-                size={28}
-                borderWidth={1.5}
-                borderColor={colors.primary}
-              />
-              <View style={{ flex: 1 }}>
-                <Text style={st.msgCardName}>{messageSticker?.user.name.split(' ')[0]}</Text>
-                <Text style={st.msgCardLabel}>deixou uma mensagem</Text>
-              </View>
-            </View>
-          </View>
-        </Pressable>
-      </Modal>
     </View>
   )
 }
@@ -233,42 +267,33 @@ const st = StyleSheet.create({
   item: {
     position: 'absolute',
     alignItems: 'center',
-    zIndex: 15,
+    zIndex: 14,
   },
-  emojiHit: {
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
+  emojiWrap: { alignItems: 'center' },
   emoji: {
-    fontSize: 44,
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
+    fontSize: 42,
+    textShadowColor: 'rgba(0,0,0,0.35)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
   },
-  messagePulse: { fontSize: 46 },
-  giftHint: {
-    color: '#fff',
-    fontFamily: fonts.bold,
-    fontSize: 9,
-    textAlign: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 6,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    marginTop: 1,
-    overflow: 'hidden',
+  giftBadge: { fontSize: 11, marginTop: -4, opacity: 0.9 },
+  particle: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    fontSize: 36,
+    zIndex: 30,
   },
-  authorBadge: {
+  author: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    backgroundColor: 'rgba(0,0,0,0.52)',
+    gap: 4,
+    backgroundColor: 'rgba(0,0,0,0.50)',
     borderRadius: 10,
-    paddingHorizontal: 5,
+    paddingHorizontal: 6,
     paddingVertical: 3,
-    marginTop: 2,
-    maxWidth: 90,
+    marginTop: 4,
+    maxWidth: 88,
   },
   authorName: {
     color: '#fff',
@@ -277,51 +302,56 @@ const st = StyleSheet.create({
     letterSpacing: 0.1,
     flexShrink: 1,
   },
-  particle: {
-    position: 'absolute',
-    fontSize: 22,
-    zIndex: 99,
-  },
+
+  // ── Message card — compact bubble ─────────────────────────────────────────
   msgBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 28,
+    paddingHorizontal: 24,
   },
   msgCard: {
     backgroundColor: '#fff',
-    borderRadius: 24,
-    padding: 24,
-    paddingTop: 20,
-    alignItems: 'center',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     width: '100%',
+    maxWidth: 340,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 24,
-    elevation: 14,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    elevation: 16,
+  },
+  msgRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 10,
+  },
+  msgName: {
+    flex: 1,
+    fontFamily: fonts.semiBold,
+    fontSize: 15,
+    color: '#111',
   },
   msgCloseBtn: {
-    alignSelf: 'flex-end',
-    width: 28, height: 28, borderRadius: 14,
+    width: 26, height: 26, borderRadius: 13,
     backgroundColor: '#F0F0F0',
     alignItems: 'center', justifyContent: 'center',
-    marginBottom: 8,
   },
-  msgCloseTxt:    { fontSize: 13, color: '#666', fontFamily: fonts.semiBold },
-  msgCardEmoji:   { fontSize: 48, marginBottom: 10 },
-  msgCardContent: {
-    fontFamily: fonts.semiBold,
-    fontSize: 18, color: '#111',
-    textAlign: 'center', lineHeight: 26,
-    marginBottom: 20,
+  msgCloseTxt: { fontSize: 11, color: '#777', fontFamily: fonts.semiBold },
+  msgText: {
+    fontFamily: fonts.regular,
+    fontSize: 15,
+    color: '#333',
+    lineHeight: 22,
   },
-  msgCardFooter: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    borderTopWidth: 1, borderTopColor: '#F0F0F0',
-    paddingTop: 14, width: '100%',
+  msgEmpty: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    color: colors.gray500,
+    fontStyle: 'italic',
   },
-  msgCardName:  { fontFamily: fonts.semiBold, fontSize: 14, color: '#111' },
-  msgCardLabel: { fontFamily: fonts.regular,  fontSize: 12, color: colors.gray600 },
 })

@@ -4,7 +4,6 @@ import {
   Animated,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import * as Haptics from 'expo-haptics'
 import { Heart, MessageCircle, Send, Eye, MoreVertical, Pencil, Trash2, Tag } from 'lucide-react-native'
 
 const FULL_LIFE_MS = 24 * 60 * 60 * 1000
@@ -181,7 +180,6 @@ export default React.memo(function ActionBar({
   function handleVoteBattery() {
     if (voteLoading) return
     voteDirectionRef.current = voted ? '-' : '+'
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
     batFloatY.setValue(0)
     batFloatOp.setValue(1)
     Animated.parallel([
@@ -196,7 +194,6 @@ export default React.memo(function ActionBar({
 
   async function handleShare() {
     try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
       const result = await Share.share({
         message: `${post.caption ? `"${post.caption}" — ` : ''}${t.feed_share_msg}`,
       })
@@ -317,7 +314,7 @@ export default React.memo(function ActionBar({
         {isSelf && (
           <TouchableOpacity
             style={s.btnOptions}
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowMenu(true) }}
+            onPress={() => { setShowMenu(true) }}
             activeOpacity={0.75}
           >
             <MoreVertical size={22} strokeWidth={2} color="rgba(255,255,255,0.82)" />

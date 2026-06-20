@@ -36,13 +36,12 @@ export function useFeed() {
   const refresh = useCallback(async () => {
     if (loadingRef.current) return
     loadingRef.current = true
-    setLoading(true)
 
     try {
       if (!initialised.current) {
         initialised.current = true
+        setLoading(true)  // spinner only on very first load
 
-        // Serve SQLite immediately
         const local = await syncFeed((fresh) => {
           setPosts(fresh)
           setPage(1)
@@ -51,19 +50,22 @@ export function useFeed() {
         if (local.length > 0) setPosts(local)
 
       } else {
-        // Subsequent focus: force network refresh if online, else SQLite
+        // Subsequent focus: SILENT background sync — no spinner, no visible refresh
         if (isConnected()) {
-          const fresh = await forceSyncFeed()
-          setPosts(fresh)
-          setPage(1)
-          setHasMore(fresh.length >= 10)
+          forceSyncFeed()
+            .then(fresh => {
+              setPosts(fresh)
+              setPage(1)
+              setHasMore(fresh.length >= 10)
+            })
+            .catch(() => {})
         } else {
-          const cached = await getCachedPosts()
-          setPosts(cached)
+          getCachedPosts()
+            .then(cached => { if (cached.length > 0) setPosts(cached) })
+            .catch(() => {})
         }
       }
     } catch {
-      // Fallback to SQLite on any error
       try {
         const cached = await getCachedPosts()
         if (cached.length > 0) setPosts(cached)

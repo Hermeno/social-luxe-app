@@ -5,7 +5,6 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
-import * as Haptics from 'expo-haptics'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { AuthStackParams } from '../../navigation/AuthNavigator'
@@ -63,7 +62,6 @@ export default function PhoneScreen() {
 
   async function handleContinue() {
     if (!canGo) return
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     bounce(async () => {
       setLoading(true)
       try {

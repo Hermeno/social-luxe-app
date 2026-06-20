@@ -13,7 +13,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { useFocusEffect } from '@react-navigation/native'
-import * as Haptics from 'expo-haptics'
 import { ChevronLeft, Plus, Package, Eye, Heart, Pause, Play, Trash2, ChevronRight, Lock } from 'lucide-react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { colors, fonts, spacing, radius } from '../../theme'
@@ -153,7 +152,6 @@ function _MyStoreScreenFull() {
   useFocusEffect(useCallback(() => { loadListings() }, [user?.id]))
 
   async function handleTogglePause(productId: string) {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     await storeService.pauseListing(productId)
     loadListings()
   }
@@ -165,7 +163,6 @@ function _MyStoreScreenFull() {
         text: 'Eliminar', style: 'destructive',
         onPress: async () => {
           if (!user) return
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
           await storeService.deleteListing(product.id, user.id)
           loadListings()
         },

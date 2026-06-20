@@ -13,8 +13,6 @@ import { StackNavigationProp } from '@react-navigation/stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFocusEffect } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
-import { Home } from 'lucide-react-native'
-import * as Haptics from 'expo-haptics'
 import Toast from 'react-native-toast-message'
 import * as msgService from '../../services/message.service'
 import { getConnections, toggleFollow, FollowDuration } from '../../services/follow.service'
@@ -450,7 +448,6 @@ export default function MessagesScreen() {
   // ── Follow / unfollow ─────────────────────────────────────────────────────
   const handleFollow = useCallback(async (userId: string, duration: FollowDuration = 'forever') => {
     if (followPending.has(userId)) return
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     const wasFollowed = followed.has(userId)
     setFollowed((prev) => {
       const next = new Set(prev)
@@ -493,7 +490,6 @@ export default function MessagesScreen() {
   }
 
   function handleQuickSend(userId: string, userName: string, text: string) {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
     const tempId  = `pending-${Date.now()}`
     const now     = new Date().toISOString()
     const msgPatch = {
@@ -582,30 +578,10 @@ export default function MessagesScreen() {
           </View>
 
           <TouchableOpacity
-            onPress={() => (nav as any).jumpTo('Feed')}
-            activeOpacity={0.75}
-            style={s.homeBtn}
-          >
-            <Home size={20} strokeWidth={2} color="#111111" />
-            {newPostsCount > 0 && (
-              <View style={s.homeBadgeWrap}>
-                <View style={s.homeBadgePill}>
-                  <Text style={s.homeBadgeTxt}>
-                    {newPostsCount > 99 ? '99+' : String(newPostsCount)}
-                  </Text>
-                </View>
-                <View style={s.homeBadgeTail} />
-              </View>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
             onPress={() => nav.navigate('Profile', { userId: user?.id })}
             activeOpacity={0.75}
           >
-            <View style={s.navAvatar}>
-              <AvatarImage uri={user?.avatar ?? null} size={34} />
-            </View>
+            <AvatarImage uri={user?.avatar ?? null} size={34} borderWidth={0} borderColor="transparent" />
           </TouchableOpacity>
         </View>
 

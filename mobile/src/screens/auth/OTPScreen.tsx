@@ -8,7 +8,6 @@ import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
-import * as Haptics from 'expo-haptics'
 import { AuthStackParams } from '../../navigation/AuthNavigator'
 import { fonts } from '../../theme'
 
@@ -77,14 +76,12 @@ export default function OTPScreen() {
 
   async function handleVerify() {
     if (!filled) return
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     bounce(async () => {
       setLoading(true)
       try {
         // TODO: v2 — OTP verification disabled in v1
         // await authService.verifyOTP(phone, code.join(''))
       } catch {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
         setError(true); setCode(Array(CODE_LENGTH).fill(''))
         inputs.current[0]?.focus()
       } finally { setLoading(false) }

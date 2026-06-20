@@ -11,7 +11,6 @@ import { Image } from 'expo-image'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
-import * as Haptics from 'expo-haptics'
 import { ChevronLeft, Trash2, ShoppingBag, Plus, Minus } from 'lucide-react-native'
 import { colors, fonts, spacing, radius } from '../../theme'
 import { AppStackParams } from '../../navigation/AppNavigator'
@@ -31,7 +30,6 @@ function CartRow({ item }: { item: CartItem }) {
       {
         text: 'Remover', style: 'destructive',
         onPress: () => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
           removeFromCart(item.product.id)
         },
       },
@@ -68,7 +66,6 @@ function CartRow({ item }: { item: CartItem }) {
           <TouchableOpacity
             style={s.qtyBtn}
             onPress={() => {
-              Haptics.selectionAsync()
               updateQuantity(item.product.id, item.quantity - 1)
             }}
           >
@@ -79,7 +76,6 @@ function CartRow({ item }: { item: CartItem }) {
             style={s.qtyBtn}
             onPress={() => {
               if (item.quantity >= item.product.quantity) return
-              Haptics.selectionAsync()
               updateQuantity(item.product.id, item.quantity + 1)
             }}
           >

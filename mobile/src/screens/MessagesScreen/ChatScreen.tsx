@@ -4,7 +4,6 @@ import {
   KeyboardAvoidingView, Platform, Animated, Pressable, TouchableOpacity, Modal, StatusBar, AppState,
 } from 'react-native'
 import { Image } from 'expo-image'
-import * as Haptics from 'expo-haptics'
 import { Ionicons } from '@expo/vector-icons'
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { RouteProp, useNavigation, useRoute, useFocusEffect } from '@react-navigation/native'
@@ -262,7 +261,7 @@ function MessageBubble({ msg, mine, isFirst, isLast, myUserId, onLongPress, onRe
       <View style={[t.bubbleOuter, mine ? t.bubbleOuterMine : t.bubbleOuterTheirs]}>
 
         <Pressable
-          onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); onLongPress(msg) }}
+          onLongPress={() => { onLongPress(msg) }}
           delayLongPress={350}
           onPress={() => onReply(msg)}
         >
@@ -641,7 +640,6 @@ export default function ChatScreen() {
 
   // ── Send: optimistic → API → confirm ──────────────────────────────────────
   async function handleSendFile(fileUri: string, mimeType: string, fileName: string) {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     const tempId = `pending-file-${Date.now()}`
     const isImage = mimeType.startsWith('image/')
 
@@ -680,7 +678,6 @@ export default function ChatScreen() {
   }
 
   async function handleSendAudio(uri: string, durationMs: number) {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     const tempId   = `pending-audio-${Date.now()}`
     const fileName = `audio_${Date.now()}.m4a`
 
@@ -751,7 +748,6 @@ export default function ChatScreen() {
 
     const content = text.trim()
     if (!content) return
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
 
     const tempId   = `pending-${Date.now()}`
     const replyToId = replyingTo?.id
@@ -804,7 +800,6 @@ export default function ChatScreen() {
     if (!emojiTargetMsg) return
     const messageId = emojiTargetMsg.id
     setEmojiTargetMsg(null)
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     try {
       const result = await msgService.reactToMessage(messageId, emoji)
       setMessages((prev) => prev.map((m) => {
