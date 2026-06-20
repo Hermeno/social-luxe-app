@@ -236,9 +236,12 @@ export async function voteExtendPost(userId: string, postId: string) {
   // Create vote (unique constraint will throw if already voted)
   await prisma.postExtendVote.create({ data: { postId, userId } })
 
+  // Every vote immediately adds 1 hour
+  await extendLife(postId, 60)
+
   const voteCount = await prisma.postExtendVote.count({ where: { postId } })
 
-  // If 3 or more votes and post not yet extended, extend it
+  // At 3 votes: bonus 48h extension milestone
   if (voteCount >= 3 && !post.extended) {
     const newExpiresAt = new Date(Date.now() + POST_EXTENDED_HOURS * 60 * 60 * 1000)
     await prisma.post.update({
@@ -246,7 +249,6 @@ export async function voteExtendPost(userId: string, postId: string) {
       data: { extended: true, expiresAt: newExpiresAt },
     })
 
-    // Notify post owner
     await sendPush(
       post.userId,
       'Your post was extended!',

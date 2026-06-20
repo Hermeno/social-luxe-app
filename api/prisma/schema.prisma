@@ -109,6 +109,7 @@ model User {
   donationsGiven   Donation[]         @relation("DonorDonations")
   donationsReceived Donation[]        @relation("RequesterDonations")
   donationFeedbacks DonationFeedback[] @relation("FeedbackGiver")
+  postStickers     PostSticker[]
 }
 
 // ─── Post ────────────────────────────────────────────────────────────────────
@@ -129,6 +130,8 @@ model Post {
   partnerAccepted Boolean   @default(false)
   isAnnouncement  Boolean   @default(false)
 
+  stickersEnabled Boolean   @default(false)
+
   user        User             @relation(fields: [userId], references: [id])
   partnerUser User?            @relation("PostPartner", fields: [partnerUserId], references: [id])
   likes       Like[]
@@ -139,6 +142,24 @@ model Post {
   bookmarks   Bookmark[]
   extendVotes PostExtendVote[]
   coins       LuxeCoin[]
+  stickers    PostSticker[]
+}
+
+// ─── Post Stickers ───────────────────────────────────────────────────────────
+
+model PostSticker {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  emoji     String
+  x         Float
+  y         Float
+  createdAt DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
 }
 
 // ─── Friendship ───────────────────────────────────────────────────────────────
