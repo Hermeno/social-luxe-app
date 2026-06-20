@@ -23,6 +23,7 @@ export interface User {
   showDevice?: boolean
   statusLabel?: string | null
   isAdmin?: boolean
+  lastSeen?: string | null
 }
 
 export interface PostSticker {
@@ -52,7 +53,7 @@ export interface Post {
   partnerUser?: { id: string; name: string; avatar: string | null } | null
   isAnnouncement?: boolean
   stickersEnabled?: boolean
-  user: Pick<User, 'id' | 'name' | 'avatar' | 'viewsPublic' | 'showDevice' | 'statusLabel'>
+  user: Pick<User, 'id' | 'name' | 'avatar' | 'viewsPublic' | 'showDevice' | 'statusLabel' | 'lastSeen'>
   _count: { likes: number; comments: number; shares: number; views: number }
   recentCommenters?: Array<{ id: string; name: string; avatar: string | null }>
   stickers?: PostSticker[]

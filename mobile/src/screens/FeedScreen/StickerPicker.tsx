@@ -1,7 +1,7 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet, Modal,
-  TextInput, KeyboardAvoidingView, Platform,
+  TextInput, KeyboardAvoidingView, Platform, Animated, Pressable,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
@@ -44,17 +44,39 @@ interface Props {
 }
 
 export default function StickerPicker({ visible, onClose, onSelect }: Props) {
-  const { bottom } = useSafeAreaInsets()
+  const insets = useSafeAreaInsets()
   const [categoryIdx, setCategoryIdx] = useState(0)
   const [composingMsg, setComposingMsg] = useState(false)
   const [msgText, setMsgText] = useState('')
 
+  // Slide-down animation: starts off-screen above, springs into place
+  const slideAnim = useRef(new Animated.Value(-700)).current
+
+  useEffect(() => {
+    if (visible) {
+      slideAnim.setValue(-700)
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        speed: 16,
+        bounciness: 3,
+      }).start()
+    }
+  }, [visible])
+
   const cat = CATEGORIES[categoryIdx]
 
   function handleClose() {
-    setComposingMsg(false)
-    setMsgText('')
-    onClose()
+    // Slide back up then notify parent
+    Animated.timing(slideAnim, {
+      toValue: -700,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
+      setComposingMsg(false)
+      setMsgText('')
+      onClose()
+    })
   }
 
   function handleSendMessage() {
@@ -71,19 +93,25 @@ export default function StickerPicker({ visible, onClose, onSelect }: Props) {
   }
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
-      <TouchableOpacity style={s.backdrop} activeOpacity={1} onPress={handleClose} />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={[s.sheet, { paddingBottom: Math.max(bottom, 12) }]}>
+    <Modal visible={visible} transparent animationType="none" onRequestClose={handleClose}>
+      {/* Full-screen backdrop — tapping outside closes the picker */}
+      <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
 
-          {/* Handle + title */}
-          <View style={s.handle} />
+      {/* Sheet drops from top */}
+      <Animated.View
+        style={[s.sheet, { paddingTop: insets.top + 6, transform: [{ translateY: slideAnim }] }]}
+      >
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+
+          {/* Header row */}
           <View style={s.headerRow}>
             <Text style={s.title}>
               {composingMsg ? 'Escrever mensagem' : 'Adicionar sticker'}
             </Text>
-            <TouchableOpacity onPress={handleClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="close" size={22} color={colors.gray600} />
+            <TouchableOpacity onPress={handleClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <View style={s.closeBtn}>
+                <Ionicons name="close" size={18} color="#666" />
+              </View>
             </TouchableOpacity>
           </View>
 
@@ -120,7 +148,7 @@ export default function StickerPicker({ visible, onClose, onSelect }: Props) {
             </View>
           ) : (
             <>
-              {/* ── Mensagem special button ── */}
+              {/* ── Message special button ── */}
               <TouchableOpacity style={s.msgSpecialBtn} onPress={() => setComposingMsg(true)} activeOpacity={0.8}>
                 <Text style={s.msgSpecialIcon}>💌</Text>
                 <View style={s.msgSpecialTexts}>
@@ -178,37 +206,44 @@ export default function StickerPicker({ visible, onClose, onSelect }: Props) {
               </ScrollView>
             </>
           )}
-        </View>
-      </KeyboardAvoidingView>
+
+          {/* Drag indicator at the bottom */}
+          <View style={s.bottomHandle} />
+        </KeyboardAvoidingView>
+      </Animated.View>
     </Modal>
   )
 }
 
 const s = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
   sheet: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0,
     backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
     maxHeight: '72%',
-  },
-  handle: {
-    width: 38, height: 4, borderRadius: 2,
-    backgroundColor: '#DDDDE0',
-    alignSelf: 'center',
-    marginTop: 10, marginBottom: 6,
+    // Shadow below the sheet
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    elevation: 16,
   },
   headerRow: {
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingBottom: 10,
+    paddingHorizontal: 20,
+    paddingBottom: 12, paddingTop: 4,
   },
   title: { fontFamily: fonts.semiBold, fontSize: 16, color: '#111' },
+  closeBtn: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: '#F0F0F0',
+    alignItems: 'center', justifyContent: 'center',
+  },
 
-  // ── Message special button ─────────────────────────────────────────────────
+  // ── Message special button ────────────────────────────────────────────────
   msgSpecialBtn: {
     flexDirection: 'row', alignItems: 'center',
     marginHorizontal: 14, marginBottom: 10,
@@ -217,27 +252,27 @@ const s = StyleSheet.create({
     padding: 12, gap: 10,
     borderWidth: 1, borderColor: '#FFDDE6',
   },
-  msgSpecialIcon: { fontSize: 26 },
+  msgSpecialIcon:  { fontSize: 26 },
   msgSpecialTexts: { flex: 1 },
   msgSpecialTitle: { fontFamily: fonts.semiBold, fontSize: 14, color: '#1A1A1A' },
   msgSpecialSub:   { fontFamily: fonts.regular, fontSize: 11, color: colors.gray600, marginTop: 1 },
 
-  // ── Category tabs ──────────────────────────────────────────────────────────
-  catScroll:   { flexGrow: 0 },
-  catContent:  { paddingHorizontal: 14, gap: 6, paddingBottom: 10 },
+  // ── Category tabs ─────────────────────────────────────────────────────────
+  catScroll:      { flexGrow: 0 },
+  catContent:     { paddingHorizontal: 14, gap: 6, paddingBottom: 10 },
   catTab: {
     alignItems: 'center', gap: 3,
     paddingHorizontal: 10, paddingVertical: 6,
     borderRadius: 12,
     backgroundColor: '#F4F4F6',
   },
-  catTabActive: { backgroundColor: colors.primary + '18' },
-  catTabGift:   { backgroundColor: '#FFF8E7' },
-  catIcon:      { fontSize: 18 },
-  catLabel:     { fontFamily: fonts.medium, fontSize: 10, color: colors.gray600 },
+  catTabActive:   { backgroundColor: colors.primary + '18' },
+  catTabGift:     { backgroundColor: '#FFF8E7' },
+  catIcon:        { fontSize: 18 },
+  catLabel:       { fontFamily: fonts.medium, fontSize: 10, color: colors.gray600 },
   catLabelActive: { color: colors.primary },
 
-  // ── Gift / explosion banner ────────────────────────────────────────────────
+  // ── Gift / explosion banner ───────────────────────────────────────────────
   giftBanner: {
     marginHorizontal: 14, marginBottom: 6,
     backgroundColor: '#FFFBEB',
@@ -258,10 +293,18 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  emoji: { fontSize: 28 },
+  emoji: { fontSize: 30 },
+
+  // ── Bottom handle ─────────────────────────────────────────────────────────
+  bottomHandle: {
+    width: 38, height: 4, borderRadius: 2,
+    backgroundColor: '#DDDDE0',
+    alignSelf: 'center',
+    marginVertical: 10,
+  },
 
   // ── Message compose ───────────────────────────────────────────────────────
-  composeWrap: { paddingHorizontal: 16, paddingBottom: 8 },
+  composeWrap:  { paddingHorizontal: 16, paddingBottom: 8 },
   msgHint: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     backgroundColor: '#F0F4FF', borderRadius: 12,
@@ -290,5 +333,5 @@ const s = StyleSheet.create({
     backgroundColor: colors.primary, alignItems: 'center',
   },
   sendBtnDisabled: { opacity: 0.45 },
-  sendBtnTxt: { fontFamily: fonts.semiBold, fontSize: 14, color: '#fff' },
+  sendBtnTxt:     { fontFamily: fonts.semiBold, fontSize: 14, color: '#fff' },
 })

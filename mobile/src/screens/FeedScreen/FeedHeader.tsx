@@ -7,7 +7,6 @@ import {
   ScrollView,
   StyleSheet,
 } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { Search } from 'lucide-react-native'
@@ -21,11 +20,14 @@ export interface FeedUserGroup {
   posts: Post[]
 }
 
-const BUBBLE_SIZE = 64
+const BUBBLE_SIZE   = 64
+const AV_SIZE       = 44   // avatar size in the header bar
+const ONLINE_THRESH = 5 * 60 * 1000  // 5 minutes
 
-const MAX_STACK  = 6
-const AV_SIZE    = 30
-const AV_OVERLAP = 10
+function isOnline(lastSeen?: string | null): boolean {
+  if (!lastSeen) return false
+  return Date.now() - new Date(lastSeen).getTime() < ONLINE_THRESH
+}
 
 export interface FeedHeaderProps {
   filteredGroups:  FeedUserGroup[]
@@ -135,62 +137,50 @@ export default memo(function FeedHeader({
   }
 
   /* ── Normal bar ────────────────────────────────────────────────────────────── */
-  const newUsers = filteredGroups
-    .filter((g) => !g.posts.every((p) => viewedIds.has(p.id)))
-    .slice(0, MAX_STACK)
-
-  const stackW = newUsers.length > 0
-    ? AV_SIZE + (newUsers.length - 1) * (AV_SIZE - AV_OVERLAP)
-    : 0
-
   return (
     <View style={[s.wrapper, { paddingTop: top }]} pointerEvents="box-none">
       <View style={s.bar}>
 
-        {/* Left — create + new post user avatars */}
-        <View style={s.leftGroup}>
-          <TouchableOpacity onPress={onCreatePress} activeOpacity={0.7}>
-            <LinearGradient
-              colors={['rgba(8,8,40,0.10)', 'rgba(16,16,64,0.12)']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={s.createBtn}
-            >
-              <Ionicons name="add" size={26} color="rgba(255,255,255,0.92)" />
-            </LinearGradient>
+        {/* Left — fixed: create + search */}
+        <View style={s.leftButtons}>
+          <TouchableOpacity onPress={onCreatePress} activeOpacity={0.7} style={s.iconBtn}>
+            <Ionicons name="add" size={26} color="rgba(255,255,255,0.92)" />
           </TouchableOpacity>
-
-          {newUsers.length > 0 && (
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={onSearchPress}
-              style={[s.stackWrap, { width: stackW }]}
-            >
-              {newUsers.map((g, i) => (
-                <View
-                  key={g.user.id}
-                  style={[s.stackAvatar, { left: i * (AV_SIZE - AV_OVERLAP), zIndex: MAX_STACK - i }]}
-                >
-                  <AvatarImage uri={g.user.avatar} size={AV_SIZE} borderWidth={0} borderColor="transparent" />
-                </View>
-              ))}
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity onPress={onSearchPress} activeOpacity={0.7} style={s.iconBtn}>
+            <Search size={22} strokeWidth={2} color="rgba(255,255,255,0.92)" />
+          </TouchableOpacity>
         </View>
 
-        <View style={s.spacer} />
-
-        {/* Right — search */}
-        <TouchableOpacity onPress={onSearchPress} activeOpacity={0.7}>
-          <LinearGradient
-            colors={['rgba(8,8,40,0.10)', 'rgba(16,16,64,0.12)']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={s.searchBtn}
-          >
-            <Search size={26} strokeWidth={2} color="rgba(255,255,255,0.92)" />
-          </LinearGradient>
-        </TouchableOpacity>
+        {/* Scrollable user avatars — all users with posts */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={s.avatarScroll}
+          contentContainerStyle={s.avatarContent}
+        >
+          {filteredGroups.map((g) => {
+            const allViewed = g.posts.every((p) => viewedIds.has(p.id))
+            const isActive  = g.user.id === activeUserId
+            const online    = isOnline(g.user.lastSeen)
+            return (
+              <TouchableOpacity
+                key={g.user.id}
+                style={s.avatarItem}
+                onPress={() => onBubblePress(g)}
+                activeOpacity={0.78}
+              >
+                <View style={[
+                  s.avatarRing,
+                  allViewed  && s.avatarRingViewed,
+                  isActive   && s.avatarRingActive,
+                ]}>
+                  <AvatarImage uri={g.user.avatar} size={AV_SIZE} borderWidth={0} borderColor="transparent" />
+                </View>
+                {online && <View style={s.onlineDot} />}
+              </TouchableOpacity>
+            )
+          })}
+        </ScrollView>
 
       </View>
     </View>
@@ -208,35 +198,49 @@ const s = StyleSheet.create({
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+    paddingLeft: 14,
+    paddingVertical: 8,
   },
-  createBtn: {
-    width: 38, height: 38, borderRadius: 19,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  leftGroup: {
+  leftButtons: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 4,
   },
-  stackWrap: {
-    height: AV_SIZE,
-    position: 'relative',
-  },
-  stackAvatar: {
-    position: 'absolute',
-    top: 0,
-    width: AV_SIZE,
-    height: AV_SIZE,
-    borderRadius: AV_SIZE / 2,
-    overflow: 'hidden',
-  },
-  spacer: { flex: 1 },
-  searchBtn: {
-    width: 38, height: 38, borderRadius: 19,
+  iconBtn: {
+    width: 36, height: 36, borderRadius: 18,
     alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.28)',
+  },
+  avatarScroll: { flex: 1 },
+  avatarContent: {
+    paddingLeft: 10,
+    paddingRight: 14,
+    gap: 8,
+    alignItems: 'center',
+  },
+  avatarItem: { alignItems: 'center' },
+  avatarRing: {
+    borderRadius: (AV_SIZE + 6) / 2,
+    borderWidth: 2.5,
+    // Palette: #FF6766 (soft red) for users with new posts
+    borderColor: '#FF6766',
+    padding: 2,
+  },
+  // All posts viewed → faint border
+  avatarRingViewed: { borderColor: 'rgba(255,255,255,0.20)' },
+  // Currently active → #FFB173 (orange from palette)
+  avatarRingActive: { borderColor: '#FFB173' },
+  onlineDot: {
+    position: 'absolute',
+    bottom: 1,
+    right: 1,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    // #CA2851 (primary red from palette) as online color
+    backgroundColor: '#4CD964',
+    borderWidth: 1.5,
+    borderColor: '#000',
   },
 
   /* ── Search panel ──────────────────────────────────────────────────────────── */

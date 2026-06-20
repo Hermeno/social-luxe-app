@@ -140,10 +140,13 @@ async function attachRecentCommenters(posts: any[], userId?: string): Promise<an
 }
 
 export async function getFeed(userId: string, page = 1, limit = 10) {
+  // Touch lastSeen so other users can see this user is online (fire-and-forget)
+  prisma.user.update({ where: { id: userId }, data: { lastSeen: new Date() } }).catch(() => {})
+
   const now = new Date()
   const baseWhere = { deletedAt: null, expiresAt: { gt: now } }
   const include = {
-    user:        { select: { id: true, name: true, avatar: true, viewsPublic: true, isAdmin: true, showDevice: true, statusLabel: true } },
+    user:        { select: { id: true, name: true, avatar: true, viewsPublic: true, isAdmin: true, showDevice: true, statusLabel: true, lastSeen: true } },
     partnerUser: { select: { id: true, name: true, avatar: true } },
     _count:      { select: { likes: true, comments: true, shares: true, views: true } },
   }
