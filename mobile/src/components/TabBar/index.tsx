@@ -4,7 +4,6 @@ import { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Search, Home, MessageCircle, User, Squircle } from 'lucide-react-native'
 import { colors, fonts } from '../../theme'
-import { useMessageBadgeStore } from '../../store/messageBadge.store'
 import { useFeedStore } from '../../store/feed.store'
 import { useAuthStore } from '../../store/auth.store'
 
@@ -61,7 +60,7 @@ function MessageBadge({ count, iconColor }: { count: number; iconColor: string }
 
 export default function TabBar({ state, navigation }: BottomTabBarProps) {
   const { bottom }    = useSafeAreaInsets()
-  const messageBadge  = useMessageBadgeStore((s) => s.totalUnread)
+  const newPostsCount = useFeedStore((s) => s.newPostsCount)
   const openSearch    = useFeedStore((s) => s.openSearch)
   const setOpenSearch = useFeedStore((s) => s.setOpenSearch)
   const avatar        = useAuthStore((s) => s.user?.avatar ?? null)
@@ -102,8 +101,9 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
           />
         </TouchableOpacity>
 
-        {/* Home → Feed */}
+        {/* Home → Feed — badge shows unread post count */}
         <TouchableOpacity style={s.btn} onPress={() => goTo('Feed')} activeOpacity={0.7}>
+          <MessageBadge count={newPostsCount} iconColor={iconInactv} />
           <Home
             size={SZ}
             strokeWidth={homeActive ? 2.5 : 2}
@@ -112,9 +112,8 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
           />
         </TouchableOpacity>
 
-        {/* Messages — badge tooltip above, centered */}
+        {/* Messages */}
         <TouchableOpacity style={s.btn} onPress={() => goTo('Messages')} activeOpacity={0.7}>
-          <MessageBadge count={messageBadge} iconColor={iconInactv} />
           <View style={s.mirrorX}>
             <MessageCircle
               size={SZ}
@@ -177,7 +176,7 @@ const s = StyleSheet.create({
   // Badge — positioned above the icon, centered on the btn
   badgeAnchor: {
     position: 'absolute',
-    top: -24,
+    top: -18,
     left: 0, right: 0,
     alignItems: 'center',
   },

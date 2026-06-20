@@ -1,5 +1,5 @@
 import { api, uploadApi } from './api'
-import { ApiResponse, Post, Comment } from '../types'
+import { ApiResponse, Post, Comment, PostSticker } from '../types'
 
 export async function getFeed(page = 1): Promise<Post[]> {
   const res = await api.get<ApiResponse<Post[]>>(`/posts/feed?page=${page}`)
@@ -14,9 +14,10 @@ export async function createPost(
   partnerUserId?: string,
   isAnnouncement?: boolean,
   deviceModel?: string,
+  stickersEnabled?: boolean,
 ) {
   if (mediaType === 'TEXT') {
-    const res = await api.post<ApiResponse<Post>>('/posts', { caption, bgColor, partnerUserId, isAnnouncement, deviceModel })
+    const res = await api.post<ApiResponse<Post>>('/posts', { caption, bgColor, partnerUserId, isAnnouncement, deviceModel, stickersEnabled })
     return res.data.data
   }
 
@@ -24,14 +25,29 @@ export async function createPost(
   const filename = mediaUri!.split('/').pop() ?? 'media'
   const type = mediaType === 'VIDEO' ? 'video/mp4' : 'image/jpeg'
   form.append('media', { uri: mediaUri, name: filename, type } as unknown as Blob)
-  if (caption)        form.append('caption', caption)
-  if (partnerUserId)  form.append('partnerUserId', partnerUserId)
-  if (isAnnouncement) form.append('isAnnouncement', 'true')
-  if (deviceModel)    form.append('deviceModel', deviceModel)
+  if (caption)          form.append('caption', caption)
+  if (partnerUserId)    form.append('partnerUserId', partnerUserId)
+  if (isAnnouncement)   form.append('isAnnouncement', 'true')
+  if (deviceModel)      form.append('deviceModel', deviceModel)
+  if (stickersEnabled)  form.append('stickersEnabled', 'true')
   const res = await uploadApi.post<ApiResponse<Post>>('/posts', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
   return res.data.data
+}
+
+export async function getStickers(postId: string): Promise<PostSticker[]> {
+  const res = await api.get<ApiResponse<PostSticker[]>>(`/posts/${postId}/stickers`)
+  return res.data.data
+}
+
+export async function addSticker(postId: string, emoji: string, x: number, y: number, type = 'emoji', content?: string): Promise<PostSticker> {
+  const res = await api.post<ApiResponse<PostSticker>>(`/posts/${postId}/stickers`, { emoji, x, y, type, content })
+  return res.data.data
+}
+
+export async function removeSticker(postId: string, stickerId: string): Promise<void> {
+  await api.delete(`/posts/${postId}/stickers/${stickerId}`)
 }
 
 export async function getPartnerPostInvites(): Promise<Post[]> {
@@ -74,8 +90,8 @@ export async function updatePost(postId: string, caption: string) {
   await api.patch(`/posts/${postId}`, { caption })
 }
 
-export async function voteExtend(postId: string): Promise<{ votes: number; extended: boolean }> {
-  const res = await api.post<ApiResponse<{ votes: number; extended: boolean }>>(`/posts/${postId}/vote-extend`)
+export async function voteExtend(postId: string): Promise<{ voted: boolean }> {
+  const res = await api.post<ApiResponse<{ voted: boolean }>>(`/posts/${postId}/vote-extend`)
   return res.data.data
 }
 

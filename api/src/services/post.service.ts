@@ -50,43 +50,53 @@ export async function getStickers(postId: string) {
   })
 }
 
-export async function addSticker(userId: string, postId: string, emoji: string, x: number, y: number) {
+const STICKER_LIMIT = 50
+
+export async function addSticker(userId: string, postId: string, emoji: string, x: number, y: number, type = 'emoji', content?: string) {
   const post = await prisma.post.findUnique({ where: { id: postId }, select: { stickersEnabled: true } })
   if (!post?.stickersEnabled) throw new Error('Stickers not enabled for this post')
+  const count = await prisma.postSticker.count({ where: { postId } })
+  if (count >= STICKER_LIMIT) throw new Error('Sticker limit reached')
   return prisma.postSticker.create({
-    data:    { postId, userId, emoji, x, y },
+    data:    { postId, userId, emoji, x, y, type, content: content ?? null },
     include: { user: { select: { id: true, name: true, avatar: true } } },
   })
 }
 
 export async function removeSticker(userId: string, stickerId: string) {
-  const sticker = await prisma.postSticker.findUnique({ where: { id: stickerId } })
+  const sticker = await prisma.postSticker.findUnique({
+    where:   { id: stickerId },
+    include: { post: { select: { userId: true } } },
+  })
   if (!sticker) throw new Error('Not found')
-  if (sticker.userId !== userId) throw new Error('Not authorized')
+  // Only the sticker's creator or the post owner may delete
+  if (sticker.userId !== userId && sticker.post.userId !== userId) throw new Error('Not authorized')
   await prisma.postSticker.delete({ where: { id: stickerId } })
 }
 
 // ─── Feed meta helpers ────────────────────────────────────────────────────────
 
-// Fetch up to 4 unique non-author commenters per post in a single DB query.
-// This is called once per feed load — O(1) queries regardless of post count.
-async function attachRecentCommenters(posts: any[]): Promise<any[]> {
-  const postIds = posts.filter((p) => p._count.comments > 0).map((p) => p.id)
-  if (postIds.length === 0) return posts.map((p) => ({ ...p, recentCommenters: [] }))
+// Fetch up to 4 unique non-author commenters, stickers, and the caller's vote
+// status for each post — all in O(1) round-trips regardless of post count.
+async function attachRecentCommenters(posts: any[], userId?: string): Promise<any[]> {
+  const allPostIds      = posts.map((p) => p.id)
+  const commentPostIds  = posts.filter((p) => p._count.comments > 0).map((p) => p.id)
 
-  const comments = await prisma.comment.findMany({
-    where:   { postId: { in: postIds }, parentId: null },
-    select:  { postId: true, userId: true, user: { select: { id: true, name: true, avatar: true } } },
-    orderBy: { createdAt: 'desc' },
-  })
-
-  const byPost = new Map<string, typeof comments>()
-  for (const c of comments) {
-    if (!byPost.has(c.postId)) byPost.set(c.postId, [])
-    byPost.get(c.postId)!.push(c)
+  // ── Comments ────────────────────────────────────────────────────────────────
+  const byPost = new Map<string, any[]>()
+  if (commentPostIds.length > 0) {
+    const comments = await prisma.comment.findMany({
+      where:   { postId: { in: commentPostIds }, parentId: null },
+      select:  { postId: true, userId: true, user: { select: { id: true, name: true, avatar: true } } },
+      orderBy: { createdAt: 'desc' },
+    })
+    for (const c of comments) {
+      if (!byPost.has(c.postId)) byPost.set(c.postId, [])
+      byPost.get(c.postId)!.push(c)
+    }
   }
 
-  // Fetch stickers for all posts with stickersEnabled in one query
+  // ── Stickers ────────────────────────────────────────────────────────────────
   const stickerEnabledIds = posts.filter((p) => p.stickersEnabled).map((p) => p.id)
   const allStickers = stickerEnabledIds.length > 0
     ? await prisma.postSticker.findMany({
@@ -101,6 +111,16 @@ async function attachRecentCommenters(posts: any[]): Promise<any[]> {
     stickersByPost.get(s.postId)!.push(s)
   }
 
+  // ── Vote extend ─────────────────────────────────────────────────────────────
+  const votedPostIds = new Set<string>()
+  if (userId && allPostIds.length > 0) {
+    const votes = await prisma.postExtendVote.findMany({
+      where:  { userId, postId: { in: allPostIds } },
+      select: { postId: true },
+    })
+    votes.forEach((v) => votedPostIds.add(v.postId))
+  }
+
   return posts.map((p) => {
     const seen = new Set<string>([p.userId])
     const recentCommenters: Array<{ id: string; name: string; avatar: string | null }> = []
@@ -110,7 +130,12 @@ async function attachRecentCommenters(posts: any[]): Promise<any[]> {
       recentCommenters.push(c.user)
       if (recentCommenters.length >= 4) break
     }
-    return { ...p, recentCommenters, stickers: stickersByPost.get(p.id) ?? [] }
+    return {
+      ...p,
+      recentCommenters,
+      stickers: stickersByPost.get(p.id) ?? [],
+      hasVotedExtend: votedPostIds.has(p.id),
+    }
   })
 }
 
@@ -159,7 +184,7 @@ export async function getFeed(userId: string, page = 1, limit = 10) {
       skip: (page - 1) * limit,
       take: limit,
     })
-    return attachRecentCommenters(withThumbnails(posts))
+    return attachRecentCommenters(withThumbnails(posts), userId)
   }
 
   // New user: show posts from people within 40 km (or all if no location)
@@ -194,7 +219,7 @@ export async function getFeed(userId: string, page = 1, limit = 10) {
         skip: (page - 1) * limit,
         take: limit,
       })
-      return attachRecentCommenters(withThumbnails(posts))
+      return attachRecentCommenters(withThumbnails(posts), userId)
     }
   }
 
@@ -206,7 +231,7 @@ export async function getFeed(userId: string, page = 1, limit = 10) {
     skip: (page - 1) * limit,
     take: limit,
   })
-  return attachRecentCommenters(withThumbnails(posts))
+  return attachRecentCommenters(withThumbnails(posts), userId)
 }
 
 // Extend a post's expiry by `minutes`. Announcements are never touched.
@@ -274,34 +299,31 @@ export async function sharePost(userId: string, postId: string) {
 }
 
 export async function voteExtendPost(userId: string, postId: string) {
-  const post = await prisma.post.findUnique({ where: { id: postId } })
+  const post = await prisma.post.findUnique({ where: { id: postId }, select: { isAnnouncement: true, deletedAt: true } })
   if (!post || post.deletedAt) throw new Error('Post not found')
+  if (post.isAnnouncement) throw new Error('Cannot vote on announcements')
 
-  // Create vote (unique constraint will throw if already voted)
-  await prisma.postExtendVote.create({ data: { postId, userId } })
+  const existing = await prisma.postExtendVote.findUnique({
+    where: { postId_userId: { postId, userId } },
+  })
 
-  // Every vote immediately adds 1 hour
-  await extendLife(postId, 60)
-
-  const voteCount = await prisma.postExtendVote.count({ where: { postId } })
-
-  // At 3 votes: bonus 48h extension milestone
-  if (voteCount >= 3 && !post.extended) {
-    const newExpiresAt = new Date(Date.now() + POST_EXTENDED_HOURS * 60 * 60 * 1000)
-    await prisma.post.update({
-      where: { id: postId },
-      data: { extended: true, expiresAt: newExpiresAt },
-    })
-
-    await sendPush(
-      post.userId,
-      'Your post was extended!',
-      'The community voted to keep your post alive for 48 more hours.',
-      { postId },
-    )
+  if (existing) {
+    // Un-vote: remove vote and subtract 10 minutes
+    await prisma.postExtendVote.delete({ where: { postId_userId: { postId, userId } } })
+    const current = await prisma.post.findUnique({ where: { id: postId }, select: { expiresAt: true } })
+    if (current) {
+      await prisma.post.update({
+        where: { id: postId },
+        data: { expiresAt: new Date(current.expiresAt.getTime() - 10 * 60_000) },
+      })
+    }
+    return { voted: false }
   }
 
-  return { voteCount }
+  // Vote: add 10 minutes
+  await prisma.postExtendVote.create({ data: { postId, userId } })
+  await extendLife(postId, 10)
+  return { voted: true }
 }
 
 export async function getExtendVotes(postId: string) {

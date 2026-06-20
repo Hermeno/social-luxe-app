@@ -25,6 +25,16 @@ export interface User {
   isAdmin?: boolean
 }
 
+export interface PostSticker {
+  id: string
+  type: 'emoji' | 'message' | 'gift'
+  emoji: string
+  content?: string
+  x: number
+  y: number
+  user: Pick<User, 'id' | 'name' | 'avatar'>
+}
+
 export interface Post {
   id: string
   userId: string
@@ -41,8 +51,12 @@ export interface Post {
   partnerAccepted?: boolean
   partnerUser?: { id: string; name: string; avatar: string | null } | null
   isAnnouncement?: boolean
+  stickersEnabled?: boolean
   user: Pick<User, 'id' | 'name' | 'avatar' | 'viewsPublic' | 'showDevice' | 'statusLabel'>
   _count: { likes: number; comments: number; shares: number; views: number }
+  recentCommenters?: Array<{ id: string; name: string; avatar: string | null }>
+  stickers?: PostSticker[]
+  hasVotedExtend?: boolean
 }
 
 export interface Comment {

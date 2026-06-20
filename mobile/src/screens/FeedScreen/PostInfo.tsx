@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useMemo } from 'react'
 import {
   Animated, View, Text, TouchableOpacity, StyleSheet, Image,
 } from 'react-native'
@@ -13,7 +13,7 @@ import { colors, fonts } from '../../theme'
 import { useT } from '../../i18n'
 import { useAuthStore } from '../../store/auth.store'
 import { toggleFollow, getFollowStatus } from '../../services/follow.service'
-import { getCache } from '../../db/database'
+import { getCache, setCache } from '../../db/database'
 import * as postService from '../../services/post.service'
 import { API_BASE } from '../../config'
 import AvatarImage from '../../components/AvatarImage'
@@ -115,13 +115,18 @@ function HourglassIcon({ pct, color }: { pct: number; color: string }) {
 interface Props {
   post: Post
   isActive: boolean
+  commentCount?: number
   onExpired?: () => void
+  voted?: boolean
+  extraMs?: number
+  voteLoading?: boolean
+  onVoteToggle?: () => void
 }
 
 // Height of tab bar above the device safe-area bottom (paddingTop + icon row)
 const TAB_BAR_ABOVE_SAFE = 42
 
-export default function PostInfo({ post, isActive, onExpired }: Props) {
+export default function PostInfo({ post, isActive, commentCount: commentCountProp, onExpired, voted = false, extraMs: extraMsProp = 0, voteLoading = false, onVoteToggle }: Props) {
   const { bottom: safeBottom } = useSafeAreaInsets()
   const tabOffset = TAB_BAR_ABOVE_SAFE + Math.max(safeBottom, 8)
   const { user }    = useAuthStore()
@@ -131,7 +136,13 @@ export default function PostInfo({ post, isActive, onExpired }: Props) {
   const [following, setFollowing]         = useState(() => followCache.get(post.user.id) ?? false)
   const [loadingFollow, setLoadingFollow] = useState(false)
   const [now, setNow]                     = useState(Date.now)
-  const [commenters, setCommenters]       = useState<CommenterThumb[]>([])
+  const [extraCommenters, setExtraCommenters] = useState<CommenterThumb[]>([])
+
+  // Vote animation refs
+  const hourglassScale = useRef(new Animated.Value(1)).current
+  const floatY         = useRef(new Animated.Value(0)).current
+  const floatOpacity   = useRef(new Animated.Value(0)).current
+  const voteDirectionRef = useRef<'+' | '-'>('+')  // direction of last tap
 
   const caption   = post.caption ?? ''
   const isLong    = caption.length > 80
@@ -139,7 +150,6 @@ export default function PostInfo({ post, isActive, onExpired }: Props) {
   const isSelf    = user?.id === post.user.id
 
   // Animated values
-  const slideAnim  = useRef(new Animated.Value(10)).current
   const pulseAnim  = useRef(new Animated.Value(1)).current
 
   // Warm the follow cache from SQLite on first mount — runs once per session.
@@ -174,42 +184,35 @@ export default function PostInfo({ post, isActive, onExpired }: Props) {
     return () => clearTimeout(id)
   }, [post.id])
 
-  // Slide-in when post becomes active
-  useEffect(() => {
-    if (isActive) {
-      slideAnim.setValue(10)
-      Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, speed: 28, bounciness: 3 }).start()
-    }
-  }, [isActive])
-
   // Reset state on post change
   useEffect(() => {
     setExpanded(false)
     setFollowing(followCache.get(post.user.id) ?? false)
-    setCommenters([])
+    setExtraCommenters([])
   }, [post.id])
 
-  // Carrega avatares dos comentadores — cache SQLite primeiro, API em background
+  // Load extra commenters only when recentCommenters is absent (old cached posts)
   useEffect(() => {
     if (post._count.comments === 0) return
+    if (post.recentCommenters && post.recentCommenters.length > 0) return
     let cancelled = false
 
     async function load() {
-      // 1. Cache instantâneo (populado quando CommentSheet abre)
+      // SQLite generic cache (populated when CommentSheet opens)
       const cached = await getCache<Array<{ user: CommenterThumb }>>(`comments:${post.id}`)
         .catch(() => null)
       if (!cancelled && cached && cached.length > 0) {
-        setCommenters(uniqueCommenters(cached, post))
+        setExtraCommenters(uniqueCommenters(cached, post))
+        return
       }
-      // 2. Se sem cache, busca silenciosamente em background
-      if (!cached || cached.length === 0) {
-        try {
-          const fresh = await postService.getComments(post.id)
-          if (!cancelled && fresh.length > 0) {
-            setCommenters(uniqueCommenters(fresh as any, post))
-          }
-        } catch {}
-      }
+      // Fallback: fetch from API and save to cache for next time
+      try {
+        const fresh = await postService.getComments(post.id)
+        if (fresh.length > 0) {
+          setCache(`comments:${post.id}`, fresh).catch(() => {})
+          if (!cancelled) setExtraCommenters(uniqueCommenters(fresh as any, post))
+        }
+      } catch {}
     }
 
     load()
@@ -239,8 +242,15 @@ export default function PostInfo({ post, isActive, onExpired }: Props) {
     setLoadingFollow(false)
   }
 
+  // Prefer recentCommenters from the feed response (cached with post, works offline).
+  // Fall back to extraCommenters fetched separately for old cached posts.
+  const commenters = useMemo<CommenterThumb[]>(() => {
+    if (post.recentCommenters && post.recentCommenters.length > 0) return post.recentCommenters
+    return extraCommenters
+  }, [post.recentCommenters, extraCommenters])
+
   // ── Energy calculations ─────────────────────────────────────────────────────
-  const expiresMs   = post.expiresAt ? new Date(post.expiresAt).getTime() : 0
+  const expiresMs   = (post.expiresAt ? new Date(post.expiresAt).getTime() : 0) + extraMsProp
   const remainingMs = Math.max(0, expiresMs - now)
   const energyPct   = Math.min(100, (remainingMs / FULL_LIFE_MS) * 100)
   const isDying     = remainingMs > 0 && remainingMs < DYING_THRESH
@@ -269,9 +279,32 @@ export default function PostInfo({ post, isActive, onExpired }: Props) {
 
   const clockColor = isDying ? '#FF3B30' : 'rgba(255,255,255,0.65)'
 
+  function handleVoteExtend() {
+    if (voteLoading || post.isAnnouncement) return
+    voteDirectionRef.current = voted ? '-' : '+'
+
+    // Hourglass pulse
+    Animated.sequence([
+      Animated.spring(hourglassScale, { toValue: 1.6, useNativeDriver: true, speed: 60, bounciness: 14 }),
+      Animated.spring(hourglassScale, { toValue: 1,   useNativeDriver: true, speed: 25, bounciness: 8 }),
+    ]).start()
+
+    // Floating label rises and fades
+    floatY.setValue(0)
+    floatOpacity.setValue(1)
+    Animated.parallel([
+      Animated.timing(floatY,       { toValue: -52, duration: 900, useNativeDriver: true }),
+      Animated.sequence([
+        Animated.delay(350),
+        Animated.timing(floatOpacity, { toValue: 0, duration: 550, useNativeDriver: true }),
+      ]),
+    ]).start()
+
+    onVoteToggle?.()
+  }
+
   return (
-    <>
-      <Animated.View style={[s.container, { bottom: 16 + tabOffset, transform: [{ translateY: slideAnim }] }]}>
+    <View style={[s.container, { bottom: 16 + tabOffset }]}>
 
         {/* Avatar(s) + Name + follow */}
         <View style={s.userRow}>
@@ -343,9 +376,12 @@ export default function PostInfo({ post, isActive, onExpired }: Props) {
               )
             })}
             <Text style={s.commentersLabel}>
-              {post._count.comments > 1
-                ? `+${post._count.comments - 1} comentário${post._count.comments > 2 ? 's' : ''}`
-                : 'comentou'}
+              {(() => {
+                const total = commentCountProp ?? post._count.comments
+                return total > 1
+                  ? `+${total - 1} comentário${total > 2 ? 's' : ''}`
+                  : 'comentou'
+              })()}
             </Text>
           </View>
         )}
@@ -363,10 +399,24 @@ export default function PostInfo({ post, isActive, onExpired }: Props) {
         {/* Timer + device badge */}
         {!post.isAnnouncement && (
           <View style={s.timerRow}>
-            <Animated.View style={{ opacity: isDying ? pulseAnim : 1 }}>
-              <HourglassIcon pct={energyPct} color={clockColor} />
-            </Animated.View>
-            <Text style={[s.timer, isDying && s.timerDying]}> {timeLeft()}</Text>
+            <View style={s.timerTapWrap}>
+              <TouchableOpacity
+                onPress={handleVoteExtend}
+                activeOpacity={0.7}
+                style={s.timerTap}
+                disabled={voteLoading}
+              >
+                <Animated.View style={[{ opacity: isDying ? pulseAnim : 1 }, { transform: [{ scale: hourglassScale }] }]}>
+                  <HourglassIcon pct={energyPct} color={clockColor} />
+                </Animated.View>
+                <Text style={[s.timer, isDying && s.timerDying]}> {timeLeft()}</Text>
+              </TouchableOpacity>
+
+              {/* Floating +10min / -10min label */}
+              <Animated.Text style={[s.floatLabel, { transform: [{ translateY: floatY }], opacity: floatOpacity, color: voteDirectionRef.current === '+' ? '#4CD964' : '#FF6766' }]}>
+                {voteDirectionRef.current === '+' ? '+10min' : '-10min'}
+              </Animated.Text>
+            </View>
 
             {post.user.showDevice && (
               <LinearGradient
@@ -382,8 +432,7 @@ export default function PostInfo({ post, isActive, onExpired }: Props) {
         )}
 
 
-      </Animated.View>
-    </>
+    </View>
   )
 }
 
@@ -424,9 +473,23 @@ const s = StyleSheet.create({
   caption:    { color: 'rgba(255,255,255,0.88)', fontFamily: fonts.regular, fontSize: 13, lineHeight: 19 },
   seeMore:    { color: 'rgba(255,255,255,0.50)', fontFamily: fonts.medium },
 
-  timerRow:   { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  timer:      { color: 'rgba(255,255,255,0.65)', fontFamily: fonts.medium, fontSize: 12, letterSpacing: 0.1 },
-  timerDying: { color: '#FF3B30' },
+  timerRow:     { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  timerTapWrap: { position: 'relative' },
+  timerTap:     { flexDirection: 'row', alignItems: 'center' },
+  timer:        { color: 'rgba(255,255,255,0.65)', fontFamily: fonts.medium, fontSize: 12, letterSpacing: 0.1 },
+  timerDying:   { color: '#FF3B30' },
+  floatLabel: {
+    position: 'absolute',
+    left: 0,
+    bottom: 0,
+    color: '#4CD964',
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    letterSpacing: 0.3,
+    textShadowColor: 'rgba(0,0,0,0.4)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
 
   // ── Commenter avatars ────────────────────────────────────────────────────────
   commentersRow: {

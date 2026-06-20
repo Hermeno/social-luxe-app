@@ -244,9 +244,9 @@ export async function getStickers(req: AuthRequest, res: Response) {
 
 export async function addSticker(req: AuthRequest, res: Response) {
   try {
-    const { emoji, x, y } = req.body
+    const { emoji, x, y, type, content } = req.body
     if (!emoji || x === undefined || y === undefined) return badRequest(res, 'emoji, x, y required')
-    const sticker = await postService.addSticker(req.user!.userId, req.params.id, emoji, Number(x), Number(y))
+    const sticker = await postService.addSticker(req.user!.userId, req.params.id, emoji, Number(x), Number(y), type, content)
     return created(res, sticker)
   } catch (err) { return handleError(res, err) }
 }

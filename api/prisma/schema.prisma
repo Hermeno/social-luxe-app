@@ -151,7 +151,9 @@ model PostSticker {
   id        String   @id @default(cuid())
   postId    String
   userId    String
+  type      String   @default("emoji")
   emoji     String
+  content   String?
   x         Float
   y         Float
   createdAt DateTime @default(now())

@@ -23,6 +23,10 @@ export interface FeedUserGroup {
 
 const BUBBLE_SIZE = 64
 
+const MAX_STACK  = 6
+const AV_SIZE    = 30
+const AV_OVERLAP = 10
+
 export interface FeedHeaderProps {
   filteredGroups:  FeedUserGroup[]
   viewedIds:       Set<string>
@@ -131,21 +135,48 @@ export default memo(function FeedHeader({
   }
 
   /* ── Normal bar ────────────────────────────────────────────────────────────── */
+  const newUsers = filteredGroups
+    .filter((g) => !g.posts.every((p) => viewedIds.has(p.id)))
+    .slice(0, MAX_STACK)
+
+  const stackW = newUsers.length > 0
+    ? AV_SIZE + (newUsers.length - 1) * (AV_SIZE - AV_OVERLAP)
+    : 0
+
   return (
     <View style={[s.wrapper, { paddingTop: top }]} pointerEvents="box-none">
       <View style={s.bar}>
 
-        {/* Left — create */}
-        <TouchableOpacity onPress={onCreatePress} activeOpacity={0.7}>
-          <LinearGradient
-            colors={['rgba(8,8,40,0.10)', 'rgba(16,16,64,0.12)']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={s.createBtn}
-          >
-            <Ionicons name="add" size={26} color="rgba(255,255,255,0.92)" />
-          </LinearGradient>
-        </TouchableOpacity>
+        {/* Left — create + new post user avatars */}
+        <View style={s.leftGroup}>
+          <TouchableOpacity onPress={onCreatePress} activeOpacity={0.7}>
+            <LinearGradient
+              colors={['rgba(8,8,40,0.10)', 'rgba(16,16,64,0.12)']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={s.createBtn}
+            >
+              <Ionicons name="add" size={26} color="rgba(255,255,255,0.92)" />
+            </LinearGradient>
+          </TouchableOpacity>
+
+          {newUsers.length > 0 && (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={onSearchPress}
+              style={[s.stackWrap, { width: stackW }]}
+            >
+              {newUsers.map((g, i) => (
+                <View
+                  key={g.user.id}
+                  style={[s.stackAvatar, { left: i * (AV_SIZE - AV_OVERLAP), zIndex: MAX_STACK - i }]}
+                >
+                  <AvatarImage uri={g.user.avatar} size={AV_SIZE} borderWidth={0} borderColor="transparent" />
+                </View>
+              ))}
+            </TouchableOpacity>
+          )}
+        </View>
 
         <View style={s.spacer} />
 
@@ -184,6 +215,23 @@ const s = StyleSheet.create({
   createBtn: {
     width: 38, height: 38, borderRadius: 19,
     alignItems: 'center', justifyContent: 'center',
+  },
+  leftGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  stackWrap: {
+    height: AV_SIZE,
+    position: 'relative',
+  },
+  stackAvatar: {
+    position: 'absolute',
+    top: 0,
+    width: AV_SIZE,
+    height: AV_SIZE,
+    borderRadius: AV_SIZE / 2,
+    overflow: 'hidden',
   },
   spacer: { flex: 1 },
   searchBtn: {

@@ -5,7 +5,7 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
-import { Heart, MessageCircle, Send, Eye, MoreVertical, Pencil, Trash2 } from 'lucide-react-native'
+import { Heart, MessageCircle, Send, Eye, MoreVertical, Pencil, Trash2, Tag } from 'lucide-react-native'
 
 const FULL_LIFE_MS = 24 * 60 * 60 * 1000
 const DYING_THRESH  =  2 * 60 * 60 * 1000
@@ -21,12 +21,17 @@ import { useT } from '../../i18n'
 interface Props {
   post: Post
   onCommentPress: () => void
+  onStickerPress?: () => void
   liked?: boolean
   onLikeChange?: (liked: boolean) => void
   onDeleted?: (id: string) => void
   onEdited?: (id: string, caption: string) => void
   newPostsCount?: number
   commentCount?: number
+  voted?: boolean
+  extraMs?: number
+  voteLoading?: boolean
+  onVoteToggle?: () => void
 }
 
 type HeartP = {
@@ -44,9 +49,10 @@ function fmt(n: number) {
 }
 
 export default React.memo(function ActionBar({
-  post, onCommentPress, liked: likedProp = false,
+  post, onCommentPress, onStickerPress, liked: likedProp = false,
   onLikeChange, onDeleted, onEdited, newPostsCount = 0,
   commentCount: commentCountProp,
+  voted = false, extraMs: extraMsProp = 0, voteLoading = false, onVoteToggle,
 }: Props) {
   const { bottom: safeBottom } = useSafeAreaInsets()
   const tabOffset = 42 + Math.max(safeBottom, 8)
@@ -64,10 +70,14 @@ export default React.memo(function ActionBar({
   const [hearts,    setHearts]    = useState<HeartP[]>([])
   const heartIdRef = useRef(0)
 
+  const batFloatY   = useRef(new Animated.Value(0)).current
+  const batFloatOp  = useRef(new Animated.Value(0)).current
+  const voteDirectionRef = useRef<'+' | '-'>('+')
+
   // ── Battery ────────────────────────────────────────────────────────────────
   const [nowBat, setNowBat] = useState(Date.now)
 
-  const expiresMs   = post.expiresAt ? new Date(post.expiresAt).getTime() : 0
+  const expiresMs   = (post.expiresAt ? new Date(post.expiresAt).getTime() : 0) + extraMsProp
   const remainingMs = Math.max(0, expiresMs - nowBat)
   const energyPct   = expiresMs > 0 ? Math.min(100, (remainingMs / FULL_LIFE_MS) * 100) : 0
   const isDyingPost = remainingMs > 0 && remainingMs < DYING_THRESH
@@ -146,6 +156,8 @@ export default React.memo(function ActionBar({
     setShareCount(post._count?.shares ?? 0)
     setShowReactions(false); setShowMenu(false); setEditMode(false)
     setEditText(post.caption ?? '')
+    batFloatY.setValue(0)
+    batFloatOp.setValue(0)
   }, [post.id])
 
   async function handleLike() {
@@ -164,6 +176,22 @@ export default React.memo(function ActionBar({
       setLiked(was); setLikeCount(prev); onLikeChange?.(was)
       updateCachedPost(post.id, { _count: { ...post._count, likes: prev } }).catch(() => {})
     }
+  }
+
+  function handleVoteBattery() {
+    if (voteLoading) return
+    voteDirectionRef.current = voted ? '-' : '+'
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+    batFloatY.setValue(0)
+    batFloatOp.setValue(1)
+    Animated.parallel([
+      Animated.timing(batFloatY,  { toValue: -44, duration: 900, useNativeDriver: true }),
+      Animated.sequence([
+        Animated.delay(350),
+        Animated.timing(batFloatOp, { toValue: 0, duration: 550, useNativeDriver: true }),
+      ]),
+    ]).start()
+    onVoteToggle?.()
   }
 
   async function handleShare() {
@@ -254,13 +282,29 @@ export default React.memo(function ActionBar({
           </TouchableOpacity>
         )}
 
-        {/* Battery life */}
-        {!isAnnouncement && expiresMs > 0 && (
-          <Animated.View style={[s.batteryWrap, { opacity: isDyingPost ? batPulseAnim : 1 }]}>
-            <View style={s.batteryBody}>
-              <Animated.View style={[s.batteryFill, { height: fillHeight, backgroundColor: fillColor }]} />
+        {/* Stickers — só aparece se o post tiver stickers habilitados */}
+        {!isAnnouncement && post.stickersEnabled && (
+          <TouchableOpacity style={s.btn} onPress={onStickerPress} activeOpacity={0.75}>
+            <View style={s.tagRotate}>
+              <Tag size={26} strokeWidth={2} color="#fff" />
             </View>
-          </Animated.View>
+          </TouchableOpacity>
+        )}
+
+        {/* Battery life — tappable to extend */}
+        {!isAnnouncement && expiresMs > 0 && (
+          <View style={s.batteryWrap}>
+            <Animated.Text style={[s.batteryFloat, { transform: [{ translateY: batFloatY }], opacity: batFloatOp, color: voteDirectionRef.current === '+' ? '#4CD964' : '#FF6766' }]}>
+              {voteDirectionRef.current === '+' ? '+10min' : '-10min'}
+            </Animated.Text>
+            <TouchableOpacity onPress={handleVoteBattery} disabled={voteLoading} activeOpacity={0.75}>
+              <Animated.View style={{ opacity: isDyingPost ? batPulseAnim : 1 }}>
+                <View style={s.batteryBody}>
+                  <Animated.View style={[s.batteryFill, { height: fillHeight, backgroundColor: fillColor }]} />
+                </View>
+              </Animated.View>
+            </TouchableOpacity>
+          </View>
         )}
 
         {/* Views */}
@@ -358,7 +402,8 @@ const s = StyleSheet.create({
     paddingBottom: 4,
   },
 
-  mirrorX: { transform: [{ scaleX: -1 }] },
+  mirrorX:   { transform: [{ scaleX: -1 }] },
+  tagRotate: { transform: [{ rotate: '90deg' }] },
 
   burstHeart: {
     position: 'absolute',
@@ -382,6 +427,17 @@ const s = StyleSheet.create({
     width: 52,
     alignItems: 'center',
     paddingVertical: 9,
+  },
+  batteryFloat: {
+    position: 'absolute',
+    top: 2,
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    color: '#4CD964',
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    zIndex: 30,
   },
   batteryBody: {
     width: 14,

@@ -67,9 +67,10 @@ export default function CreateScreen() {
   const [caption,        setCaption]        = useState('')
   const [gradientIdx,    setGradientIdx]    = useState(0)
   const [media,          setMedia]          = useState<Media[]>([])
-  const [loading,        setLoading]        = useState(false)
-  const [includePartner, setIncludePartner] = useState(false)
-  const [isAnnouncement, setIsAnnouncement] = useState(false)
+  const [loading,          setLoading]          = useState(false)
+  const [includePartner,   setIncludePartner]   = useState(false)
+  const [isAnnouncement,   setIsAnnouncement]   = useState(false)
+  const [stickersEnabled,  setStickersEnabled]  = useState(false)
   const textRef    = useRef<TextInput>(null)
   const videoUri   = media[0]?.type === 'video' ? media[0].uri : null
   const videoPlayer = useVideoPlayer(videoUri, (p) => { p.loop = true; p.muted = false; if (videoUri) p.play() })
@@ -144,10 +145,10 @@ export default function CreateScreen() {
       const partnerId   = hasPartner && includePartner && !isAnnouncement ? user!.partnerId! : undefined
       const deviceModel = getDeviceModel()
       const newPost = hasMedia
-        ? await createPost(media[0].uri, media[0].type === 'video' ? 'VIDEO' : 'IMAGE', caption.trim() || undefined, undefined, partnerId, isAnnouncement, deviceModel)
-        : await createPost(null, 'TEXT', caption.trim(), `${gradient[0]}|${gradient[1]}`, partnerId, isAnnouncement, deviceModel)
+        ? await createPost(media[0].uri, media[0].type === 'video' ? 'VIDEO' : 'IMAGE', caption.trim() || undefined, undefined, partnerId, isAnnouncement, deviceModel, stickersEnabled)
+        : await createPost(null, 'TEXT', caption.trim(), `${gradient[0]}|${gradient[1]}`, partnerId, isAnnouncement, deviceModel, stickersEnabled)
       if (newPost) setPendingPost(newPost)
-      setCaption(''); setMedia([]); setGradientIdx(0); setIsAnnouncement(false)
+      setCaption(''); setMedia([]); setGradientIdx(0); setIsAnnouncement(false); setStickersEnabled(false)
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       toast.success(t.feed_published, isAnnouncement ? t.feed_announcement_sub : t.feed_published_sub)
       nav.navigate('Feed' as never)
@@ -364,6 +365,17 @@ export default function CreateScreen() {
           </TouchableOpacity>
         )}
 
+        <TouchableOpacity
+          style={[s.partnerChip, stickersEnabled && s.stickerChip]}
+          onPress={() => setStickersEnabled((v) => !v)}
+          activeOpacity={0.8}
+        >
+          <Text style={{ fontSize: 13 }}>🎨</Text>
+          <Text style={[s.partnerChipTxt, stickersEnabled && s.partnerChipTxtOn]}>
+            {stickersEnabled ? 'Objetos ON' : 'Objetos'}
+          </Text>
+        </TouchableOpacity>
+
         <View style={s.badge24h}>
           <Ionicons name="time-outline" size={13} color={M} />
           <Text style={s.badge24hTxt}>{t.feed_visible_24h}</Text>
@@ -545,6 +557,7 @@ const s = StyleSheet.create({
   },
   partnerChipOn:    { backgroundColor: B, borderColor: B },
   announcementChip: { backgroundColor: '#E67E22', borderColor: '#E67E22' },
+  stickerChip:      { backgroundColor: '#7B2FBE', borderColor: '#7B2FBE' },
   partnerChipTxt:   { fontFamily: fonts.semiBold, fontSize: 12, color: B },
   partnerChipTxtOn: { color: '#fff' },
 
