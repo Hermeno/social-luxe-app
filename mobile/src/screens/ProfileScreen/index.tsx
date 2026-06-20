@@ -517,9 +517,14 @@ function OwnHeader({ profile, postsCount, followerCount, followingCount, partner
           : <View style={{ width: 32 }} />
         }
         <Text style={n.topBarName} numberOfLines={1}>{profile?.name ?? ''}</Text>
-        <TouchableOpacity onPress={onLogout} hitSlop={HIT}>
-          <Ionicons name="ellipsis-horizontal" size={22} color={colors.dark} />
-        </TouchableOpacity>
+        <View style={n.topBarActions}>
+          <TouchableOpacity onPress={() => nav.navigate('Tabs', { screen: 'Create' })} hitSlop={HIT}>
+            <Ionicons name="add" size={28} color={colors.dark} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onLogout} hitSlop={HIT}>
+            <Ionicons name="ellipsis-horizontal" size={22} color={colors.dark} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* ── Body ── */}
@@ -775,6 +780,9 @@ const n = StyleSheet.create({
     flex: 1, textAlign: 'center',
     fontSize: 16, fontFamily: fonts.bold, color: colors.dark,
     letterSpacing: -0.3, marginHorizontal: 4,
+  },
+  topBarActions: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
   },
 
   body: { paddingHorizontal: 16, paddingBottom: 4 },

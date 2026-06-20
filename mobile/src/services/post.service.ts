@@ -50,6 +50,16 @@ export async function removeSticker(postId: string, stickerId: string): Promise<
   await api.delete(`/posts/${postId}/stickers/${stickerId}`)
 }
 
+export async function likeSticker(stickerId: string): Promise<{ liked: boolean }> {
+  const res = await api.post<ApiResponse<{ liked: boolean }>>(`/posts/stickers/${stickerId}/like`)
+  return res.data.data
+}
+
+export async function reactSticker(stickerId: string, word: string): Promise<{ reacted: boolean }> {
+  const res = await api.post<ApiResponse<{ reacted: boolean }>>(`/posts/stickers/${stickerId}/react`, { word })
+  return res.data.data
+}
+
 export async function getPartnerPostInvites(): Promise<Post[]> {
   const res = await api.get<ApiResponse<Post[]>>('/posts/partner-pending')
   return res.data.data ?? []

@@ -112,6 +112,8 @@ model User {
   donationsReceived Donation[]        @relation("RequesterDonations")
   donationFeedbacks DonationFeedback[] @relation("FeedbackGiver")
   postStickers     PostSticker[]
+  stickerLikes     StickerLike[]
+  stickerReactions StickerReaction[]
 }
 
 // ─── Post ────────────────────────────────────────────────────────────────────
@@ -160,10 +162,37 @@ model PostSticker {
   y         Float
   createdAt DateTime @default(now())
 
-  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post              @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  likes     StickerLike[]
+  reactions StickerReaction[]
 
   @@index([postId])
+}
+
+model StickerLike {
+  id        String      @id @default(cuid())
+  stickerId String
+  userId    String
+  createdAt DateTime    @default(now())
+
+  sticker PostSticker @relation(fields: [stickerId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId],    references: [id], onDelete: Cascade)
+
+  @@unique([stickerId, userId])
+}
+
+model StickerReaction {
+  id        String      @id @default(cuid())
+  stickerId String
+  userId    String
+  word      String
+  createdAt DateTime    @default(now())
+
+  sticker PostSticker @relation(fields: [stickerId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId],    references: [id], onDelete: Cascade)
+
+  @@unique([stickerId, userId, word])
 }
 
 // ─── Friendship ───────────────────────────────────────────────────────────────

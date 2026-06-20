@@ -42,12 +42,82 @@ function haversine(lat1: number, lng1: number, lat2: number, lng2: number) {
 
 // ─── Sticker service functions ───────────────────────────────────────────────
 
-export async function getStickers(postId: string) {
-  return prisma.postSticker.findMany({
+const STICKER_REACTION_SELECT = {
+  userId: true,
+  word:   true,
+  user:   { select: { id: true, name: true, avatar: true } },
+} as const
+
+type RawStickerRow = {
+  id: string; postId: string; userId: string; type: string; emoji: string
+  content: string | null; x: number; y: number; createdAt: Date
+  user:      { id: string; name: string; avatar: string | null }
+  likes:     { userId: string }[]
+  reactions: { userId: string; word: string; user: { id: string; name: string; avatar: string | null } }[]
+}
+
+function formatSticker(s: RawStickerRow, requesterId?: string) {
+  const reactionMap = new Map<string, { count: number; mine: boolean; users: { id: string; name: string; avatar: string | null }[] }>()
+  for (const r of s.reactions) {
+    const prev = reactionMap.get(r.word) ?? { count: 0, mine: false, users: [] }
+    reactionMap.set(r.word, {
+      count: prev.count + 1,
+      mine:  prev.mine || r.userId === requesterId,
+      users: [...prev.users, r.user],
+    })
+  }
+  return {
+    id:        s.id,
+    postId:    s.postId,
+    userId:    s.userId,
+    type:      s.type,
+    emoji:     s.emoji,
+    content:   s.content,
+    x:         s.x,
+    y:         s.y,
+    createdAt: s.createdAt,
+    user:      s.user,
+    likeCount: s.likes.length,
+    myLike:    s.likes.some((l) => l.userId === requesterId),
+    reactions: Array.from(reactionMap.entries()).map(([word, { count, mine, users }]) => ({ word, count, mine, users })),
+  }
+}
+
+export async function getStickers(postId: string, requesterId?: string) {
+  const rows = await prisma.postSticker.findMany({
     where:   { postId },
-    include: { user: { select: { id: true, name: true, avatar: true } } },
+    include: {
+      user:      { select: { id: true, name: true, avatar: true } },
+      likes:     { select: { userId: true } },
+      reactions: { select: STICKER_REACTION_SELECT },
+    },
     orderBy: { createdAt: 'asc' },
   })
+  return rows.map((s) => formatSticker(s as RawStickerRow, requesterId))
+}
+
+export async function likeSticker(userId: string, stickerId: string) {
+  const existing = await prisma.stickerLike.findUnique({
+    where: { stickerId_userId: { stickerId, userId } },
+  })
+  if (existing) {
+    await prisma.stickerLike.delete({ where: { stickerId_userId: { stickerId, userId } } })
+    return { liked: false }
+  }
+  await prisma.stickerLike.create({ data: { stickerId, userId } })
+  return { liked: true }
+}
+
+export async function reactSticker(userId: string, stickerId: string, word: string) {
+  const existing = await prisma.stickerReaction.findUnique({
+    where: { stickerId_userId_word: { stickerId, userId, word } },
+  })
+  if (existing) {
+    await prisma.stickerReaction.delete({ where: { stickerId_userId_word: { stickerId, userId, word } } })
+    return { reacted: false }
+  }
+  await prisma.stickerReaction.create({ data: { stickerId, userId, word } })
+  return { reacted: true }
 }
 
 const STICKER_LIMIT = 50
@@ -101,14 +171,18 @@ async function attachRecentCommenters(posts: any[], userId?: string): Promise<an
   const allStickers = stickerEnabledIds.length > 0
     ? await prisma.postSticker.findMany({
         where:   { postId: { in: stickerEnabledIds } },
-        include: { user: { select: { id: true, name: true, avatar: true } } },
+        include: {
+          user:      { select: { id: true, name: true, avatar: true } },
+          likes:     { select: { userId: true } },
+          reactions: { select: STICKER_REACTION_SELECT },
+        },
         orderBy: { createdAt: 'asc' },
       })
     : []
-  const stickersByPost = new Map<string, typeof allStickers>()
+  const stickersByPost = new Map<string, ReturnType<typeof formatSticker>[]>()
   for (const s of allStickers) {
     if (!stickersByPost.has(s.postId)) stickersByPost.set(s.postId, [])
-    stickersByPost.get(s.postId)!.push(s)
+    stickersByPost.get(s.postId)!.push(formatSticker(s as RawStickerRow, userId))
   }
 
   // ── Vote extend ─────────────────────────────────────────────────────────────

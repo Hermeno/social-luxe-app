@@ -1,15 +1,28 @@
 import React, { useState, useRef, useEffect } from 'react'
 import {
   View, Text, StyleSheet, Animated,
-  TouchableOpacity, Pressable, Modal,
+  TouchableOpacity, Pressable, Modal, ScrollView,
 } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
-import { PostSticker } from '../../types'
+import { Ionicons } from '@expo/vector-icons'
+import { PostSticker, StickerReactionCount } from '../../types'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import AvatarImage from '../../components/AvatarImage'
 import { colors, fonts } from '../../theme'
 import { API_BASE } from '../../config'
+import { likeSticker, reactSticker } from '../../services/post.service'
+
+// Reserved vocabulary — shown as tappable chips inside the message modal
+const REACTION_WORDS = [
+  // PT
+  'amei', 'lindo', 'incrível', 'maravilhoso', 'verdade',
+  'obrigado', 'valeu', 'perfeito', 'bonito', 'brilhante',
+  'gostoso', 'que amor', 'demais', 'show', 'top',
+  // EN
+  'love it', 'amazing', 'beautiful', 'wonderful', 'so true',
+  'thanks', 'perfect', 'gorgeous', 'awesome', 'brilliant',
+]
 
 function resolveAvatar(uri: string | null | undefined): string | null {
   if (!uri) return null
@@ -129,7 +142,7 @@ function StickerItem({ sticker, left, top, type, canDelete, onTap, onLongPress, 
   )
 }
 
-// ─── Message card — small compact bubble, Modal so fica acima de tudo ────────
+// ─── Message card — compact bubble with likes + word reactions ────────────────
 interface MsgCardProps {
   sticker: PostSticker
   onClose: () => void
@@ -138,6 +151,11 @@ interface MsgCardProps {
 function MessageCard({ sticker, onClose }: MsgCardProps) {
   const scaleAnim = useRef(new Animated.Value(0.88)).current
   const opacAnim  = useRef(new Animated.Value(0)).current
+
+  const [likeCount, setLikeCount] = useState(sticker.likeCount ?? 0)
+  const [myLike, setMyLike]       = useState(sticker.myLike ?? false)
+  const [reactions, setReactions] = useState<StickerReactionCount[]>(sticker.reactions ?? [])
+  const [openWord, setOpenWord]   = useState<string | null>(null)
 
   useEffect(() => {
     Animated.parallel([
@@ -153,20 +171,56 @@ function MessageCard({ sticker, onClose }: MsgCardProps) {
     ]).start(onClose)
   }
 
-  const message = sticker.content?.trim()
+  async function handleLike() {
+    const next = !myLike
+    setMyLike(next)
+    setLikeCount((c) => next ? c + 1 : Math.max(0, c - 1))
+    try { await likeSticker(sticker.id) } catch {
+      setMyLike(!next)
+      setLikeCount((c) => next ? Math.max(0, c - 1) : c + 1)
+    }
+  }
+
+  async function handleChipTap(word: string) {
+    // Toggle branch visibility
+    setOpenWord((prev) => prev === word ? null : word)
+
+    // Toggle reaction
+    const existing = reactions.find((r) => r.word === word)
+    const wasMine  = existing?.mine ?? false
+    setReactions((prev) => {
+      if (wasMine) {
+        return prev
+          .map((r) => r.word === word ? { ...r, count: r.count - 1, mine: false } : r)
+          .filter((r) => r.count > 0)
+      }
+      if (existing) {
+        return prev.map((r) => r.word === word ? { ...r, count: r.count + 1, mine: true } : r)
+      }
+      return [...prev, { word, count: 1, mine: true, users: [] }]
+    })
+    try { await reactSticker(sticker.id, word) } catch {
+      setReactions(sticker.reactions ?? [])
+    }
+  }
+
+  const message  = sticker.content?.trim()
+  const usedWords = reactions.slice().sort((a, b) => b.count - a.count)
+  const usedSet   = new Set(usedWords.map((r) => r.word))
+  const wordList  = [...usedWords.map((r) => r.word), ...REACTION_WORDS.filter((w) => !usedSet.has(w))]
+  const openReaction = reactions.find((r) => r.word === openWord)
 
   return (
     <Modal transparent animationType="none" visible onRequestClose={dismiss}>
       <Pressable style={st.msgBackdrop} onPress={dismiss}>
-        {/* Stop tap propagation inside card */}
         <Pressable onPress={() => {}}>
           <Animated.View style={[st.msgCard, { opacity: opacAnim, transform: [{ scale: scaleAnim }] }]}>
 
-            {/* Row: avatar + name + close */}
+            {/* Header: avatar + name + close */}
             <View style={st.msgRow}>
               <AvatarImage
                 uri={resolveAvatar(sticker.user.avatar)}
-                size={38}
+                size={36}
                 borderWidth={2}
                 borderColor={colors.primary}
               />
@@ -182,11 +236,96 @@ function MessageCard({ sticker, onClose }: MsgCardProps) {
               </TouchableOpacity>
             </View>
 
-            {/* Message text */}
+            {/* Message */}
             {message
               ? <Text style={st.msgText}>{message}</Text>
               : <Text style={st.msgEmpty}>💌 sem mensagem</Text>
             }
+
+            {/* Total likes badge */}
+            {likeCount > 0 && (
+              <View style={st.likeBadge}>
+                <Ionicons name="heart" size={13} color={colors.primary} />
+                <Text style={st.likeBadgeTxt}>
+                  {likeCount} {likeCount === 1 ? 'curtida' : 'curtidas'}
+                </Text>
+              </View>
+            )}
+
+            <View style={st.msgDivider} />
+
+            {/* Bottom: heart toggle + word chips */}
+            <View style={st.msgBottom}>
+              <TouchableOpacity onPress={handleLike} style={st.likeBtn} activeOpacity={0.75}>
+                <Ionicons
+                  name={myLike ? 'heart' : 'heart-outline'}
+                  size={22}
+                  color={myLike ? colors.primary : '#BDBDBD'}
+                />
+              </TouchableOpacity>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={st.chipsContent}
+                style={st.chipsScroll}
+                keyboardShouldPersistTaps="handled"
+              >
+                {wordList.map((word) => {
+                  const info   = reactions.find((r) => r.word === word)
+                  const mine   = info?.mine ?? false
+                  const count  = info?.count ?? 0
+                  const isOpen = openWord === word
+                  return (
+                    <TouchableOpacity
+                      key={word}
+                      onPress={() => handleChipTap(word)}
+                      activeOpacity={0.72}
+                      style={[st.chip, mine && st.chipActive, isOpen && st.chipOpen]}
+                    >
+                      <Text style={[st.chipTxt, (mine || isOpen) && st.chipTxtActive]}>{word}</Text>
+                      {count > 0 && (
+                        <Text style={[st.chipCount, (mine || isOpen) && st.chipCountActive]}>{count}</Text>
+                      )}
+                      {isOpen && <Text style={st.chipCaret}>▾</Text>}
+                    </TouchableOpacity>
+                  )
+                })}
+              </ScrollView>
+            </View>
+
+            {/* Branch — who reacted with the selected word */}
+            {openWord && (
+              <View style={st.branch}>
+                <View style={st.branchAccent} />
+                <View style={st.branchBody}>
+                  <Text style={st.branchLabel}>{openWord}</Text>
+                  {openReaction && openReaction.users.length > 0
+                    ? openReaction.users.map((u, i, arr) => (
+                        <View key={u.id} style={st.branchRow}>
+                          {/* Connector lines */}
+                          <View style={st.connectorWrap}>
+                            <View style={[st.connVertical, i === arr.length - 1 && { opacity: 0 }]} />
+                            <View style={st.connHoriz} />
+                          </View>
+                          <AvatarImage
+                            uri={resolveAvatar(u.avatar)}
+                            size={26}
+                            borderWidth={0}
+                            borderColor="transparent"
+                          />
+                          <Text style={st.branchName} numberOfLines={1}>
+                            {u.name.split(' ')[0]}
+                          </Text>
+                        </View>
+                      ))
+                    : (
+                        <Text style={st.branchEmpty}>Seja o primeiro a reagir</Text>
+                      )
+                  }
+                </View>
+              </View>
+            )}
 
           </Animated.View>
         </Pressable>
@@ -303,26 +442,26 @@ const st = StyleSheet.create({
     flexShrink: 1,
   },
 
-  // ── Message card — compact bubble ─────────────────────────────────────────
+  // ── Message card ──────────────────────────────────────────────────────────
   msgBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
   },
   msgCard: {
     backgroundColor: '#fff',
-    borderRadius: 20,
+    borderRadius: 22,
+    paddingTop: 14,
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingBottom: 10,
     width: '100%',
-    maxWidth: 340,
+    maxWidth: 360,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.18,
-    shadowRadius: 20,
-    elevation: 16,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.16,
+    shadowRadius: 24,
+    elevation: 18,
   },
   msgRow: {
     flexDirection: 'row',
@@ -347,11 +486,156 @@ const st = StyleSheet.create({
     fontSize: 15,
     color: '#333',
     lineHeight: 22,
+    marginBottom: 2,
   },
   msgEmpty: {
     fontFamily: fonts.regular,
     fontSize: 13,
     color: colors.gray500,
+    fontStyle: 'italic',
+    marginBottom: 2,
+  },
+  // ── Total likes badge ──────────────────────────────────────────────────────
+  likeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    backgroundColor: `${colors.primary}12`,
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  likeBadgeTxt: {
+    fontFamily: fonts.semiBold,
+    fontSize: 12,
+    color: colors.primary,
+  },
+
+  msgDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#EBEBEB',
+    marginVertical: 10,
+  },
+
+  // ── Like button + word chips row ──────────────────────────────────────────
+  msgBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 2,
+  },
+  likeBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+    flexShrink: 0,
+  },
+  chipsScroll: { flex: 1 },
+  chipsContent: {
+    gap: 6,
+    paddingRight: 4,
+    alignItems: 'center',
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    backgroundColor: '#F2F2F5',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  chipActive: {
+    backgroundColor: `${colors.primary}18`,
+    borderColor: colors.primary,
+  },
+  chipOpen: {
+    backgroundColor: `${colors.primary}22`,
+    borderColor: colors.primary,
+  },
+  chipTxt: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: '#555',
+  },
+  chipTxtActive: { color: colors.primary },
+  chipCount: {
+    fontFamily: fonts.semiBold,
+    fontSize: 11,
+    color: '#888',
+  },
+  chipCountActive: { color: colors.primary },
+  chipCaret: {
+    fontSize: 10,
+    color: colors.primary,
+    marginLeft: -1,
+  },
+
+  // ── Branch (who reacted with selected word) ───────────────────────────────
+  branch: {
+    flexDirection: 'row',
+    marginTop: 10,
+    marginBottom: 2,
+  },
+  branchAccent: {
+    width: 2,
+    backgroundColor: colors.primary,
+    borderRadius: 1,
+    marginRight: 12,
+    alignSelf: 'stretch',
+  },
+  branchBody: {
+    flex: 1,
+  },
+  branchLabel: {
+    fontFamily: fonts.semiBold,
+    fontSize: 12,
+    color: colors.primary,
+    marginBottom: 8,
+    textTransform: 'lowercase',
+  },
+  branchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 0,
+  },
+  connectorWrap: {
+    width: 18,
+    alignItems: 'flex-start',
+    alignSelf: 'stretch',
+    marginRight: 6,
+  },
+  connVertical: {
+    position: 'absolute',
+    top: 0,
+    bottom: -8,
+    left: 5,
+    width: 1.5,
+    backgroundColor: '#DDD',
+  },
+  connHoriz: {
+    position: 'absolute',
+    top: 12,
+    left: 5,
+    width: 12,
+    height: 1.5,
+    backgroundColor: '#DDD',
+  },
+  branchName: {
+    fontFamily: fonts.medium,
+    fontSize: 13,
+    color: '#333',
+    marginLeft: 8,
+    flexShrink: 1,
+  },
+  branchEmpty: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: '#BDBDBD',
     fontStyle: 'italic',
   },
 })

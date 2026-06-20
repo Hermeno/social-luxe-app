@@ -237,8 +237,24 @@ export async function getExtendVotes(req: AuthRequest, res: Response) {
 
 export async function getStickers(req: AuthRequest, res: Response) {
   try {
-    const stickers = await postService.getStickers(req.params.id)
+    const stickers = await postService.getStickers(req.params.id, req.user!.userId)
     return ok(res, stickers)
+  } catch (err) { return handleError(res, err) }
+}
+
+export async function likeSticker(req: AuthRequest, res: Response) {
+  try {
+    const result = await postService.likeSticker(req.user!.userId, req.params.stickerId)
+    return ok(res, result)
+  } catch (err) { return handleError(res, err) }
+}
+
+export async function reactSticker(req: AuthRequest, res: Response) {
+  try {
+    const { word } = req.body
+    if (!word || typeof word !== 'string') return badRequest(res, 'word required')
+    const result = await postService.reactSticker(req.user!.userId, req.params.stickerId, word.trim())
+    return ok(res, result)
   } catch (err) { return handleError(res, err) }
 }
 
