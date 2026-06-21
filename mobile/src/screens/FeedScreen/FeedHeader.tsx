@@ -240,8 +240,6 @@ const s = StyleSheet.create({
     height:          AV_SIZE,
     borderRadius:    AV_SIZE / 2,
     overflow:        'hidden',
-    borderWidth:     2,
-    borderColor:     '#fff',
     backgroundColor: '#2A2A2A',
   },
 

@@ -242,6 +242,13 @@ const INTERESTS = [
   'Fotografia', 'Música', 'Viagens', 'Culinária',
   'Moda', 'Arte', 'Desporto', 'Tecnologia',
   'Fitness', 'Cinema', 'Natureza', 'Negócios',
+  'Dança', 'Literatura', 'Jogos', 'Bem-estar',
+  'Animais', 'Arquitectura', 'Automóveis', 'Beleza',
+  'Podcast', 'Espiritualidade', 'Política', 'Ciência',
+  'Sustentabilidade', 'Voluntariado', 'Empreendedorismo', 'Investimento',
+  'Futebol', 'Basquete', 'Surf', 'Corrida',
+  'Yoga', 'Meditação', 'Gastronomia', 'Vinho',
+  'Tatuagem', 'Graffiti', 'Teatro', 'Comédia',
 ]
 
 function InterestsStep({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
@@ -357,15 +364,15 @@ const is = StyleSheet.create({
   heading: { fontFamily: fonts.extraBold, fontSize: 30, lineHeight: 36, letterSpacing: -0.9, color: T },
   sub:     { fontFamily: fonts.regular, fontSize: 15, lineHeight: 22, color: S },
 
-  tagsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  tagsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   tag: {
-    paddingHorizontal: 18, paddingVertical: 10,
+    paddingHorizontal: 24, paddingVertical: 14,
     borderRadius: 999,
     borderWidth: 1.5, borderColor: BD,
     backgroundColor: BG,
   },
   tagOn:     { backgroundColor: B, borderColor: B },
-  tagTxt:    { fontFamily: fonts.semiBold, fontSize: 14, color: T },
+  tagTxt:    { fontFamily: fonts.semiBold, fontSize: 16, color: T },
   tagTxtOn:  { color: '#fff' },
 
   footer:   { paddingHorizontal: 24, gap: 10, borderTopWidth: 1, borderTopColor: BD, paddingTop: 14 },

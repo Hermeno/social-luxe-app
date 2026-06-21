@@ -55,9 +55,8 @@ export async function likeSticker(stickerId: string): Promise<{ liked: boolean }
   return res.data.data
 }
 
-export async function reactSticker(stickerId: string, word: string): Promise<{ reacted: boolean }> {
-  const res = await api.post<ApiResponse<{ reacted: boolean }>>(`/posts/stickers/${stickerId}/react`, { word })
-  return res.data.data
+export async function viewSticker(stickerId: string): Promise<void> {
+  await api.post(`/posts/stickers/${stickerId}/view`)
 }
 
 export async function getPartnerPostInvites(): Promise<Post[]> {

@@ -1,7 +1,8 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useMemo } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, Animated, ActivityIndicator,
+  Modal, FlatList, SafeAreaView,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
@@ -11,44 +12,170 @@ import { AuthStackParams } from '../../navigation/AuthNavigator'
 import * as authService from '../../services/auth.service'
 import { fonts } from '../../theme'
 
-function detectCountry(): string {
+const COUNTRIES = [
+  { code: '+244', flag: '🇦🇴', name: 'Angola',              iso: 'AO' },
+  { code: '+55',  flag: '🇧🇷', name: 'Brasil',              iso: 'BR' },
+  { code: '+238', flag: '🇨🇻', name: 'Cabo Verde',          iso: 'CV' },
+  { code: '+245', flag: '🇬🇼', name: 'Guiné-Bissau',        iso: 'GW' },
+  { code: '+240', flag: '🇬🇶', name: 'Guiné Equatorial',    iso: 'GQ' },
+  { code: '+258', flag: '🇲🇿', name: 'Moçambique',          iso: 'MZ' },
+  { code: '+351', flag: '🇵🇹', name: 'Portugal',            iso: 'PT' },
+  { code: '+239', flag: '🇸🇹', name: 'São Tomé e Príncipe', iso: 'ST' },
+  { code: '+27',  flag: '🇿🇦', name: 'África do Sul',       iso: 'ZA' },
+  { code: '+213', flag: '🇩🇿', name: 'Argélia',             iso: 'DZ' },
+  { code: '+54',  flag: '🇦🇷', name: 'Argentina',           iso: 'AR' },
+  { code: '+61',  flag: '🇦🇺', name: 'Austrália',           iso: 'AU' },
+  { code: '+32',  flag: '🇧🇪', name: 'Bélgica',             iso: 'BE' },
+  { code: '+591', flag: '🇧🇴', name: 'Bolívia',             iso: 'BO' },
+  { code: '+1',   flag: '🇨🇦', name: 'Canadá',              iso: 'CA' },
+  { code: '+56',  flag: '🇨🇱', name: 'Chile',               iso: 'CL' },
+  { code: '+86',  flag: '🇨🇳', name: 'China',               iso: 'CN' },
+  { code: '+57',  flag: '🇨🇴', name: 'Colômbia',            iso: 'CO' },
+  { code: '+506', flag: '🇨🇷', name: 'Costa Rica',          iso: 'CR' },
+  { code: '+53',  flag: '🇨🇺', name: 'Cuba',                iso: 'CU' },
+  { code: '+45',  flag: '🇩🇰', name: 'Dinamarca',           iso: 'DK' },
+  { code: '+593', flag: '🇪🇨', name: 'Equador',             iso: 'EC' },
+  { code: '+34',  flag: '🇪🇸', name: 'Espanha',             iso: 'ES' },
+  { code: '+1',   flag: '🇺🇸', name: 'Estados Unidos',      iso: 'US' },
+  { code: '+251', flag: '🇪🇹', name: 'Etiópia',             iso: 'ET' },
+  { code: '+33',  flag: '🇫🇷', name: 'França',              iso: 'FR' },
+  { code: '+233', flag: '🇬🇭', name: 'Gana',                iso: 'GH' },
+  { code: '+30',  flag: '🇬🇷', name: 'Grécia',              iso: 'GR' },
+  { code: '+91',  flag: '🇮🇳', name: 'Índia',               iso: 'IN' },
+  { code: '+62',  flag: '🇮🇩', name: 'Indonésia',           iso: 'ID' },
+  { code: '+353', flag: '🇮🇪', name: 'Irlanda',             iso: 'IE' },
+  { code: '+972', flag: '🇮🇱', name: 'Israel',              iso: 'IL' },
+  { code: '+39',  flag: '🇮🇹', name: 'Itália',              iso: 'IT' },
+  { code: '+81',  flag: '🇯🇵', name: 'Japão',               iso: 'JP' },
+  { code: '+254', flag: '🇰🇪', name: 'Quénia',              iso: 'KE' },
+  { code: '+52',  flag: '🇲🇽', name: 'México',              iso: 'MX' },
+  { code: '+212', flag: '🇲🇦', name: 'Marrocos',            iso: 'MA' },
+  { code: '+234', flag: '🇳🇬', name: 'Nigéria',             iso: 'NG' },
+  { code: '+47',  flag: '🇳🇴', name: 'Noruega',             iso: 'NO' },
+  { code: '+31',  flag: '🇳🇱', name: 'Países Baixos',       iso: 'NL' },
+  { code: '+51',  flag: '🇵🇪', name: 'Peru',                iso: 'PE' },
+  { code: '+48',  flag: '🇵🇱', name: 'Polónia',             iso: 'PL' },
+  { code: '+44',  flag: '🇬🇧', name: 'Reino Unido',         iso: 'GB' },
+  { code: '+7',   flag: '🇷🇺', name: 'Rússia',              iso: 'RU' },
+  { code: '+221', flag: '🇸🇳', name: 'Senegal',             iso: 'SN' },
+  { code: '+46',  flag: '🇸🇪', name: 'Suécia',              iso: 'SE' },
+  { code: '+41',  flag: '🇨🇭', name: 'Suíça',               iso: 'CH' },
+  { code: '+255', flag: '🇹🇿', name: 'Tanzânia',            iso: 'TZ' },
+  { code: '+90',  flag: '🇹🇷', name: 'Turquia',             iso: 'TR' },
+  { code: '+380', flag: '🇺🇦', name: 'Ucrânia',             iso: 'UA' },
+  { code: '+598', flag: '🇺🇾', name: 'Uruguai',             iso: 'UY' },
+  { code: '+58',  flag: '🇻🇪', name: 'Venezuela',           iso: 'VE' },
+  { code: '+84',  flag: '🇻🇳', name: 'Vietname',            iso: 'VN' },
+  { code: '+260', flag: '🇿🇲', name: 'Zâmbia',              iso: 'ZM' },
+  { code: '+263', flag: '🇿🇼', name: 'Zimbabwe',            iso: 'ZW' },
+]
+
+type Country = typeof COUNTRIES[0]
+
+function detectCountryEntry(): Country {
   try {
     const locale = Intl.DateTimeFormat().resolvedOptions().locale
-    const parts = locale.split('-')
+    const parts  = locale.split('-')
     for (let i = parts.length - 1; i >= 0; i--) {
       const p = parts[i]
-      if (p.length === 2 && p === p.toUpperCase()) return p
+      if (p.length === 2 && p === p.toUpperCase()) {
+        const found = COUNTRIES.find(c => c.iso === p)
+        if (found) return found
+      }
     }
   } catch {}
-  return 'AO'
+  return COUNTRIES[0] // Angola default
 }
 
-function callingCodeForCountry(country: string): { code: string; flag: string } {
-  const map: Record<string, { code: string; flag: string }> = {
-    AO: { code: '+244', flag: '🇦🇴' },
-    PT: { code: '+351', flag: '🇵🇹' },
-    BR: { code: '+55',  flag: '🇧🇷' },
-    MZ: { code: '+258', flag: '🇲🇿' },
-    CV: { code: '+238', flag: '🇨🇻' },
-    ST: { code: '+239', flag: '🇸🇹' },
-    GW: { code: '+245', flag: '🇬🇼' },
-  }
-  return map[country] ?? { code: '+244', flag: '🇦🇴' }
+// ─── Country picker modal ─────────────────────────────────────────────────────
+function CountryPickerModal({
+  visible,
+  onSelect,
+  onClose,
+}: {
+  visible:  boolean
+  onSelect: (c: Country) => void
+  onClose:  () => void
+}) {
+  const [query, setQuery] = useState('')
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return COUNTRIES
+    return COUNTRIES.filter(
+      c => c.name.toLowerCase().includes(q) || c.code.includes(q)
+    )
+  }, [query])
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+    >
+      <SafeAreaView style={pm.container}>
+        {/* Header */}
+        <View style={pm.header}>
+          <Text style={pm.title}>Indicativo</Text>
+          <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Ionicons name="close" size={24} color="#333" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Search */}
+        <View style={pm.searchWrap}>
+          <Ionicons name="search" size={17} color="#ABABAB" style={pm.searchIcon} />
+          <TextInput
+            style={pm.searchInput}
+            placeholder="Pesquisar país ou indicativo..."
+            placeholderTextColor="#ABABAB"
+            value={query}
+            onChangeText={setQuery}
+            autoCorrect={false}
+            clearButtonMode="while-editing"
+          />
+        </View>
+
+        {/* List */}
+        <FlatList
+          data={filtered}
+          keyExtractor={item => item.iso}
+          keyboardShouldPersistTaps="handled"
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={pm.row}
+              activeOpacity={0.7}
+              onPress={() => {
+                onSelect(item)
+                setQuery('')
+                onClose()
+              }}
+            >
+              <Text style={pm.rowFlag}>{item.flag}</Text>
+              <Text style={pm.rowName} numberOfLines={1}>{item.name}</Text>
+              <Text style={pm.rowCode}>{item.code}</Text>
+            </TouchableOpacity>
+          )}
+          ItemSeparatorComponent={() => <View style={pm.sep} />}
+        />
+      </SafeAreaView>
+    </Modal>
+  )
 }
 
+// ─── Main screen ──────────────────────────────────────────────────────────────
 type Nav = StackNavigationProp<AuthStackParams>
 
 export default function PhoneScreen() {
   const nav     = useNavigation<Nav>()
   const { top, bottom } = useSafeAreaInsets()
-  const country = detectCountry()
-  const { code: defaultCode, flag: defaultFlag } = callingCodeForCountry(country)
 
-  const [phone,   setPhone]   = useState('')
-  const [code,    setCode]    = useState(defaultCode)
-  const [flag,    setFlag]    = useState(defaultFlag)
-  const [loading, setLoading] = useState(false)
-  const [focused, setFocused] = useState(false)
+  const [selected, setSelected] = useState<Country>(detectCountryEntry)
+  const [phone,    setPhone]    = useState('')
+  const [loading,  setLoading]  = useState(false)
+  const [focused,  setFocused]  = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
   const btnScale = useRef(new Animated.Value(1)).current
 
   const canGo = phone.replace(/\D/g, '').length >= 7
@@ -65,12 +192,12 @@ export default function PhoneScreen() {
     bounce(async () => {
       setLoading(true)
       try {
-        const full = `${code}${phone.replace(/\D/g, '')}`
+        const full = `${selected.code}${phone.replace(/\D/g, '')}`
         const { exists } = await authService.checkPhone(full)
-        nav.navigate(exists ? 'LoginPassword' : 'CreatePassword', { phone: full, countryCode: code })
+        nav.navigate(exists ? 'LoginPassword' : 'CreatePassword', { phone: full, countryCode: selected.code })
       } catch {
-        const full = `${code}${phone.replace(/\D/g, '')}`
-        nav.navigate('LoginPassword', { phone: full, countryCode: code })
+        const full = `${selected.code}${phone.replace(/\D/g, '')}`
+        nav.navigate('LoginPassword', { phone: full, countryCode: selected.code })
       } finally { setLoading(false) }
     })
   }
@@ -95,9 +222,13 @@ export default function PhoneScreen() {
         {/* Phone inputs */}
         <View style={s.inputRow}>
           {/* Country code selector */}
-          <TouchableOpacity style={s.countryBtn} activeOpacity={0.75}>
-            <Text style={s.countryFlag}>{flag}</Text>
-            <Text style={s.countryCode}>{code}</Text>
+          <TouchableOpacity
+            style={s.countryBtn}
+            activeOpacity={0.75}
+            onPress={() => setPickerOpen(true)}
+          >
+            <Text style={s.countryFlag}>{selected.flag}</Text>
+            <Text style={s.countryCode}>{selected.code}</Text>
             <Ionicons name="chevron-down" size={18} color="#ABABAB" />
           </TouchableOpacity>
 
@@ -149,6 +280,12 @@ export default function PhoneScreen() {
         </Text>
 
       </View>
+
+      <CountryPickerModal
+        visible={pickerOpen}
+        onSelect={c => setSelected(c)}
+        onClose={() => setPickerOpen(false)}
+      />
     </KeyboardAvoidingView>
   )
 }
@@ -220,4 +357,36 @@ const s = StyleSheet.create({
 
   legal:     { marginTop: 16, fontSize: 12, fontFamily: fonts.regular, color: M, textAlign: 'center', lineHeight: 18, paddingHorizontal: 6 },
   legalLink: { color: S, fontFamily: fonts.semiBold },
+})
+
+// ─── Picker styles ────────────────────────────────────────────────────────────
+const pm = StyleSheet.create({
+  container: { flex: 1, backgroundColor: BG },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: BD,
+  },
+  title: { fontFamily: fonts.bold, fontSize: 18, color: T },
+
+  searchWrap: {
+    flexDirection: 'row', alignItems: 'center',
+    margin: 16, paddingHorizontal: 14,
+    height: 44, borderRadius: 12,
+    backgroundColor: SX, borderWidth: 1, borderColor: BD,
+  },
+  searchIcon:  { marginRight: 8 },
+  searchInput: {
+    flex: 1, fontFamily: fonts.regular, fontSize: 15,
+    color: T, paddingVertical: 0,
+  },
+
+  row: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 20, paddingVertical: 14, gap: 14,
+  },
+  rowFlag: { fontSize: 24, width: 32, textAlign: 'center' },
+  rowName: { flex: 1, fontFamily: fonts.medium, fontSize: 15, color: T },
+  rowCode: { fontFamily: fonts.semiBold, fontSize: 15, color: S },
+  sep:     { height: StyleSheet.hairlineWidth, backgroundColor: BD, marginLeft: 66 },
 })

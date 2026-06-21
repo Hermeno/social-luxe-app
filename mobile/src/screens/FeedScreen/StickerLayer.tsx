@@ -1,28 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react'
 import {
-  View, Text, StyleSheet, Animated,
-  TouchableOpacity, Pressable, Modal, ScrollView,
+  View, Text, StyleSheet, Animated, Dimensions,
+  TouchableOpacity, Pressable, Modal,
 } from 'react-native'
+
+const CARD_MAX_H = Dimensions.get('window').height * 0.78
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { Ionicons } from '@expo/vector-icons'
-import { PostSticker, StickerReactionCount } from '../../types'
+import { PostSticker } from '../../types'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import AvatarImage from '../../components/AvatarImage'
 import { colors, fonts } from '../../theme'
 import { API_BASE } from '../../config'
-import { likeSticker, reactSticker } from '../../services/post.service'
-
-// Reserved vocabulary — shown as tappable chips inside the message modal
-const REACTION_WORDS = [
-  // PT
-  'amei', 'lindo', 'incrível', 'maravilhoso', 'verdade',
-  'obrigado', 'valeu', 'perfeito', 'bonito', 'brilhante',
-  'gostoso', 'que amor', 'demais', 'show', 'top',
-  // EN
-  'love it', 'amazing', 'beautiful', 'wonderful', 'so true',
-  'thanks', 'perfect', 'gorgeous', 'awesome', 'brilliant',
-]
+import { likeSticker, viewSticker } from '../../services/post.service'
 
 function resolveAvatar(uri: string | null | undefined): string | null {
   if (!uri) return null
@@ -87,7 +78,6 @@ function StickerItem({ sticker, left, top, type, canDelete, onTap, onLongPress, 
     setParticles(prev => [...prev, ...batch])
   }
 
-  // Use emoji as additional check — '💌' is always a message sticker
   const isMessage = type === 'message' || sticker.emoji === '💌'
   const displayEmoji = isMessage ? '💌' : sticker.emoji
 
@@ -142,26 +132,51 @@ function StickerItem({ sticker, left, top, type, canDelete, onTap, onLongPress, 
   )
 }
 
-// ─── Message card — compact bubble with likes + word reactions ────────────────
-interface MsgCardProps {
-  sticker: PostSticker
-  onClose: () => void
+// ─── Per-sticker interaction cache (lives in StickerLayer, survives modal re-open) ──
+type StickerInteraction = {
+  likeCount: number
+  myLike:    boolean
+  viewCount: number
+  myView:    boolean   // true once we've registered a view this session
 }
 
-function MessageCard({ sticker, onClose }: MsgCardProps) {
+function initInteractions(stickers: PostSticker[]): Record<string, StickerInteraction> {
+  const m: Record<string, StickerInteraction> = {}
+  for (const s of stickers) {
+    m[s.id] = { likeCount: s.likeCount ?? 0, myLike: s.myLike ?? false, viewCount: s.viewCount ?? 0, myView: false }
+  }
+  return m
+}
+
+// ─── Message card ─────────────────────────────────────────────────────────────
+interface MsgCardProps {
+  sticker:     PostSticker
+  interaction: StickerInteraction
+  onUpdate:    (patch: Partial<StickerInteraction>) => void
+  onClose:     () => void
+}
+
+function MessageCard({ sticker, interaction, onUpdate, onClose }: MsgCardProps) {
   const scaleAnim = useRef(new Animated.Value(0.88)).current
   const opacAnim  = useRef(new Animated.Value(0)).current
 
-  const [likeCount, setLikeCount] = useState(sticker.likeCount ?? 0)
-  const [myLike, setMyLike]       = useState(sticker.myLike ?? false)
-  const [reactions, setReactions] = useState<StickerReactionCount[]>(sticker.reactions ?? [])
-  const [openWord, setOpenWord]   = useState<string | null>(null)
+  const [likeCount, setLikeCount] = useState(interaction.likeCount)
+  const [myLike, setMyLike]       = useState(interaction.myLike)
+  const [viewCount, setViewCount] = useState(interaction.viewCount)
 
   useEffect(() => {
     Animated.parallel([
       Animated.spring(scaleAnim, { toValue: 1, speed: 30, bounciness: 10, useNativeDriver: true }),
       Animated.timing(opacAnim,  { toValue: 1, duration: 140, useNativeDriver: true }),
     ]).start()
+
+    // Only register the view once per session — cache survives modal close/reopen
+    if (!interaction.myView) {
+      const next = interaction.viewCount + 1
+      setViewCount(next)
+      onUpdate({ myView: true, viewCount: next })
+      viewSticker(sticker.id).catch(() => {})
+    }
   }, [])
 
   function dismiss() {
@@ -172,163 +187,78 @@ function MessageCard({ sticker, onClose }: MsgCardProps) {
   }
 
   async function handleLike() {
-    const next = !myLike
+    const next      = !myLike
+    const nextCount = next ? likeCount + 1 : Math.max(0, likeCount - 1)
     setMyLike(next)
-    setLikeCount((c) => next ? c + 1 : Math.max(0, c - 1))
+    setLikeCount(nextCount)
+    onUpdate({ myLike: next, likeCount: nextCount })
     try { await likeSticker(sticker.id) } catch {
       setMyLike(!next)
-      setLikeCount((c) => next ? Math.max(0, c - 1) : c + 1)
+      setLikeCount(likeCount)
+      onUpdate({ myLike: !next, likeCount })
     }
   }
 
-  async function handleChipTap(word: string) {
-    // Toggle branch visibility
-    setOpenWord((prev) => prev === word ? null : word)
-
-    // Toggle reaction
-    const existing = reactions.find((r) => r.word === word)
-    const wasMine  = existing?.mine ?? false
-    setReactions((prev) => {
-      if (wasMine) {
-        return prev
-          .map((r) => r.word === word ? { ...r, count: r.count - 1, mine: false } : r)
-          .filter((r) => r.count > 0)
-      }
-      if (existing) {
-        return prev.map((r) => r.word === word ? { ...r, count: r.count + 1, mine: true } : r)
-      }
-      return [...prev, { word, count: 1, mine: true, users: [] }]
-    })
-    try { await reactSticker(sticker.id, word) } catch {
-      setReactions(sticker.reactions ?? [])
-    }
-  }
-
-  const message  = sticker.content?.trim()
-  const usedWords = reactions.slice().sort((a, b) => b.count - a.count)
-  const usedSet   = new Set(usedWords.map((r) => r.word))
-  const wordList  = [...usedWords.map((r) => r.word), ...REACTION_WORDS.filter((w) => !usedSet.has(w))]
-  const openReaction = reactions.find((r) => r.word === openWord)
+  const message = sticker.content?.trim()
 
   return (
     <Modal transparent animationType="none" visible onRequestClose={dismiss}>
       <Pressable style={st.msgBackdrop} onPress={dismiss}>
-        <Pressable onPress={() => {}}>
-          <Animated.View style={[st.msgCard, { opacity: opacAnim, transform: [{ scale: scaleAnim }] }]}>
+        <Animated.View
+          style={[st.msgCard, { opacity: opacAnim, transform: [{ scale: scaleAnim }] }]}
+          onStartShouldSetResponder={() => true}
+        >
 
-            {/* Header: avatar + name + close */}
-            <View style={st.msgRow}>
-              <AvatarImage
-                uri={resolveAvatar(sticker.user.avatar)}
-                size={36}
-                borderWidth={2}
-                borderColor={colors.primary}
+          {/* Header */}
+          <View style={st.msgRow}>
+            <AvatarImage
+              uri={resolveAvatar(sticker.user.avatar)}
+              size={36}
+              borderWidth={0}
+              borderColor="transparent"
+            />
+            <Text style={st.msgName} numberOfLines={1}>
+              {sticker.user.name.split(' ')[0]}
+            </Text>
+            <TouchableOpacity
+              onPress={dismiss}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              style={st.msgCloseBtn}
+            >
+              <Text style={st.msgCloseTxt}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Message */}
+          {message
+            ? <Text style={st.msgText}>{message}</Text>
+            : <Text style={st.msgEmpty}>💌 sem mensagem</Text>
+          }
+
+          <View style={st.msgDivider} />
+
+          {/* Like + View counts */}
+          <View style={st.msgBottom}>
+            <TouchableOpacity onPress={handleLike} style={st.likeBtn} activeOpacity={0.75}>
+              <Ionicons
+                name={myLike ? 'heart' : 'heart-outline'}
+                size={20}
+                color={myLike ? colors.primary : '#BDBDBD'}
               />
-              <Text style={st.msgName} numberOfLines={1}>
-                {sticker.user.name.split(' ')[0]}
-              </Text>
-              <TouchableOpacity
-                onPress={dismiss}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                style={st.msgCloseBtn}
-              >
-                <Text style={st.msgCloseTxt}>✕</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Message */}
-            {message
-              ? <Text style={st.msgText}>{message}</Text>
-              : <Text style={st.msgEmpty}>💌 sem mensagem</Text>
-            }
-
-            {/* Total likes badge */}
-            {likeCount > 0 && (
-              <View style={st.likeBadge}>
-                <Ionicons name="heart" size={13} color={colors.primary} />
-                <Text style={st.likeBadgeTxt}>
-                  {likeCount} {likeCount === 1 ? 'curtida' : 'curtidas'}
+              {likeCount > 0 && (
+                <Text style={[st.likeCount, myLike && { color: colors.primary }]}>
+                  {likeCount}
                 </Text>
-              </View>
-            )}
+              )}
+            </TouchableOpacity>
 
-            <View style={st.msgDivider} />
-
-            {/* Bottom: heart toggle + word chips */}
-            <View style={st.msgBottom}>
-              <TouchableOpacity onPress={handleLike} style={st.likeBtn} activeOpacity={0.75}>
-                <Ionicons
-                  name={myLike ? 'heart' : 'heart-outline'}
-                  size={22}
-                  color={myLike ? colors.primary : '#BDBDBD'}
-                />
-              </TouchableOpacity>
-
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={st.chipsContent}
-                style={st.chipsScroll}
-                keyboardShouldPersistTaps="handled"
-              >
-                {wordList.map((word) => {
-                  const info   = reactions.find((r) => r.word === word)
-                  const mine   = info?.mine ?? false
-                  const count  = info?.count ?? 0
-                  const isOpen = openWord === word
-                  return (
-                    <TouchableOpacity
-                      key={word}
-                      onPress={() => handleChipTap(word)}
-                      activeOpacity={0.72}
-                      style={[st.chip, mine && st.chipActive, isOpen && st.chipOpen]}
-                    >
-                      <Text style={[st.chipTxt, (mine || isOpen) && st.chipTxtActive]}>{word}</Text>
-                      {count > 0 && (
-                        <Text style={[st.chipCount, (mine || isOpen) && st.chipCountActive]}>{count}</Text>
-                      )}
-                      {isOpen && <Text style={st.chipCaret}>▾</Text>}
-                    </TouchableOpacity>
-                  )
-                })}
-              </ScrollView>
+            <View style={st.viewBadge}>
+              <Ionicons name="eye-outline" size={18} color="#BDBDBD" />
+              <Text style={st.viewCountTxt}>{viewCount}</Text>
             </View>
+          </View>
 
-            {/* Branch — who reacted with the selected word */}
-            {openWord && (
-              <View style={st.branch}>
-                <View style={st.branchAccent} />
-                <View style={st.branchBody}>
-                  <Text style={st.branchLabel}>{openWord}</Text>
-                  {openReaction && openReaction.users.length > 0
-                    ? openReaction.users.map((u, i, arr) => (
-                        <View key={u.id} style={st.branchRow}>
-                          {/* Connector lines */}
-                          <View style={st.connectorWrap}>
-                            <View style={[st.connVertical, i === arr.length - 1 && { opacity: 0 }]} />
-                            <View style={st.connHoriz} />
-                          </View>
-                          <AvatarImage
-                            uri={resolveAvatar(u.avatar)}
-                            size={26}
-                            borderWidth={0}
-                            borderColor="transparent"
-                          />
-                          <Text style={st.branchName} numberOfLines={1}>
-                            {u.name.split(' ')[0]}
-                          </Text>
-                        </View>
-                      ))
-                    : (
-                        <Text style={st.branchEmpty}>Seja o primeiro a reagir</Text>
-                      )
-                  }
-                </View>
-              </View>
-            )}
-
-          </Animated.View>
-        </Pressable>
+        </Animated.View>
       </Pressable>
     </Modal>
   )
@@ -336,6 +266,7 @@ function MessageCard({ sticker, onClose }: MsgCardProps) {
 
 // ─── StickerLayer ─────────────────────────────────────────────────────────────
 interface Props {
+  postId:          string
   stickers:        PostSticker[]
   containerW:      number
   containerH:      number
@@ -346,11 +277,23 @@ interface Props {
   onMessageClose?: () => void
 }
 
-export default function StickerLayer({ stickers, containerW, containerH, onLongPress, currentUserId, postOwnerId, onMessageOpen, onMessageClose }: Props) {
+export default function StickerLayer({ postId, stickers, containerW, containerH, onLongPress, currentUserId, postOwnerId, onMessageOpen, onMessageClose }: Props) {
   const nav = useNavigation<StackNavigationProp<AppStackParams>>()
   const [messageSticker, setMessageSticker] = useState<PostSticker | null>(null)
 
-  // Pause the feed while the message card is open, resume when it closes
+  const [interactions, setInteractions] = useState<Record<string, StickerInteraction>>(
+    () => initInteractions(stickers)
+  )
+
+  useEffect(() => {
+    setInteractions(initInteractions(stickers))
+    setMessageSticker(null)
+  }, [postId])
+
+  function patchInteraction(id: string, patch: Partial<StickerInteraction>) {
+    setInteractions((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }))
+  }
+
   useEffect(() => {
     if (messageSticker) {
       onMessageOpen?.()
@@ -367,7 +310,6 @@ export default function StickerLayer({ stickers, containerW, containerH, onLongP
       {stickers.map(stk => {
         const left = (stk.x / 100) * containerW
         const top  = (stk.y / 100) * containerH
-        // Use emoji as additional fallback for type detection
         const type = (stk.emoji === '💌' ? 'message' : (stk.type ?? 'emoji')) as 'emoji' | 'message' | 'gift'
         const canDelete = !!currentUserId &&
           (stk.user.id === currentUserId || postOwnerId === currentUserId)
@@ -390,10 +332,11 @@ export default function StickerLayer({ stickers, containerW, containerH, onLongP
         )
       })}
 
-      {/* Modal fica acima de ActionBar, FeedHeader e tudo o resto */}
       {messageSticker && (
         <MessageCard
           sticker={messageSticker}
+          interaction={interactions[messageSticker.id] ?? { likeCount: 0, myLike: false, viewCount: 0, myView: false }}
+          onUpdate={(patch) => patchInteraction(messageSticker.id, patch)}
           onClose={() => setMessageSticker(null)}
         />
       )}
@@ -445,18 +388,16 @@ const st = StyleSheet.create({
   // ── Message card ──────────────────────────────────────────────────────────
   msgBackdrop: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: 'stretch',
     justifyContent: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 12,
   },
   msgCard: {
     backgroundColor: '#fff',
     borderRadius: 22,
     paddingTop: 14,
     paddingHorizontal: 16,
-    paddingBottom: 10,
-    width: '100%',
-    maxWidth: 360,
+    paddingBottom: 14,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.16,
@@ -491,151 +432,42 @@ const st = StyleSheet.create({
   msgEmpty: {
     fontFamily: fonts.regular,
     fontSize: 13,
-    color: colors.gray500,
+    color: '#999',
     fontStyle: 'italic',
     marginBottom: 2,
   },
-  // ── Total likes badge ──────────────────────────────────────────────────────
-  likeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    marginTop: 8,
-    alignSelf: 'flex-start',
-    backgroundColor: `${colors.primary}12`,
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  likeBadgeTxt: {
-    fontFamily: fonts.semiBold,
-    fontSize: 12,
-    color: colors.primary,
-  },
-
   msgDivider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: '#EBEBEB',
     marginVertical: 10,
   },
 
-  // ── Like button + word chips row ──────────────────────────────────────────
+  // ── Like + View row ───────────────────────────────────────────────────────
   msgBottom: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 2,
+    gap: 16,
   },
   likeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     paddingVertical: 4,
     paddingHorizontal: 2,
-    flexShrink: 0,
   },
-  chipsScroll: { flex: 1 },
-  chipsContent: {
-    gap: 6,
-    paddingRight: 4,
-    alignItems: 'center',
-  },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-    backgroundColor: '#F2F2F5',
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  chipActive: {
-    backgroundColor: `${colors.primary}18`,
-    borderColor: colors.primary,
-  },
-  chipOpen: {
-    backgroundColor: `${colors.primary}22`,
-    borderColor: colors.primary,
-  },
-  chipTxt: {
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    color: '#555',
-  },
-  chipTxtActive: { color: colors.primary },
-  chipCount: {
+  likeCount: {
     fontFamily: fonts.semiBold,
-    fontSize: 11,
-    color: '#888',
-  },
-  chipCountActive: { color: colors.primary },
-  chipCaret: {
-    fontSize: 10,
-    color: colors.primary,
-    marginLeft: -1,
-  },
-
-  // ── Branch (who reacted with selected word) ───────────────────────────────
-  branch: {
-    flexDirection: 'row',
-    marginTop: 10,
-    marginBottom: 2,
-  },
-  branchAccent: {
-    width: 2,
-    backgroundColor: colors.primary,
-    borderRadius: 1,
-    marginRight: 12,
-    alignSelf: 'stretch',
-  },
-  branchBody: {
-    flex: 1,
-  },
-  branchLabel: {
-    fontFamily: fonts.semiBold,
-    fontSize: 12,
-    color: colors.primary,
-    marginBottom: 8,
-    textTransform: 'lowercase',
-  },
-  branchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-    gap: 0,
-  },
-  connectorWrap: {
-    width: 18,
-    alignItems: 'flex-start',
-    alignSelf: 'stretch',
-    marginRight: 6,
-  },
-  connVertical: {
-    position: 'absolute',
-    top: 0,
-    bottom: -8,
-    left: 5,
-    width: 1.5,
-    backgroundColor: '#DDD',
-  },
-  connHoriz: {
-    position: 'absolute',
-    top: 12,
-    left: 5,
-    width: 12,
-    height: 1.5,
-    backgroundColor: '#DDD',
-  },
-  branchName: {
-    fontFamily: fonts.medium,
-    fontSize: 13,
-    color: '#333',
-    marginLeft: 8,
-    flexShrink: 1,
-  },
-  branchEmpty: {
-    fontFamily: fonts.regular,
-    fontSize: 12,
+    fontSize: 14,
     color: '#BDBDBD',
-    fontStyle: 'italic',
+  },
+  viewBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  viewCountTxt: {
+    fontFamily: fonts.semiBold,
+    fontSize: 14,
+    color: '#BDBDBD',
   },
 })

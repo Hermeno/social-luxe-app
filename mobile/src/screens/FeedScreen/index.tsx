@@ -696,6 +696,7 @@ export default function FeedScreen() {
                 mediaClip/swipe   → falls through to swipe gesture  ✓ */}
           {post.stickersEnabled && (
             <StickerLayer
+              postId={post.id}
               stickers={currentStickers}
               containerW={viewerW}
               containerH={viewerH}

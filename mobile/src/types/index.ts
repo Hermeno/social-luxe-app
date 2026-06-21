@@ -26,13 +26,6 @@ export interface User {
   lastSeen?: string | null
 }
 
-export interface StickerReactionCount {
-  word: string
-  count: number
-  mine: boolean
-  users: Array<{ id: string; name: string; avatar: string | null }>
-}
-
 export interface PostSticker {
   id: string
   type: 'emoji' | 'message' | 'gift'
@@ -43,7 +36,7 @@ export interface PostSticker {
   user: Pick<User, 'id' | 'name' | 'avatar'>
   likeCount?: number
   myLike?: boolean
-  reactions?: StickerReactionCount[]
+  viewCount?: number
 }
 
 export interface Post {
