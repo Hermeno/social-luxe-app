@@ -29,7 +29,7 @@ router.get('/:id/reactions', reactionController.getReactions)
 router.get('/:id/stickers', postController.getStickers)
 router.post('/:id/stickers', postController.addSticker)
 router.delete('/:id/stickers/:stickerId', postController.removeSticker)
-router.post('/stickers/:stickerId/like',  postController.likeSticker)
-router.post('/stickers/:stickerId/react', postController.reactSticker)
+router.post('/stickers/:stickerId/like', postController.likeSticker)
+router.post('/stickers/:stickerId/view', postController.viewStickerMessage)
 
 export default router

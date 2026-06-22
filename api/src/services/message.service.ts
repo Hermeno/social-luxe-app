@@ -19,17 +19,22 @@ export async function getConversations(userId: string) {
   return messages
 }
 
-export async function getMessages(userId: string, otherId: string, page = 1, limit = 30) {
+export async function getMessages(
+  userId: string,
+  otherId: string,
+  before?: string,
+  limit = 30,
+) {
   return prisma.message.findMany({
     where: {
       OR: [
         { senderId: userId, receiverId: otherId },
         { senderId: otherId, receiverId: userId },
       ],
+      ...(before ? { createdAt: { lt: new Date(before) } } : {}),
     },
     include: MSG_SELECT,
     orderBy: { createdAt: 'desc' },
-    skip: (page - 1) * limit,
     take: limit,
   })
 }

@@ -249,12 +249,10 @@ export async function likeSticker(req: AuthRequest, res: Response) {
   } catch (err) { return handleError(res, err) }
 }
 
-export async function reactSticker(req: AuthRequest, res: Response) {
+export async function viewStickerMessage(req: AuthRequest, res: Response) {
   try {
-    const { word } = req.body
-    if (!word || typeof word !== 'string') return badRequest(res, 'word required')
-    const result = await postService.reactSticker(req.user!.userId, req.params.stickerId, word.trim())
-    return ok(res, result)
+    await postService.viewSticker(req.user!.userId, req.params.stickerId)
+    return ok(res, null)
   } catch (err) { return handleError(res, err) }
 }
 

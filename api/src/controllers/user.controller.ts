@@ -4,6 +4,7 @@ import { ok, badRequest, serverError, notFound, forbidden, created } from '../ut
 import { handleError } from '../utils/errors'
 import { AuthRequest } from '../types'
 import { prisma } from '../config/database'
+import { Prisma } from '@prisma/client'
 import { uploadToCloudinary } from '../utils/cloudinary.util'
 
 export async function getAllUsers(req: AuthRequest, res: Response) {
@@ -66,58 +67,82 @@ export async function getConnections(req: AuthRequest, res: Response) {
   try {
     const userId = req.user!.userId
 
-    // Union of people I follow + people who follow me
+    // 1. One query: union of followers + following
     const follows = await prisma.follow.findMany({
       where: { OR: [{ followerId: userId }, { followingId: userId }] },
       select: {
-        follower:   { select: { id: true, name: true, avatar: true } },
-        following:  { select: { id: true, name: true, avatar: true } },
+        follower:    { select: { id: true, name: true, avatar: true } },
+        following:   { select: { id: true, name: true, avatar: true } },
         followerId:  true,
         followingId: true,
       },
     })
 
-    const map = new Map<string, { id: string; name: string; avatar: string | null }>()
+    const userMap = new Map<string, { id: string; name: string; avatar: string | null }>()
     follows.forEach((f) => {
-      if (f.followerId  !== userId) map.set(f.followerId,  f.follower)
-      if (f.followingId !== userId) map.set(f.followingId, f.following)
+      if (f.followerId  !== userId) userMap.set(f.followerId,  f.follower)
+      if (f.followingId !== userId) userMap.set(f.followingId, f.following)
     })
+
+    const connectionIds = Array.from(userMap.keys())
+    if (connectionIds.length === 0) return ok(res, [])
 
     const now = new Date()
 
-    // Fetch per-connection data in parallel
-    const connections = await Promise.all(
-      Array.from(map.values()).map(async (other) => {
-        const [lastMessage, unreadCount, activePosts] = await Promise.all([
-          prisma.message.findFirst({
-            where: {
-              OR: [
-                { senderId: userId, receiverId: other.id },
-                { senderId: other.id, receiverId: userId },
-              ],
-            },
-            orderBy: { createdAt: 'desc' },
-            select: { id: true, content: true, senderId: true, readAt: true, createdAt: true },
-          }),
-          prisma.message.count({
-            where: { senderId: other.id, receiverId: userId, readAt: null },
-          }),
-          prisma.post.findMany({
-            where: { userId: other.id, expiresAt: { gt: now } },
-            select: { id: true },
-            orderBy: { createdAt: 'desc' },
-          }),
-        ])
-        return {
-          user: other,
-          lastMessage: lastMessage ?? null,
-          unreadCount,
-          postIds: activePosts.map((p) => p.id),
-        }
-      })
-    )
+    // 2–4. Three aggregated queries (replaces 3N individual queries)
+    type RawMsg = {
+      id: string; content: string | null; senderId: string; receiverId: string
+      readAt: Date | null; createdAt: Date; partner_id: string
+    }
 
-    // Sort: recent messages first, then alphabetically
+    const [rawLastMessages, unreadGroups, activePosts] = await Promise.all([
+      // Last message per conversation — DISTINCT ON is O(messages) not O(N*messages)
+      prisma.$queryRaw<RawMsg[]>`
+        SELECT DISTINCT ON (
+            CASE WHEN m."senderId" = ${userId} THEN m."receiverId" ELSE m."senderId" END
+          )
+          m.id, m.content, m."senderId", m."receiverId", m."readAt", m."createdAt",
+          CASE WHEN m."senderId" = ${userId} THEN m."receiverId" ELSE m."senderId" END AS partner_id
+        FROM "Message" m
+        WHERE (m."senderId" = ${userId} AND m."receiverId" = ANY(${connectionIds}::text[]))
+           OR (m."senderId" = ANY(${connectionIds}::text[]) AND m."receiverId" = ${userId})
+        ORDER BY
+          CASE WHEN m."senderId" = ${userId} THEN m."receiverId" ELSE m."senderId" END,
+          m."createdAt" DESC
+      `,
+
+      // Unread counts — one GROUP BY instead of N COUNT queries
+      prisma.message.groupBy({
+        by:    ['senderId'],
+        where: { senderId: { in: connectionIds }, receiverId: userId, readAt: null },
+        _count: { _all: true },
+      }),
+
+      // Active posts — one IN query instead of N findMany queries
+      prisma.post.findMany({
+        where:   { userId: { in: connectionIds }, expiresAt: { gt: now } },
+        select:  { id: true, userId: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ])
+
+    // Build lookup maps
+    const lastMsgByPartner = new Map(rawLastMessages.map((m) => [m.partner_id, m]))
+    const unreadByPartner  = new Map(unreadGroups.map((g) => [g.senderId, g._count._all]))
+    const postsByUser      = new Map<string, string[]>()
+    activePosts.forEach((p) => {
+      if (!postsByUser.has(p.userId)) postsByUser.set(p.userId, [])
+      postsByUser.get(p.userId)!.push(p.id)
+    })
+
+    // Assemble and sort
+    const connections = connectionIds.map((otherId) => ({
+      user:         userMap.get(otherId)!,
+      lastMessage:  lastMsgByPartner.get(otherId) ?? null,
+      unreadCount:  unreadByPartner.get(otherId)  ?? 0,
+      postIds:      postsByUser.get(otherId)       ?? [],
+    }))
+
     connections.sort((a, b) => {
       if (a.lastMessage && b.lastMessage)
         return new Date(b.lastMessage.createdAt).getTime() - new Date(a.lastMessage.createdAt).getTime()

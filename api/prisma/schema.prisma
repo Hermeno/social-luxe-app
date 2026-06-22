@@ -114,6 +114,8 @@ model User {
   postStickers     PostSticker[]
   stickerLikes     StickerLike[]
   stickerReactions StickerReaction[]
+  stickerViews     StickerView[]
+  travelObjects    TravelObject[]
 }
 
 // ─── Post ────────────────────────────────────────────────────────────────────
@@ -134,19 +136,57 @@ model Post {
   partnerAccepted Boolean   @default(false)
   isAnnouncement  Boolean   @default(false)
 
-  stickersEnabled Boolean   @default(false)
+  stickersEnabled  Boolean   @default(false)
+  isTravelEnabled  Boolean   @default(true)
 
-  user        User             @relation(fields: [userId], references: [id])
-  partnerUser User?            @relation("PostPartner", fields: [partnerUserId], references: [id])
-  likes       Like[]
-  comments    Comment[]
-  shares      Share[]
-  views       View[]
-  reactions   Reaction[]
-  bookmarks   Bookmark[]
-  extendVotes PostExtendVote[]
-  coins       LuxeCoin[]
-  stickers    PostSticker[]
+  user           User             @relation(fields: [userId], references: [id])
+  partnerUser    User?            @relation("PostPartner", fields: [partnerUserId], references: [id])
+  likes          Like[]
+  comments       Comment[]
+  shares         Share[]
+  views          View[]
+  reactions      Reaction[]
+  bookmarks      Bookmark[]
+  extendVotes    PostExtendVote[]
+  coins          LuxeCoin[]
+  stickers       PostSticker[]
+  travelNodes    TravelNode[]
+  travelObjects  TravelObject[]
+}
+
+// ─── Travel Posts ─────────────────────────────────────────────────────────────
+
+model TravelNode {
+  id                 String   @id @default(cuid())
+  postId             String
+  countryCode        String
+  countryName        String
+  views              Int      @default(0)
+  likes              Int      @default(0)
+  comments           Int      @default(0)
+  objectsAdded       Int      @default(0)
+  firstInteractionAt DateTime @default(now())
+  lastInteractionAt  DateTime @default(now()) @updatedAt
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, countryCode])
+  @@index([postId])
+}
+
+model TravelObject {
+  id          String   @id @default(cuid())
+  postId      String
+  userId      String
+  type        String   @default("emoji")
+  value       String
+  countryCode String
+  createdAt   DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId],  references: [id], onDelete: Cascade)
+
+  @@index([postId])
 }
 
 // ─── Post Stickers ───────────────────────────────────────────────────────────
@@ -166,8 +206,21 @@ model PostSticker {
   user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   likes     StickerLike[]
   reactions StickerReaction[]
+  views     StickerView[]
 
   @@index([postId])
+}
+
+model StickerView {
+  id        String      @id @default(cuid())
+  stickerId String
+  userId    String
+  createdAt DateTime    @default(now())
+
+  sticker PostSticker @relation(fields: [stickerId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId],    references: [id], onDelete: Cascade)
+
+  @@unique([stickerId, userId])
 }
 
 model StickerLike {
@@ -314,9 +367,12 @@ model Message {
 
   sender    User              @relation("Sender",   fields: [senderId],   references: [id])
   receiver  User              @relation("Receiver", fields: [receiverId], references: [id])
-  replyTo   Message?          @relation("MessageReplies", fields: [replyToId], references: [id])
+  replyTo   Message?          @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
   replies   Message[]         @relation("MessageReplies")
   reactions MessageReaction[]
+
+  @@index([senderId, receiverId, createdAt(sort: Desc)])
+  @@index([receiverId, senderId, createdAt(sort: Desc)])
 }
 
 model MessageReaction {

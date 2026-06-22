@@ -17,8 +17,8 @@ export async function getConversations(req: AuthRequest, res: Response) {
 
 export async function getMessages(req: AuthRequest, res: Response) {
   try {
-    const page = Number(req.query.page ?? 1)
-    const messages = await messageService.getMessages(req.user!.userId, req.params.userId, page)
+    const before  = req.query.before as string | undefined
+    const messages = await messageService.getMessages(req.user!.userId, req.params.userId, before)
     await messageService.markRead(req.user!.userId, req.params.userId)
     return ok(res, messages)
   } catch (err) { return handleError(res, err) }
@@ -77,9 +77,7 @@ export async function deleteMessage(req: AuthRequest, res: Response) {
     const msg = await prisma.message.findUnique({ where: { id: req.params.id } })
     if (!msg) return notFound(res, 'Message not found')
     if (msg.senderId !== req.user!.userId) return forbidden(res, 'Not your message')
-    // Null out any reply references first to avoid FK constraint errors
-    await prisma.message.updateMany({ where: { replyToId: req.params.id }, data: { replyToId: null } })
-    await prisma.messageReaction.deleteMany({ where: { messageId: req.params.id } })
+    // replyToId FK uses onDelete: SetNull (schema), reactions use onDelete: Cascade
     await prisma.message.delete({ where: { id: req.params.id } })
     emitToUser(msg.receiverId, 'message:deleted', { messageId: req.params.id })
     return ok(res, { deleted: true })

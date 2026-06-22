@@ -3,6 +3,7 @@ import { MediaType } from '@prisma/client'
 import { POST_INITIAL_HOURS, POST_EXTENDED_HOURS } from '../types'
 import { sendPush } from './notification.service'
 import { withThumbnail, withThumbnails } from '../utils/cloudinary.util'
+import { interact as travelInteract } from './travel.service'
 
 export async function createPost(
   userId: string,
@@ -42,30 +43,15 @@ function haversine(lat1: number, lng1: number, lat2: number, lng2: number) {
 
 // ─── Sticker service functions ───────────────────────────────────────────────
 
-const STICKER_REACTION_SELECT = {
-  userId: true,
-  word:   true,
-  user:   { select: { id: true, name: true, avatar: true } },
-} as const
-
 type RawStickerRow = {
   id: string; postId: string; userId: string; type: string; emoji: string
   content: string | null; x: number; y: number; createdAt: Date
-  user:      { id: string; name: string; avatar: string | null }
-  likes:     { userId: string }[]
-  reactions: { userId: string; word: string; user: { id: string; name: string; avatar: string | null } }[]
+  user:  { id: string; name: string; avatar: string | null }
+  likes: { userId: string }[]
+  views: { userId: string }[]
 }
 
 function formatSticker(s: RawStickerRow, requesterId?: string) {
-  const reactionMap = new Map<string, { count: number; mine: boolean; users: { id: string; name: string; avatar: string | null }[] }>()
-  for (const r of s.reactions) {
-    const prev = reactionMap.get(r.word) ?? { count: 0, mine: false, users: [] }
-    reactionMap.set(r.word, {
-      count: prev.count + 1,
-      mine:  prev.mine || r.userId === requesterId,
-      users: [...prev.users, r.user],
-    })
-  }
   return {
     id:        s.id,
     postId:    s.postId,
@@ -79,7 +65,7 @@ function formatSticker(s: RawStickerRow, requesterId?: string) {
     user:      s.user,
     likeCount: s.likes.length,
     myLike:    s.likes.some((l) => l.userId === requesterId),
-    reactions: Array.from(reactionMap.entries()).map(([word, { count, mine, users }]) => ({ word, count, mine, users })),
+    viewCount: s.views.length,
   }
 }
 
@@ -87,9 +73,9 @@ export async function getStickers(postId: string, requesterId?: string) {
   const rows = await prisma.postSticker.findMany({
     where:   { postId },
     include: {
-      user:      { select: { id: true, name: true, avatar: true } },
-      likes:     { select: { userId: true } },
-      reactions: { select: STICKER_REACTION_SELECT },
+      user:  { select: { id: true, name: true, avatar: true } },
+      likes: { select: { userId: true } },
+      views: { select: { userId: true } },
     },
     orderBy: { createdAt: 'asc' },
   })
@@ -108,16 +94,12 @@ export async function likeSticker(userId: string, stickerId: string) {
   return { liked: true }
 }
 
-export async function reactSticker(userId: string, stickerId: string, word: string) {
-  const existing = await prisma.stickerReaction.findUnique({
-    where: { stickerId_userId_word: { stickerId, userId, word } },
+export async function viewSticker(userId: string, stickerId: string) {
+  await prisma.stickerView.upsert({
+    where:  { stickerId_userId: { stickerId, userId } },
+    update: {},
+    create: { stickerId, userId },
   })
-  if (existing) {
-    await prisma.stickerReaction.delete({ where: { stickerId_userId_word: { stickerId, userId, word } } })
-    return { reacted: false }
-  }
-  await prisma.stickerReaction.create({ data: { stickerId, userId, word } })
-  return { reacted: true }
 }
 
 const STICKER_LIMIT = 50
@@ -172,9 +154,9 @@ async function attachRecentCommenters(posts: any[], userId?: string): Promise<an
     ? await prisma.postSticker.findMany({
         where:   { postId: { in: stickerEnabledIds } },
         include: {
-          user:      { select: { id: true, name: true, avatar: true } },
-          likes:     { select: { userId: true } },
-          reactions: { select: STICKER_REACTION_SELECT },
+          user:  { select: { id: true, name: true, avatar: true } },
+          likes: { select: { userId: true } },
+          views: { select: { userId: true } },
         },
         orderBy: { createdAt: 'asc' },
       })
@@ -185,14 +167,22 @@ async function attachRecentCommenters(posts: any[], userId?: string): Promise<an
     stickersByPost.get(s.postId)!.push(formatSticker(s as RawStickerRow, userId))
   }
 
-  // ── Vote extend ─────────────────────────────────────────────────────────────
-  const votedPostIds = new Set<string>()
+  // ── Vote extend + User likes ─────────────────────────────────────────────────
+  const votedPostIds  = new Set<string>()
+  const likedPostIds  = new Set<string>()
   if (userId && allPostIds.length > 0) {
-    const votes = await prisma.postExtendVote.findMany({
-      where:  { userId, postId: { in: allPostIds } },
-      select: { postId: true },
-    })
+    const [votes, likes] = await Promise.all([
+      prisma.postExtendVote.findMany({
+        where:  { userId, postId: { in: allPostIds } },
+        select: { postId: true },
+      }),
+      prisma.like.findMany({
+        where:  { userId, postId: { in: allPostIds } },
+        select: { postId: true },
+      }),
+    ])
     votes.forEach((v) => votedPostIds.add(v.postId))
+    likes.forEach((l) => likedPostIds.add(l.postId))
   }
 
   return posts.map((p) => {
@@ -207,8 +197,9 @@ async function attachRecentCommenters(posts: any[], userId?: string): Promise<an
     return {
       ...p,
       recentCommenters,
-      stickers: stickersByPost.get(p.id) ?? [],
+      stickers:       stickersByPost.get(p.id) ?? [],
       hasVotedExtend: votedPostIds.has(p.id),
+      userLiked:      likedPostIds.has(p.id),
     }
   })
 }
@@ -326,12 +317,12 @@ export async function likePost(userId: string, postId: string) {
     return { liked: false }
   }
   await prisma.like.create({ data: { userId, postId } })
-  extendLife(postId, 10).catch(() => {})   // +10 min — fire-and-forget
+  extendLife(postId, 10).catch(() => {})
+  travelInteract(postId, userId, 'like').catch(() => {})  // fire-and-forget
   return { liked: true }
 }
 
 export async function addView(userId: string, postId: string) {
-  // Skip view if user has ghost mode enabled
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { ghostMode: true } })
   if (user?.ghostMode) return
 
@@ -340,6 +331,7 @@ export async function addView(userId: string, postId: string) {
     update: {},
     create: { userId, postId },
   })
+  travelInteract(postId, userId, 'view').catch(() => {})  // fire-and-forget
 }
 
 export async function deletePost(userId: string, postId: string) {
