@@ -12,7 +12,7 @@ import { Post } from '../../types'
 import { colors, fonts } from '../../theme'
 import { useT } from '../../i18n'
 import { useAuthStore } from '../../store/auth.store'
-import { toggleFollow, getFollowStatus } from '../../services/follow.service'
+import { useFollowStore } from '../../store/follow.store'
 import { getCache, setCache } from '../../db/database'
 import * as postService from '../../services/post.service'
 import { API_BASE } from '../../config'
@@ -50,22 +50,6 @@ type Nav = StackNavigationProp<AppStackParams>
 
 const FULL_LIFE_MS  = 24 * 60 * 60 * 1000   // 24h baseline
 const DYING_THRESH  =  2 * 60 * 60 * 1000   // <2h = dying
-
-// Module-level follow cache — persists for the full JS session
-const followCache = new Map<string, boolean>()
-let _cacheWarmed = false
-
-// Load my_following from SQLite into followCache once per session.
-// After this, useState initializers and the follow-status useEffect both
-// read the correct value without a per-user API call.
-async function ensureFollowCacheWarmed(): Promise<void> {
-  if (_cacheWarmed) return
-  _cacheWarmed = true
-  try {
-    const following = await getCache<Array<{ id: string }>>('my_following')
-    if (following?.length) following.forEach((u) => { if (!followCache.has(u.id)) followCache.set(u.id, true) })
-  } catch {}
-}
 
 // ─── Hourglass Icon (Lucide style) ───────────────────────────────────────────
 // Viewbox 24×24. Funnel corners: top (7,2)–(17,2), pinch (12,12), bottom (7,22)–(17,22)
@@ -132,8 +116,8 @@ export default function PostInfo({ post, isActive, commentCount: commentCountPro
   const { user }    = useAuthStore()
   const nav         = useNavigation<Nav>()
   const t           = useT()
+  const following   = useFollowStore((s) => s.followingIds.has(post.user.id))
   const [expanded, setExpanded]           = useState(false)
-  const [following, setFollowing]         = useState(() => followCache.get(post.user.id) ?? false)
   const [loadingFollow, setLoadingFollow] = useState(false)
   const [now, setNow]                     = useState(Date.now)
   const [extraCommenters, setExtraCommenters] = useState<CommenterThumb[]>([])
@@ -151,16 +135,6 @@ export default function PostInfo({ post, isActive, commentCount: commentCountPro
 
   // Animated values
   const pulseAnim  = useRef(new Animated.Value(1)).current
-
-  // Warm the follow cache from SQLite on first mount — runs once per session.
-  // After warm, re-check this post's author so the button shows the right state immediately.
-  useEffect(() => {
-    if (_cacheWarmed) return
-    ensureFollowCacheWarmed().then(() => {
-      const cached = followCache.get(post.user.id)
-      if (cached !== undefined) setFollowing(cached)
-    }).catch(() => {})
-  }, [])
 
   // Live clock — refreshes every 30s for display
   useEffect(() => {
@@ -187,7 +161,6 @@ export default function PostInfo({ post, isActive, commentCount: commentCountPro
   // Reset state on post change
   useEffect(() => {
     setExpanded(false)
-    setFollowing(followCache.get(post.user.id) ?? false)
     setExtraCommenters([])
   }, [post.id])
 
@@ -219,25 +192,11 @@ export default function PostInfo({ post, isActive, commentCount: commentCountPro
     return () => { cancelled = true }
   }, [post.id])
 
-  // Follow status fetch
-  useEffect(() => {
-    if (isSelf) return
-    if (followCache.has(post.user.id)) {
-      setFollowing(followCache.get(post.user.id)!)
-      return
-    }
-    getFollowStatus(post.user.id)
-      .then((r) => { followCache.set(post.user.id, r.following); setFollowing(r.following) })
-      .catch(() => {})
-  }, [post.user.id])
-
   async function handleFollow(duration: FollowDuration = 'forever') {
     if (loadingFollow) return
     setLoadingFollow(true)
     try {
-      const res = await toggleFollow(post.user.id, duration)
-      followCache.set(post.user.id, res.following)
-      setFollowing(res.following)
+      await useFollowStore.getState().toggle(post.user.id, duration)
     } catch {}
     setLoadingFollow(false)
   }

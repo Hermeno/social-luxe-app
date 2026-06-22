@@ -50,7 +50,7 @@ function resolveMedia(url: string) {
 // ─── Progress Bars ────────────────────────────────────────────────────────────
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function FeedScreen() {
-  const { posts, loading, refresh, loadMore, prependPost, removePost, updatePost, incrementView } = useFeed()
+  const { posts, loading, refresh, loadMore, prependPost, removePost, updatePost, incrementView, updatePostCounts } = useFeed()
   const t = useT()
   const tAgo = (iso: string) => {
     const diff = Date.now() - new Date(iso).getTime()
@@ -138,6 +138,7 @@ export default function FeedScreen() {
     },
   }), [])
   const likedLoadedRef = useRef(false)
+  const likedSyncedFromServerRef = useRef(false)
 
   // Persist likes: load on mount, save on change (guard prevents the initial
   // empty-Set render from overwriting the cache before the async load resolves)
@@ -151,6 +152,19 @@ export default function FeedScreen() {
     if (!likedLoadedRef.current) return
     setCache('liked_post_ids', Array.from(likedPostIds)).catch(() => {})
   }, [likedPostIds])
+
+  // Seed likedPostIds from server on first non-empty feed load (fixes fresh installs)
+  useEffect(() => {
+    if (likedSyncedFromServerRef.current || posts.length === 0) return
+    likedSyncedFromServerRef.current = true
+    const serverLiked = posts.filter((p) => p.userLiked).map((p) => p.id)
+    if (serverLiked.length === 0) return
+    setLikedPostIds((prev) => {
+      const next = new Set(prev)
+      serverLiked.forEach((id) => next.add(id))
+      return next
+    })
+  }, [posts])
 
   // Overlay opacity that COVERS the video (1 = thumbnail visible, 0 = video visible).
   // Starts at 1 so the thumbnail is shown while the video loads its first frame.
@@ -725,7 +739,13 @@ export default function FeedScreen() {
               }}
             newPostsCount={newPostsCount}
             liked={likedPostIds.has(post.id)}
-            onLikeChange={(l) => setLikedPostIds((s) => { const n = new Set(s); l ? n.add(post.id) : n.delete(post.id); return n })}
+            onLikeChange={(l) => {
+              const wasLiked = likedPostIds.has(post.id)
+              setLikedPostIds((s) => { const n = new Set(s); l ? n.add(post.id) : n.delete(post.id); return n })
+              if (l !== wasLiked) {
+                updatePostCounts(post.id, { likes: Math.max(0, (post._count?.likes ?? 0) + (l ? 1 : -1)) })
+              }
+            }}
             commentCount={(post._count?.comments ?? 0) + (commentDeltas[post.id] ?? 0)}
             onDeleted={(id) => { removePost(id); navigateTo(Math.max(0, currentIndex - 1)) }}
             onEdited={(id, caption) => updatePost(id, caption)}

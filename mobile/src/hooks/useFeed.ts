@@ -16,7 +16,6 @@ import {
   getCachedPosts,
   updateCachedPost,
   deleteCachedPost,
-  queueLike,
   enqueueSyncOp,
 } from '../db/database'
 import * as postService from '../services/post.service'
@@ -149,19 +148,11 @@ export function useFeed() {
     }))
   }, [])
 
-  // ── Like (optimistic + SQLite queue if offline) ───────────────────────────
-  const likePost = useCallback(async (postId: string, liked: boolean) => {
+  // ── Update like count in memory (called from ActionBar via FeedScreen) ───────
+  const updatePostCounts = useCallback((postId: string, delta: Partial<Post['_count']>) => {
     setPosts((prev) => prev.map((p) =>
-      p.id === postId
-        ? { ...p, _count: { ...p._count, likes: Math.max(0, (p._count?.likes ?? 0) + (liked ? 1 : -1)) } }
-        : p,
+      p.id !== postId ? p : { ...p, _count: { ...p._count, ...delta } },
     ))
-
-    if (isConnected()) {
-      postService.likePost(postId).catch(() => {})
-    } else {
-      await queueLike(postId, liked).catch(() => {})
-    }
   }, [])
 
   // ── Purge expired posts from in-memory state every 30s ───────────────────
@@ -193,5 +184,5 @@ export function useFeed() {
     return () => { socket.off('post:new', onNewPost) }
   }, [prependPost])
 
-  return { posts, loading, loadMore, refresh, prependPost, removePost, updatePost, incrementView, likePost }
+  return { posts, loading, loadMore, refresh, prependPost, removePost, updatePost, incrementView, updatePostCounts }
 }

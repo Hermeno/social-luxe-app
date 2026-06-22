@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import {
   View, Text, FlatList, StyleSheet, ImageBackground, ActivityIndicator,
-  KeyboardAvoidingView, Platform, Animated, Pressable, TouchableOpacity, Modal, StatusBar, AppState,
+  Keyboard, Platform, Animated, Pressable, TouchableOpacity, Modal, StatusBar, AppState,
 } from 'react-native'
 import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
@@ -13,6 +13,7 @@ import { Message, MessageReaction } from '../../types'
 import * as msgService from '../../services/message.service'
 import { useAuthStore } from '../../store/auth.store'
 import { useOnlineStore } from '../../store/online.store'
+import { useMessageBadgeStore } from '../../store/messageBadge.store'
 import { getSocket } from '../../socket'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { colors, spacing, radius, fonts } from '../../theme'
@@ -24,6 +25,7 @@ import Toast from 'react-native-toast-message'
 import { API_BASE } from '../../config'
 import {
   getCachedMessages,
+  getCachedConnections,
   cacheMessages,
   upsertCachedMessage,
   replacePendingMessage,
@@ -33,6 +35,7 @@ import {
 } from '../../db/database'
 import { isConnected } from '../../services/netinfo.service'
 import { useT } from '../../i18n'
+import AvatarImage from '../../components/AvatarImage'
 
 type Route  = RouteProp<AppStackParams, 'Chat'>
 type NavProp = StackNavigationProp<AppStackParams>
@@ -238,11 +241,15 @@ interface BubbleProps {
   isFirst: boolean
   isLast: boolean
   myUserId: string
+  partnerAvatar: string | null
+  partnerName: string
+  myAvatar: string | null
+  myName: string
   onLongPress: (msg: Message) => void
   onReply: (msg: Message) => void
 }
 
-function MessageBubble({ msg, mine, isFirst, isLast, myUserId, onLongPress, onReply }: BubbleProps) {
+function MessageBubble({ msg, mine, isFirst, isLast, myUserId, partnerAvatar, partnerName, myAvatar, myName, onLongPress, onReply }: BubbleProps) {
   const mediaUri = msg.mediaUrl
     ? (msg.mediaUrl.startsWith('http') || msg.mediaUrl.startsWith('file://')
         ? msg.mediaUrl
@@ -258,6 +265,11 @@ function MessageBubble({ msg, mine, isFirst, isLast, myUserId, onLongPress, onRe
     // FIX: row must be flex:1 so that maxWidth:'80%' on bubbleOuter
     // is relative to the full screen width — prevents text going vertical
     <View style={[t.row, mine ? t.rowRight : t.rowLeft, !isLast && t.rowCompact]}>
+      {!mine && (
+        <View style={t.msgAvatarWrap}>
+          <AvatarImage uri={partnerAvatar} name={partnerName} size={24} borderWidth={0} borderColor="transparent" />
+        </View>
+      )}
       <View style={[t.bubbleOuter, mine ? t.bubbleOuterMine : t.bubbleOuterTheirs]}>
 
         <Pressable
@@ -334,6 +346,11 @@ function MessageBubble({ msg, mine, isFirst, isLast, myUserId, onLongPress, onRe
           </View>
         )}
       </View>
+      {mine && (
+        <View style={t.msgAvatarWrap}>
+          <AvatarImage uri={myAvatar} name={myName} size={24} borderWidth={0} borderColor="transparent" />
+        </View>
+      )}
     </View>
   )
 }
@@ -355,7 +372,7 @@ export default function ChatScreen() {
   const { user }   = useAuthStore()
   const route      = useRoute<Route>()
   const nav        = useNavigation<NavProp>()
-  const { userId, userName, userAvatar } = route.params
+  const { userId, userName, userAvatar, partnerHasPosts = false } = route.params
 
   const [messages, setMessages]         = useState<LocalMessage[]>([])
   const [text, setText]                 = useState('')
@@ -366,14 +383,41 @@ export default function ChatScreen() {
   const [editingMsg, setEditingMsg]           = useState<Message | null>(null)
   const [showScheduler, setShowScheduler]     = useState(false)
   const [scheduledMsg, setScheduledMsg]       = useState<scheduledSvc.ScheduledMessage | null>(null)
-  const [loadingMore, setLoadingMore]         = useState(false)
-  const [hasMorePages, setHasMorePages]       = useState(false)
-  const msgPageRef = useRef(1)
+  const [loadingMore, setLoadingMore]   = useState(false)
+  const [hasMorePages, setHasMorePages] = useState(false)
+  const oldestMsgAtRef = useRef<string | undefined>(undefined)
 
   const listRef     = useRef<FlatList>(null)
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { bottom, top } = useSafeAreaInsets()
   const isOnline        = useOnlineStore((s) => s.isOnline(userId))
+
+  // ── Keyboard offset — replaces KeyboardAvoidingView to avoid stuck-padding bug ─
+  const kbAnim = useRef(new Animated.Value(0)).current
+
+  useEffect(() => {
+    const isIOS = Platform.OS === 'ios'
+    const showEvt = isIOS ? 'keyboardWillShow' : 'keyboardDidShow'
+    const hideEvt = isIOS ? 'keyboardWillHide' : 'keyboardDidHide'
+
+    const sub1 = Keyboard.addListener(showEvt, (e) => {
+      Animated.timing(kbAnim, {
+        toValue: e.endCoordinates.height - (isIOS ? bottom : 0),
+        duration: isIOS ? (e.duration ?? 250) : 0,
+        useNativeDriver: false,
+      }).start()
+    })
+
+    const sub2 = Keyboard.addListener(hideEvt, (e) => {
+      Animated.timing(kbAnim, {
+        toValue: 0,
+        duration: isIOS ? (e.duration ?? 250) : 0,
+        useNativeDriver: false,
+      }).start()
+    })
+
+    return () => { sub1.remove(); sub2.remove() }
+  }, [bottom])
 
   const formatDateLabel = useCallback((dateStr: string) => {
     const d    = new Date(dateStr)
@@ -403,10 +447,13 @@ export default function ChatScreen() {
 
     if (!isConnected()) return
     try {
-      const fresh = await msgService.getMessages(userId, 1)
+      // No cursor on initial load → newest 30 messages
+      const fresh = await msgService.getMessages(userId)
       const sorted = [...fresh].reverse()
-      msgPageRef.current = 1
       setHasMorePages(fresh.length >= 30)
+      if (sorted.length > 0) {
+        oldestMsgAtRef.current = sorted[0].createdAt
+      }
 
       setMessages((prev) => {
         const pendingLocal   = prev.filter((m) => m._pending || m._failed)
@@ -426,22 +473,28 @@ export default function ChatScreen() {
         cacheMessages(userId, sorted).catch(() => {}),
         setSyncMeta(syncKey, String(Date.now())).catch(() => {}),
       ])
+
+      // Clear unread badge for this conversation
+      const conns = await getCachedConnections().catch(() => [])
+      const conn  = conns.find((c) => c.user.id === userId)
+      if (conn?.unreadCount) {
+        useMessageBadgeStore.getState().clearConversation(conn.unreadCount)
+        updateCachedConnection(userId, { unreadCount: 0 }).catch(() => {})
+      }
     } catch {}
   }, [userId])
 
-  // ── Load older messages (scroll to top triggers this on inverted list) ──────
+  // ── Load older messages (cursor-based, no page-shift duplicates) ───────────
   const loadMoreMessages = useCallback(async () => {
     if (loadingMore || !hasMorePages || !isConnected()) return
+    const cursor = oldestMsgAtRef.current
+    if (!cursor) return
     setLoadingMore(true)
     try {
-      const nextPage = msgPageRef.current + 1
-      const older = await msgService.getMessages(userId, nextPage)
-      if (older.length === 0) {
-        setHasMorePages(false)
-        setLoadingMore(false)
-        return
-      }
+      const older = await msgService.getMessages(userId, cursor)
+      if (older.length === 0) { setHasMorePages(false); setLoadingMore(false); return }
       const sorted = [...older].reverse()
+      if (sorted.length > 0) oldestMsgAtRef.current = sorted[0].createdAt
       setMessages((prev) => {
         const prevIds = new Set(prev.map((m) => m.id))
         const newOnes = sorted.filter((m) => !prevIds.has(m.id))
@@ -451,7 +504,6 @@ export default function ChatScreen() {
         return merged
       })
       await cacheMessages(userId, sorted).catch(() => {})
-      msgPageRef.current = nextPage
       if (older.length < 30) setHasMorePages(false)
     } catch {}
     setLoadingMore(false)
@@ -834,14 +886,11 @@ export default function ChatScreen() {
 
   return (
     <View style={[t.screen, { paddingTop: top }]}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? top : 0}
-      >
+      <Animated.View style={{ flex: 1, paddingBottom: kbAnim }}>
         <ChatHeader
           userName={userName}
           avatarUri={userAvatar ?? null}
+          hasPosts={partnerHasPosts}
           isOnline={isOnline}
           isTyping={isTyping}
           onBack={() => nav.goBack()}
@@ -877,6 +926,10 @@ export default function ChatScreen() {
                     isFirst={item.isFirst}
                     isLast={item.isLast}
                     myUserId={user?.id ?? ''}
+                    partnerAvatar={userAvatar ?? null}
+                    partnerName={userName}
+                    myAvatar={user?.avatar ?? null}
+                    myName={user?.name ?? ''}
                     onLongPress={handleMessageLongPress}
                     onReply={setReplyingTo}
                   />
@@ -978,7 +1031,7 @@ export default function ChatScreen() {
           onSchedule={handleScheduleMessage}
           onCancelScheduled={handleCancelScheduled}
         />
-      </KeyboardAvoidingView>
+      </Animated.View>
 
     </View>
   )
@@ -994,10 +1047,20 @@ const t = StyleSheet.create({
   listContent: { paddingHorizontal: 12, paddingTop: 12, paddingBottom: 16 },
 
   // ── Row: must be flex:1 so maxWidth on bubbleOuter works against full width ──
-  row:        { flex: 1, flexDirection: 'row', marginBottom: 4 },
+  row:        { flex: 1, flexDirection: 'row', marginBottom: 4, alignItems: 'flex-end' },
   rowRight:   { justifyContent: 'flex-end' },
   rowLeft:    { justifyContent: 'flex-start' },
   rowCompact: { marginBottom: 1 },
+
+  // ── Message avatar (always visible beside every bubble) ──────────────────
+  msgAvatarWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    overflow: 'hidden',
+    flexShrink: 0,
+    marginHorizontal: 4,
+  },
 
   // ── Outer wrapper — constrain to 80% of screen width (fixes vertical text) ──
   bubbleOuter:      { maxWidth: '80%' },

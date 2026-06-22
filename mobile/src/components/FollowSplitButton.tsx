@@ -3,9 +3,12 @@ import {
   View, Text, TouchableOpacity, StyleSheet, Modal,
   TouchableWithoutFeedback, ActivityIndicator,
 } from 'react-native'
+import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { colors, fonts } from '../theme'
 import { FollowDuration } from '../services/follow.service'
+
+const GRAD: [string, string, string] = ['#CA2851', '#FF6766', '#FFB173']
 
 export type { FollowDuration }
 
@@ -59,35 +62,47 @@ export default function FollowSplitButton({ following, loading, onFollow, theme 
     )
   }
 
+  // Shared inner content for both dark and gradient-light variants
+  const innerContent = (
+    <>
+      <TouchableOpacity
+        style={[s.side, isDark ? s.sideSmall : s.sideLarge]}
+        onPress={() => onFollow('forever')}
+        activeOpacity={0.7}
+        disabled={loading}
+      >
+        {loading
+          ? <ActivityIndicator size="small" color={colors.white} />
+          : <Text style={[s.label, s.labelFollow]}>{followBack ? 'Seguir de volta' : 'Seguir'}</Text>
+        }
+      </TouchableOpacity>
+
+      <View style={[s.sep, s.sepLight]} />
+
+      <TouchableOpacity
+        style={[s.arrow, isDark ? s.arrowSmall : s.arrowLarge]}
+        onPress={openMenu}
+        activeOpacity={0.7}
+        disabled={loading}
+      >
+        <Ionicons name="chevron-down" size={12} color="rgba(255,255,255,0.85)" />
+      </TouchableOpacity>
+    </>
+  )
+
   return (
     <>
-      <View ref={ref} style={[s.pill, isDark ? s.pillDark : s.pillLight]}>
-        <TouchableOpacity
-          style={[s.side, isDark ? s.sideSmall : s.sideLarge]}
-          onPress={() => onFollow('forever')}
-          activeOpacity={0.7}
-          disabled={loading}
-        >
-          {loading
-            ? <ActivityIndicator size="small" color={colors.white} />
-            : <Text style={[s.label, s.labelFollow]}>{followBack ? 'Seguir de volta' : 'Seguir'}</Text>
-          }
-        </TouchableOpacity>
-
-        <View style={[s.sep, isDark ? s.sepDark : s.sepLight]} />
-
-        <TouchableOpacity
-          style={[s.arrow, isDark ? s.arrowSmall : s.arrowLarge]}
-          onPress={openMenu}
-          activeOpacity={0.7}
-          disabled={loading}
-        >
-          <Ionicons
-            name="chevron-down"
-            size={12}
-            color={isDark ? 'rgba(255,255,255,0.85)' : colors.white}
-          />
-        </TouchableOpacity>
+      <View ref={ref} style={isDark ? [s.pill, s.pillDark] : s.pillGradWrap}>
+        {isDark ? innerContent : (
+          <LinearGradient
+            colors={GRAD}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={[s.pill, s.pillLight]}
+          >
+            {innerContent}
+          </LinearGradient>
+        )}
       </View>
 
       <Modal
@@ -137,8 +152,12 @@ const s = StyleSheet.create({
     paddingVertical: 3,
   },
 
+  pillGradWrap: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    alignSelf: 'flex-start',
+  },
   pillLight: {
-    backgroundColor: colors.primary,
     borderRadius: 20,
   },
   pillLightFollowing: {
@@ -152,11 +171,11 @@ const s = StyleSheet.create({
 
   side: { alignItems: 'center', justifyContent: 'center' },
   sideSmall: { paddingHorizontal: 10, paddingVertical: 3 },
-  sideLarge: { paddingHorizontal: 14, paddingVertical: 8 },
+  sideLarge: { paddingHorizontal: 14, paddingVertical: 6 },
 
   arrow: { alignItems: 'center', justifyContent: 'center' },
   arrowSmall: { paddingHorizontal: 7, paddingVertical: 3 },
-  arrowLarge: { paddingHorizontal: 10, paddingVertical: 8 },
+  arrowLarge: { paddingHorizontal: 6, paddingVertical: 6 },
 
   sep: { width: 1, alignSelf: 'stretch' },
   sepDark:  { backgroundColor: 'rgba(255,255,255,0.4)' },

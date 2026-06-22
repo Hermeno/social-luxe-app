@@ -96,9 +96,10 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
 
     -- Connections / inbox cache (one row per conversation partner)
     CREATE TABLE IF NOT EXISTS connections_cache (
-      user_id   TEXT PRIMARY KEY,
-      data      TEXT NOT NULL,
-      cached_at INTEGER NOT NULL
+      user_id         TEXT PRIMARY KEY,
+      data            TEXT NOT NULL,
+      cached_at       INTEGER NOT NULL,
+      last_message_at INTEGER NOT NULL DEFAULT 0
     );
   `)
 
@@ -108,6 +109,13 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
     `).catch(() => {})
     await database.execAsync(`
       ALTER TABLE posts_cache ADD COLUMN updated_at INTEGER;
+    `).catch(() => {})
+    // Add last_message_at for efficient sort (replaces json_extract)
+    await database.execAsync(`
+      ALTER TABLE connections_cache ADD COLUMN last_message_at INTEGER NOT NULL DEFAULT 0;
+    `).catch(() => {})
+    await database.execAsync(`
+      CREATE INDEX IF NOT EXISTS idx_conn_last_msg ON connections_cache(last_message_at DESC);
     `).catch(() => {})
 
     db = database
@@ -452,9 +460,12 @@ export async function cacheConnections(connections: Connection[]): Promise<void>
   const now = Date.now()
   await database.withTransactionAsync(async () => {
     for (const conn of connections) {
+      const lastMsgAt = conn.lastMessage
+        ? new Date(conn.lastMessage.createdAt).getTime()
+        : 0
       await database.runAsync(
-        `INSERT OR REPLACE INTO connections_cache (user_id, data, cached_at) VALUES (?, ?, ?)`,
-        [conn.user.id, JSON.stringify(conn), now],
+        `INSERT OR REPLACE INTO connections_cache (user_id, data, cached_at, last_message_at) VALUES (?, ?, ?, ?)`,
+        [conn.user.id, JSON.stringify(conn), now, lastMsgAt],
       )
     }
   })
@@ -463,9 +474,7 @@ export async function cacheConnections(connections: Connection[]): Promise<void>
 export async function getCachedConnections(): Promise<Connection[]> {
   const database = await getDb()
   const rows = await database.getAllAsync<{ data: string }>(
-    // Sort by last message time descending (most recent conversation first)
-    `SELECT data FROM connections_cache
-     ORDER BY json_extract(data, '$.lastMessage.createdAt') DESC NULLS LAST`,
+    `SELECT data FROM connections_cache ORDER BY last_message_at DESC`,
   )
   return rows.map((r) => JSON.parse(r.data) as Connection)
 }
@@ -484,9 +493,12 @@ export async function updateCachedConnection(
     ? JSON.parse(row.data)
     : { user: { id: userId, name: '', avatar: null }, postIds: [], unreadCount: 0, lastMessage: null, ...fallback }
   const updated = { ...existing, ...partial }
+  const lastMsgAt = updated.lastMessage
+    ? new Date(updated.lastMessage.createdAt).getTime()
+    : 0
   await database.runAsync(
-    `INSERT OR REPLACE INTO connections_cache (user_id, data, cached_at) VALUES (?, ?, ?)`,
-    [userId, JSON.stringify(updated), Date.now()],
+    `INSERT OR REPLACE INTO connections_cache (user_id, data, cached_at, last_message_at) VALUES (?, ?, ?, ?)`,
+    [userId, JSON.stringify(updated), Date.now(), lastMsgAt],
   )
 }
 

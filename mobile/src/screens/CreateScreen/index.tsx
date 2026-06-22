@@ -1,16 +1,15 @@
-import React, { useState, useRef } from 'react'
+import React, { useRef, useState } from 'react'
 import {
-  Text, TextInput, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, View, Platform,
-  ScrollView, KeyboardAvoidingView, Dimensions, Keyboard,
+  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Keyboard,
 } from 'react-native'
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
-import * as ImagePicker from 'expo-image-picker'
 import { Ionicons } from '@expo/vector-icons'
-import { useNavigation } from '@react-navigation/native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useVideoPlayer, VideoView } from 'expo-video'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useNavigation } from '@react-navigation/native'
+import * as ImagePicker from 'expo-image-picker'
 import { fonts } from '../../theme'
 import { createPost } from '../../services/post.service'
 import { useFeedStore } from '../../store/feed.store'
@@ -18,548 +17,552 @@ import { useAuthStore } from '../../store/auth.store'
 import { toast } from '../../utils/toast'
 import { useT } from '../../i18n'
 
-const { width: W } = Dimensions.get('window')
-const B   = '#CA2851'
-const T   = '#1A1A1A'
-const M   = '#ABABAB'
-const BD  = '#E5E5EA'
-const BG  = '#FFFFFF'
+// ── Background palette (7 cores da paleta oficial Luxee) ─────────────────────
+type BgKey = 'white' | 'cream' | 'gray' | 'black' | 'red' | 'coral' | 'peach'
 
-const GRADIENTS: [string, string][] = [
-  ['#FF6B35', '#E63946'],
-  ['#7B2FBE', '#C77DFF'],
-  ['#CA2851', '#5BC0EB'],
-  ['#0A2463', '#1B4F72'],
-  ['#1E8449', '#52C234'],
-  ['#E67E22', '#F39C12'],
-  ['#E74C3C', '#FF6B9D'],
-  ['#1A1A2E', '#6C3483'],
-  ['#00B4D8', '#0077B6'],
-  ['#F72585', '#7209B7'],
-  ['#06D6A0', '#1B9AAA'],
-  ['#FFB347', '#FF6B6B'],
-  // dark / night
-  ['#0D0D0D', '#1C1C3E'],
-  ['#232526', '#414345'],
-  ['#141E30', '#243B55'],
-  ['#0F2027', '#2C5364'],
-  // deep blue
-  ['#000428', '#004E92'],
-  ['#4568DC', '#B06AB3'],
-  // electric / vivid
-  ['#FC466B', '#3F5EFB'],
-  ['#11998E', '#38EF7D'],
-  // gold / warm
-  ['#F7971E', '#FFD200'],
-  // earth / dusk
-  ['#2C3E50', '#FD746C'],
-  ['#B24592', '#F15F79'],
-  // soft / pastel
-  ['#A8EDEA', '#FED6E3'],
-]
+const BG: Record<BgKey, { bg: string; fg: string }> = {
+  white: { bg: '#FFFFFF', fg: '#1A1A1A' },
+  cream: { bg: '#F7F7F7', fg: '#1A1A1A' },
+  gray:  { bg: '#333333', fg: '#FFFFFF' },
+  black: { bg: '#000000', fg: '#FFFFFF' },
+  red:   { bg: '#CA2851', fg: '#FFFFFF' },
+  coral: { bg: '#FF6766', fg: '#FFFFFF' },
+  peach: { bg: '#FFB173', fg: '#1A1A1A' },
+}
+
+const BG_KEYS: BgKey[] = ['white', 'cream', 'gray', 'black', 'red', 'coral', 'peach']
 
 type Media = { uri: string; type: 'image' | 'video' }
 
+// ── Component ─────────────────────────────────────────────────────────────────
 export default function CreateScreen() {
-  const nav             = useNavigation()
-  const { top, bottom } = useSafeAreaInsets()
-  const [caption,        setCaption]        = useState('')
-  const [gradientIdx,    setGradientIdx]    = useState(0)
-  const [media,          setMedia]          = useState<Media[]>([])
-  const [loading,          setLoading]          = useState(false)
-  const [includePartner,   setIncludePartner]   = useState(false)
-  const [isAnnouncement,   setIsAnnouncement]   = useState(false)
-  const [stickersEnabled,  setStickersEnabled]  = useState(false)
-  const textRef    = useRef<TextInput>(null)
-  const videoUri   = media[0]?.type === 'video' ? media[0].uri : null
-  const videoPlayer = useVideoPlayer(videoUri, (p) => { p.loop = true; p.muted = false; if (videoUri) p.play() })
-
-  const setPendingPost = useFeedStore((s) => s.setPendingPost)
+  const nav            = useNavigation()
+  const insets         = useSafeAreaInsets()
   const { user }       = useAuthStore()
   const t              = useT()
+  const setPendingPost = useFeedStore((s) => s.setPendingPost)
+  const captionRef     = useRef<TextInput>(null)
+
+  const [caption,         setCaption]         = useState('')
+  const [bgKey,           setBgKey]           = useState<BgKey>('white')
+  const [media,           setMedia]           = useState<Media | null>(null)
+  const [loading,         setLoading]         = useState(false)
+  const [includePartner,  setIncludePartner]  = useState(false)
+  const [isAnnouncement,  setIsAnnouncement]  = useState(false)
+  const [stickersEnabled, setStickersEnabled] = useState(false)
+
   const hasPartner = !!(user?.partnerId && user?.partnerName)
   const isAdmin    = user?.isAdmin === true
-  const hasMedia   = media.length > 0
+  const canPublish = !!caption.trim() || !!media
+  const hasText    = !!caption.trim()
+  const activeBg   = BG[bgKey]
 
-  const gradient   = GRADIENTS[gradientIdx]
-  const canPublish = !!caption.trim() || hasMedia
+  // Floating close button adapts to the current frame background
+  const isDarkFrame  = !!media || bgKey === 'black' || bgKey === 'red'
+  const closeIconClr = isDarkFrame ? '#fff' : '#1A1A1A'
+  const closeBgClr   = isDarkFrame ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.07)'
 
-  const MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+  const videoUri = media?.type === 'video' ? media.uri : null
+  const player   = useVideoPlayer(videoUri, (p) => { p.loop = true; if (videoUri) p.play() })
 
-  async function addMedia(mediaTypes: ImagePicker.MediaType | ImagePicker.MediaType[]) {
+  async function pickMedia() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (status !== 'granted') return Alert.alert(t.profile_perm_title, t.profile_perm_msg)
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes,
-      quality: 0.85,
-      videoMaxDuration: 90,
-      videoExportPreset: ImagePicker.VideoExportPreset.MediumQuality,
-    })
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0]
-
-      // Duration guard: 90 seconds max. On iOS the native picker already shows the trim
-      // UI when videoMaxDuration=90, so this mainly catches Android gallery picks.
-      if (asset.type === 'video' && asset.duration && asset.duration > 91_000) {
-        const secs = Math.round(asset.duration / 1000)
-        const mm   = Math.floor(secs / 60)
-        const ss   = String(secs % 60).padStart(2, '0')
-        Alert.alert(
-          'Vídeo demasiado longo',
-          `Máximo 1:30. Este vídeo tem ${mm}:${ss}.\n\nEscolhe um clipe mais curto.`,
-        )
-        return
-      }
-
-      if (asset.fileSize && asset.fileSize > MAX_UPLOAD_BYTES) {
-        Alert.alert(
-          'Ficheiro demasiado grande',
-          `Máximo 50 MB. Este tem ${Math.round(asset.fileSize / 1024 / 1024)} MB.`,
-        )
-        return
-      }
-
-      const isVideo = asset.type === 'video'
-      setMedia([{ uri: asset.uri, type: isVideo ? 'video' : 'image' }])
+    if (status !== 'granted') {
+      Alert.alert('Permissão necessária', 'Permite acesso à galeria nas definições.')
+      return
     }
-  }
-
-  function removeMedia(idx: number) {
-    setMedia((prev) => prev.filter((_, i) => i !== idx))
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes:       ['images', 'videos'],
+      quality:          0.85,
+      videoMaxDuration: 90,
+    })
+    if (result.canceled || !result.assets[0]) return
+    const asset = result.assets[0]
+    if (asset.type === 'video' && asset.duration && asset.duration > 91_000) {
+      Alert.alert('Vídeo demasiado longo', 'O máximo é 1 minuto e 30 segundos.')
+      return
+    }
+    if (asset.fileSize && asset.fileSize > 50 * 1024 * 1024) {
+      Alert.alert('Ficheiro demasiado grande', 'O máximo é 50 MB.')
+      return
+    }
+    setMedia({ uri: asset.uri, type: asset.type === 'video' ? 'video' : 'image' })
+    Keyboard.dismiss()
   }
 
   function getDeviceModel(): string {
     if (Platform.OS === 'ios') return 'iPhone'
     const brand = (Platform as any).constants?.Brand as string | undefined
-    if (!brand) return 'Android'
-    return brand.charAt(0).toUpperCase() + brand.slice(1).toLowerCase()
+    return brand ? brand.charAt(0).toUpperCase() + brand.slice(1).toLowerCase() : 'Android'
   }
 
   async function handlePublish() {
-    if (!canPublish) return
+    if (!canPublish || loading) return
+    Keyboard.dismiss()
     setLoading(true)
     try {
       const partnerId   = hasPartner && includePartner && !isAnnouncement ? user!.partnerId! : undefined
       const deviceModel = getDeviceModel()
-      const newPost = hasMedia
-        ? await createPost(media[0].uri, media[0].type === 'video' ? 'VIDEO' : 'IMAGE', caption.trim() || undefined, undefined, partnerId, isAnnouncement, deviceModel, stickersEnabled)
-        : await createPost(null, 'TEXT', caption.trim(), `${gradient[0]}|${gradient[1]}`, partnerId, isAnnouncement, deviceModel, stickersEnabled)
+      const bgColor     = `${activeBg.bg}|${activeBg.bg}`
+
+      const newPost = media
+        ? await createPost(
+            media.uri,
+            media.type === 'video' ? 'VIDEO' : 'IMAGE',
+            caption.trim() || undefined,
+            undefined,
+            partnerId,
+            isAnnouncement,
+            deviceModel,
+            stickersEnabled,
+          )
+        : await createPost(
+            null,
+            'TEXT',
+            caption.trim(),
+            bgColor,
+            partnerId,
+            isAnnouncement,
+            deviceModel,
+            stickersEnabled,
+          )
+
       if (newPost) setPendingPost(newPost)
-      setCaption(''); setMedia([]); setGradientIdx(0); setIsAnnouncement(false); setStickersEnabled(false)
+      setCaption('')
+      setMedia(null)
+      setBgKey('white')
+      setIsAnnouncement(false)
+      setStickersEnabled(false)
+      setIncludePartner(false)
       toast.success(t.feed_published, isAnnouncement ? t.feed_announcement_sub : t.feed_published_sub)
       nav.navigate('Feed' as never)
     } catch (e: unknown) {
-      const status = (e as any)?.response?.status
-      const msg = status === 413
-        ? 'Vídeo demasiado grande. Máximo 100 MB.'
-        : e instanceof Error ? e.message : t.chat_retry
+      const msg =
+        (e as any)?.response?.status === 413
+          ? 'Vídeo demasiado grande. Máximo 50 MB.'
+          : e instanceof Error
+            ? e.message
+            : t.chat_retry
       toast.error(t.error, msg)
-    } finally { setLoading(false) }
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
-    <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <KeyboardAvoidingView
+      style={s.root}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      {/* ── Floating close ── */}
+      <TouchableOpacity
+        style={[s.closeBtn, { top: insets.top + 12, backgroundColor: closeBgClr }]}
+        onPress={() => { Keyboard.dismiss(); (nav as any).jumpTo('Feed') }}
+        hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="close" size={21} color={closeIconClr} />
+      </TouchableOpacity>
 
-      {/* ── Header ─────────────────────────────────────────────────── */}
-      <View style={[s.header, { paddingTop: top + 8 }]}>
+      {/* ── Frame — the live post preview ── */}
+      <View style={[s.frame, !media && { backgroundColor: activeBg.bg }]}>
+
+        {media ? (
+          <>
+            {media.type === 'video' ? (
+              <VideoView
+                player={player}
+                style={StyleSheet.absoluteFill}
+                contentFit="cover"
+                nativeControls={false}
+              />
+            ) : (
+              <Image
+                source={{ uri: media.uri }}
+                style={StyleSheet.absoluteFill}
+                contentFit="cover"
+              />
+            )}
+
+            {/* Caption gradient overlay */}
+            {hasText && (
+              <LinearGradient
+                colors={['transparent', 'rgba(0,0,0,0.62)']}
+                style={s.mediaCaption}
+              >
+                <Text style={s.mediaCaptionTxt} numberOfLines={3}>{caption}</Text>
+              </LinearGradient>
+            )}
+
+            {/* Media controls — below the floating close button */}
+            <View style={[s.mediaControls, { top: insets.top + 54 }]}>
+              <TouchableOpacity
+                style={s.clearBtn}
+                onPress={() => setMedia(null)}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="close" size={15} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={s.changeBtn}
+                onPress={pickMedia}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="swap-horizontal" size={13} color="#fff" />
+                <Text style={s.changeBtnTxt}>Alterar</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+
+        ) : hasText ? (
+          // Text post — live preview on solid bg
+          <View style={[s.textPreview, { paddingTop: insets.top + 56 }]}>
+            <Text style={[s.textPreviewTxt, { color: activeBg.fg }]} numberOfLines={10}>
+              {caption}
+            </Text>
+          </View>
+
+        ) : (
+          // Empty state
+          <View style={[s.emptyState, { paddingTop: insets.top + 40 }]}>
+            <TouchableOpacity style={s.addMediaBtn} onPress={pickMedia} activeOpacity={0.82}>
+              <Ionicons name="add" size={26} color="#B8B8B8" />
+            </TouchableOpacity>
+            <Text style={s.emptyHint}>{'Adiciona uma foto ou vídeo\nou escreve algo abaixo'}</Text>
+          </View>
+        )}
+      </View>
+
+      {/* ── Panel ── */}
+      <View style={[s.panel, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+
+        {/* Caption input */}
+        <TextInput
+          ref={captionRef}
+          style={s.captionInput}
+          placeholder={media ? 'Escreve uma legenda…' : 'Escreve algo…'}
+          placeholderTextColor="#C4C4C4"
+          value={caption}
+          onChangeText={setCaption}
+          multiline
+          maxLength={280}
+          textAlignVertical="top"
+        />
+
+        {/* Bg swatches + media link — only for text posts */}
+        {!media && (
+          <View style={s.swatchRow}>
+            {BG_KEYS.map((key) => (
+              <TouchableOpacity
+                key={key}
+                style={[s.swatchRing, bgKey === key && s.swatchRingActive]}
+                onPress={() => setBgKey(key)}
+                activeOpacity={0.8}
+              >
+                <View
+                  style={[
+                    s.swatchDot,
+                    { backgroundColor: BG[key].bg },
+                    key === 'white' && s.swatchDotBorder,
+                  ]}
+                />
+              </TouchableOpacity>
+            ))}
+
+            <View style={s.swatchSep} />
+
+            <TouchableOpacity style={s.mediaLink} onPress={pickMedia} activeOpacity={0.7}>
+              <Ionicons name="image-outline" size={16} color="#A0A0A0" />
+              <Text style={s.mediaLinkTxt}>Media</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Options row */}
+        <View style={s.optRow}>
+          <Ionicons name="time-outline" size={13} color="#C8C8C8" />
+          <Text style={s.timerTxt}>{t.feed_visible_24h}</Text>
+
+          <View style={{ flex: 1 }} />
+
+          {hasPartner && !isAnnouncement && (
+            <TouchableOpacity
+              style={[s.chip, includePartner && s.chipOn]}
+              onPress={() => setIncludePartner((v) => !v)}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name={includePartner ? 'heart' : 'heart-outline'}
+                size={12}
+                color={includePartner ? '#fff' : '#CA2851'}
+              />
+              <Text style={[s.chipTxt, includePartner && s.chipTxtOn]}>
+                {user!.partnerName}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            style={[s.chip, stickersEnabled && s.chipOn]}
+            onPress={() => setStickersEnabled((v) => !v)}
+            activeOpacity={0.8}
+          >
+            <Text style={stickersEnabled ? s.chipStarOn : s.chipStar}>✦</Text>
+            <Text style={[s.chipTxt, stickersEnabled && s.chipTxtOn]}>Objetos</Text>
+          </TouchableOpacity>
+
+          {isAdmin && (
+            <TouchableOpacity
+              style={[s.chip, isAnnouncement && s.chipAnnounce]}
+              onPress={() => setIsAnnouncement((v) => !v)}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name="megaphone-outline"
+                size={12}
+                color={isAnnouncement ? '#fff' : '#E67E22'}
+              />
+              <Text style={[s.chipTxt, isAnnouncement && s.chipTxtOn]}>Anúncio</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Publish */}
         <TouchableOpacity
-          onPress={() => { Keyboard.dismiss(); (nav as any).jumpTo('Feed') }}
-          style={s.closeBtn}
-          hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-        >
-          <Ionicons name="chevron-back" size={26} color={T} />
-        </TouchableOpacity>
-
-        <Text style={s.headerTitle}>{t.feed_new_post}</Text>
-
-        <TouchableOpacity
-          style={[s.publishPill, (!canPublish || loading) && s.publishPillOff]}
+          style={[s.publishBtn, (!canPublish || loading) && s.publishBtnOff]}
           onPress={handlePublish}
           disabled={!canPublish || loading}
-          activeOpacity={0.85}
+          activeOpacity={0.88}
         >
           {loading
-            ? <ActivityIndicator color="#fff" size="small" style={{ width: 52 }} />
-            : <Text style={s.publishTxt}>{t.feed_publish_btn}</Text>
+            ? <ActivityIndicator color="#fff" size="small" />
+            : <Text style={s.publishBtnTxt}>Publicar</Text>
           }
         </TouchableOpacity>
       </View>
-
-      {/* ── Content ────────────────────────────────────────────────── */}
-      {hasMedia ? (
-
-        /* ── Media selected: preview + caption ───────────────────── */
-        <>
-          <ScrollView
-            style={s.photoScroll}
-            contentContainerStyle={s.photoScrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={s.cardMedia}>
-              {media[0].type === 'video' ? (
-                <VideoView player={videoPlayer} style={s.cardImg} contentFit="cover" nativeControls={false} />
-              ) : (
-                <Image source={{ uri: media[0].uri }} style={s.cardImg} contentFit="cover" />
-              )}
-              {media[0].type === 'video' && (
-                <View style={s.videoIndicator} pointerEvents="none">
-                  <Ionicons name="videocam" size={14} color="#fff" />
-                  <Text style={s.videoIndicatorTxt}>Vídeo</Text>
-                </View>
-              )}
-              {/* Change media button — top-right corner of the preview */}
-              <TouchableOpacity
-                style={s.changeMediaBtn}
-                onPress={() => addMedia(['images', 'videos'])}
-                activeOpacity={0.85}
-              >
-                <Ionicons name="swap-horizontal" size={14} color="#fff" />
-                <Text style={s.changeMediaTxt}>Alterar</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={s.captionCard}>
-              <View style={s.captionRow}>
-                <Ionicons name="pencil-outline" size={16} color={M} style={{ marginTop: 2 }} />
-                <TextInput
-                  ref={textRef}
-                  style={s.captionInput}
-                  placeholder={t.feed_caption_photo_ph}
-                  placeholderTextColor={M}
-                  value={caption}
-                  onChangeText={setCaption}
-                  multiline
-                  maxLength={280}
-                  textAlignVertical="top"
-                />
-              </View>
-              <Text style={s.captionCount}>{caption.length}/280</Text>
-            </View>
-
-            <TouchableOpacity style={s.discardBtn} onPress={() => setMedia([])} activeOpacity={0.6}>
-              <Ionicons name="close-circle-outline" size={15} color={M} />
-              <Text style={s.discardTxt}>Remover e publicar só texto</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </>
-
-      ) : (
-
-        /* ── No media: big picker cards + text post option ────────── */
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={s.noMediaContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Single media picker */}
-          <View style={s.pickerRow}>
-            <TouchableOpacity style={s.pickerCard} onPress={() => addMedia(['images', 'videos'])} activeOpacity={0.82}>
-              <View style={s.pickerInner}>
-                <View style={s.pickerIconBg}>
-                  <Ionicons name="image" size={34} color="#555" />
-                </View>
-                <Text style={s.pickerTitle}>Foto ou Vídeo</Text>
-                <Text style={s.pickerSub}>Escolher da galeria</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-
-          {/* Divider */}
-          <View style={s.orRow}>
-            <View style={s.orLine} />
-            <Text style={s.orTxt}>ou escreve algo</Text>
-            <View style={s.orLine} />
-          </View>
-
-          {/* Color picker */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={s.colorScroll}
-            contentContainerStyle={s.colorContent}
-          >
-            {GRADIENTS.map((g, i) => (
-              <TouchableOpacity
-                key={i}
-                onPress={() => { setGradientIdx(i) }}
-                style={[s.colorCircleWrap, gradientIdx === i && s.colorCircleSelected]}
-                activeOpacity={0.8}
-              >
-                <LinearGradient colors={g} style={s.colorCircle} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          {/* Text gradient card — fixed height so it never gets squished behind keyboard */}
-          <TouchableOpacity
-            style={s.textCardWrap}
-            activeOpacity={1}
-            onPress={() => textRef.current?.focus()}
-          >
-            <LinearGradient colors={gradient} style={s.textCard} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-              <TextInput
-                ref={textRef}
-                style={s.textCardInput}
-                placeholder={t.feed_write_ph}
-                placeholderTextColor="rgba(255,255,255,0.45)"
-                value={caption}
-                onChangeText={setCaption}
-                multiline
-                maxLength={280}
-                textAlign="center"
-                textAlignVertical="center"
-                selectionColor="rgba(255,255,255,0.6)"
-              />
-              <Text style={s.textCardCount}>{caption.length}/280</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-
-        </ScrollView>
-      )}
-
-      {/* ── Toolbar ────────────────────────────────────────────────── */}
-      <View style={[s.toolbar, { paddingBottom: Math.max(bottom, 8) + 52 }]}>
-        {!hasMedia && (
-          <>
-            <TouchableOpacity style={s.toolBtn} onPress={() => textRef.current?.focus()} activeOpacity={0.7}>
-              <Text style={s.toolBtnTxt}>Aa</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.toolBtn} activeOpacity={0.7}>
-              <Ionicons name="happy-outline" size={22} color={T} />
-            </TouchableOpacity>
-            <TouchableOpacity style={s.toolBtn} activeOpacity={0.7}>
-              <Text style={s.toolBtnTxt}>#</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.toolBtn} activeOpacity={0.7}>
-              <Text style={s.toolBtnTxt}>@</Text>
-            </TouchableOpacity>
-          </>
-        )}
-
-        <View style={s.toolSpacer} />
-
-        {hasPartner && !isAnnouncement && (
-          <TouchableOpacity
-            style={[s.partnerChip, includePartner && s.partnerChipOn]}
-            onPress={() => setIncludePartner((v) => !v)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name={includePartner ? 'heart' : 'heart-outline'} size={14} color={includePartner ? '#fff' : B} />
-            <Text style={[s.partnerChipTxt, includePartner && s.partnerChipTxtOn]}>
-              {includePartner ? user!.partnerName : `+ ${user!.partnerName}`}
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        {isAdmin && (
-          <TouchableOpacity
-            style={[s.partnerChip, isAnnouncement && s.announcementChip]}
-            onPress={() => setIsAnnouncement((v) => !v)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="megaphone-outline" size={14} color={isAnnouncement ? '#fff' : '#E67E22'} />
-            <Text style={[s.partnerChipTxt, isAnnouncement && s.partnerChipTxtOn]}>Anúncio</Text>
-          </TouchableOpacity>
-        )}
-
-        <TouchableOpacity
-          style={[s.partnerChip, stickersEnabled && s.stickerChip]}
-          onPress={() => setStickersEnabled((v) => !v)}
-          activeOpacity={0.8}
-        >
-          <Text style={{ fontSize: 13 }}>🎨</Text>
-          <Text style={[s.partnerChipTxt, stickersEnabled && s.partnerChipTxtOn]}>
-            {stickersEnabled ? 'Objetos ON' : 'Objetos'}
-          </Text>
-        </TouchableOpacity>
-
-        <View style={s.badge24h}>
-          <Ionicons name="time-outline" size={13} color={M} />
-          <Text style={s.badge24hTxt}>{t.feed_visible_24h}</Text>
-        </View>
-      </View>
-
     </KeyboardAvoidingView>
   )
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: BG },
+  root: { flex: 1, backgroundColor: '#fff' },
 
-  /* ── Header ── */
-  header: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingBottom: 12,
-    borderBottomWidth: 1, borderBottomColor: BD,
-  },
+  // Floating close
   closeBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: '#F4F4F6',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  headerTitle: { flex: 1, textAlign: 'center', fontFamily: fonts.bold, fontSize: 16, color: T, marginLeft: -36 },
-  publishPill: {
-    backgroundColor: B, borderRadius: 20,
-    paddingHorizontal: 18, paddingVertical: 8,
-    ...Platform.select({
-      ios:     { shadowColor: B, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 10 },
-      android: { elevation: 4 },
-    }),
-  },
-  publishPillOff: { opacity: 0.35 },
-  publishTxt:     { fontFamily: fonts.semiBold, fontSize: 14, color: '#fff' },
-
-  /* ── No-media wrapper ── */
-  noMediaContent: { paddingBottom: 24 },
-
-  /* ── Big picker card ── */
-  pickerRow: {
-    paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 8,
-  },
-  pickerCard: {},
-  pickerInner: {
-    backgroundColor: '#FAFAFA',
-    borderRadius: 22,
-    borderWidth: 1.5,
-    borderColor: '#E5E5EA',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 36,
-    gap: 10,
-  },
-  pickerIconBg: {
-    width: 68,
-    height: 68,
-    borderRadius: 18,
-    backgroundColor: '#EBEBF0',
-    alignItems: 'center',
+    position:       'absolute',
+    left:           16,
+    zIndex:         20,
+    width:          34,
+    height:         34,
+    borderRadius:   17,
+    alignItems:     'center',
     justifyContent: 'center',
   },
-  pickerTitle: {
-    fontFamily: fonts.bold,
-    fontSize: 16,
-    color: T,
-    letterSpacing: -0.3,
-  },
-  pickerSub: {
-    fontFamily: fonts.regular,
-    fontSize: 12,
-    color: M,
-    letterSpacing: 0.1,
-  },
 
-  /* ── "ou" divider ── */
-  orRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 12,
-  },
-  orLine: { flex: 1, height: 1, backgroundColor: BD },
-  orTxt:  { fontFamily: fonts.medium, fontSize: 13, color: M },
-
-  /* ── Color picker ── */
-  colorScroll:  { flexGrow: 0, maxHeight: 56 },
-  colorContent: { paddingHorizontal: 16, paddingVertical: 10, gap: 10, flexDirection: 'row', alignItems: 'center' },
-  colorCircleWrap: {
-    width: 36, height: 36, borderRadius: 18,
-    padding: 2, borderWidth: 2, borderColor: 'transparent',
-  },
-  colorCircleSelected: { borderColor: T },
-  colorCircle: { width: '100%', height: '100%', borderRadius: 16 },
-
-  /* ── Text gradient card ── */
-  textCardWrap: { height: 220, marginHorizontal: 16, marginTop: 6, marginBottom: 8 },
-  textCard: {
-    flex: 1, borderRadius: 26,
-    alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: 28, paddingVertical: 24,
-  },
-  textCardInput: {
-    width: '100%',
-    fontFamily: fonts.semiBold, fontSize: 24, color: '#fff',
-    textAlign: 'center', lineHeight: 36, letterSpacing: -0.3,
-    minHeight: 72,
-  },
-  textCardCount: {
-    position: 'absolute', bottom: 12, right: 16,
-    fontSize: 11, fontFamily: fonts.regular, color: 'rgba(255,255,255,0.45)',
-  },
-
-  /* ── Media selected: photo scroll ── */
-  photoScroll:        { flex: 1 },
-  photoScrollContent: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16 },
-  cardMedia: {
-    width: '100%',
-    aspectRatio: 4 / 5,
-    borderRadius: 24,
+  // Frame — fills all space above the panel
+  frame: {
+    flex:     1,
     overflow: 'hidden',
   },
-  cardImg: { width: '100%', height: '100%' },
-  videoIndicator: {
-    position: 'absolute', top: 12, left: 12,
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 8,
-    paddingHorizontal: 8, paddingVertical: 4,
-  },
-  videoIndicatorTxt: { fontFamily: fonts.semiBold, fontSize: 11, color: '#fff' },
-  changeMediaBtn: {
-    position: 'absolute', top: 12, right: 12,
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: 'rgba(0,0,0,0.48)', borderRadius: 20,
-    paddingHorizontal: 12, paddingVertical: 6,
-  },
-  changeMediaTxt: { fontFamily: fonts.semiBold, fontSize: 12, color: '#fff' },
 
-  captionCard: {
-    marginTop: 12,
-    backgroundColor: '#F5F5F8',
-    borderRadius: 18,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: BD,
-    minHeight: 80,
+  // Empty state
+  emptyState: {
+    flex:           1,
+    alignItems:     'center',
+    justifyContent: 'center',
+    gap:            14,
   },
-  captionRow:   { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  addMediaBtn: {
+    width:           64,
+    height:          64,
+    borderRadius:    32,
+    backgroundColor: '#F2F2F2',
+    alignItems:      'center',
+    justifyContent:  'center',
+  },
+  emptyHint: {
+    fontFamily: fonts.regular,
+    fontSize:   13,
+    color:      '#C4C4C4',
+    textAlign:  'center',
+    lineHeight: 20,
+  },
+
+  // Text post live preview
+  textPreview: {
+    flex:              1,
+    alignItems:        'center',
+    justifyContent:    'center',
+    paddingHorizontal: 36,
+  },
+  textPreviewTxt: {
+    fontFamily:    fonts.semiBold,
+    fontSize:      26,
+    textAlign:     'center',
+    lineHeight:    38,
+    letterSpacing: -0.5,
+  },
+
+  // Media state — caption overlay
+  mediaCaption: {
+    position:          'absolute',
+    bottom:            0,
+    left:              0,
+    right:             0,
+    paddingHorizontal: 22,
+    paddingTop:        72,
+    paddingBottom:     28,
+  },
+  mediaCaptionTxt: {
+    fontFamily:       fonts.semiBold,
+    fontSize:         16,
+    color:            '#fff',
+    textAlign:        'center',
+    lineHeight:       24,
+    textShadowColor:  'rgba(0,0,0,0.45)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+
+  // Media controls row (clear + change)
+  mediaControls: {
+    position:      'absolute',
+    right:         14,
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           6,
+  },
+  clearBtn: {
+    width:           30,
+    height:          30,
+    borderRadius:    15,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems:      'center',
+    justifyContent:  'center',
+  },
+  changeBtn: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               5,
+    backgroundColor:   'rgba(0,0,0,0.45)',
+    borderRadius:      20,
+    paddingHorizontal: 12,
+    paddingVertical:   6,
+  },
+  changeBtnTxt: {
+    fontFamily: fonts.semiBold,
+    fontSize:   12,
+    color:      '#fff',
+  },
+
+  // Panel
+  panel: {
+    backgroundColor:   '#fff',
+    borderTopWidth:    StyleSheet.hairlineWidth,
+    borderTopColor:    '#E8E8E8',
+    paddingTop:        14,
+    paddingHorizontal: 16,
+    gap:               10,
+  },
+
+  // Caption input
   captionInput: {
-    flex: 1, fontFamily: fonts.medium, fontSize: 15, color: T,
-    lineHeight: 22, minHeight: 48, padding: 0,
+    fontFamily:    fonts.medium,
+    fontSize:      15,
+    color:         '#1A1A1A',
+    lineHeight:    22,
+    minHeight:     40,
+    maxHeight:     80,
+    padding:       0,
+    letterSpacing: -0.1,
   },
-  captionCount: { textAlign: 'right', fontFamily: fonts.regular, fontSize: 11, color: M, marginTop: 6 },
 
-  discardBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 5, marginTop: 14, paddingVertical: 6,
+  // Swatch row
+  swatchRow: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           8,
   },
-  discardTxt: { fontFamily: fonts.medium, fontSize: 13, color: M },
-
-  /* ── Toolbar ── */
-  toolbar: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingTop: 10,
-    borderTopWidth: 1, borderTopColor: BD,
-    gap: 2,
+  swatchRing: {
+    width:        28,
+    height:       28,
+    borderRadius: 14,
+    padding:      3,
+    borderWidth:  1.5,
+    borderColor:  'transparent',
   },
-  toolBtn:    { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
-  toolBtnTxt: { fontFamily: fonts.bold, fontSize: 17, color: T },
-  toolSpacer: { flex: 1 },
-
-  partnerChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14,
-    borderWidth: 1.5, borderColor: B,
+  swatchRingActive: {
+    borderColor: '#1A1A1A',
   },
-  partnerChipOn:    { backgroundColor: B, borderColor: B },
-  announcementChip: { backgroundColor: '#E67E22', borderColor: '#E67E22' },
-  stickerChip:      { backgroundColor: '#7B2FBE', borderColor: '#7B2FBE' },
-  partnerChipTxt:   { fontFamily: fonts.semiBold, fontSize: 12, color: B },
-  partnerChipTxtOn: { color: '#fff' },
+  swatchDot: {
+    flex:         1,
+    borderRadius: 9,
+  },
+  swatchDotBorder: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#D8D8D8',
+  },
+  swatchSep: {
+    width:            1,
+    height:           18,
+    backgroundColor:  '#E8E8E8',
+    marginHorizontal: 2,
+  },
+  mediaLink: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           5,
+  },
+  mediaLinkTxt: {
+    fontFamily: fonts.medium,
+    fontSize:   13,
+    color:      '#A0A0A0',
+  },
 
-  badge24h:    { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 6 },
-  badge24hTxt: { fontFamily: fonts.regular, fontSize: 12, color: M },
+  // Options row
+  optRow: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           6,
+  },
+  timerTxt: {
+    fontFamily: fonts.regular,
+    fontSize:   12,
+    color:      '#C4C4C4',
+    marginLeft: 3,
+  },
+
+  // Chips
+  chip: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               4,
+    paddingHorizontal: 9,
+    paddingVertical:   5,
+    borderRadius:      13,
+    borderWidth:       1.5,
+    borderColor:       '#E8E8E8',
+  },
+  chipOn:      { backgroundColor: '#CA2851', borderColor: '#CA2851' },
+  chipAnnounce: { backgroundColor: '#E67E22', borderColor: '#E67E22' },
+  chipTxt:     { fontFamily: fonts.semiBold, fontSize: 12, color: '#333' },
+  chipTxtOn:   { color: '#fff' },
+  chipStar:    { fontSize: 11, color: '#777' },
+  chipStarOn:  { fontSize: 11, color: '#fff' },
+
+  // Publish button
+  publishBtn: {
+    height:          52,
+    borderRadius:    26,
+    backgroundColor: '#1A1A1A',
+    alignItems:      'center',
+    justifyContent:  'center',
+  },
+  publishBtnOff: { opacity: 0.25 },
+  publishBtnTxt: {
+    fontFamily:    fonts.bold,
+    fontSize:      16,
+    color:         '#fff',
+    letterSpacing: -0.3,
+  },
 })

@@ -4,10 +4,10 @@ import {
   Animated, Platform, Alert,
 } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
-import { useAudioRecorder, AudioModule, RecordingPresets } from 'expo-audio'
 import { Ionicons } from '@expo/vector-icons'
 import { colors, fonts } from '../../theme'
 import { useT } from '../../i18n'
+import VoiceRecorder from '../../components/VoiceRecorder'
 
 interface ReplyPreview {
   senderName: string
@@ -27,75 +27,17 @@ interface Props {
   bottomInset?: number
 }
 
-function fmtMs(ms: number) {
-  const s = Math.floor(ms / 1000)
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
-}
-
 export default function ChatInputBar({
   value, onChange, onSend, onSendFile, onSendAudio,
   replyingTo, onCancelReply, onSchedulePress,
   bottomInset = 0,
 }: Props) {
   const t = useT()
-  const hasText   = value.trim().length > 0
-  const sendScale = useRef(new Animated.Value(1)).current
-  const recPulse  = useRef(new Animated.Value(1)).current
+  const hasText    = value.trim().length > 0
+  const sendScale  = useRef(new Animated.Value(1)).current
+  const [voiceMode, setVoiceMode] = useState(false)
 
-  // ── Recording ───────────────────────────────────────────────────────────────
-  const recorder       = useAudioRecorder(RecordingPresets.HIGH_QUALITY)
-  const [isRec, setIsRec]       = useState(false)
-  const [recMs, setRecMs]       = useState(0)
-  const recStartRef = useRef(0)
-  const recTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  // Pulsing red dot while recording
-  useEffect(() => {
-    if (!isRec) { recPulse.setValue(1); return }
-    const loop = Animated.loop(Animated.sequence([
-      Animated.timing(recPulse, { toValue: 0.35, duration: 600, useNativeDriver: true }),
-      Animated.timing(recPulse, { toValue: 1,   duration: 600, useNativeDriver: true }),
-    ]))
-    loop.start()
-    return () => loop.stop()
-  }, [isRec])
-
-  async function startRecording() {
-    try {
-      const perm = await AudioModule.requestRecordingPermissionsAsync()
-      if (!perm.granted) {
-        Alert.alert('Permissão necessária', 'Permite acesso ao microfone para enviar áudios.')
-        return
-      }
-      await recorder.prepareToRecordAsync()
-      await recorder.record()
-      recStartRef.current = Date.now()
-      setIsRec(true)
-      setRecMs(0)
-      recTimerRef.current = setInterval(() => setRecMs(Date.now() - recStartRef.current), 100)
-    } catch {}
-  }
-
-  async function stopRecording() {
-    if (recTimerRef.current) { clearInterval(recTimerRef.current); recTimerRef.current = null }
-    const durationMs = Date.now() - recStartRef.current
-    setIsRec(false)
-    setRecMs(0)
-    try {
-      await recorder.stop()
-      // Give the recorder a tick to flush the URI
-      await new Promise<void>((r) => setTimeout(r, 80))
-      const uri = recorder.uri
-      if (!uri || durationMs < 600) {
-        return
-      }
-      await onSendAudio(uri, durationMs)
-    } catch (e) {
-      console.warn('[AudioRec] stopRecording error:', e)
-    }
-  }
-
-  // ── Send button pop animation ────────────────────────────────────────────────
+  // ── Send button pop animation ──────────────────────────────────────────────
   const prevHasText = useRef(hasText)
   useEffect(() => {
     if (hasText && !prevHasText.current) {
@@ -137,7 +79,7 @@ export default function ChatInputBar({
     <View style={[s.container, { paddingBottom: pb }]}>
 
       {/* Reply preview banner */}
-      {replyingTo && (
+      {replyingTo && !voiceMode && (
         <View style={s.replyBanner}>
           <View style={s.replyAccent} />
           <View style={s.replyTexts}>
@@ -156,51 +98,72 @@ export default function ChatInputBar({
         </View>
       )}
 
-      {/* Input row */}
-      <View style={s.row}>
-
-        {/* + attachment */}
-        <TouchableOpacity style={s.attachBtn} activeOpacity={0.7} onPress={handleAttach}>
-          <Ionicons name="add" size={22} color={colors.primary} />
-        </TouchableOpacity>
-
-        {/* Text input */}
-        <View style={s.inputWrap}>
-          <TextInput
-            style={s.input}
-            placeholder={t.chat_input_ph}
-            placeholderTextColor={colors.gray400}
-            value={value}
-            onChangeText={onChange}
-            multiline
-            returnKeyType="default"
-            textAlignVertical="center"
+      {/* Voice recorder row */}
+      {voiceMode ? (
+        <View style={s.row}>
+          <VoiceRecorder
+            onSend={async (uri, durationMs) => {
+              await onSendAudio(uri, durationMs)
+              setVoiceMode(false)
+            }}
+            onCancel={() => setVoiceMode(false)}
           />
         </View>
+      ) : (
+        /* Normal input row */
+        <View style={s.row}>
 
-        {/* Schedule */}
-        <TouchableOpacity
-          onPress={onSchedulePress}
-          hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-          activeOpacity={0.65}
-        >
-          <Ionicons name="time-outline" size={22} color={colors.gray400} />
-        </TouchableOpacity>
+          {/* + attachment */}
+          <TouchableOpacity style={s.attachBtn} activeOpacity={0.7} onPress={handleAttach}>
+            <Ionicons name="add" size={22} color="#000" />
+          </TouchableOpacity>
 
-        {/* Send button (mic hidden until audio is ready) */}
-        {hasText && (
-          <Animated.View style={{ transform: [{ scale: sendScale }] }}>
+          {/* Text input */}
+          <View style={s.inputWrap}>
+            <TextInput
+              style={s.input}
+              placeholder={t.chat_input_ph}
+              placeholderTextColor={colors.gray400}
+              value={value}
+              onChangeText={onChange}
+              multiline
+              returnKeyType="default"
+              textAlignVertical="center"
+            />
+          </View>
+
+          {/* Schedule */}
+          <TouchableOpacity
+            onPress={onSchedulePress}
+            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+            activeOpacity={0.65}
+          >
+            <Ionicons name="time-outline" size={22} color="#000" />
+          </TouchableOpacity>
+
+          {/* Send (text) OR Mic (no text) */}
+          {hasText ? (
+            <Animated.View style={{ transform: [{ scale: sendScale }] }}>
+              <TouchableOpacity
+                style={[s.actionBtn, s.actionBtnActive]}
+                onPress={handleSend}
+                activeOpacity={0.75}
+              >
+                <Ionicons name="send" size={17} color={colors.white} style={s.sendIcon} />
+              </TouchableOpacity>
+            </Animated.View>
+          ) : (
             <TouchableOpacity
               style={[s.actionBtn, s.actionBtnActive]}
-              onPress={handleSend}
+              onPress={() => setVoiceMode(true)}
               activeOpacity={0.75}
             >
-              <Ionicons name="send" size={17} color={colors.white} style={s.sendIcon} />
+              <Ionicons name="mic" size={18} color={colors.white} />
             </TouchableOpacity>
-          </Animated.View>
-        )}
+          )}
 
-      </View>
+        </View>
+      )}
     </View>
   )
 }
@@ -252,9 +215,8 @@ const s = StyleSheet.create({
 
   // + button
   attachBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: '#F2F2F7',
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    paddingHorizontal: 4,
   },
 
   // Input
@@ -267,20 +229,6 @@ const s = StyleSheet.create({
   input: {
     fontSize: 15, fontFamily: fonts.regular, color: colors.gray800,
     padding: 0, margin: 0, lineHeight: 20, maxHeight: 80,
-  },
-
-  // Recording overlay
-  recRow: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 4,
-  },
-  recDot: {
-    width: 10, height: 10, borderRadius: 5, backgroundColor: '#CA2851',
-  },
-  recTimer: {
-    fontFamily: fonts.semiBold, fontSize: 15, color: colors.gray800, letterSpacing: 0.5,
-  },
-  recHint: {
-    fontFamily: fonts.regular, fontSize: 13, color: colors.gray400,
   },
 
   // Action button (send / mic)
@@ -300,7 +248,5 @@ const s = StyleSheet.create({
       android: { elevation: 4 },
     }),
   },
-  actionBtnIdle:      { backgroundColor: `${colors.primary}18` },
-  actionBtnRecording: { backgroundColor: '#CA2851' },
   sendIcon: { marginLeft: 2 },
 })

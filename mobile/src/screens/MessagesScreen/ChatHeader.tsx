@@ -3,11 +3,16 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { colors, fonts, spacing } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
+import SegmentedRing from '../../components/SegmentedRing'
 import { useT } from '../../i18n'
+
+const AV_SIZE    = 30
+const RING_OUTER = AV_SIZE + 6  // 36
 
 interface Props {
   userName: string
   avatarUri: string | null
+  hasPosts: boolean
   isOnline: boolean
   isTyping: boolean
   onBack: () => void
@@ -17,20 +22,29 @@ interface Props {
 }
 
 export default function ChatHeader({
-  userName, avatarUri, isOnline, isTyping,
-  onBack, onSchedule, onProfilePress,
+  userName, avatarUri, hasPosts, isOnline, isTyping,
+  onBack, onProfilePress,
 }: Props) {
   const t = useT()
   const statusText = isTyping ? t.chat_typing : isOnline ? t.chat_online : t.chat_offline
 
   return (
     <View style={s.header}>
-      <TouchableOpacity onPress={onBack} style={s.back} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-        <Ionicons name="chevron-back" size={26} color={colors.gray800} />
+      <TouchableOpacity onPress={onBack} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+        <Ionicons name="chevron-back" size={26} color="#000" />
       </TouchableOpacity>
 
       <TouchableOpacity onPress={onProfilePress} activeOpacity={0.75}>
-        <AvatarImage uri={avatarUri} name={userName} size={44} borderWidth={0} borderColor="transparent" />
+        <View style={s.avatarOuter}>
+          {hasPosts && (
+            <SegmentedRing count={1} size={RING_OUTER} strokeWidth={1.5} />
+          )}
+          <View style={s.avatarInner}>
+            <View style={s.avatarCircle}>
+              <AvatarImage uri={avatarUri} name={userName} size={AV_SIZE} borderWidth={0} borderColor="transparent" />
+            </View>
+          </View>
+        </View>
       </TouchableOpacity>
 
       <View style={s.info}>
@@ -44,12 +58,12 @@ export default function ChatHeader({
       </View>
 
       <View style={s.actions}>
-        <View style={s.callBtn}>
-          <Ionicons name="videocam-outline" size={20} color="#1A1A1A" />
-        </View>
-        <View style={s.callBtn}>
-          <Ionicons name="call-outline" size={19} color="#1A1A1A" />
-        </View>
+        <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Ionicons name="videocam-outline" size={22} color="#000" />
+        </TouchableOpacity>
+        <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Ionicons name="call-outline" size={21} color="#000" />
+        </TouchableOpacity>
       </View>
     </View>
   )
@@ -63,11 +77,27 @@ const s = StyleSheet.create({
     paddingVertical: 8,
     paddingBottom: 10,
     backgroundColor: colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
     gap: 12,
   },
-  back:   {},
+
+  avatarOuter: {
+    width:           RING_OUTER,
+    height:          RING_OUTER,
+    alignItems:      'center',
+    justifyContent:  'center',
+  },
+  avatarInner: {
+    position:        'absolute',
+    alignItems:      'center',
+    justifyContent:  'center',
+  },
+  avatarCircle: {
+    width:           AV_SIZE,
+    height:          AV_SIZE,
+    borderRadius:    AV_SIZE / 2,
+    overflow:        'hidden',
+  },
+
   info:   { flex: 1, minWidth: 0 },
   name:   { fontSize: 16, fontFamily: fonts.semiBold, color: colors.gray800, letterSpacing: -0.3 },
 
@@ -75,11 +105,5 @@ const s = StyleSheet.create({
   onlineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#22C55E' },
   status:    { fontSize: 12, fontFamily: fonts.regular },
 
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  callBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    borderWidth: 1.5, borderColor: '#D1D1D6',
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#F5F5F7',
-  },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
 })

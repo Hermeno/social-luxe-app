@@ -6,8 +6,9 @@ export async function getConversations(): Promise<Message[]> {
   return res.data.data
 }
 
-export async function getMessages(userId: string, page = 1): Promise<Message[]> {
-  const res = await api.get<ApiResponse<Message[]>>(`/messages/${userId}?page=${page}`)
+export async function getMessages(userId: string, before?: string): Promise<Message[]> {
+  const params = before ? `?before=${encodeURIComponent(before)}` : ''
+  const res = await api.get<ApiResponse<Message[]>>(`/messages/${userId}${params}`)
   return res.data.data
 }
 

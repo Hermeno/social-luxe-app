@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { colors, fonts } from '../theme'
 import { useAuthStore } from '../store/auth.store'
 import { useOnlineStore } from '../store/online.store'
+import { useFollowStore } from '../store/follow.store'
 import { connectSocket, disconnectSocket, getSocket } from '../socket'
 import { useSync } from '../hooks/useSync'
 import { getCachedConnections } from '../db/database'
@@ -132,6 +133,9 @@ export default function RootNavigator({ onboardingDone, setOnboardingDone, defau
 
     const socket = connectSocket(token)
     const { setOnline, setOffline } = useOnlineStore.getState()
+
+    // Load who we follow into the global store (SQLite cache first, then API)
+    useFollowStore.getState().load().catch(() => {})
 
     // Snapshot de quem já está online quando conectamos
     socket.on('users:online:snapshot', ({ userIds }: { userIds: string[] }) => {

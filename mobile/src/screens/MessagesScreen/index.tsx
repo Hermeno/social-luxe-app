@@ -4,6 +4,8 @@ import {
   TouchableOpacity, Animated, ActivityIndicator, KeyboardAvoidingView,
   Dimensions, Keyboard, LayoutAnimation, Platform, UIManager,
 } from 'react-native'
+import { Image } from 'expo-image'
+import { LinearGradient } from 'expo-linear-gradient'
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true)
@@ -15,7 +17,7 @@ import { useFocusEffect } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
 import Toast from 'react-native-toast-message'
 import * as msgService from '../../services/message.service'
-import { getConnections, toggleFollow, FollowDuration } from '../../services/follow.service'
+import { getConnections, FollowDuration } from '../../services/follow.service'
 import { Connection } from '../../types'
 import {
   getViewedPostIds,
@@ -28,10 +30,12 @@ import {
   setSyncMeta,
 } from '../../db/database'
 import { FollowUser } from '../../services/follow.service'
+import { API_BASE } from '../../config'
 import FollowSplitButton from '../../components/FollowSplitButton'
 import { api } from '../../services/api'
 import { getSocket } from '../../socket'
 import { useAuthStore } from '../../store/auth.store'
+import { useFollowStore } from '../../store/follow.store'
 import { isConnected } from '../../services/netinfo.service'
 import { useMessageBadgeStore } from '../../store/messageBadge.store'
 import { useFeedStore } from '../../store/feed.store'
@@ -40,6 +44,7 @@ import { colors, fonts } from '../../theme'
 import { useT } from '../../i18n'
 import AvatarImage from '../../components/AvatarImage'
 import SegmentedRing from '../../components/SegmentedRing'
+import DiscoveryRow from '../../components/DiscoveryRow'
 
 type Nav = StackNavigationProp<AppStackParams>
 
@@ -79,6 +84,11 @@ interface UserResult {
 
 // ── User card (search results) ────────────────────────────────────────────────
 
+function resolveUri(uri: string | null | undefined): string | null {
+  if (!uri) return null
+  return uri.startsWith('http') || uri.startsWith('file://') ? uri : `${API_BASE}${uri}`
+}
+
 function UserCard({
   user, followed, followBack, loadingFollow, onFollow, onPress,
 }: {
@@ -89,35 +99,48 @@ function UserCard({
   onFollow: (duration: FollowDuration) => void
   onPress: () => void
 }) {
-  const t = useT()
+  const t         = useT()
   const followers = user._count?.followers ?? 0
   const posts     = user._count?.posts     ?? 0
+  const photoUri  = resolveUri(user.avatar)
 
   return (
-    <View style={c.card}>
-      <TouchableOpacity style={c.cardBody} onPress={onPress} activeOpacity={0.8}>
-        <AvatarImage uri={user.avatar} name={user.name} size={84} />
+    <TouchableOpacity style={c.card} onPress={onPress} activeOpacity={0.88}>
+      {/* Full-bleed photo */}
+      {photoUri
+        ? <Image source={{ uri: photoUri }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
+        : <View style={[StyleSheet.absoluteFill, c.photoFallback]}>
+            <Ionicons name="person" size={44} color="rgba(255,255,255,0.25)" />
+          </View>
+      }
+
+      {/* Dark gradient — fades in from mid-card downward */}
+      <LinearGradient
+        colors={['transparent', 'rgba(0,0,0,0.55)', 'rgba(0,0,0,0.92)']}
+        locations={[0.3, 0.6, 1]}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+
+      {/* Info + button pinned to bottom */}
+      <View style={c.info}>
         <Text style={c.cardName} numberOfLines={1}>{user.name}</Text>
         <View style={c.statsRow}>
-          <View style={c.statItem}>
-            <Text style={c.statValue}>{fmtCount(posts)}</Text>
-            <Text style={c.statLabel}>{posts === 1 ? 'post' : 'posts'}</Text>
-          </View>
-          <View style={c.statDivider} />
-          <View style={c.statItem}>
-            <Text style={c.statValue}>{fmtCount(followers)}</Text>
-            <Text style={c.statLabel}>{followers === 1 ? t.follower : t.followers}</Text>
-          </View>
+          <Text style={c.statTxt}>{fmtCount(posts)} posts</Text>
+          <View style={c.statDot} />
+          <Text style={c.statTxt}>{fmtCount(followers)} {followers === 1 ? t.follower : t.followers}</Text>
         </View>
-      </TouchableOpacity>
-      <FollowSplitButton
-        following={followed}
-        followBack={followBack}
-        loading={loadingFollow}
-        onFollow={onFollow}
-        theme="light"
-      />
-    </View>
+        <View style={c.followWrap}>
+          <FollowSplitButton
+            following={followed}
+            followBack={followBack}
+            loading={loadingFollow}
+            onFollow={onFollow}
+            theme="light"
+          />
+        </View>
+      </View>
+    </TouchableOpacity>
   )
 }
 
@@ -222,7 +245,7 @@ function ConvoRow({ item, viewedIds, onPress, index, myUserId, isQuickOpen, onTo
         <View style={s.avatarWrap}>
           {hasPosts ? (
             <>
-              <SegmentedRing count={item.postIds.length} viewedCount={viewedCount} size={RING} />
+              <SegmentedRing count={item.postIds.length} size={RING} strokeWidth={2} />
               <View style={s.avatarInner}>
                 <AvatarImage uri={item.user.avatar} name={item.user.name} size={AVA} />
               </View>
@@ -297,6 +320,8 @@ export default function MessagesScreen() {
   const [connections,    setConnections]    = useState<Connection[]>([])
   const [viewedIds,      setViewedIds]      = useState<Set<string>>(new Set())
   const [quickReplyId,   setQuickReplyId]   = useState<string | null>(null)
+  const [showDiscovery,  setShowDiscovery]  = useState(true)
+  const [myHasPosts,     setMyHasPosts]     = useState(false)
 
   const [query,          setQuery]          = useState('')
   const [isSearchMode,   setIsSearchMode]   = useState(false)
@@ -304,7 +329,7 @@ export default function MessagesScreen() {
   const [searchResults,  setSearchResults]  = useState<UserResult[]>([])
   const [searchLoading,  setSearchLoading]  = useState(false)
   const [suggestLoading, setSuggestLoading] = useState(false)
-  const [followed,       setFollowed]       = useState<Set<string>>(new Set())
+  const followingIds     = useFollowStore((s) => s.followingIds)
   const [followers,      setFollowers]      = useState<Set<string>>(new Set())
   const [followPending,  setFollowPending]  = useState<Set<string>>(new Set())
 
@@ -344,8 +369,17 @@ export default function MessagesScreen() {
 
     syncConnectionsRef.current = load
     load()
+
+    // Fetch current user's post count for avatar ring
+    if (user?.id) {
+      api.get(`/users/${user.id}`).then((r) => {
+        const count = r.data?._count?.posts ?? r.data?.data?._count?.posts ?? 0
+        setMyHasPosts(count > 0)
+      }).catch(() => {})
+    }
+
     return () => { cancelled = true }
-  }, []))
+  }, [user?.id]))
 
   // ── Socket: live inbox updates ────────────────────────────────────────────
   useEffect(() => {
@@ -362,12 +396,19 @@ export default function MessagesScreen() {
             ? (msg.senderId !== user?.id ? prev[idx].unreadCount + 1 : prev[idx].unreadCount)
             : 1,
         }
-        const updated: Connection[] = idx >= 0
-          ? [{ ...prev[idx], ...update }, ...prev.filter((_, i) => i !== idx)]
-          : prev
-        updateCachedConnection(partnerId, update).catch(() => {})
+
+        if (idx >= 0) {
+          // Known conversation — move to top
+          const updated: Connection[] = [{ ...prev[idx], ...update }, ...prev.filter((_, i) => i !== idx)]
+          updateCachedConnection(partnerId, update).catch(() => {})
+          if (msg.senderId !== user?.id) increment()
+          return updated
+        }
+
+        // Unknown partner — fetch full connections to get their profile + add to list
+        syncConnectionsRef.current?.().catch(() => {})
         if (msg.senderId !== user?.id) increment()
-        return updated
+        return prev
       })
     }
 
@@ -402,32 +443,23 @@ export default function MessagesScreen() {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [query, isSearchMode])
 
-  // ── Follow state ──────────────────────────────────────────────────────────
-  const followedLoadedRef = useRef(false)
+  // ── Followers state (who follows ME — for "followBack" indicator) ─────────
+  // "who I follow" is handled by useFollowStore globally.
+  const followersLoadedRef = useRef(false)
 
-  async function loadFollowedState() {
-    if (followedLoadedRef.current) return
-    followedLoadedRef.current = true
-    const [cachedFollowing, cachedFollowers] = await Promise.all([
-      getCache<FollowUser[]>('my_following').catch(() => null),
-      getCache<FollowUser[]>('my_followers').catch(() => null),
-    ])
-    if (cachedFollowing?.length) setFollowed(new Set(cachedFollowing.map((u) => u.id)))
-    if (cachedFollowers?.length) setFollowers(new Set(cachedFollowers.map((u) => u.id)))
+  async function loadFollowersState() {
+    if (followersLoadedRef.current) return
+    followersLoadedRef.current = true
+    const cached = await getCache<FollowUser[]>('my_followers').catch(() => null)
+    if (cached?.length) setFollowers(new Set(cached.map((u) => u.id)))
     if (!isConnected()) return
     try {
-      const [followingRes, followersRes] = await Promise.all([
-        api.get('/users/following'),
-        api.get('/users/followers'),
-      ])
-      const following: FollowUser[]    = followingRes.data.data ?? followingRes.data ?? []
-      const myFollowers: FollowUser[]  = followersRes.data.data ?? followersRes.data ?? []
-      setFollowed(new Set(following.map((u) => u.id)))
+      const res = await api.get('/users/followers')
+      const myFollowers: FollowUser[] = res.data.data ?? res.data ?? []
       setFollowers(new Set(myFollowers.map((u) => u.id)))
-      setCache('my_following', following).catch(() => {})
       setCache('my_followers', myFollowers).catch(() => {})
     } catch {
-      followedLoadedRef.current = false
+      followersLoadedRef.current = false
     }
   }
 
@@ -435,7 +467,7 @@ export default function MessagesScreen() {
   function enterSearch() {
     setIsSearchMode(true)
     loadSuggested()
-    loadFollowedState()
+    loadFollowersState()
   }
 
   function exitSearch() {
@@ -448,30 +480,12 @@ export default function MessagesScreen() {
   // ── Follow / unfollow ─────────────────────────────────────────────────────
   const handleFollow = useCallback(async (userId: string, duration: FollowDuration = 'forever') => {
     if (followPending.has(userId)) return
-    const wasFollowed = followed.has(userId)
-    setFollowed((prev) => {
-      const next = new Set(prev)
-      wasFollowed ? next.delete(userId) : next.add(userId)
-      return next
-    })
     setFollowPending((prev) => new Set([...prev, userId]))
     try {
-      const res = await toggleFollow(userId, duration)
-      setFollowed((prev) => {
-        const next = new Set(prev)
-        res.following ? next.add(userId) : next.delete(userId)
-        return next
-      })
+      const nowFollowing = await useFollowStore.getState().toggle(userId, duration)
       // New follow → refresh connections so the person appears in the list instantly
-      if (res.following) {
-        syncConnectionsRef.current?.().catch(() => {})
-      }
+      if (nowFollowing) syncConnectionsRef.current?.().catch(() => {})
     } catch {
-      setFollowed((prev) => {
-        const next = new Set(prev)
-        wasFollowed ? next.add(userId) : next.delete(userId)
-        return next
-      })
       Toast.show({ type: 'error', text1: t.error, text2: t.msg_follow_err, visibilityTime: 2500 })
     } finally {
       setFollowPending((prev) => {
@@ -480,7 +494,7 @@ export default function MessagesScreen() {
         return next
       })
     }
-  }, [followed, followPending])
+  }, [followPending])
 
   // ── Quick reply ───────────────────────────────────────────────────────────
   function toggleQuickReply(userId: string) {
@@ -531,6 +545,21 @@ export default function MessagesScreen() {
   const displayCards  = query.trim() ? searchResults : suggested
   const isCardLoading = query.trim() ? searchLoading : suggestLoading
 
+  // ── Conversation list items (with injected discovery row) ─────────────────
+  type ConvoListItem =
+    | { kind: 'convo'; c: Connection; idx: number }
+    | { kind: 'discovery' }
+
+  const INJECT_AT = 3
+  const convoListItems: ConvoListItem[] = []
+  connections.forEach((c, i) => {
+    if (i === INJECT_AT && showDiscovery) convoListItems.push({ kind: 'discovery' })
+    convoListItems.push({ kind: 'convo', c, idx: i })
+  })
+  if (showDiscovery && connections.length > 0 && connections.length <= INJECT_AT) {
+    convoListItems.push({ kind: 'discovery' })
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <View style={s.screen}>
@@ -540,20 +569,28 @@ export default function MessagesScreen() {
         keyboardVerticalOffset={0}
       >
 
-        {/* ── Nav bar: ← | search field | avatar ──────────────────── */}
+        {/* ── Nav bar: ← | + | search field | avatar ──────────────── */}
         <View style={[s.navbar, { paddingTop: top + 12 }]}>
           <TouchableOpacity
             onPress={() => isSearchMode ? exitSearch() : nav.goBack()}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Ionicons name="chevron-back" size={26} color="#1A1A1A" />
+            <Ionicons name="chevron-back" size={26} color="#000" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => nav.navigate('Tabs', { screen: 'Create' })}
+            activeOpacity={0.75}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="add" size={26} color="#000" />
           </TouchableOpacity>
 
           <View style={[s.searchBar, isSearchMode && s.searchBarActive]}>
             <Ionicons
               name="search-outline"
               size={16}
-              color={isSearchMode ? colors.primary : '#ABABAB'}
+              color={isSearchMode ? colors.primary : '#1A1A1A'}
             />
             <TextInput
               ref={inputRef}
@@ -577,11 +614,21 @@ export default function MessagesScreen() {
             )}
           </View>
 
+          {/* Avatar + ring if user has posts */}
           <TouchableOpacity
             onPress={() => nav.navigate('Profile', { userId: user?.id })}
             activeOpacity={0.75}
           >
-            <AvatarImage uri={user?.avatar ?? null} size={34} borderWidth={0} borderColor="transparent" />
+            <View style={s.navAvatarOuter}>
+              {myHasPosts && (
+                <SegmentedRing count={1} size={32} strokeWidth={1.5} />
+              )}
+              <View style={s.navAvatarInner}>
+                <View style={s.navAvatarCircle}>
+                  <AvatarImage uri={user?.avatar ?? null} size={26} borderWidth={0} borderColor="transparent" />
+                </View>
+              </View>
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -629,8 +676,8 @@ export default function MessagesScreen() {
                 renderItem={({ item }) => (
                   <UserCard
                     user={item}
-                    followed={followed.has(item.id)}
-                    followBack={followers.has(item.id) && !followed.has(item.id)}
+                    followed={followingIds.has(item.id)}
+                    followBack={followers.has(item.id) && !followingIds.has(item.id)}
                     loadingFollow={followPending.has(item.id)}
                     onFollow={(duration) => handleFollow(item.id, duration)}
                     onPress={() => { exitSearch(); nav.navigate('Profile', { userId: item.id }) }}
@@ -644,30 +691,38 @@ export default function MessagesScreen() {
 
           /* ── Conversations list ──────────────────────────────────── */
           <FlatList
-            data={connections}
-            keyExtractor={(c) => c.user.id}
+            data={convoListItems}
+            keyExtractor={(item) => item.kind === 'discovery' ? '__discovery__' : item.c.user.id}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={[s.list, { paddingBottom: Math.max(bottom, 8) + 66 }]}
-            ItemSeparatorComponent={() => <View style={s.sep} />}
-            renderItem={({ item, index }) => (
-              <ConvoRow
-                item={item}
-                viewedIds={viewedIds}
-                index={index}
-                myUserId={user?.id ?? ''}
-                isQuickOpen={quickReplyId === item.user.id}
-                onToggleQuick={() => toggleQuickReply(item.user.id)}
-                onQuickSend={(text) => handleQuickSend(item.user.id, item.user.name, text)}
-                onPress={() => {
-                  setQuickReplyId(null)
-                  nav.navigate('Chat', {
-                    userId:     item.user.id,
-                    userName:   item.user.name,
-                    userAvatar: item.user.avatar,
-                  })
-                }}
-              />
-            )}
+            ItemSeparatorComponent={({ leadingItem }) =>
+              (leadingItem as ConvoListItem).kind === 'discovery' ? null : <View style={s.sep} />
+            }
+            renderItem={({ item }) => {
+              if (item.kind === 'discovery') {
+                return <DiscoveryRow onDismiss={() => setShowDiscovery(false)} />
+              }
+              return (
+                <ConvoRow
+                  item={item.c}
+                  viewedIds={viewedIds}
+                  index={item.idx}
+                  myUserId={user?.id ?? ''}
+                  isQuickOpen={quickReplyId === item.c.user.id}
+                  onToggleQuick={() => toggleQuickReply(item.c.user.id)}
+                  onQuickSend={(text) => handleQuickSend(item.c.user.id, item.c.user.name, text)}
+                  onPress={() => {
+                    setQuickReplyId(null)
+                    nav.navigate('Chat', {
+                      userId:           item.c.user.id,
+                      userName:         item.c.user.name,
+                      userAvatar:       item.c.user.avatar,
+                      partnerHasPosts:  item.c.postIds.length > 0,
+                    })
+                  }}
+                />
+              )
+            }}
             ListEmptyComponent={
               <View style={s.empty}>
                 <View style={s.emptyCircle}>
@@ -699,8 +754,6 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 14,
     gap: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#EBEBEB',
   },
   searchBar: {
     flex: 1,
@@ -709,7 +762,7 @@ const s = StyleSheet.create({
     backgroundColor: '#F0F0F5',
     borderRadius: 22,
     paddingHorizontal: 14,
-    paddingVertical: 11,
+    paddingVertical: 7,
     gap: 8,
     borderWidth: 1.5,
     borderColor: 'transparent',
@@ -725,61 +778,24 @@ const s = StyleSheet.create({
     color: '#1A1A1A',
     padding: 0,
   },
-  navAvatar: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: `${colors.primary}40`,
-  },
-
-  /* ── Home button + badge ── */
-  homeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#F4F4F6',
+  /* ── Nav avatar + ring ── */
+  navAvatarOuter: {
+    width: 32,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  homeBadgeWrap: {
+  navAvatarInner: {
     position: 'absolute',
-    bottom: 38,
-    alignSelf: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  homeBadgePill: {
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    paddingHorizontal: 7,
-    paddingVertical: 4,
-    minWidth: 22,
-    alignItems: 'center',
-    ...Platform.select({
-      ios:     { shadowColor: colors.primary, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.4, shadowRadius: 5 },
-      android: { elevation: 4 },
-    }),
+  navAvatarCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    overflow: 'hidden',
   },
-  homeBadgeTxt: {
-    color: '#fff',
-    fontSize: 11,
-    fontFamily: fonts.bold,
-    lineHeight: 14,
-    includeFontPadding: false,
-  },
-  homeBadgeTail: {
-    width: 0,
-    height: 0,
-    borderLeftWidth: 5,
-    borderRightWidth: 5,
-    borderTopWidth: 6,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    borderTopColor: colors.primary,
-    marginTop: -1,
-  },
-
   /* ── Section label ── */
   sectionRow: {
     flexDirection: 'row',
@@ -886,28 +902,52 @@ const q = StyleSheet.create({
 
 // ── User card styles ──────────────────────────────────────────────────────────
 
+const CARD_H = Math.round(CARD_W * 1.45)
+
 const c = StyleSheet.create({
   card: {
-    width: CARD_W,
-    backgroundColor: colors.white,
-    borderRadius: 20,
-    paddingBottom: 16,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.gray200,
+    width:        CARD_W,
+    height:       CARD_H,
+    borderRadius: 18,
+    overflow:     'hidden',
+    backgroundColor: '#1A1A1A',
   },
-  cardBody: {
-    alignItems: 'center',
-    paddingTop: 22,
-    paddingHorizontal: 10,
-    paddingBottom: 12,
-    width: '100%',
-    gap: 8,
+  photoFallback: {
+    backgroundColor: '#2A2A2A',
+    alignItems:      'center',
+    justifyContent:  'center',
   },
-  cardName:  { fontSize: 14, fontFamily: fonts.bold, color: colors.gray800, textAlign: 'center', letterSpacing: -0.2 },
-  statsRow:  { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 2 },
-  statItem:  { alignItems: 'center', gap: 1 },
-  statValue: { fontSize: 14, fontFamily: fonts.bold, color: colors.gray800, letterSpacing: -0.3 },
-  statLabel: { fontSize: 10, fontFamily: fonts.regular, color: colors.gray400, textTransform: 'uppercase', letterSpacing: 0.3 },
-  statDivider: { width: 1, height: 22, backgroundColor: colors.gray200 },
+  info: {
+    position: 'absolute',
+    bottom:   0,
+    left:     0,
+    right:    0,
+    padding:  12,
+    gap:      4,
+  },
+  cardName: {
+    fontSize:    14,
+    fontFamily:  fonts.bold,
+    color:       '#fff',
+    letterSpacing: -0.2,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           5,
+  },
+  statTxt: {
+    fontSize:   11,
+    fontFamily: fonts.regular,
+    color:      'rgba(255,255,255,0.65)',
+  },
+  statDot: {
+    width:        3,
+    height:       3,
+    borderRadius: 1.5,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+  },
+  followWrap: {
+    marginTop: 8,
+  },
 })

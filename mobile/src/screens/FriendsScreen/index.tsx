@@ -9,7 +9,8 @@ import { StackNavigationProp } from '@react-navigation/stack'
 import { Ionicons } from '@expo/vector-icons'
 import { colors, spacing, radius, fonts } from '../../theme'
 import { useFriendsStore } from '../../store/friends.store'
-import { getMyFollowers, getMyFollowing, toggleFollow, FollowUser } from '../../services/follow.service'
+import { getMyFollowers, getMyFollowing, FollowUser } from '../../services/follow.service'
+import { useFollowStore } from '../../store/follow.store'
 import { getAllUsers } from '../../services/user.service'
 import AvatarImage from '../../components/AvatarImage'
 import { AppStackParams } from '../../navigation/AppNavigator'
@@ -46,22 +47,17 @@ function UserRow({
   )
 }
 
-function FollowButton({ userId, initialFollowing }: { userId: string; initialFollowing: boolean }) {
-  const t = useT()
-  const [following, setFollowing] = useState(initialFollowing)
-  const [loading, setLoading]     = useState(false)
+function FollowButton({ userId }: { userId: string }) {
+  const t         = useT()
+  const following = useFollowStore((s) => s.followingIds.has(userId))
+  const [loading, setLoading] = useState(false)
 
   async function toggle() {
     if (loading) return
-    const prev = following
-    setFollowing(!prev)
     setLoading(true)
     try {
-      const res = await toggleFollow(userId)
-      setFollowing(res.following)
-    } catch {
-      setFollowing(prev)
-    } finally {
+      await useFollowStore.getState().toggle(userId)
+    } catch {} finally {
       setLoading(false)
     }
   }
@@ -90,7 +86,6 @@ export default function FriendsScreen() {
   const [allUsers, setAllUsers]     = useState<UserSummary[]>([])
   const [followers, setFollowers]   = useState<FollowUser[]>([])
   const [following, setFollowing]   = useState<FollowUser[]>([])
-  const [followingIds, setFollowingIds] = useState<Set<string>>(new Set())
 
   useFocusEffect(useCallback(() => {
     let cancelled = false
@@ -105,7 +100,7 @@ export default function FriendsScreen() {
       if (!cancelled) {
         if (cachedUsers)  setAllUsers(cachedUsers)
         if (cachedFwers)  { setFollowers(cachedFwers); setFollowerCount(cachedFwers.length) }
-        if (cachedFwing)  { setFollowing(cachedFwing); setFollowingIds(new Set(cachedFwing.map((u) => u.id))) }
+        if (cachedFwing)  { setFollowing(cachedFwing) }
       }
 
       // 2. Background network sync
@@ -118,8 +113,8 @@ export default function FriendsScreen() {
         setAllUsers(users)
         setFollowers(fwers)
         setFollowing(fwing)
-        setFollowingIds(new Set(fwing.map((u) => u.id)))
         setFollowerCount(fwers.length)
+        useFollowStore.getState().syncAll(fwing.map((u) => u.id))
         Promise.all([
           setCache('all_users', users),
           setCache('my_followers', fwers),
@@ -188,7 +183,7 @@ export default function FriendsScreen() {
           renderItem={({ item }) => (
             <UserRow
               user={item}
-              rightSlot={<FollowButton userId={item.id} initialFollowing={followingIds.has(item.id)} />}
+              rightSlot={<FollowButton userId={item.id} />}
             />
           )}
           ListEmptyComponent={<Text style={s.empty}>{t.friends_no_users}</Text>}
@@ -204,7 +199,7 @@ export default function FriendsScreen() {
           renderItem={({ item }) => (
             <UserRow
               user={item}
-              rightSlot={<FollowButton userId={item.id} initialFollowing />}
+              rightSlot={<FollowButton userId={item.id} />}
             />
           )}
           ListEmptyComponent={
@@ -225,12 +220,7 @@ export default function FriendsScreen() {
           renderItem={({ item }) => (
             <UserRow
               user={item}
-              rightSlot={
-                <FollowButton
-                  userId={item.id}
-                  initialFollowing={followingIds.has(item.id)}
-                />
-              }
+              rightSlot={<FollowButton userId={item.id} />}
             />
           )}
           ListEmptyComponent={

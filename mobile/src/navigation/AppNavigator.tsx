@@ -50,7 +50,7 @@ export type AppTabParams = {
 export type AppStackParams = {
   Tabs: NavigatorScreenParams<AppTabParams>
   Profile: { userId?: string }
-  Chat: { userId: string; userName: string; userAvatar: string | null }
+  Chat: { userId: string; userName: string; userAvatar: string | null; partnerHasPosts?: boolean }
   About: undefined
   Verified: undefined
   // COMMUNITY BLOCKED FOR LAUNCH

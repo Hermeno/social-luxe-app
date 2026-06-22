@@ -2,7 +2,8 @@ import React, { useState, useCallback } from 'react'
 import {
   View, Text, TouchableOpacity, FlatList,
   RefreshControl, StyleSheet, Alert, Dimensions,
-  ActivityIndicator, Modal, TextInput, KeyboardAvoidingView, Platform,
+  ActivityIndicator, Modal, TextInput, KeyboardAvoidingView,
+  Platform, Image as RNImage,
 } from 'react-native'
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -17,6 +18,7 @@ import { Post, User } from '../../types'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { colors, fonts } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
+import SegmentedRing from '../../components/SegmentedRing'
 import FollowersSheet from './FollowersSheet'
 import QRModal from '../../components/QRModal'
 import * as followService from '../../services/follow.service'
@@ -24,18 +26,39 @@ import { API_BASE } from '../../config'
 import { getCache, setCache } from '../../db/database'
 import { isConnected } from '../../services/netinfo.service'
 import { useFeedStore } from '../../store/feed.store'
+import { useFollowStore } from '../../store/follow.store'
 import { deletePost as apiDeletePost, updatePost as apiUpdatePost } from '../../services/post.service'
 import { useT } from '../../i18n'
 
+// ── Types ──────────────────────────────────────────────────────────────────────
 type Nav   = StackNavigationProp<AppStackParams>
 type Route = RouteProp<AppStackParams, 'Profile'>
 
-const { width: W } = Dimensions.get('window')
-const GRID_GAP  = 1.5
-const GRID_SIZE = (W - GRID_GAP * 2) / 3
-const AVATAR_SZ = 86
-const HIT       = { top: 10, bottom: 10, left: 10, right: 10 }
+interface PartnerRequest {
+  id: string
+  senderId: string
+  status: string
+  sender: { id: string; name: string; avatar: string | null; bio: string | null }
+}
 
+type FeaturedRow = { type: 'featured'; main: Post; side: (Post | null)[] }
+type RegularRow  = { type: 'regular';  items: Post[] }
+type GridRow = FeaturedRow | RegularRow
+
+// ── Constants ──────────────────────────────────────────────────────────────────
+const { width: W, height: H } = Dimensions.get('window')
+const HERO_H      = Math.round(H * 0.38)
+const AV_OUTER    = 104          // ring container
+const AV_SIZE     = 92           // crisp avatar inside ring
+const RING_STROKE = 2.5
+const GAP         = 2
+const SMALL_W     = (W - GAP * 2) / 3
+const SMALL_H     = SMALL_W
+const FEAT_W      = SMALL_W * 2 + GAP
+const FEAT_H      = SMALL_H * 2 + GAP
+const HIT         = { top: 10, bottom: 10, left: 10, right: 10 }
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
 function resolveUrl(url: string | null | undefined): string | null {
   if (!url) return null
   if (url.startsWith('http') || url.startsWith('file://')) return url
@@ -64,19 +87,99 @@ function buildInfoLine(profile: any, hasPartner: boolean): string {
   return parts.join(' · ')
 }
 
-interface PartnerRequest {
-  id: string
-  senderId: string
-  status: string
-  sender: { id: string; name: string; avatar: string | null; bio: string | null }
+function buildRows(posts: Post[]): GridRow[] {
+  if (posts.length === 0) return []
+  const rows: GridRow[] = []
+  rows.push({ type: 'featured', main: posts[0], side: [posts[1] ?? null, posts[2] ?? null] })
+  for (let i = 3; i < posts.length; i += 3) {
+    rows.push({ type: 'regular', items: posts.slice(i, i + 3) })
+  }
+  return rows
 }
 
+// ── PostThumb ──────────────────────────────────────────────────────────────────
+function PostThumb({
+  post, width, height, isOwn,
+  onPress, onMenu,
+}: {
+  post: Post; width: number; height: number; isOwn: boolean
+  onPress: () => void; onMenu: () => void
+}) {
+  const thumb = resolveUrl(post.thumbnailUrl ?? post.mediaUrl)
+  return (
+    <TouchableOpacity
+      activeOpacity={0.88}
+      onPress={onPress}
+      style={{ width, height }}
+    >
+      {post.mediaType === 'TEXT' ? (() => {
+        const parts = post.bgColor?.split('|') ?? []
+        const gc: [string, string] = parts.length === 2 ? [parts[0], parts[1]] : ['#FF6B35', '#E63946']
+        return (
+          <LinearGradient
+            colors={gc}
+            style={[g.cellImg, { width, height, justifyContent: 'center', alignItems: 'center', padding: 4 }]}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          >
+            <Text style={g.cellText} numberOfLines={5}>{post.caption}</Text>
+          </LinearGradient>
+        )
+      })() : (
+        <Image source={{ uri: thumb ?? '' }} style={[g.cellImg, { width, height }]} contentFit="cover" cachePolicy="disk" recyclingKey={`grid-${post.id}`} />
+      )}
+      {post.mediaType === 'VIDEO' && (
+        <View style={g.videoIcon}><Ionicons name="play" size={10} color="#fff" /></View>
+      )}
+      {isOwn && (
+        <TouchableOpacity style={g.menuBtn} onPress={onMenu} hitSlop={{ top: 6, right: 6, bottom: 6, left: 6 }}>
+          <Ionicons name="ellipsis-horizontal" size={13} color="#fff" />
+        </TouchableOpacity>
+      )}
+    </TouchableOpacity>
+  )
+}
+
+// ── Grid rows ──────────────────────────────────────────────────────────────────
+function FeaturedRowComp({ row, isOwn, onPress, onMenu }: {
+  row: FeaturedRow; isOwn: boolean
+  onPress: (p: Post) => void; onMenu: (p: Post) => void
+}) {
+  return (
+    <View style={{ flexDirection: 'row', gap: GAP, marginBottom: GAP }}>
+      <PostThumb post={row.main} width={FEAT_W} height={FEAT_H} isOwn={isOwn} onPress={() => onPress(row.main)} onMenu={() => onMenu(row.main)} />
+      <View style={{ gap: GAP }}>
+        {row.side.map((p, i) =>
+          p ? (
+            <PostThumb key={p.id} post={p} width={SMALL_W} height={SMALL_H} isOwn={isOwn} onPress={() => onPress(p)} onMenu={() => onMenu(p)} />
+          ) : (
+            <View key={i} style={{ width: SMALL_W, height: SMALL_H, backgroundColor: colors.gray100 }} />
+          )
+        )}
+      </View>
+    </View>
+  )
+}
+
+function RegularRowComp({ row, isOwn, onPress, onMenu }: {
+  row: RegularRow; isOwn: boolean
+  onPress: (p: Post) => void; onMenu: (p: Post) => void
+}) {
+  return (
+    <View style={{ flexDirection: 'row', gap: GAP, marginBottom: GAP }}>
+      {row.items.map((p) => (
+        <PostThumb key={p.id} post={p} width={SMALL_W} height={SMALL_H} isOwn={isOwn} onPress={() => onPress(p)} onMenu={() => onMenu(p)} />
+      ))}
+    </View>
+  )
+}
+
+// ── Main screen ────────────────────────────────────────────────────────────────
 export default function ProfileScreen() {
   const t = useT()
   const { user: me, logout, refreshUser } = useAuthStore()
   const nav   = useNavigation<Nav>()
   const route = useRoute<Route>()
-  const { bottom } = useSafeAreaInsets()
+  const { bottom, top } = useSafeAreaInsets()
 
   const viewingId = route.params?.userId && route.params.userId !== me?.id ? route.params.userId : null
   const isOwn     = !viewingId
@@ -87,7 +190,7 @@ export default function ProfileScreen() {
   const [refreshing,     setRefreshing]     = useState(false)
   const [followerCount,  setFollowerCount]  = useState(0)
   const [followingCount, setFollowingCount] = useState(0)
-  const [isFollowing,    setIsFollowing]    = useState(false)
+  const isFollowing    = useFollowStore((s) => s.followingIds.has(targetId))
   const [theyFollowMe,   setTheyFollowMe]   = useState(false)
   const [followLoading,  setFollowLoading]  = useState(false)
   const [showQR,         setShowQR]         = useState(false)
@@ -108,7 +211,6 @@ export default function ProfileScreen() {
 
   useFocusEffect(useCallback(() => {
     let cancelled = false
-
     async function run() {
       const [cachedMeta, cachedPosts] = await Promise.all([
         !isOwn ? getCache<ProfileCache>(`profile:${targetId}`) : null,
@@ -120,15 +222,12 @@ export default function ProfileScreen() {
           setProfile(cachedMeta.user)
           setFollowerCount(cachedMeta.followerCount)
           setFollowingCount(cachedMeta.followingCount)
-          setIsFollowing(cachedMeta.isFollowing)
           setTheyFollowMe(cachedMeta.theyFollowMe ?? false)
         }
         if (cachedPosts) setPosts(cachedPosts)
         if (isOwn && latestMe) setProfile(latestMe)
       }
-
       if (!isConnected()) { setRefreshing(false); return }
-
       try {
         const [userRes, postsRes, followStatus] = await Promise.all([
           isOwn
@@ -137,30 +236,28 @@ export default function ProfileScreen() {
           api.get(`/users/${targetId}/posts`),
           isOwn
             ? Promise.resolve(null)
-            : followService.getFollowStatus(targetId)
-                .catch(() => ({ following: false, followsMe: false })),
+            : followService.getFollowStatus(targetId).catch(() => ({ following: false, followsMe: false })),
         ])
         if (cancelled) return
-
         const p = userRes.data.data as User
         if (!p) throw new Error('not found')
         const freshPosts: Post[] = postsRes.data.data ?? []
-
         setProfile(p)
         setPosts(freshPosts)
         setCache(`profile_posts:${targetId}`, freshPosts).catch(() => {})
-
         if (!isOwn && followStatus) {
-          setIsFollowing(followStatus.following)
           setTheyFollowMe(followStatus.followsMe)
+          // Reconcile store with the API's definitive answer (handles expiry edge cases)
+          const { followingIds, syncAll } = useFollowStore.getState()
+          const next = new Set(followingIds)
+          followStatus.following ? next.add(targetId) : next.delete(targetId)
+          syncAll([...next])
         }
-
         if (!isOwn) {
           const cachedFollowerCount  = cachedMeta?.followerCount  ?? 0
           const cachedFollowingCount = cachedMeta?.followingCount ?? 0
           setFollowerCount(cachedFollowerCount)
           setFollowingCount(cachedFollowingCount)
-
           Promise.all([
             followService.getUserFollowers(targetId),
             followService.getUserFollowing(targetId),
@@ -169,8 +266,7 @@ export default function ProfileScreen() {
             setFollowerCount(followersRes.length)
             setFollowingCount(followingRes.length)
             setCache(`profile:${targetId}`, {
-              user: p,
-              followerCount: followersRes.length,
+              user: p, followerCount: followersRes.length,
               followingCount: followingRes.length,
               isFollowing: followStatus?.following ?? false,
               theyFollowMe: followStatus?.followsMe ?? false,
@@ -178,10 +274,8 @@ export default function ProfileScreen() {
           }).catch(() => {})
         }
       } catch {}
-
       if (!cancelled) setRefreshing(false)
     }
-
     run()
     return () => { cancelled = true }
   }, [targetId]))
@@ -206,12 +300,7 @@ export default function ProfileScreen() {
 
   async function handleRefresh() {
     setRefreshing(true)
-    await silentReload()
-    setRefreshing(false)
-  }
-
-  async function silentReload() {
-    if (!isConnected()) return
+    if (!isConnected()) { setRefreshing(false); return }
     try {
       const latestMe = useAuthStore.getState().user
       const [userRes, postsRes] = await Promise.all([
@@ -233,24 +322,22 @@ export default function ProfileScreen() {
         Promise.all([
           followService.getUserFollowers(targetId),
           followService.getUserFollowing(targetId),
-        ]).then(([f, fo]) => {
-          setFollowerCount(f.length)
-          setFollowingCount(fo.length)
-        }).catch(() => {})
+        ]).then(([f, fo]) => { setFollowerCount(f.length); setFollowingCount(fo.length) }).catch(() => {})
       }
     } catch {}
+    setRefreshing(false)
   }
 
   async function handleFollow() {
     if (followLoading) return
     setFollowLoading(true)
-    const prev = isFollowing
-    setIsFollowing(!prev); setFollowerCount((c) => prev ? c - 1 : c + 1)
+    const wasFollowing = isFollowing
+    setFollowerCount((c) => wasFollowing ? c - 1 : c + 1)
     try {
-      const res = await followService.toggleFollow(targetId)
-      setIsFollowing(res.following)
-      setFollowerCount((c) => res.following === prev ? c : res.following ? c + 1 : c - 1)
-    } catch { setIsFollowing(prev); setFollowerCount((c) => prev ? c + 1 : c - 1) }
+      await useFollowStore.getState().toggle(targetId)
+    } catch {
+      setFollowerCount((c) => wasFollowing ? c + 1 : c - 1)
+    }
     setFollowLoading(false)
   }
 
@@ -262,17 +349,13 @@ export default function ProfileScreen() {
     })
     try {
       await api.put(`/users/partner-requests/${id}/${accept ? 'accept' : 'reject'}`)
-      if (accept) {
-        await refreshUser()
-        setProfile((p) => p ? { ...p, ...me } : p)
-      }
+      if (accept) { await refreshUser(); setProfile((p) => p ? { ...p, ...me } : p) }
     } catch {
-      api.get('/users/partner-requests')
-        .then((r) => {
-          const fresh = r.data.data ?? []
-          setPartnerRequests(fresh)
-          setCache('partner_requests', fresh).catch(() => {})
-        }).catch(() => {})
+      api.get('/users/partner-requests').then((r) => {
+        const fresh = r.data.data ?? []
+        setPartnerRequests(fresh)
+        setCache('partner_requests', fresh).catch(() => {})
+      }).catch(() => {})
       Alert.alert(t.error, t.notifs_err_msg)
     }
   }
@@ -301,45 +384,31 @@ export default function ProfileScreen() {
       setProfile((prev) => prev ? { ...prev, avatar: me?.avatar ?? null } : prev)
       useAuthStore.setState((s) => ({ user: s.user ? { ...s.user, avatar: me?.avatar ?? null } : null }))
       Alert.alert(t.error, t.profile_photo_err)
-    } finally {
-      setSavingAvatar(false)
-    }
+    } finally { setSavingAvatar(false) }
   }
 
   const setJumpToPostId = useFeedStore((s) => s.setJumpToPostId)
-  function openPost(postId: string) {
-    if (!postId) return
-    setJumpToPostId(postId)
+  function openPost(post: Post) {
+    setJumpToPostId(post.id)
     nav.navigate('Tabs', { screen: 'Feed' })
   }
 
-  function handleMenuOpen(post: Post) {
-    setMenuPost(post)
-    setEditEditing(false)
-  }
-
   function handleDeletePost(post: Post) {
-    Alert.alert(
-      t.profile_del_title,
-      t.profile_del_msg,
-      [
-        { text: t.cancel, style: 'cancel' },
-        {
-          text: t.delete, style: 'destructive',
-          onPress: async () => {
-            setMenuPost(null)
-            setPosts((prev) => prev.filter((p) => p.id !== post.id))
-            try {
-              await apiDeletePost(post.id)
-            } catch {
-              setPosts((prev) => [...prev, post].sort((a, b) =>
-                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
-              Alert.alert(t.error, t.profile_del_err)
-            }
-          },
+    Alert.alert(t.profile_del_title, t.profile_del_msg, [
+      { text: t.cancel, style: 'cancel' },
+      {
+        text: t.delete, style: 'destructive',
+        onPress: async () => {
+          setMenuPost(null)
+          setPosts((prev) => prev.filter((p) => p.id !== post.id))
+          try { await apiDeletePost(post.id) } catch {
+            setPosts((prev) => [...prev, post].sort((a, b) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
+            Alert.alert(t.error, t.profile_del_err)
+          }
         },
-      ]
-    )
+      },
+    ])
   }
 
   async function handleSaveEdit() {
@@ -350,127 +419,306 @@ export default function ProfileScreen() {
     setPosts((prev) => prev.map((p) => p.id === menuPost.id ? { ...p, caption: updated } : p))
     setEditEditing(false)
     setMenuPost(null)
-    try {
-      await apiUpdatePost(menuPost.id, updated)
-    } catch {
+    try { await apiUpdatePost(menuPost.id, updated) } catch {
       setPosts((prev) => prev.map((p) => p.id === menuPost.id ? { ...p, caption: original } : p))
       Alert.alert(t.error, t.profile_save_err)
     }
     setEditLoading(false)
   }
 
-  function renderPost({ item }: { item: Post }) {
-    const thumb = resolveUrl(item.thumbnailUrl ?? item.mediaUrl)
-    return (
-      <TouchableOpacity style={s.gridCell} onPress={() => openPost(item.id)} activeOpacity={0.88}>
-        {item.mediaType === 'TEXT' ? (() => {
-          const parts = item.bgColor?.split('|') ?? []
-          const gc: [string, string] = parts.length === 2 ? [parts[0], parts[1]] : ['#FF6B35', '#E63946']
-          return (
-            <LinearGradient colors={gc} style={[s.gridImg, { justifyContent: 'center', alignItems: 'center', padding: 4 }]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-              <Text style={s.gridText} numberOfLines={4}>{item.caption}</Text>
-            </LinearGradient>
-          )
-        })() : (
-          <Image source={{ uri: thumb ?? '' }} style={s.gridImg} contentFit="cover" cachePolicy="disk" recyclingKey={`grid-${item.id}`} />
-        )}
-        {item.mediaType === 'VIDEO' && (
-          <View style={s.videoIcon}><Ionicons name="play" size={10} color={colors.white} /></View>
-        )}
-        {isOwn && (
-          <TouchableOpacity style={s.postMenuBtn} onPress={() => handleMenuOpen(item)} hitSlop={{ top: 6, right: 6, bottom: 6, left: 6 }}>
-            <Ionicons name="ellipsis-horizontal" size={13} color={colors.white} />
-          </TouchableOpacity>
-        )}
+  // ── Derived ──────────────────────────────────────────────────────────────────
+  const nav2         = useNavigation<Nav>()
+  const canGoBack    = nav2.canGoBack()
+  const displayUri   = resolveUrl(pendingAvatarUri ?? profile?.avatar)
+  const hasPosts     = posts.length > 0
+  const hasPartner   = Boolean(profile?.partnerId && profile?.partnerName)
+  const rows         = buildRows(posts)
+
+  // ── Header component ─────────────────────────────────────────────────────────
+  const topRight = isOwn ? (
+    <View style={{ flexDirection: 'row', gap: 8 }}>
+      <TouchableOpacity onPress={() => nav2.navigate('Tabs', { screen: 'Create' })} hitSlop={HIT} style={m.floatBtn}>
+        <Ionicons name="add" size={26} color={colors.dark} />
       </TouchableOpacity>
+      <TouchableOpacity
+        onPress={() => Alert.alert(t.profile_logout, t.profile_logout_confirm, [
+          { text: t.cancel },
+          { text: t.profile_logout_btn, style: 'destructive', onPress: logout },
+        ])}
+        hitSlop={HIT}
+        style={m.floatBtn}
+      >
+        <Ionicons name="ellipsis-horizontal" size={26} color={colors.dark} />
+      </TouchableOpacity>
+    </View>
+  ) : null
+
+  const ListHeader = (
+    <View>
+      {/* ── Hero ── */}
+      <View style={{ height: HERO_H }}>
+        {displayUri ? (
+          <RNImage source={{ uri: displayUri }} style={StyleSheet.absoluteFill} blurRadius={22} resizeMode="cover" />
+        ) : (
+          <LinearGradient colors={['#CA2851', '#FF6766', '#FFB173']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+        )}
+        <LinearGradient
+          colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.55)', '#ffffff']}
+          locations={[0, 0.62, 1]}
+          style={StyleSheet.absoluteFill}
+        />
+
+        {/* Floating nav */}
+        <View style={[m.floatNav, { top: top + 8 }]}>
+          {canGoBack ? (
+            <TouchableOpacity onPress={() => nav2.goBack()} hitSlop={HIT} style={m.floatBtn}>
+              <Ionicons name="chevron-back" size={26} color={colors.dark} />
+            </TouchableOpacity>
+          ) : <View style={{ width: 36 }} />}
+          <View style={{ flexDirection: 'row', gap: 8 }}>{topRight}</View>
+        </View>
+
+        {/* Avatar + name at bottom of hero */}
+        <View style={m.identity}>
+          {/* Avatar tap — own profile picks new photo */}
+          <TouchableOpacity
+            onPress={isOwn ? pickAvatar : undefined}
+            activeOpacity={isOwn ? 0.8 : 1}
+            style={m.avatarOuter}
+          >
+            {hasPosts && (
+              <View style={StyleSheet.absoluteFill} pointerEvents="none">
+                <SegmentedRing count={1} size={AV_OUTER} strokeWidth={RING_STROKE} />
+              </View>
+            )}
+            <View style={m.avatarCircle}>
+              {displayUri ? (
+                <Image source={{ uri: displayUri }} style={m.avatarImg} contentFit="cover"
+                  cachePolicy={displayUri.startsWith('file://') ? 'none' : 'disk'} />
+              ) : (
+                <View style={[m.avatarImg, m.avatarFallback]}>
+                  <Text style={m.avatarInitial}>{profile?.name?.[0]?.toUpperCase() ?? '?'}</Text>
+                </View>
+              )}
+            </View>
+            {isOwn && !pendingAvatarUri && (
+              <View style={m.camDot}>
+                <Ionicons name="camera" size={10} color="#fff" />
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <Text style={m.name} numberOfLines={1}>{profile?.name ?? ''}</Text>
+
+          {!!profile?.statusLabel && (
+            <View style={m.statusPill}>
+              <Text style={m.statusTxt} numberOfLines={1}>{profile.statusLabel}</Text>
+            </View>
+          )}
+        </View>
+      </View>
+
+      {/* ── Stats ── */}
+      <View style={m.statsRow}>
+        <View style={m.statCol}>
+          <Text style={m.statNum}>{fmtStat(posts.length)}</Text>
+          <Text style={m.statLbl}>{t.profile_posts}</Text>
+        </View>
+        <View style={m.statDivider} />
+        <TouchableOpacity style={m.statCol} onPress={() => { setFollowSheetMode('followers'); setShowFollowSheet(true) }} activeOpacity={0.7}>
+          <Text style={m.statNum}>{fmtStat(followerCount)}</Text>
+          <Text style={m.statLbl}>{t.profile_followers}</Text>
+        </TouchableOpacity>
+        <View style={m.statDivider} />
+        <TouchableOpacity style={m.statCol} onPress={() => { setFollowSheetMode('following'); setShowFollowSheet(true) }} activeOpacity={0.7}>
+          <Text style={m.statNum}>{fmtStat(followingCount)}</Text>
+          <Text style={m.statLbl}>{t.profile_following}</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* ── Bio card ── */}
+      {(profile?.bio || buildInfoLine(profile, hasPartner) || hasPartner) && (
+        <View style={m.bioCard}>
+          {!!profile?.bio && <Text style={m.bioTxt}>{profile.bio}</Text>}
+          {!!buildInfoLine(profile, hasPartner) && (
+            <View style={m.infoRow}>
+              <Ionicons name="location-outline" size={12} color={colors.gray400} />
+              <Text style={m.infoTxt}>{buildInfoLine(profile, hasPartner)}</Text>
+            </View>
+          )}
+          {hasPartner && (
+            <LinearGradient colors={['#CA2851', '#FF6766']} style={m.partnerPill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+              <Ionicons name="heart" size={11} color="#fff" />
+              <Text style={m.partnerTxt}>Parceiro · {profile?.partnerName}</Text>
+            </LinearGradient>
+          )}
+        </View>
+      )}
+
+      {/* ── Action buttons ── */}
+      <View style={m.actionsArea}>
+        {isOwn ? (
+          pendingAvatarUri ? (
+            <View style={m.btnRow}>
+              <TouchableOpacity style={m.outlineBtn} onPress={() => setPendingAvatarUri(null)} activeOpacity={0.8}>
+                <Text style={m.outlineBtnTxt}>{t.cancel}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={m.gradBtn} onPress={savePendingAvatar} disabled={savingAvatar} activeOpacity={0.8}>
+                {savingAvatar
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={m.gradBtnTxt}>{t.save}</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={m.btnRow}>
+              <TouchableOpacity style={[m.outlineBtn, { flex: 1 }]} onPress={() => nav2.navigate('EditProfile')} activeOpacity={0.85}>
+                <Text style={m.outlineBtnTxt}>{t.profile_edit_btn}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={m.iconBtn} onPress={() => setShowQR(true)} activeOpacity={0.85}>
+                <Ionicons name="qr-code-outline" size={18} color={colors.dark} />
+              </TouchableOpacity>
+              <TouchableOpacity style={m.iconBtn} onPress={() => nav2.navigate('Settings' as any)} activeOpacity={0.85}>
+                <Ionicons name="settings-outline" size={18} color={colors.dark} />
+              </TouchableOpacity>
+            </View>
+          )
+        ) : (
+          <View style={m.btnRow}>
+            {isFollowing ? (
+              <TouchableOpacity style={[m.outlineBtn, { flex: 1 }]} onPress={handleFollow} disabled={followLoading} activeOpacity={0.85}>
+                {followLoading
+                  ? <ActivityIndicator size="small" color={colors.gray600} />
+                  : <Text style={m.outlineBtnTxt}>{t.following}</Text>
+                }
+              </TouchableOpacity>
+            ) : (
+              <LinearGradient colors={['#CA2851', '#FF6766']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[m.gradBtn, { flex: 1 }]}>
+                <TouchableOpacity onPress={handleFollow} disabled={followLoading} activeOpacity={0.85} style={m.gradBtnInner}>
+                  {followLoading
+                    ? <ActivityIndicator size="small" color="#fff" />
+                    : <Text style={m.gradBtnTxt}>{theyFollowMe ? t.profile_follow_back : t.follow}</Text>
+                  }
+                </TouchableOpacity>
+              </LinearGradient>
+            )}
+            <TouchableOpacity
+              style={[m.outlineBtn, { flex: 1 }]}
+              onPress={() => { if (!profile) return; nav2.navigate('Chat', { userId: profile.id, userName: profile.name, userAvatar: profile.avatar }) }}
+              activeOpacity={0.85}
+            >
+              <Text style={m.outlineBtnTxt}>{t.profile_message}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+
+      {/* ── Partner requests ── */}
+      {isOwn && partnerRequests.length > 0 && (
+        <View style={m.partnerReqs}>
+          <View style={m.partnerReqsHeader}>
+            <Ionicons name="heart-circle" size={14} color={colors.primary} />
+            <Text style={m.partnerReqsTitle}>{t.profile_partner_req}</Text>
+          </View>
+          {partnerRequests.map((req) => (
+            <View key={req.id} style={m.partnerReqRow}>
+              <AvatarImage uri={req.sender.avatar} size={38} />
+              <View style={{ flex: 1 }}>
+                <Text style={m.partnerReqName}>{req.sender.name}</Text>
+                <Text style={m.partnerReqBio} numberOfLines={1}>{req.sender.bio ?? t.profile_partner_req_msg}</Text>
+              </View>
+              <TouchableOpacity style={m.acceptBtn} onPress={() => handlePartnerResponse(req.id, true)} activeOpacity={0.8}>
+                <Text style={m.acceptBtnTxt}>{t.profile_accept}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={m.rejectBtn} onPress={() => handlePartnerResponse(req.id, false)} activeOpacity={0.8}>
+                <Ionicons name="close" size={15} color={colors.gray600} />
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* ── Grid separator ── */}
+      <View style={m.gridSep}>
+        <View style={m.gridSepLine} />
+        <Ionicons name="grid-outline" size={14} color={colors.gray400} />
+        <View style={m.gridSepLine} />
+      </View>
+    </View>
+  )
+
+  // ── Render grid row ──────────────────────────────────────────────────────────
+  function renderRow({ item }: { item: GridRow }) {
+    if (item.type === 'featured') {
+      return (
+        <FeaturedRowComp
+          row={item}
+          isOwn={isOwn}
+          onPress={openPost}
+          onMenu={(p) => { setMenuPost(p); setEditEditing(false) }}
+        />
+      )
+    }
+    return (
+      <RegularRowComp
+        row={item}
+        isOwn={isOwn}
+        onPress={openPost}
+        onMenu={(p) => { setMenuPost(p); setEditEditing(false) }}
+      />
     )
   }
 
-  const header = isOwn
-    ? <OwnHeader
-        profile={profile}
-        postsCount={posts.length}
-        followerCount={followerCount} followingCount={followingCount}
-        partnerRequests={partnerRequests}
-        onPickAvatar={pickAvatar}
-        pendingAvatarUri={pendingAvatarUri}
-        savingAvatar={savingAvatar}
-        onSaveAvatar={savePendingAvatar}
-        onCancelAvatar={() => setPendingAvatarUri(null)}
-        onEdit={() => nav.navigate('EditProfile')}
-        onShowFollowers={() => { setFollowSheetMode('followers'); setShowFollowSheet(true) }}
-        onShowFollowing={() => { setFollowSheetMode('following'); setShowFollowSheet(true) }}
-        onNavigate={(screen: keyof AppStackParams) => nav.navigate(screen as any)}
-        onPartnerResponse={handlePartnerResponse}
-        onLogout={() => Alert.alert(t.profile_logout, t.profile_logout_confirm, [{ text: t.cancel }, { text: t.profile_logout_btn, style: 'destructive', onPress: logout }])}
-        onShowQR={() => setShowQR(true)}
-      />
-    : <OtherHeader
-        profile={profile}
-        postsCount={posts.length}
-        followerCount={followerCount} followingCount={followingCount}
-        isFollowing={isFollowing} theyFollowMe={theyFollowMe}
-        followLoading={followLoading}
-        onFollow={handleFollow}
-        onMessage={() => { if (!profile) return; nav.navigate('Chat', { userId: profile.id, userName: profile.name, userAvatar: profile.avatar }) }}
-        onShowFollowers={() => { setFollowSheetMode('followers'); setShowFollowSheet(true) }}
-        onShowFollowing={() => { setFollowSheetMode('following'); setShowFollowSheet(true) }}
-      />
-
   return (
-    <View style={s.container}>
+    <View style={m.container}>
       <FlatList
-        data={posts}
-        keyExtractor={(p) => p.id}
-        numColumns={3}
+        data={rows}
+        keyExtractor={(_, i) => String(i)}
+        renderItem={renderRow}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
-        ListHeaderComponent={header}
-        renderItem={renderPost}
+        ListHeaderComponent={ListHeader}
         ListEmptyComponent={
-          <View style={s.emptyGrid}>
-            <Ionicons name="images-outline" size={48} color="#E5E5EA" />
-            <Text style={s.emptyGridText}>{t.profile_no_posts}</Text>
+          <View style={m.emptyGrid}>
+            <Ionicons name="images-outline" size={44} color="#E5E5EA" />
+            <Text style={m.emptyGridTxt}>{t.profile_no_posts}</Text>
           </View>
         }
         contentContainerStyle={{ paddingBottom: Math.max(bottom, 8) + 58 }}
       />
+
       {isOwn && profile && <QRModal visible={showQR} userId={profile.id} userName={profile.name} onClose={() => setShowQR(false)} />}
       <FollowersSheet visible={showFollowSheet} mode={followSheetMode} userId={targetId} onClose={() => setShowFollowSheet(false)} />
 
+      {/* Post options sheet */}
       <Modal visible={!!menuPost && !editEditing} transparent animationType="fade" onRequestClose={() => setMenuPost(null)}>
-        <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={() => setMenuPost(null)}>
-          <View style={s.actionSheet}>
-            <View style={s.sheetHandle} />
-            <TouchableOpacity
-              style={s.sheetRow}
-              activeOpacity={0.75}
-              onPress={() => { setEditCaption(menuPost?.caption ?? ''); setEditEditing(true) }}
-            >
+        <TouchableOpacity style={m.overlay} activeOpacity={1} onPress={() => setMenuPost(null)}>
+          <View style={m.sheet}>
+            <View style={m.sheetHandle} />
+            <TouchableOpacity style={m.sheetRow} activeOpacity={0.75}
+              onPress={() => { setEditCaption(menuPost?.caption ?? ''); setEditEditing(true) }}>
               <Ionicons name="create-outline" size={20} color={colors.gray800} />
-              <Text style={s.sheetRowText}>{t.profile_edit_caption}</Text>
+              <Text style={m.sheetRowTxt}>{t.profile_edit_caption}</Text>
             </TouchableOpacity>
-            <View style={s.sheetDivider} />
-            <TouchableOpacity
-              style={s.sheetRow}
-              activeOpacity={0.75}
-              onPress={() => menuPost && handleDeletePost(menuPost)}
-            >
+            <View style={m.sheetDiv} />
+            <TouchableOpacity style={m.sheetRow} activeOpacity={0.75}
+              onPress={() => menuPost && handleDeletePost(menuPost)}>
               <Ionicons name="trash-outline" size={20} color="#FF3B30" />
-              <Text style={[s.sheetRowText, { color: '#FF3B30' }]}>{t.profile_del_title}</Text>
+              <Text style={[m.sheetRowTxt, { color: '#FF3B30' }]}>{t.profile_del_title}</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
       </Modal>
 
+      {/* Edit caption sheet */}
       <Modal visible={editEditing} transparent animationType="slide" onRequestClose={() => setEditEditing(false)}>
-        <KeyboardAvoidingView style={s.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <KeyboardAvoidingView style={m.overlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setEditEditing(false)} />
-          <View style={s.editSheet}>
-            <View style={s.sheetHandle} />
-            <Text style={s.editSheetTitle}>{t.profile_edit_caption}</Text>
+          <View style={m.sheet}>
+            <View style={m.sheetHandle} />
+            <Text style={m.editTitle}>{t.profile_edit_caption}</Text>
             <TextInput
-              style={s.editInput}
+              style={m.editInput}
               value={editCaption}
               onChangeText={setEditCaption}
               placeholder={t.profile_caption_ph}
@@ -479,14 +727,14 @@ export default function ProfileScreen() {
               maxLength={200}
               autoFocus
             />
-            <View style={s.editBtnRow}>
-              <TouchableOpacity style={s.editCancelBtn} onPress={() => setEditEditing(false)} activeOpacity={0.75}>
-                <Text style={s.editCancelTxt}>{t.cancel}</Text>
+            <View style={m.editBtnRow}>
+              <TouchableOpacity style={m.editCancelBtn} onPress={() => setEditEditing(false)} activeOpacity={0.75}>
+                <Text style={m.editCancelTxt}>{t.cancel}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={s.editSaveBtn} onPress={handleSaveEdit} disabled={editLoading} activeOpacity={0.85}>
+              <TouchableOpacity style={m.editSaveBtn} onPress={handleSaveEdit} disabled={editLoading} activeOpacity={0.85}>
                 {editLoading
-                  ? <ActivityIndicator color={colors.white} size="small" />
-                  : <Text style={s.editSaveTxt}>{t.save}</Text>
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={m.editSaveTxt}>{t.save}</Text>
                 }
               </TouchableOpacity>
             </View>
@@ -497,437 +745,166 @@ export default function ProfileScreen() {
   )
 }
 
-// ─── Own Profile Header ────────────────────────────────────────────────────────
-function OwnHeader({ profile, postsCount, followerCount, followingCount, partnerRequests, onPickAvatar, pendingAvatarUri, savingAvatar, onSaveAvatar, onCancelAvatar, onEdit, onShowFollowers, onShowFollowing, onNavigate, onPartnerResponse, onLogout, onShowQR }: any) {
-  const t          = useT()
-  const nav        = useNavigation<Nav>()
-  const { top }    = useSafeAreaInsets()
-  const canGoBack  = nav.canGoBack()
-  const hasPartner = Boolean(profile?.partnerId && profile?.partnerName)
-  const displayUri = pendingAvatarUri ?? (profile?.avatar ? resolveUrl(profile.avatar) : null)
+// ── Styles ─────────────────────────────────────────────────────────────────────
+const m = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.white },
 
-  return (
-    <View>
-      {/* ── Top bar ── */}
-      <View style={[n.topBar, { paddingTop: top + 6 }]}>
-        {canGoBack
-          ? <TouchableOpacity onPress={() => nav.goBack()} hitSlop={HIT}>
-              <Ionicons name="chevron-back" size={26} color={colors.dark} />
-            </TouchableOpacity>
-          : <View style={{ width: 32 }} />
-        }
-        <Text style={n.topBarName} numberOfLines={1}>{profile?.name ?? ''}</Text>
-        <View style={n.topBarActions}>
-          <TouchableOpacity onPress={() => nav.navigate('Tabs', { screen: 'Create' })} hitSlop={HIT}>
-            <Ionicons name="add" size={28} color={colors.dark} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={onLogout} hitSlop={HIT}>
-            <Ionicons name="ellipsis-horizontal" size={22} color={colors.dark} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* ── Body ── */}
-      <View style={n.body}>
-
-        {/* Avatar + stats */}
-        <View style={n.asr}>
-          <TouchableOpacity onPress={onPickAvatar} activeOpacity={0.85} style={n.avatarWrap}>
-            {displayUri
-              ? <Image source={{ uri: displayUri }} style={n.avatar} contentFit="cover"
-                  cachePolicy={displayUri.startsWith('file://') ? 'none' : 'disk'} />
-              : <View style={[n.avatar, n.avatarFallback]}>
-                  <Text style={n.avatarInitial}>{profile?.name?.[0]?.toUpperCase() ?? '?'}</Text>
-                </View>
-            }
-            {!pendingAvatarUri && (
-              <View style={n.camBadge}>
-                <Ionicons name="camera" size={11} color={colors.white} />
-              </View>
-            )}
-          </TouchableOpacity>
-
-          <View style={n.stats}>
-            <TouchableOpacity style={n.statCol} activeOpacity={0.7}>
-              <Text style={n.statNum}>{postsCount}</Text>
-              <Text style={n.statLbl}>{t.profile_posts}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={n.statCol} onPress={onShowFollowers} activeOpacity={0.7}>
-              <Text style={n.statNum}>{fmtStat(followerCount)}</Text>
-              <Text style={n.statLbl}>{t.profile_followers}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={n.statCol} onPress={onShowFollowing} activeOpacity={0.7}>
-              <Text style={n.statNum}>{fmtStat(followingCount)}</Text>
-              <Text style={n.statLbl}>{t.profile_following}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Name + bio + info */}
-        <Text style={n.name}>{profile?.name ?? ''}</Text>
-        {!!profile?.statusLabel && <Text style={n.statusLbl}>{profile.statusLabel}</Text>}
-        {!!profile?.bio && <Text style={n.bio} numberOfLines={4}>{profile.bio}</Text>}
-        {!!buildInfoLine(profile, hasPartner) && (
-          <Text style={n.infoLine}>{buildInfoLine(profile, hasPartner)}</Text>
-        )}
-        {hasPartner && (
-          <View style={n.partnerBadge}>
-            <Ionicons name="heart" size={12} color={colors.primary} />
-            <Text style={n.partnerBadgeTxt}>{t.profile_partner} {profile.partnerName}</Text>
-          </View>
-        )}
-
-        {/* Action buttons */}
-        {pendingAvatarUri ? (
-          <View style={n.btnRow}>
-            <TouchableOpacity style={n.outlineBtn} onPress={onCancelAvatar} activeOpacity={0.8}>
-              <Text style={n.outlineBtnTxt}>{t.cancel}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={n.primaryBtn} onPress={onSaveAvatar} disabled={savingAvatar} activeOpacity={0.8}>
-              {savingAvatar
-                ? <ActivityIndicator size="small" color={colors.white} />
-                : <Text style={n.primaryBtnTxt}>{t.save}</Text>
-              }
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={n.btnRow}>
-            <TouchableOpacity style={n.outlineBtn} onPress={onEdit} activeOpacity={0.85}>
-              <Text style={n.outlineBtnTxt}>{t.profile_edit_btn}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={n.squareBtn} onPress={onShowQR} activeOpacity={0.85}>
-              <Ionicons name="qr-code-outline" size={17} color={colors.dark} />
-            </TouchableOpacity>
-            <TouchableOpacity style={n.squareBtn} onPress={() => onNavigate('Settings')} activeOpacity={0.85}>
-              <Ionicons name="settings-outline" size={17} color={colors.dark} />
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Partner requests */}
-        {partnerRequests?.length > 0 && (
-          <View style={n.partnerReqs}>
-            <View style={n.partnerReqsHeader}>
-              <Ionicons name="heart-circle" size={14} color={colors.primary} />
-              <Text style={n.partnerReqsTitle}>{t.profile_partner_req}</Text>
-            </View>
-            {partnerRequests.map((req: any) => (
-              <View key={req.id} style={n.partnerReqRow}>
-                <AvatarImage uri={req.sender.avatar} size={38} />
-                <View style={{ flex: 1 }}>
-                  <Text style={n.partnerReqName}>{req.sender.name}</Text>
-                  <Text style={n.partnerReqBio} numberOfLines={1}>
-                    {req.sender.bio ?? t.profile_partner_req_msg}
-                  </Text>
-                </View>
-                <TouchableOpacity style={n.acceptBtn} onPress={() => onPartnerResponse(req.id, true)} activeOpacity={0.8}>
-                  <Text style={n.acceptBtnTxt}>{t.profile_accept}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={n.rejectBtn} onPress={() => onPartnerResponse(req.id, false)} activeOpacity={0.8}>
-                  <Ionicons name="close" size={15} color={colors.gray600} />
-                </TouchableOpacity>
-              </View>
-            ))}
-          </View>
-        )}
-      </View>
-
-      {/* ── Grid tab bar ── */}
-      <View style={n.tabBar}>
-        <View style={n.tabActive}>
-          <Ionicons name="grid" size={20} color={colors.dark} />
-          <View style={n.tabUnderline} />
-        </View>
-      </View>
-    </View>
-  )
-}
-
-// ─── Other User Header ─────────────────────────────────────────────────────────
-function OtherHeader({ profile, postsCount, followerCount, followingCount, isFollowing, theyFollowMe, followLoading, onFollow, onMessage, onShowFollowers, onShowFollowing }: any) {
-  const t        = useT()
-  const nav      = useNavigation<Nav>()
-  const { top }  = useSafeAreaInsets()
-
-  if (!profile) {
-    return (
-      <View>
-        <View style={[n.topBar, { paddingTop: top + 6 }]}>
-          <TouchableOpacity onPress={() => nav.goBack()} hitSlop={HIT}>
-            <Ionicons name="chevron-back" size={26} color={colors.dark} />
-          </TouchableOpacity>
-          <View style={[n.skelLine, { flex: 1, height: 14, marginHorizontal: 24 }]} />
-          <View style={{ width: 32 }} />
-        </View>
-        <View style={n.body}>
-          <View style={n.asr}>
-            <View style={n.skelAvatar} />
-            <View style={n.stats}>
-              {[0, 1, 2].map((i) => (
-                <View key={i} style={n.statCol}>
-                  <View style={[n.skelLine, { width: 32, height: 18, marginBottom: 5 }]} />
-                  <View style={[n.skelLine, { width: 48, height: 11 }]} />
-                </View>
-              ))}
-            </View>
-          </View>
-          <View style={[n.skelLine, { width: 120, height: 14, marginTop: 14 }]} />
-          <View style={[n.skelLine, { width: 200, height: 11, marginTop: 8 }]} />
-        </View>
-      </View>
-    )
-  }
-
-  const hasPartner = Boolean(profile.partnerId && profile.partnerName)
-
-  return (
-    <View>
-      {/* ── Top bar ── */}
-      <View style={[n.topBar, { paddingTop: top + 6 }]}>
-        <TouchableOpacity onPress={() => nav.goBack()} hitSlop={HIT}>
-          <Ionicons name="chevron-back" size={26} color={colors.dark} />
-        </TouchableOpacity>
-        <Text style={n.topBarName} numberOfLines={1}>{profile.name}</Text>
-        <View style={{ width: 32 }} />
-      </View>
-
-      {/* ── Body ── */}
-      <View style={n.body}>
-
-        {/* Avatar + stats */}
-        <View style={n.asr}>
-          <View style={n.avatarWrap}>
-            {profile.avatar
-              ? <Image source={{ uri: resolveUrl(profile.avatar) ?? '' }} style={n.avatar} contentFit="cover" cachePolicy="disk" />
-              : <View style={[n.avatar, n.avatarFallback]}>
-                  <Text style={n.avatarInitial}>{profile.name?.[0]?.toUpperCase() ?? '?'}</Text>
-                </View>
-            }
-          </View>
-
-          <View style={n.stats}>
-            <View style={n.statCol}>
-              <Text style={n.statNum}>{postsCount}</Text>
-              <Text style={n.statLbl}>{t.profile_posts}</Text>
-            </View>
-            <TouchableOpacity style={n.statCol} onPress={onShowFollowers} activeOpacity={0.7}>
-              <Text style={n.statNum}>{fmtStat(followerCount)}</Text>
-              <Text style={n.statLbl}>{t.profile_followers}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={n.statCol} onPress={onShowFollowing} activeOpacity={0.7}>
-              <Text style={n.statNum}>{fmtStat(followingCount)}</Text>
-              <Text style={n.statLbl}>{t.profile_following}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Name + bio + info */}
-        <Text style={n.name}>{profile.name}</Text>
-        {!!profile.statusLabel && <Text style={n.statusLbl}>{profile.statusLabel}</Text>}
-        {!!profile.bio && <Text style={n.bio} numberOfLines={4}>{profile.bio}</Text>}
-        {!!buildInfoLine(profile, hasPartner) && (
-          <Text style={n.infoLine}>{buildInfoLine(profile, hasPartner)}</Text>
-        )}
-        {hasPartner && (
-          <View style={n.partnerBadge}>
-            <Ionicons name="heart" size={12} color={colors.primary} />
-            <Text style={n.partnerBadgeTxt}>{t.profile_partner} {profile.partnerName}</Text>
-          </View>
-        )}
-
-        {/* Action buttons */}
-        <View style={n.btnRow}>
-          {isFollowing ? (
-            <TouchableOpacity style={n.outlineBtn} onPress={onFollow} disabled={followLoading} activeOpacity={0.85}>
-              {followLoading
-                ? <ActivityIndicator size="small" color={colors.gray600} />
-                : <Text style={n.outlineBtnTxt}>{t.following}</Text>
-              }
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity style={n.primaryBtn} onPress={onFollow} disabled={followLoading} activeOpacity={0.85}>
-              {followLoading
-                ? <ActivityIndicator size="small" color={colors.white} />
-                : <Text style={n.primaryBtnTxt}>{theyFollowMe ? t.profile_follow_back : t.follow}</Text>
-              }
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity style={n.outlineBtn} onPress={onMessage} activeOpacity={0.85}>
-            <Text style={n.outlineBtnTxt}>{t.profile_message}</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* ── Grid tab bar ── */}
-      <View style={n.tabBar}>
-        <View style={n.tabActive}>
-          <Ionicons name="grid" size={20} color={colors.dark} />
-          <View style={n.tabUnderline} />
-        </View>
-      </View>
-    </View>
-  )
-}
-
-// ─── Header styles (Instagram layout) ─────────────────────────────────────────
-const n = StyleSheet.create({
-  topBar: {
+  // ── Floating nav ────────────────────────────────────────────────────────────
+  floatNav: {
+    position: 'absolute', left: 14, right: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingBottom: 12,
-    backgroundColor: colors.white,
+    zIndex: 10,
   },
-  topBarName: {
-    flex: 1, textAlign: 'center',
-    fontSize: 16, fontFamily: fonts.bold, color: colors.dark,
-    letterSpacing: -0.3, marginHorizontal: 4,
-  },
-  topBarActions: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
-  },
-
-  body: { paddingHorizontal: 16, paddingBottom: 4 },
-
-  asr: { flexDirection: 'row', alignItems: 'center', gap: 20, marginBottom: 14 },
-
-  avatarWrap: { position: 'relative' },
-  avatar: {
-    width: AVATAR_SZ, height: AVATAR_SZ, borderRadius: AVATAR_SZ / 2,
-    backgroundColor: colors.gray100,
-  },
-  avatarFallback: {
+  floatBtn: {
+    width: 36, height: 36,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: `${colors.primary}20`,
   },
-  avatarInitial: { fontSize: 32, fontFamily: fonts.bold, color: colors.primary },
-  camBadge: {
-    position: 'absolute', bottom: 1, right: 1,
-    width: 24, height: 24, borderRadius: 12,
+
+  // ── Avatar + identity (inside hero) ─────────────────────────────────────────
+  identity: {
+    position: 'absolute', bottom: 14, left: 0, right: 0,
+    alignItems: 'center', gap: 6,
+  },
+  avatarOuter: {
+    width: AV_OUTER, height: AV_OUTER,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  avatarCircle: {
+    width: AV_SIZE, height: AV_SIZE, borderRadius: AV_SIZE / 2,
+    overflow: 'hidden', backgroundColor: colors.gray100,
+    // white border so it separates from the blurred background
+    borderWidth: 3, borderColor: '#fff',
+  },
+  avatarImg:      { width: '100%', height: '100%' },
+  avatarFallback: { alignItems: 'center', justifyContent: 'center', backgroundColor: `${colors.primary}20` },
+  avatarInitial:  { fontSize: 34, fontFamily: fonts.bold, color: colors.primary },
+  camDot: {
+    position: 'absolute', bottom: 2, right: 2,
+    width: 22, height: 22, borderRadius: 11,
     backgroundColor: colors.dark,
-    borderWidth: 2, borderColor: colors.white,
+    borderWidth: 2, borderColor: '#fff',
     alignItems: 'center', justifyContent: 'center',
   },
 
-  stats: { flex: 1, flexDirection: 'row', justifyContent: 'space-around' },
-  statCol: { alignItems: 'center', gap: 2 },
-  statNum: { fontSize: 18, fontFamily: fonts.bold, color: colors.dark, letterSpacing: -0.4 },
-  statLbl: { fontSize: 12, fontFamily: fonts.regular, color: colors.gray600 },
+  name: {
+    fontSize: 22, fontFamily: fonts.bold, color: colors.dark,
+    letterSpacing: -0.5, textAlign: 'center', paddingHorizontal: 24,
+  },
+  statusPill: {
+    backgroundColor: 'rgba(0,0,0,0.07)',
+    borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3,
+  },
+  statusTxt: {
+    fontSize: 12, fontFamily: fonts.medium, color: colors.gray600, letterSpacing: 0.1,
+  },
 
-  name:      { fontSize: 14, fontFamily: fonts.bold, color: colors.dark, letterSpacing: -0.1 },
-  statusLbl: { fontSize: 13, fontFamily: fonts.medium, color: colors.gray600, marginTop: 2 },
-  bio:       { fontSize: 13.5, fontFamily: fonts.regular, color: colors.gray800, lineHeight: 19, marginTop: 3 },
-  infoLine:  { fontSize: 12.5, fontFamily: fonts.regular, color: colors.gray500, marginTop: 4 },
+  // ── Stats ───────────────────────────────────────────────────────────────────
+  statsRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 18, paddingHorizontal: 24,
+  },
+  statCol:     { flex: 1, alignItems: 'center', gap: 3 },
+  statNum:     { fontSize: 20, fontFamily: fonts.bold, color: colors.dark, letterSpacing: -0.4 },
+  statLbl:     { fontSize: 11, fontFamily: fonts.regular, color: colors.gray500, letterSpacing: 0.1 },
+  statDivider: { width: 1, height: 28, backgroundColor: colors.gray200 },
 
-  partnerBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6 },
-  partnerBadgeTxt: { fontSize: 13, fontFamily: fonts.semiBold, color: colors.primary },
+  // ── Bio card ─────────────────────────────────────────────────────────────────
+  bioCard: {
+    marginHorizontal: 16, marginBottom: 14,
+    backgroundColor: '#F7F7F7',
+    borderRadius: 16, padding: 14, gap: 8,
+  },
+  bioTxt:  { fontSize: 14, fontFamily: fonts.regular, color: colors.gray800, lineHeight: 20 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  infoTxt: { fontSize: 12.5, fontFamily: fonts.regular, color: colors.gray500 },
+  partnerPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5,
+    alignSelf: 'flex-start',
+  },
+  partnerTxt: { fontSize: 12, fontFamily: fonts.semiBold, color: '#fff' },
 
-  btnRow: { flexDirection: 'row', gap: 8, marginTop: 14, marginBottom: 6 },
+  // ── Action buttons ───────────────────────────────────────────────────────────
+  actionsArea: { paddingHorizontal: 16, marginBottom: 6 },
+  btnRow: { flexDirection: 'row', gap: 8 },
+  gradBtn: {
+    height: 42, borderRadius: 21,
+    alignItems: 'center', justifyContent: 'center',
+    ...Platform.select({
+      ios: { shadowColor: '#CA2851', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
+      android: { elevation: 4 },
+    }),
+  },
+  gradBtnInner: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center' },
+  gradBtnTxt:   { fontSize: 14, fontFamily: fonts.semiBold, color: '#fff' },
   outlineBtn: {
-    flex: 1, height: 34, borderRadius: 8,
-    borderWidth: 1, borderColor: colors.gray300,
+    height: 42, borderRadius: 21,
+    borderWidth: 1.5, borderColor: colors.gray300,
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: colors.white,
   },
   outlineBtnTxt: { fontSize: 14, fontFamily: fonts.semiBold, color: colors.dark },
-  primaryBtn: {
-    flex: 1, height: 34, borderRadius: 8,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: colors.primary,
-  },
-  primaryBtnTxt: { fontSize: 14, fontFamily: fonts.semiBold, color: colors.white },
-  squareBtn: {
-    width: 34, height: 34, borderRadius: 8,
-    borderWidth: 1, borderColor: colors.gray300,
+  iconBtn: {
+    width: 42, height: 42, borderRadius: 21,
+    borderWidth: 1.5, borderColor: colors.gray300,
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: colors.white,
   },
 
-  partnerReqs: {
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.gray200,
-    paddingTop: 12, marginTop: 10, gap: 10,
-  },
+  // ── Partner requests ─────────────────────────────────────────────────────────
+  partnerReqs:       { marginHorizontal: 16, marginTop: 8, gap: 10, paddingTop: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.gray200 },
   partnerReqsHeader: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  partnerReqsTitle: {
-    fontSize: 10, fontFamily: fonts.bold, color: colors.primary,
-    letterSpacing: 1, textTransform: 'uppercase',
-  },
-  partnerReqRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  partnerReqName: { fontSize: 14, fontFamily: fonts.semiBold, color: colors.dark },
-  partnerReqBio:  { fontSize: 12, fontFamily: fonts.regular, color: colors.gray500 },
-  acceptBtn: {
-    backgroundColor: colors.primary, borderRadius: 8,
-    paddingHorizontal: 12, paddingVertical: 7,
-  },
-  acceptBtnTxt: { fontSize: 13, fontFamily: fonts.semiBold, color: colors.white },
-  rejectBtn: {
-    width: 30, height: 30, borderRadius: 7,
-    backgroundColor: colors.gray100,
-    alignItems: 'center', justifyContent: 'center',
-  },
+  partnerReqsTitle:  { fontSize: 10, fontFamily: fonts.bold, color: colors.primary, letterSpacing: 1, textTransform: 'uppercase' },
+  partnerReqRow:     { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  partnerReqName:    { fontSize: 14, fontFamily: fonts.semiBold, color: colors.dark },
+  partnerReqBio:     { fontSize: 12, fontFamily: fonts.regular, color: colors.gray500 },
+  acceptBtn:         { backgroundColor: colors.primary, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },
+  acceptBtnTxt:      { fontSize: 13, fontFamily: fonts.semiBold, color: '#fff' },
+  rejectBtn:         { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.gray100, alignItems: 'center', justifyContent: 'center' },
 
-  tabBar: {
-    flexDirection: 'row',
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.gray300,
-    marginTop: 12,
-  },
-  tabActive: {
-    flex: 1, alignItems: 'center', paddingVertical: 10, position: 'relative',
-  },
-  tabUnderline: {
-    position: 'absolute', bottom: 0, left: 0, right: 0, height: 1,
-    backgroundColor: colors.dark,
-  },
+  // ── Grid separator ───────────────────────────────────────────────────────────
+  gridSep:     { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 14 },
+  gridSepLine: { flex: 1, height: 1, backgroundColor: colors.gray200 },
 
-  skelLine:   { backgroundColor: colors.gray100, borderRadius: 6 },
-  skelAvatar: {
-    width: AVATAR_SZ, height: AVATAR_SZ, borderRadius: AVATAR_SZ / 2,
-    backgroundColor: colors.gray100,
-  },
-})
+  // ── Empty state ──────────────────────────────────────────────────────────────
+  emptyGrid:    { alignItems: 'center', paddingTop: 48, gap: 10 },
+  emptyGridTxt: { fontSize: 14, fontFamily: fonts.regular, color: colors.gray400 },
 
-// ─── Grid / Modal styles ───────────────────────────────────────────────────────
-const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.white },
-
-  gridCell:    { width: GRID_SIZE, height: GRID_SIZE, margin: GRID_GAP / 2 },
-  gridImg:     { width: '100%', height: '100%' },
-  gridText:    { fontSize: 9, fontFamily: fonts.medium, color: colors.white, textAlign: 'center' },
-  videoIcon: {
-    position: 'absolute', top: 5, right: 5,
-    backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 4, padding: 3,
+  // ── Modals ───────────────────────────────────────────────────────────────────
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    paddingTop: 10, paddingBottom: 36, paddingHorizontal: 20,
   },
-  postMenuBtn: {
-    position: 'absolute', top: 5, right: 5,
-    backgroundColor: 'rgba(0,0,0,0.52)', borderRadius: 10,
-    paddingHorizontal: 5, paddingVertical: 3,
-  },
-
-  emptyGrid:     { alignItems: 'center', paddingTop: 56, gap: 12 },
-  emptyGridText: { fontSize: 14, color: colors.gray400 },
-
-  modalOverlay: { flex: 1, backgroundColor: 'transparent', justifyContent: 'flex-end' },
-  actionSheet: {
-    backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    paddingTop: 10, paddingBottom: 32, paddingHorizontal: 16,
-  },
-  sheetHandle:  { width: 36, height: 4, borderRadius: 2, backgroundColor: colors.gray200, alignSelf: 'center', marginBottom: 14 },
+  sheetHandle:  { width: 36, height: 4, borderRadius: 2, backgroundColor: colors.gray200, alignSelf: 'center', marginBottom: 16 },
   sheetRow:     { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 16, paddingHorizontal: 4 },
-  sheetRowText: { fontSize: 16, fontFamily: fonts.medium, color: colors.gray800 },
-  sheetDivider: { height: 1, backgroundColor: colors.gray100, marginHorizontal: -4 },
-
-  editSheet: {
-    backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    paddingTop: 10, paddingBottom: 32, paddingHorizontal: 20,
-  },
-  editSheetTitle: { fontSize: 16, fontFamily: fonts.semiBold, color: colors.gray800, marginBottom: 14, textAlign: 'center' },
+  sheetRowTxt:  { fontSize: 16, fontFamily: fonts.medium, color: colors.gray800 },
+  sheetDiv:     { height: 1, backgroundColor: colors.gray100 },
+  editTitle:    { fontSize: 16, fontFamily: fonts.semiBold, color: colors.gray800, marginBottom: 14, textAlign: 'center' },
   editInput: {
-    borderWidth: 1.5, borderColor: colors.gray200, borderRadius: 12,
+    borderWidth: 1.5, borderColor: colors.gray200, borderRadius: 14,
     paddingHorizontal: 14, paddingVertical: 12,
     fontSize: 15, fontFamily: fonts.regular, color: colors.gray800,
     minHeight: 90, textAlignVertical: 'top', marginBottom: 16,
   },
   editBtnRow:    { flexDirection: 'row', gap: 10 },
-  editCancelBtn: { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 12, borderWidth: 1.5, borderColor: colors.gray200 },
+  editCancelBtn: { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 21, borderWidth: 1.5, borderColor: colors.gray200 },
   editCancelTxt: { fontSize: 15, fontFamily: fonts.semiBold, color: colors.gray600 },
-  editSaveBtn:   { flex: 2, alignItems: 'center', paddingVertical: 14, borderRadius: 12, backgroundColor: colors.primary },
-  editSaveTxt:   { fontSize: 15, fontFamily: fonts.semiBold, color: colors.white },
+  editSaveBtn:   { flex: 2, alignItems: 'center', paddingVertical: 14, borderRadius: 21, backgroundColor: colors.primary },
+  editSaveTxt:   { fontSize: 15, fontFamily: fonts.semiBold, color: '#fff' },
+})
+
+// ── Grid cell styles ──────────────────────────────────────────────────────────
+const g = StyleSheet.create({
+  cellImg:  { backgroundColor: colors.gray100 },
+  cellText: { fontSize: 9, fontFamily: fonts.medium, color: '#fff', textAlign: 'center' },
+  videoIcon: {
+    position: 'absolute', top: 5, right: 5,
+    backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 4, padding: 3,
+  },
+  menuBtn: {
+    position: 'absolute', top: 5, right: 5,
+    backgroundColor: 'rgba(0,0,0,0.52)', borderRadius: 10,
+    paddingHorizontal: 5, paddingVertical: 3,
+  },
 })

@@ -11,8 +11,9 @@ import Toast from 'react-native-toast-message'
 import { api } from '../../services/api'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { colors, fonts } from '../../theme'
-import { toggleFollow, FollowDuration } from '../../services/follow.service'
+import { FollowDuration } from '../../services/follow.service'
 import { getCache, setCache } from '../../db/database'
+import { useFollowStore } from '../../store/follow.store'
 import { isConnected } from '../../services/netinfo.service'
 import AvatarImage from '../../components/AvatarImage'
 import FollowSplitButton from '../../components/FollowSplitButton'
@@ -100,7 +101,7 @@ export default function SearchScreen() {
   const [suggested,     setSuggested]     = useState<UserResult[]>([])
   const [loadingSug,    setLoadingSug]    = useState(true)
   const [loadingSearch, setLoadingSearch] = useState(false)
-  const [followed,      setFollowed]      = useState<Set<string>>(new Set())
+  const followingIds    = useFollowStore((s) => s.followingIds)
   const [followPending, setFollowPending] = useState<Set<string>>(new Set())
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -149,28 +150,10 @@ export default function SearchScreen() {
 
   const handleFollow = useCallback(async (userId: string, duration: FollowDuration = 'forever') => {
     if (followPending.has(userId)) return
-
-    const wasFollowed = followed.has(userId)
-    setFollowed((prev) => {
-      const next = new Set(prev)
-      wasFollowed ? next.delete(userId) : next.add(userId)
-      return next
-    })
     setFollowPending((prev) => new Set([...prev, userId]))
-
     try {
-      const res = await toggleFollow(userId, duration)
-      setFollowed((prev) => {
-        const next = new Set(prev)
-        res.following ? next.add(userId) : next.delete(userId)
-        return next
-      })
+      await useFollowStore.getState().toggle(userId, duration)
     } catch {
-      setFollowed((prev) => {
-        const next = new Set(prev)
-        wasFollowed ? next.add(userId) : next.delete(userId)
-        return next
-      })
       Toast.show({ type: 'error', text1: t.search_no_network, text2: t.search_follow_err, visibilityTime: 2500 })
     } finally {
       setFollowPending((prev) => {
@@ -179,7 +162,7 @@ export default function SearchScreen() {
         return next
       })
     }
-  }, [followed, followPending])
+  }, [followPending])
 
   const isSearching = query.trim().length > 0
   const displayList = isSearching ? results : suggested
@@ -188,12 +171,12 @@ export default function SearchScreen() {
   const renderItem = useCallback(({ item }: ListRenderItemInfo<UserResult>) => (
     <UserRow
       user={item}
-      followed={followed.has(item.id)}
+      followed={followingIds.has(item.id)}
       loadingFollow={followPending.has(item.id)}
       onFollow={(duration) => handleFollow(item.id, duration)}
       onPress={() => nav.navigate('Profile', { userId: item.id })}
     />
-  ), [followed, followPending, handleFollow, nav])
+  ), [followingIds, followPending, handleFollow, nav])
 
   return (
     <View style={[s.screen, { paddingTop: top }]}>
