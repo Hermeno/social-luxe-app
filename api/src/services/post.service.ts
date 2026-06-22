@@ -3,7 +3,7 @@ import { MediaType } from '@prisma/client'
 import { POST_INITIAL_HOURS, POST_EXTENDED_HOURS } from '../types'
 import { sendPush } from './notification.service'
 import { withThumbnail, withThumbnails } from '../utils/cloudinary.util'
-import { interact as travelInteract } from './travel.service'
+import { interact as travelInteract, createOriginNode } from './travel.service'
 
 export async function createPost(
   userId: string,
@@ -15,18 +15,26 @@ export async function createPost(
   isAnnouncement?: boolean,
   deviceModel?: string,
   stickersEnabled?: boolean,
+  isTravelEnabled?: boolean,
 ) {
   const expiresAt = isAnnouncement
     ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
     : new Date(Date.now() + POST_INITIAL_HOURS * 60 * 60 * 1000)
   const post = await prisma.post.create({
-    data: { userId, mediaUrl, mediaType, caption, bgColor, expiresAt, partnerUserId: partnerUserId ?? null, isAnnouncement: isAnnouncement ?? false, deviceModel: deviceModel ?? null, stickersEnabled: stickersEnabled ?? false },
+    data: { userId, mediaUrl, mediaType, caption, bgColor, expiresAt, partnerUserId: partnerUserId ?? null, isAnnouncement: isAnnouncement ?? false, deviceModel: deviceModel ?? null, stickersEnabled: stickersEnabled ?? false, isTravelEnabled: isTravelEnabled ?? true },
     include: {
       user:        { select: { id: true, name: true, avatar: true, viewsPublic: true, showDevice: true, statusLabel: true } },
       partnerUser: { select: { id: true, name: true, avatar: true } },
       _count:      { select: { likes: true, comments: true, shares: true, views: true } },
     },
   })
+
+  // Seed the travel path with the creator's country before returning,
+  // so the client sees the origin node the moment the post appears in the feed.
+  if (isTravelEnabled !== false) {
+    await createOriginNode(post.id, userId).catch(() => {})
+  }
+
   return withThumbnail(post)
 }
 

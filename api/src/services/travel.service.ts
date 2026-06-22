@@ -20,8 +20,20 @@ const COUNTRY_NAMES: Record<string, string> = {
   IL: 'Israel',
 }
 
-function resolveCountryName(code: string): string {
+export function resolveCountryName(code: string): string {
   return COUNTRY_NAMES[code.toUpperCase()] ?? code.toUpperCase()
+}
+
+// Creates the origin node for a travel post immediately on creation (0 counts).
+// Called fire-and-forget from createPost so the travel path renders right away.
+export async function createOriginNode(postId: string, userId: string): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { countryCode: true } })
+  if (!user?.countryCode) return
+  const code = user.countryCode.toUpperCase()
+  await prisma.travelNode.createMany({
+    data:           [{ postId, countryCode: code, countryName: resolveCountryName(code) }],
+    skipDuplicates: true,
+  })
 }
 
 // ── interact ──────────────────────────────────────────────────────────────────

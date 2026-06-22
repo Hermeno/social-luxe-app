@@ -44,8 +44,9 @@ export async function createPost(req: AuthRequest, res: Response) {
       isAnnouncement = true
     }
 
-    const stickersEnabled = req.body.stickersEnabled === true || req.body.stickersEnabled === 'true'
-    const post = await postService.createPost(req.user!.userId, mediaUrl, mediaType, caption, bgColor, partnerUserId ?? undefined, isAnnouncement, deviceModel ?? undefined, stickersEnabled)
+    const stickersEnabled   = req.body.stickersEnabled   === true || req.body.stickersEnabled   === 'true'
+    const isTravelEnabled   = req.body.isTravelEnabled   !== false && req.body.isTravelEnabled   !== 'false'
+    const post = await postService.createPost(req.user!.userId, mediaUrl, mediaType, caption, bgColor, partnerUserId ?? undefined, isAnnouncement, deviceModel ?? undefined, stickersEnabled, isTravelEnabled)
 
     // Notify partner of post invitation
     if (partnerUserId) {
