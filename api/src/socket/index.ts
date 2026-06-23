@@ -7,6 +7,33 @@ let io: Server
 
 export const onlineUsers = new Map<string, string>() // userId → socketId
 
+// ── Modo Juntos — ephemeral per-session state ────────────────────────────────
+type TogetherRoom = {
+  members:   Set<string>          // userId → has chat open
+  consented: Map<string, boolean> // userId → agreed to show
+  visibility: 'private' | 'public'
+}
+const togetherRooms = new Map<string, TogetherRoom>()
+
+function getOrCreateRoom(unionId: string): TogetherRoom {
+  if (!togetherRooms.has(unionId)) {
+    togetherRooms.set(unionId, { members: new Set(), consented: new Map(), visibility: 'private' })
+  }
+  return togetherRooms.get(unionId)!
+}
+
+function broadcastTogetherStatus(unionId: string, union: { memberAId: string; memberBId: string }) {
+  const room = togetherRooms.get(unionId)
+  if (!room) return
+  const bothPresent = room.members.has(union.memberAId) && room.members.has(union.memberBId)
+  io.to(`union:${unionId}`).emit('union:together:status', {
+    unionId,
+    bothPresent,
+    memberConsents: Object.fromEntries(room.consented),
+    visibility: room.visibility,
+  })
+}
+
 export function setupSocket(httpServer: HttpServer): Server {
   io = new Server(httpServer, {
     cors: { origin: '*', methods: ['GET', 'POST'] },
@@ -121,10 +148,114 @@ export function setupSocket(httpServer: HttpServer): Server {
       } catch {}
     })
 
+    // ── Modo Juntos ────────────────────────────────────────────────────────────
+
+    // Member opened the union chat screen
+    socket.on('union:chat:enter', async ({ unionId }: { unionId: string }) => {
+      try {
+        const union = await prisma.union.findUnique({
+          where:  { id: unionId },
+          select: { id: true, memberAId: true, memberBId: true, name: true, label: true,
+                    memberA: { select: { name: true } }, memberB: { select: { name: true } } },
+        })
+        if (!union || (union.memberAId !== userId && union.memberBId !== userId)) return
+
+        const room = getOrCreateRoom(unionId)
+        room.members.add(userId)
+        broadcastTogetherStatus(unionId, union)
+      } catch {}
+    })
+
+    // Member closed / backgrounded the union chat screen
+    socket.on('union:chat:leave', async ({ unionId }: { unionId: string }) => {
+      try {
+        const room = togetherRooms.get(unionId)
+        if (!room) return
+
+        const firstMember = room.members.values().next().value as string | undefined
+        const wasPublicAndBoth = room.visibility === 'public'
+          && !!firstMember && room.consented.get(firstMember) === true
+
+        room.members.delete(userId)
+        room.consented.delete(userId)
+
+        const union = await prisma.union.findUnique({
+          where: { id: unionId }, select: { memberAId: true, memberBId: true },
+        })
+        if (!union) return
+
+        // If the pair was publicly live → notify followers that it ended
+        if (wasPublicAndBoth) {
+          const followers = await prisma.follow.findMany({
+            where:  { followingId: { in: [union.memberAId, union.memberBId] } },
+            select: { followerId: true },
+          })
+          const unique = [...new Set(followers.map((f) => f.followerId))]
+          unique.forEach((fId) => emitToUser(fId, 'union:together:ended', { unionId }))
+        }
+
+        broadcastTogetherStatus(unionId, union)
+      } catch {}
+    })
+
+    // Member toggles consent or changes visibility
+    socket.on('union:together:consent', async ({
+      unionId, consent, visibility,
+    }: { unionId: string; consent: boolean; visibility?: 'private' | 'public' }) => {
+      try {
+        const union = await prisma.union.findUnique({
+          where:  { id: unionId },
+          select: { id: true, memberAId: true, memberBId: true, name: true, label: true,
+                    memberA: { select: { name: true } }, memberB: { select: { name: true } } },
+        })
+        if (!union || (union.memberAId !== userId && union.memberBId !== userId)) return
+
+        const room = getOrCreateRoom(unionId)
+        room.consented.set(userId, consent)
+        if (visibility) room.visibility = visibility
+
+        // Check if both present, both consented, and public
+        const bothPresent  = room.members.has(union.memberAId) && room.members.has(union.memberBId)
+        const bothConsented = room.consented.get(union.memberAId) === true
+                           && room.consented.get(union.memberBId) === true
+
+        if (bothPresent && bothConsented && room.visibility === 'public') {
+          // Broadcast "live" to followers of both members
+          const followers = await prisma.follow.findMany({
+            where:  { followingId: { in: [union.memberAId, union.memberBId] } },
+            select: { followerId: true },
+          })
+          const unique = [...new Set(followers.map((f) => f.followerId))]
+          unique.forEach((fId) => emitToUser(fId, 'union:together:live', {
+            unionId,
+            unionName:  union.name,
+            label:      union.label,
+            memberAName: union.memberA.name,
+            memberBName: union.memberB.name,
+          }))
+        }
+
+        broadcastTogetherStatus(unionId, union)
+      } catch {}
+    })
+
     // ── disconnect ──────────────────────────────────────────────────────────
-    socket.on('disconnect', () => {
+    socket.on('disconnect', async () => {
       onlineUsers.delete(userId)
       io.emit('user:offline', { userId })
+
+      // Clean up any together rooms this user was in
+      for (const [unionId, room] of togetherRooms) {
+        if (!room.members.has(userId)) continue
+        room.members.delete(userId)
+        room.consented.delete(userId)
+        try {
+          const union = await prisma.union.findUnique({
+            where: { id: unionId }, select: { memberAId: true, memberBId: true },
+          })
+          if (union) broadcastTogetherStatus(unionId, union)
+        } catch {}
+      }
     })
   })
 

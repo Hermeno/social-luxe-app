@@ -735,14 +735,6 @@ model DonationFeedback {
 
 // ─── União (Duo Profile) ─────────────────────────────────────────────────────
 
-enum UnionType {
-  COUPLE
-  TWINS
-  PARTNERS
-  FRIENDS
-  CREATIVE
-}
-
 enum UnionInviteStatus {
   PENDING
   ACCEPTED
@@ -750,10 +742,10 @@ enum UnionInviteStatus {
 }
 
 model Union {
-  id        String    @id @default(cuid())
+  id        String   @id @default(cuid())
   name      String
   avatar    String?
-  type      UnionType
+  label     String?
   bio       String?
   memberAId String
   memberBId String

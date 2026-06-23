@@ -4,7 +4,7 @@ import { ok, created, badRequest, serverError, notFound, forbidden } from '../ut
 import { handleError } from '../utils/errors'
 import { AuthRequest } from '../types'
 import { emitToUser } from '../socket'
-import { UnionType } from '@prisma/client'
+import { sendPush } from '../services/notification.service'
 import { uploadToCloudinary } from '../utils/cloudinary.util'
 
 // ─── Union CRUD ───────────────────────────────────────────────────────────────
@@ -12,14 +12,13 @@ import { uploadToCloudinary } from '../utils/cloudinary.util'
 export async function createUnion(req: AuthRequest, res: Response) {
   try {
     const userId = req.user!.userId
-    const { invitedUserId, name, type, bio } = req.body
-    if (!invitedUserId || !name || !type) return badRequest(res, 'invitedUserId, name e type são obrigatórios')
-    if (!Object.values(UnionType).includes(type)) return badRequest(res, 'Tipo de união inválido')
+    const { invitedUserId, name, label, bio } = req.body
+    if (!invitedUserId || !name) return badRequest(res, 'invitedUserId e name são obrigatórios')
 
-    const union = await unionService.createUnion(userId, invitedUserId, name, type as UnionType, bio)
+    const union = await unionService.createUnion(userId, invitedUserId, name, label, bio)
     return created(res, union)
   } catch (err: any) {
-    if (err?.message?.includes('já existe')) return badRequest(res, err.message)
+    if (err?.message?.includes('já pertence') || err?.message?.includes('já existe')) return badRequest(res, err.message)
     return handleError(res, err)
   }
 }
@@ -42,14 +41,14 @@ export async function getUnion(req: AuthRequest, res: Response) {
 export async function updateUnion(req: AuthRequest, res: Response) {
   try {
     const userId = req.user!.userId
-    const { name, bio } = req.body
+    const { name, bio, label } = req.body
     let avatar: string | undefined
 
     if (req.file) {
       avatar = await uploadToCloudinary(req.file.buffer, req.file.mimetype, 'luxe/unions')
     }
 
-    const union = await unionService.updateUnion(req.params.id, userId, { name, bio, avatar })
+    const union = await unionService.updateUnion(req.params.id, userId, { name, bio, label, avatar })
     return ok(res, union)
   } catch (err: any) {
     if (err?.message?.includes('membro')) return forbidden(res, err.message)
@@ -77,8 +76,14 @@ export async function sendInvite(req: AuthRequest, res: Response) {
 
     const invite = await unionService.sendInvite(req.params.id, toUserId, userId)
 
-    // Notify target user in real-time
+    // Notify target user — socket (real-time) + push (background)
     emitToUser(toUserId, 'union:invite', { invite })
+    sendPush(
+      toUserId,
+      '💑 Convite de União',
+      `${invite.fromUnion.name} convidou-te para uma união. Aceita ou recusa.`,
+      { type: 'union_invite', inviteId: invite.id, unionId: invite.fromUnion.id },
+    ).catch(() => {})
 
     return created(res, invite)
   } catch (err: any) {

@@ -1,11 +1,10 @@
 import { prisma } from '../config/database'
-import { UnionType } from '@prisma/client'
 
 const UNION_SELECT = {
   id:        true,
   name:      true,
   avatar:    true,
-  type:      true,
+  label:     true,
   bio:       true,
   createdAt: true,
   memberA: { select: { id: true, name: true, avatar: true } },
@@ -28,23 +27,40 @@ export async function createUnion(
   memberAId: string,
   memberBId: string,
   name: string,
-  type: UnionType,
+  label?: string,
   bio?: string,
 ) {
-  // Ensure canonical order so the unique constraint always matches
+  // Each user can only be in one union at a time
+  const existingForEither = await prisma.union.findFirst({
+    where: {
+      OR: [
+        { memberAId },
+        { memberBId: memberAId },
+        { memberAId: memberBId },
+        { memberBId },
+      ],
+    },
+  })
+  if (existingForEither) throw new Error('Um dos utilizadores já pertence a uma união')
+
+  // Canonical order so the unique constraint always matches
   const [a, b] = memberAId < memberBId ? [memberAId, memberBId] : [memberBId, memberAId]
 
-  const existing = await prisma.union.findUnique({ where: { memberAId_memberBId: { memberAId: a, memberBId: b } } })
-  if (existing) throw new Error('União já existe entre estes utilizadores')
-
   return prisma.union.create({
-    data: { memberAId: a, memberBId: b, name, type, bio },
+    data: { memberAId: a, memberBId: b, name, label, bio },
     select: UNION_SELECT,
   })
 }
 
 export async function getUnion(id: string) {
   return prisma.union.findUnique({ where: { id }, select: UNION_SELECT })
+}
+
+export async function getMyUnion(userId: string) {
+  return prisma.union.findFirst({
+    where: { OR: [{ memberAId: userId }, { memberBId: userId }] },
+    select: UNION_SELECT,
+  })
 }
 
 export async function getMyUnions(userId: string) {
@@ -58,7 +74,7 @@ export async function getMyUnions(userId: string) {
 export async function updateUnion(
   id: string,
   userId: string,
-  data: { name?: string; avatar?: string; bio?: string },
+  data: { name?: string; avatar?: string; bio?: string; label?: string },
 ) {
   const union = await prisma.union.findUnique({ where: { id } })
   if (!union) throw new Error('União não encontrada')
@@ -82,10 +98,11 @@ export async function sendInvite(fromUnionId: string, toUserId: string, requeste
   if (!union) throw new Error('União não encontrada')
   if (!isMember(union, requesterId)) throw new Error('Não és membro desta união')
 
-  // Check target user isn't already in a union with the requester
-  const [a, b] = requesterId < toUserId ? [requesterId, toUserId] : [toUserId, requesterId]
-  const already = await prisma.union.findUnique({ where: { memberAId_memberBId: { memberAId: a, memberBId: b } } })
-  if (already) throw new Error('Já existe uma união com este utilizador')
+  // Check target user isn't already in any union
+  const targetExisting = await prisma.union.findFirst({
+    where: { OR: [{ memberAId: toUserId }, { memberBId: toUserId }] },
+  })
+  if (targetExisting) throw new Error('Este utilizador já pertence a uma união')
 
   return prisma.unionInvite.upsert({
     where: { fromUnionId_toUserId: { fromUnionId, toUserId } },
@@ -121,14 +138,8 @@ export async function respondToInvite(
     return null
   }
 
-  // Accept: mark invite + create a new union between the two unions' members
   await prisma.unionInvite.update({ where: { id: inviteId }, data: { status: 'ACCEPTED' } })
-
-  // The invite is from fromUnion → the accepting user creates a new union pairing them
-  const fromUnion = invite.fromUnion
-  // toUserId is accepting — we need them to pick their own union or we create one ad-hoc
-  // For now: the acceptor's userId IS one member; return the fromUnion so the chat can start
-  return prisma.union.findUnique({ where: { id: fromUnion.id }, select: UNION_SELECT })
+  return prisma.union.findUnique({ where: { id: invite.fromUnion.id }, select: UNION_SELECT })
 }
 
 // ─── Messages between Unions ──────────────────────────────────────────────────
@@ -151,7 +162,6 @@ export async function getUnionConversations(userId: string) {
     orderBy: { createdAt: 'desc' },
   })
 
-  // Deduplicate into conversation pairs
   const seen = new Set<string>()
   const conversations: typeof messages = []
   for (const msg of messages) {
