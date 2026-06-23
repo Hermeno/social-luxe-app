@@ -17,6 +17,7 @@ import friendshipRoutes from './friendship.routes'
 import storeRoutes from './store.routes'
 import donationRoutes from './donation.routes'
 import travelRoutes from './travel.routes'
+import unionRoutes from './union.routes'
 
 const router = Router()
 
@@ -38,5 +39,6 @@ router.use('/friendships', friendshipRoutes)
 router.use('/store', storeRoutes)
 router.use('/donations', donationRoutes)
 router.use('/travel', travelRoutes)
+router.use('/unions', unionRoutes)
 
 export default router

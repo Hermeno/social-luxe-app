@@ -116,6 +116,9 @@ model User {
   stickerReactions StickerReaction[]
   stickerViews     StickerView[]
   travelObjects    TravelObject[]
+  unionsAsA        Union[]        @relation("UnionMemberA")
+  unionsAsB        Union[]        @relation("UnionMemberB")
+  unionInvites     UnionInvite[]
 }
 
 // ─── Post ────────────────────────────────────────────────────────────────────
@@ -137,7 +140,7 @@ model Post {
   isAnnouncement  Boolean   @default(false)
 
   stickersEnabled  Boolean   @default(false)
-  isTravelEnabled  Boolean   @default(true)
+  isTravelEnabled  Boolean   @default(false)
 
   user           User             @relation(fields: [userId], references: [id])
   partnerUser    User?            @relation("PostPartner", fields: [partnerUserId], references: [id])
@@ -728,6 +731,74 @@ model DonationFeedback {
 
   donation   Donation @relation(fields: [donationId], references: [id], onDelete: Cascade)
   from       User     @relation("FeedbackGiver", fields: [fromUserId], references: [id])
+}
+
+// ─── União (Duo Profile) ─────────────────────────────────────────────────────
+
+enum UnionType {
+  COUPLE
+  TWINS
+  PARTNERS
+  FRIENDS
+  CREATIVE
+}
+
+enum UnionInviteStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+model Union {
+  id        String    @id @default(cuid())
+  name      String
+  avatar    String?
+  type      UnionType
+  bio       String?
+  memberAId String
+  memberBId String
+  createdAt DateTime  @default(now())
+
+  memberA  User           @relation("UnionMemberA", fields: [memberAId], references: [id], onDelete: Cascade)
+  memberB  User           @relation("UnionMemberB", fields: [memberBId], references: [id], onDelete: Cascade)
+  sentMessages     UnionMessage[] @relation("UnionSender")
+  receivedMessages UnionMessage[] @relation("UnionReceiver")
+  invitesSent      UnionInvite[]  @relation("InviteFromUnion")
+
+  @@unique([memberAId, memberBId])
+  @@index([memberAId])
+  @@index([memberBId])
+}
+
+model UnionInvite {
+  id          String            @id @default(cuid())
+  fromUnionId String
+  toUserId    String
+  status      UnionInviteStatus @default(PENDING)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  fromUnion Union @relation("InviteFromUnion", fields: [fromUnionId], references: [id], onDelete: Cascade)
+  toUser    User  @relation(fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@unique([fromUnionId, toUserId])
+  @@index([toUserId])
+}
+
+model UnionMessage {
+  id          String   @id @default(cuid())
+  fromUnionId String
+  toUnionId   String
+  content     String?
+  mediaUrl    String?
+  readAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  fromUnion Union @relation("UnionSender",   fields: [fromUnionId], references: [id], onDelete: Cascade)
+  toUnion   Union @relation("UnionReceiver", fields: [toUnionId],   references: [id], onDelete: Cascade)
+
+  @@index([fromUnionId, toUnionId, createdAt(sort: Desc)])
+  @@index([toUnionId, fromUnionId, createdAt(sort: Desc)])
 }
 
 // ─── PasswordReset ────────────────────────────────────────────────────────────

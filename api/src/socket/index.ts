@@ -96,6 +96,31 @@ export function setupSocket(httpServer: HttpServer): Server {
       socket.to(`group:${groupId}`).emit('group:typing', { groupId, userId, isTyping })
     })
 
+    // ── union:join — auto-join rooms for both unions ─────────────────────────
+    try {
+      const userUnions = await prisma.union.findMany({
+        where: { OR: [{ memberAId: userId }, { memberBId: userId }] },
+        select: { id: true },
+      })
+      userUnions.forEach(({ id }) => socket.join(`union:${id}`))
+    } catch {}
+
+    // ── union:typing ─────────────────────────────────────────────────────────
+    socket.on('union:typing', ({ toUnionId, fromUnionId, isTyping }: { toUnionId: string; fromUnionId: string; isTyping: boolean }) => {
+      socket.to(`union:${toUnionId}`).emit('union:typing', { fromUnionId, isTyping })
+    })
+
+    // ── union:message:read ────────────────────────────────────────────────────
+    socket.on('union:message:read', async ({ fromUnionId, toUnionId }: { fromUnionId: string; toUnionId: string }) => {
+      try {
+        await prisma.unionMessage.updateMany({
+          where: { fromUnionId, toUnionId, readAt: null },
+          data:  { readAt: new Date() },
+        })
+        io.to(`union:${fromUnionId}`).emit('union:message:read', { fromUnionId, toUnionId })
+      } catch {}
+    })
+
     // ── disconnect ──────────────────────────────────────────────────────────
     socket.on('disconnect', () => {
       onlineUsers.delete(userId)
