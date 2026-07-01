@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { View, StyleSheet, Dimensions, TouchableWithoutFeedback, Animated } from 'react-native'
-import { useVideoPlayer, VideoView } from 'expo-video'
+import { View, StyleSheet, Dimensions, TouchableWithoutFeedback, Animated, ActivityIndicator } from 'react-native'
+import { useVideoPlayer, VideoView, useVideoPlayerStatus } from 'expo-video'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { Post } from '../../types'
@@ -25,6 +25,10 @@ export default function FeedItem({ post, isActive, onCommentPress }: Props) {
   const player = useVideoPlayer(
     post.mediaType === 'VIDEO' ? { uri } : null,
     (p) => { p.loop = true; p.muted = false }
+  )
+  const videoStatus = useVideoPlayerStatus(post.mediaType === 'VIDEO' ? player : null)
+  const isBuffering = post.mediaType === 'VIDEO' && isActive && (
+    videoStatus?.isBuffering === true || videoStatus?.status === 'loading'
   )
 
   // Double-tap to like
@@ -79,6 +83,13 @@ export default function FeedItem({ post, isActive, onCommentPress }: Props) {
         <LinearGradient colors={gradients.feedTop}    style={s.topGradient} />
         <LinearGradient colors={gradients.feedBottom} style={s.bottomGradient} />
 
+        {/* Buffering spinner — shown when network stalls the video */}
+        {isBuffering && (
+          <View style={s.bufferWrap} pointerEvents="none">
+            <ActivityIndicator size="large" color="rgba(255,255,255,0.85)" />
+          </View>
+        )}
+
         {/* Double-tap heart burst */}
         <Animated.View
           style={[s.heartWrap, { opacity: heartAnim, transform: [{ scale: heartScale }] }]}
@@ -103,7 +114,7 @@ const s = StyleSheet.create({
   media:          { width, height },
   topGradient:    { position: 'absolute', top: 0,    left: 0, right: 0, height: 180 },
   bottomGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 320 },
-  heartWrap:      {
+  heartWrap: {
     position: 'absolute',
     alignSelf: 'center',
     top: '38%',
@@ -111,5 +122,11 @@ const s = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.5,
     shadowRadius: 12,
+  },
+  bufferWrap: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 })

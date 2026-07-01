@@ -196,7 +196,7 @@ export default function PostInfo({ post, isActive, commentCount: commentCountPro
     if (loadingFollow) return
     setLoadingFollow(true)
     try {
-      await useFollowStore.getState().toggle(post.user.id, duration)
+      await useFollowStore.getState().toggle(post.user.id, duration, { name: post.user.name, avatar: post.user.avatar ?? null })
     } catch {}
     setLoadingFollow(false)
   }

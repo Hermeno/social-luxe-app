@@ -15,6 +15,20 @@ type TogetherRoom = {
 }
 const togetherRooms = new Map<string, TogetherRoom>()
 
+// ── Modo Dupla — ephemeral real-time pairing (chat-initiated) ─────────────────
+type DuplaMoment = {
+  userA:       string   // proposer
+  userB:       string   // partner
+  accepted:    boolean
+  vibe?:       string
+  vibeColors?: [string, string]
+}
+const duplaMoments = new Map<string, DuplaMoment>()
+
+function duplaKey(a: string, b: string): string {
+  return [a, b].sort().join('|')
+}
+
 function getOrCreateRoom(unionId: string): TogetherRoom {
   if (!togetherRooms.has(unionId)) {
     togetherRooms.set(unionId, { members: new Set(), consented: new Map(), visibility: 'private' })
@@ -239,10 +253,123 @@ export function setupSocket(httpServer: HttpServer): Server {
       } catch {}
     })
 
+    // ── Modo Dupla ─────────────────────────────────────────────────────────────
+
+    // User A invites User B to dupla from within their DM chat
+    socket.on('dupla:invite', ({ toUserId }: { toUserId: string }) => {
+      const key = duplaKey(userId, toUserId)
+      if (duplaMoments.has(key)) return
+      duplaMoments.set(key, { userA: userId, userB: toUserId, accepted: false })
+      io.to(toUserId).emit('dupla:invited', { fromUserId: userId })
+    })
+
+    // Partner accepts or declines
+    socket.on('dupla:respond', ({ toUserId, accept }: { toUserId: string; accept: boolean }) => {
+      const key = duplaKey(userId, toUserId)
+      const moment = duplaMoments.get(key)
+      if (!moment) return
+      if (accept) {
+        moment.accepted = true
+        // Notify proposer so they can open the vibe picker
+        io.to(toUserId).emit('dupla:accepted', { byUserId: userId })
+      } else {
+        duplaMoments.delete(key)
+        io.to(toUserId).emit('dupla:declined', { byUserId: userId })
+      }
+    })
+
+    // Either partner sets the vibe → go live for both + all followers
+    socket.on('dupla:setVibe', async ({
+      toUserId, vibe, vibeColors,
+    }: { toUserId: string; vibe: string; vibeColors: [string, string] }) => {
+      const key = duplaKey(userId, toUserId)
+      const moment = duplaMoments.get(key)
+      if (!moment || !moment.accepted) return
+      if (moment.vibe) return  // first pick wins
+
+      moment.vibe      = vibe
+      moment.vibeColors = vibeColors
+
+      try {
+        const [profA, profB] = await Promise.all([
+          prisma.user.findUnique({ where: { id: moment.userA }, select: { name: true, avatar: true } }),
+          prisma.user.findUnique({ where: { id: moment.userB }, select: { name: true, avatar: true } }),
+        ])
+        if (!profA || !profB) return
+
+        const payload = {
+          userAId:     moment.userA,
+          userAName:   profA.name,
+          userAAvatar: profA.avatar,
+          userBId:     moment.userB,
+          userBName:   profB.name,
+          userBAvatar: profB.avatar,
+          vibe,
+          vibeColors,
+        }
+
+        io.to(moment.userA).emit('dupla:live', payload)
+        io.to(moment.userB).emit('dupla:live', payload)
+
+        const followers = await prisma.follow.findMany({
+          where:  { followingId: { in: [moment.userA, moment.userB] } },
+          select: { followerId: true },
+        })
+        const unique = [...new Set(followers.map((f) => f.followerId))]
+          .filter((id) => id !== moment.userA && id !== moment.userB)
+        unique.forEach((fId) => emitToUser(fId, 'dupla:live', payload))
+      } catch {}
+    })
+
+    // Either user ends the dupla moment
+    socket.on('dupla:end', async ({ toUserId }: { toUserId: string }) => {
+      const key = duplaKey(userId, toUserId)
+      const moment = duplaMoments.get(key)
+      if (!moment) return
+      const wasLive = !!moment.vibe
+      duplaMoments.delete(key)
+
+      const endPayload = { userAId: moment.userA, userBId: moment.userB }
+      io.to(moment.userA).emit('dupla:ended', endPayload)
+      io.to(moment.userB).emit('dupla:ended', endPayload)
+
+      if (wasLive) {
+        try {
+          const followers = await prisma.follow.findMany({
+            where:  { followingId: { in: [moment.userA, moment.userB] } },
+            select: { followerId: true },
+          })
+          const unique = [...new Set(followers.map((f) => f.followerId))]
+            .filter((id) => id !== moment.userA && id !== moment.userB)
+          unique.forEach((fId) => emitToUser(fId, 'dupla:ended', endPayload))
+        } catch {}
+      }
+    })
+
     // ── disconnect ──────────────────────────────────────────────────────────
     socket.on('disconnect', async () => {
       onlineUsers.delete(userId)
       io.emit('user:offline', { userId })
+
+      // Clean up any dupla moments this user was in
+      for (const [key, moment] of [...duplaMoments]) {
+        if (moment.userA !== userId && moment.userB !== userId) continue
+        const wasLive = !!moment.vibe
+        const otherId = moment.userA === userId ? moment.userB : moment.userA
+        duplaMoments.delete(key)
+        const endPayload = { userAId: moment.userA, userBId: moment.userB }
+        io.to(otherId).emit('dupla:ended', endPayload)
+        if (wasLive) {
+          prisma.follow.findMany({
+            where:  { followingId: { in: [moment.userA, moment.userB] } },
+            select: { followerId: true },
+          }).then((followers) => {
+            const unique = [...new Set(followers.map((f) => f.followerId))]
+              .filter((id) => id !== moment.userA && id !== moment.userB)
+            unique.forEach((fId) => emitToUser(fId, 'dupla:ended', endPayload))
+          }).catch(() => {})
+        }
+      }
 
       // Clean up any together rooms this user was in
       for (const [unionId, room] of togetherRooms) {

@@ -1,8 +1,10 @@
 import React, { useEffect } from 'react'
-import { AppState, AppStateStatus, Text, StyleSheet, View } from 'react-native'
+import { AppState, AppStateStatus, Platform, Text, StyleSheet, View } from 'react-native'
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native'
 import Toast, { BaseToastProps } from 'react-native-toast-message'
 import { Ionicons } from '@expo/vector-icons'
+import * as Notifications from 'expo-notifications'
+import Constants from 'expo-constants'
 import { colors, fonts } from '../theme'
 import { useAuthStore } from '../store/auth.store'
 import { useOnlineStore } from '../store/online.store'
@@ -14,6 +16,18 @@ import { useMessageBadgeStore } from '../store/messageBadge.store'
 import AuthNavigator from './AuthNavigator'
 import AppNavigator from './AppNavigator'
 import OnboardingScreen from '../screens/OnboardingScreen'
+import { api } from '../services/api'
+import { TogetherLivePayload } from '../types'
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge:  true,
+    shouldShowBanner: true,
+    shouldShowList:   true,
+  }),
+})
 
 const toastConfig = {
   success: ({ text1, text2 }: BaseToastProps) => (
@@ -124,6 +138,31 @@ export default function RootNavigator({ onboardingDone, setOnboardingDone, defau
     return () => sub.remove()
   }, [isAuthenticated, token])
 
+  // Register Expo push token when authenticated (physical devices only)
+  useEffect(() => {
+    if (!isAuthenticated || !token) return
+
+    async function registerPushToken() {
+      try {
+        const { status: existing } = await Notifications.getPermissionsAsync()
+        const { status } = existing !== 'granted'
+          ? await Notifications.requestPermissionsAsync()
+          : { status: existing }
+        if (status !== 'granted') return
+
+        const projectId = (Constants.expoConfig?.extra as any)?.eas?.projectId
+        if (!projectId) return
+
+        const { data: pushToken } = await Notifications.getExpoPushTokenAsync({ projectId })
+        await api.post('/notifications/token', { token: pushToken, platform: Platform.OS })
+      } catch {
+        // Non-critical — push will not work but app continues normally
+      }
+    }
+
+    registerPushToken()
+  }, [isAuthenticated])
+
   // Connect socket when authenticated and listen to online/offline events
   useEffect(() => {
     if (!isAuthenticated || !token) {
@@ -146,10 +185,22 @@ export default function RootNavigator({ onboardingDone, setOnboardingDone, defau
     socket.on('user:online',  ({ userId }: { userId: string }) => setOnline(userId))
     socket.on('user:offline', ({ userId }: { userId: string }) => setOffline(userId))
 
+    // União ao vivo — notificar seguidores com um toast
+    socket.on('union:together:live', ({ unionName, label, memberAName, memberBName }: TogetherLivePayload) => {
+      Toast.show({
+        type:            'success',
+        text1:           `💑 ${unionName} estão juntos agora`,
+        text2:           label ? `${label} · ${memberAName} & ${memberBName}` : `${memberAName} & ${memberBName}`,
+        visibilityTime:  5000,
+        position:        'top',
+      })
+    })
+
     return () => {
       socket.off('users:online:snapshot')
       socket.off('user:online')
       socket.off('user:offline')
+      socket.off('union:together:live')
     }
   }, [isAuthenticated, token])
 

@@ -17,8 +17,10 @@ import { useFocusEffect } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
 import Toast from 'react-native-toast-message'
 import * as msgService from '../../services/message.service'
+import * as unionService from '../../services/union.service'
 import { getConnections, FollowDuration } from '../../services/follow.service'
-import { Connection } from '../../types'
+import { Connection, Union, UnionMessage, TogetherLivePayload, DuplaLive, DuplaEnded } from '../../types'
+import { useUnionStore } from '../../store/union.store'
 import {
   getViewedPostIds,
   getCachedConnections,
@@ -306,6 +308,87 @@ function ConvoRow({ item, viewedIds, onPress, index, myUserId, isQuickOpen, onTo
   )
 }
 
+// ── Union conversation row ────────────────────────────────────────────────────
+
+function UnionConvoRow({ item, myUnion, liveUnions, onPress }: {
+  item: UnionMessage
+  myUnion: Union | undefined
+  liveUnions: Set<string>
+  onPress: () => void
+}) {
+  const isLive   = liveUnions.has(myUnion?.id ?? '') || liveUnions.has(item.fromUnionId) || liveUnions.has(item.toUnionId)
+  const unread   = useUnionStore.getState().unreadCounts[`${item.fromUnionId}|${item.toUnionId}`] ?? 0
+  const dispName = item.fromUnion?.name ?? 'União'
+  const memberA  = (item.fromUnion as any)?.memberA
+  const memberB  = (item.fromUnion as any)?.memberB
+
+  return (
+    <TouchableOpacity style={s.row} activeOpacity={0.6} onPress={onPress}>
+      <View style={s.unionConvoAvatarWrap}>
+        {memberA?.avatar
+          ? <Image source={{ uri: memberA.avatar }} style={s.unionConvoDualA} contentFit="cover" />
+          : <View style={[s.unionConvoDualA, { backgroundColor: colors.gray100, alignItems: 'center', justifyContent: 'center' }]}><Ionicons name="people" size={13} color={colors.gray400} /></View>
+        }
+        {memberB?.avatar
+          ? <Image source={{ uri: memberB.avatar }} style={s.unionConvoDualB} contentFit="cover" />
+          : <View style={[s.unionConvoDualB, { backgroundColor: colors.gray200, alignItems: 'center', justifyContent: 'center' }]}><Ionicons name="person" size={11} color={colors.gray400} /></View>
+        }
+      </View>
+
+      <View style={s.info}>
+        <View style={s.topRow}>
+          <Text style={[s.name, unread > 0 && s.nameBold]} numberOfLines={1}>💑 {dispName}</Text>
+          {isLive
+            ? <View style={s.livePill}><Text style={s.livePillTxt}>● juntos</Text></View>
+            : <Text style={[s.time, unread > 0 && s.timeActive]}>{timeAgo(item.createdAt)}</Text>
+          }
+        </View>
+        <Text style={[s.preview, unread > 0 && s.previewBold]} numberOfLines={1}>
+          {item.content ?? '📎 Mídia'}
+        </Text>
+      </View>
+
+      {unread > 0 && (
+        <View style={s.dot}><Text style={s.dotTxt}>{unread > 9 ? '9+' : unread}</Text></View>
+      )}
+    </TouchableOpacity>
+  )
+}
+
+// ── Live dupla row ────────────────────────────────────────────────────────────
+
+function DuplaRow({ data }: { data: DuplaLive }) {
+  return (
+    <View style={s.row}>
+      {/* Overlapping dual avatars */}
+      <View style={s.duplaAvatarWrap}>
+        <View style={s.duplaAvatarA}>
+          <AvatarImage uri={data.userAAvatar} name={data.userAName} size={AVA} />
+        </View>
+        <View style={s.duplaAvatarB}>
+          <AvatarImage uri={data.userBAvatar} name={data.userBName} size={AVA} />
+        </View>
+      </View>
+
+      <View style={s.info}>
+        <Text style={s.name} numberOfLines={1}>
+          {data.userAName.split(' ')[0]} & {data.userBName.split(' ')[0]}
+        </Text>
+        <View style={s.duplaStatusRow}>
+          <View style={s.duplaGreenDot} />
+          <Text style={s.duplaLiveTxt} numberOfLines={1}>
+            online, a viver {data.vibe}
+          </Text>
+        </View>
+      </View>
+
+      <View style={s.livePill}>
+        <Text style={s.livePillTxt}>● ao vivo</Text>
+      </View>
+    </View>
+  )
+}
+
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function MessagesScreen() {
@@ -318,6 +401,8 @@ export default function MessagesScreen() {
   const newPostsCount = useFeedStore((s) => s.newPostsCount)
 
   const [connections,    setConnections]    = useState<Connection[]>([])
+  const [connsLoading,   setConnsLoading]   = useState(false)
+  const [connsError,     setConnsError]     = useState(false)
   const [viewedIds,      setViewedIds]      = useState<Set<string>>(new Set())
   const [quickReplyId,   setQuickReplyId]   = useState<string | null>(null)
   const [showDiscovery,  setShowDiscovery]  = useState(true)
@@ -335,6 +420,99 @@ export default function MessagesScreen() {
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // ── Uniões tab ────────────────────────────────────────────────────────────
+  const [unionConvos,     setUnionConvos]     = useState<UnionMessage[]>([])
+  const [unionConvoLoad,  setUnionConvoLoad]  = useState(false)
+  const [respondingId,    setRespondingId]    = useState<string | null>(null)
+  const [liveUnions,      setLiveUnions]      = useState<Set<string>>(new Set())
+  const [liveDuplas,      setLiveDuplas]      = useState<Record<string, DuplaLive>>({})
+  const { myUnions, setMyUnions, addInvite, incrementUnread, setPendingInvites, removeInvite, addUnion, hydrateFromCache } = useUnionStore()
+  const pendingInvites   = useUnionStore((s) => s.pendingInvites)
+
+  // Hydrate from cache on first mount (offline-first)
+  useEffect(() => {
+    hydrateFromCache()
+  }, [])
+
+  useFocusEffect(useCallback(() => {
+    // Background refresh from API (cache is already showing)
+    unionService.getMyUnions().then(setMyUnions).catch(() => {})
+    unionService.getPendingInvites().then(setPendingInvites).catch(() => {})
+    setUnionConvoLoad(true)
+    unionService.getUnionConversations().then(setUnionConvos).catch(() => {}).finally(() => setUnionConvoLoad(false))
+  }, []))
+
+  // Track current connections in a ref so onNewMessage can read it without closures
+  const connectionsRef = useRef<Connection[]>([])
+  useEffect(() => { connectionsRef.current = connections }, [connections])
+
+  // ── Respond to union invite ───────────────────────────────────────────────
+  async function handleRespondInvite(inviteId: string, accept: boolean) {
+    setRespondingId(inviteId)
+    try {
+      const result = await unionService.respondToInvite(inviteId, accept)
+      removeInvite(inviteId)
+      if (accept && result.union) {
+        addUnion(result.union)
+        // Refresh conversations
+        unionService.getUnionConversations().then(setUnionConvos).catch(() => {})
+      }
+    } catch {
+      Toast.show({ type: 'error', text1: 'Erro', text2: 'Não foi possível responder ao convite', visibilityTime: 2500 })
+    } finally {
+      setRespondingId(null)
+    }
+  }
+
+  // Socket: union invite & message notifications
+  useEffect(() => {
+    const socket = getSocket()
+    if (!socket) return
+    const onInvite = ({ invite }: any) => addInvite(invite)
+    const onMsg    = ({ message }: { message: UnionMessage }) => {
+      setUnionConvos((prev) => {
+        const key = [message.fromUnionId, message.toUnionId].sort().join('|')
+        const filtered = prev.filter((m) => [m.fromUnionId, m.toUnionId].sort().join('|') !== key)
+        return [message, ...filtered]
+      })
+      incrementUnread(`${message.fromUnionId}|${message.toUnionId}`)
+    }
+    const onLive = ({ unionId }: TogetherLivePayload) => {
+      setLiveUnions((prev) => new Set([...prev, unionId]))
+    }
+    const onEnded = ({ unionId }: { unionId: string }) => {
+      setLiveUnions((prev) => { const n = new Set(prev); n.delete(unionId); return n })
+    }
+
+    const onDuplaLive = (data: DuplaLive) => {
+      const key = [data.userAId, data.userBId].sort().join('|')
+      setLiveDuplas((prev) => ({ ...prev, [key]: data }))
+    }
+    const onDuplaEnded = (data: DuplaEnded) => {
+      const key = [data.userAId, data.userBId].sort().join('|')
+      setLiveDuplas((prev) => {
+        const next = { ...prev }
+        delete next[key]
+        return next
+      })
+    }
+
+    socket.on('union:invite',       onInvite)
+    socket.on('union:message:new',  onMsg)
+    socket.on('union:together:live',  onLive)
+    socket.on('union:together:ended', onEnded)
+    socket.on('dupla:live',           onDuplaLive)
+    socket.on('dupla:ended',          onDuplaEnded)
+    return () => {
+      socket.off('union:invite',       onInvite)
+      socket.off('union:message:new',  onMsg)
+      socket.off('union:together:live',  onLive)
+      socket.off('union:together:ended', onEnded)
+      socket.off('dupla:live',           onDuplaLive)
+      socket.off('dupla:ended',          onDuplaEnded)
+    }
+  }, [])
+
   // ── Load connections (SQLite first → always background sync) ────────────
   const syncConnectionsRef = useRef<(() => Promise<void>) | null>(null)
 
@@ -342,29 +520,59 @@ export default function MessagesScreen() {
     let cancelled = false
 
     async function load() {
-      // 1. Show cache instantly (offline-first)
+      // 1. Show connections_cache instantly
       const [cached, viewed] = await Promise.all([
         getCachedConnections().catch(() => [] as Connection[]),
         getViewedPostIds().catch(() => new Set<string>()),
       ])
+
+      let hasLocalData = false
+
       if (!cancelled && cached.length > 0) {
         setConnections(cached)
         setViewedIds(viewed)
         setTotalUnread(cached.reduce((s, c) => s + c.unreadCount, 0))
+        hasLocalData = true
+      } else if (!cancelled) {
+        // 2. Fallback: build list from follow store cache (never fails offline)
+        // Filter entries that have actual names — bare { id } objects from stale cache
+        // would produce '?' avatars and are useless.
+        const followCache = await getCache<FollowUser[]>('my_following').catch(() => null)
+        const validFollows = followCache?.filter((u) => u.name?.trim()) ?? []
+        if (validFollows.length > 0 && !cancelled) {
+          const fallback: Connection[] = validFollows.map((u) => ({
+            user:        { id: u.id, name: u.name, avatar: u.avatar },
+            lastMessage: null,
+            unreadCount: 0,
+            postIds:     [],
+          }))
+          setConnections(fallback)
+          hasLocalData = true
+        }
       }
 
-      // 2. Always refresh from API — no TTL gate (TTL was blocking new follows)
+      // 3. Background refresh from API (enriches with messages/unread/posts)
       if (!isConnected()) return
+      // Only show spinner if we have no data at all
+      if (!cancelled && !hasLocalData) { setConnsLoading(true); setConnsError(false) }
       try {
         const fresh = await getConnections()
         if (cancelled) return
         setConnections(fresh)
+        setConnsLoading(false)
+        setConnsError(false)
         const viewedFresh = await getViewedPostIds().catch(() => new Set<string>())
         if (!cancelled) setViewedIds(viewedFresh)
         cacheConnections(fresh).catch(() => {})
         setSyncMeta('connections_sync', String(Date.now())).catch(() => {})
         setTotalUnread(fresh.reduce((s, c) => s + c.unreadCount, 0))
-      } catch {}
+      } catch {
+        if (!cancelled) {
+          setConnsLoading(false)
+          // Only show the error banner if we have no data to display
+          if (!hasLocalData) setConnsError(true)
+        }
+      }
     }
 
     syncConnectionsRef.current = load
@@ -388,28 +596,43 @@ export default function MessagesScreen() {
 
     function onNewMessage(msg: any) {
       const partnerId = msg.senderId === user?.id ? msg.receiverId : msg.senderId
-      setConnections((prev) => {
-        const idx = prev.findIndex((c) => c.user.id === partnerId)
-        const update: Partial<Connection> = {
-          lastMessage: { id: msg.id, content: msg.content, senderId: msg.senderId, readAt: msg.readAt, createdAt: msg.createdAt },
-          unreadCount: idx >= 0
-            ? (msg.senderId !== user?.id ? prev[idx].unreadCount + 1 : prev[idx].unreadCount)
-            : 1,
-        }
+      const newLastMsg = { id: msg.id, content: msg.content, senderId: msg.senderId, readAt: msg.readAt, createdAt: msg.createdAt }
+      if (msg.senderId !== user?.id) increment()
 
-        if (idx >= 0) {
-          // Known conversation — move to top
+      const known = connectionsRef.current.some((c) => c.user.id === partnerId)
+
+      if (known) {
+        setConnections((prev) => {
+          const idx = prev.findIndex((c) => c.user.id === partnerId)
+          if (idx < 0) return prev
+          const update: Partial<Connection> = {
+            lastMessage: newLastMsg,
+            unreadCount: msg.senderId !== user?.id ? prev[idx].unreadCount + 1 : prev[idx].unreadCount,
+          }
           const updated: Connection[] = [{ ...prev[idx], ...update }, ...prev.filter((_, i) => i !== idx)]
-          updateCachedConnection(partnerId, update).catch(() => {})
-          if (msg.senderId !== user?.id) increment()
+          updateCachedConnection(partnerId, update, { user: prev[idx].user, postIds: prev[idx].postIds }).catch(() => {})
           return updated
-        }
-
-        // Unknown partner — fetch full connections to get their profile + add to list
-        syncConnectionsRef.current?.().catch(() => {})
-        if (msg.senderId !== user?.id) increment()
-        return prev
-      })
+        })
+      } else {
+        // Unknown sender — quick profile fetch to show them immediately
+        api.get(`/users/${partnerId}`, { timeout: 8000 })
+          .then((res) => {
+            const u = res.data.data ?? res.data
+            if (!u?.id) { syncConnectionsRef.current?.().catch(() => {}); return }
+            const newConn: Connection = {
+              user:        { id: u.id, name: u.name, avatar: u.avatar ?? null },
+              lastMessage: newLastMsg,
+              unreadCount: msg.senderId !== user?.id ? 1 : 0,
+              postIds:     [],
+            }
+            setConnections((cur) => {
+              if (cur.some((c) => c.user.id === u.id)) return cur
+              cacheConnections([newConn]).catch(() => {})
+              return [newConn, ...cur]
+            })
+          })
+          .catch(() => syncConnectionsRef.current?.().catch(() => {}))
+      }
     }
 
     socket.on('message:new', onNewMessage)
@@ -482,9 +705,43 @@ export default function MessagesScreen() {
     if (followPending.has(userId)) return
     setFollowPending((prev) => new Set([...prev, userId]))
     try {
-      const nowFollowing = await useFollowStore.getState().toggle(userId, duration)
-      // New follow → refresh connections so the person appears in the list instantly
-      if (nowFollowing) syncConnectionsRef.current?.().catch(() => {})
+      const followedUser = displayCards.find((u) => u.id === userId)
+      const profile = followedUser
+        ? { name: followedUser.name, avatar: followedUser.avatar ?? null }
+        : undefined
+
+      // Pass profile so the follow store can write it to connections_cache
+      // atomically as part of the toggle — before we trigger any load().
+      const nowFollowing = await useFollowStore.getState().toggle(userId, duration, profile)
+
+      if (nowFollowing) {
+        if (followedUser) {
+          const newConn: Connection = {
+            user:        { id: followedUser.id, name: followedUser.name, avatar: followedUser.avatar ?? null },
+            lastMessage: null,
+            unreadCount: 0,
+            postIds:     [],
+          }
+          // Update state immediately (no SQLite call inside setState)
+          setConnections((prev) => {
+            if (prev.some((c) => c.user.id === userId)) return prev
+            const updated = [...prev, newConn].sort((a, b) => {
+              if (a.lastMessage && b.lastMessage)
+                return new Date(b.lastMessage.createdAt).getTime() - new Date(a.lastMessage.createdAt).getTime()
+              if (a.lastMessage) return -1
+              if (b.lastMessage) return 1
+              return a.user.name.localeCompare(b.user.name)
+            })
+            return updated
+          })
+          // The follow store already wrote this to connections_cache inside toggle().
+          // Trigger a background refresh to enrich with messages / unread counts.
+          syncConnectionsRef.current?.().catch(() => {})
+        }
+      } else {
+        // Unfollow → remove from chat list
+        setConnections((prev) => prev.filter((c) => c.user.id !== userId))
+      }
     } catch {
       Toast.show({ type: 'error', text1: t.error, text2: t.msg_follow_err, visibilityTime: 2500 })
     } finally {
@@ -545,19 +802,36 @@ export default function MessagesScreen() {
   const displayCards  = query.trim() ? searchResults : suggested
   const isCardLoading = query.trim() ? searchLoading : suggestLoading
 
-  // ── Conversation list items (with injected discovery row) ─────────────────
-  type ConvoListItem =
-    | { kind: 'convo'; c: Connection; idx: number }
+  // ── Unified feed — duplas live + personal + uniões merged by recency ────
+  type FeedItem =
+    | { kind: 'personal';  c: Connection; idx: number }
+    | { kind: 'union';     m: UnionMessage }
+    | { kind: 'dupla';     data: DuplaLive }
     | { kind: 'discovery' }
 
   const INJECT_AT = 3
-  const convoListItems: ConvoListItem[] = []
-  connections.forEach((c, i) => {
-    if (i === INJECT_AT && showDiscovery) convoListItems.push({ kind: 'discovery' })
-    convoListItems.push({ kind: 'convo', c, idx: i })
+  const allMsgItems: { item: Exclude<FeedItem, { kind: 'discovery' } | { kind: 'dupla'; data: DuplaLive }>; ts: number }[] = [
+    ...connections.map((c, i) => ({
+      item: { kind: 'personal' as const, c, idx: i },
+      ts:   c.lastMessage ? new Date(c.lastMessage.createdAt).getTime() : 0,
+    })),
+    ...(!unionConvoLoad ? unionConvos : []).map((m) => ({
+      item: { kind: 'union' as const, m },
+      ts:   new Date(m.createdAt).getTime(),
+    })),
+  ]
+  allMsgItems.sort((a, b) => b.ts - a.ts)
+
+  // Live dupla rows always appear at the very top
+  const duplaItems: FeedItem[] = Object.values(liveDuplas).map((data) => ({ kind: 'dupla' as const, data }))
+
+  const feedItems: FeedItem[] = [...duplaItems]
+  allMsgItems.forEach(({ item }, i) => {
+    if (i === INJECT_AT && showDiscovery) feedItems.push({ kind: 'discovery' })
+    feedItems.push(item as FeedItem)
   })
-  if (showDiscovery && connections.length > 0 && connections.length <= INJECT_AT) {
-    convoListItems.push({ kind: 'discovery' })
+  if (showDiscovery && allMsgItems.length > 0 && allMsgItems.length <= INJECT_AT) {
+    feedItems.push({ kind: 'discovery' })
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -625,12 +899,13 @@ export default function MessagesScreen() {
               )}
               <View style={s.navAvatarInner}>
                 <View style={s.navAvatarCircle}>
-                  <AvatarImage uri={user?.avatar ?? null} size={26} borderWidth={0} borderColor="transparent" />
+                  <AvatarImage uri={user?.avatar ?? null} name={user?.name} size={26} borderWidth={0} borderColor="transparent" />
                 </View>
               </View>
             </View>
           </TouchableOpacity>
         </View>
+
 
         {/* ── Content ─────────────────────────────────────────────── */}
         {isSearchMode ? (
@@ -689,50 +964,178 @@ export default function MessagesScreen() {
 
         ) : (
 
-          /* ── Conversations list ──────────────────────────────────── */
-          <FlatList
-            data={convoListItems}
-            keyExtractor={(item) => item.kind === 'discovery' ? '__discovery__' : item.c.user.id}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={[s.list, { paddingBottom: Math.max(bottom, 8) + 66 }]}
-            ItemSeparatorComponent={({ leadingItem }) =>
-              (leadingItem as ConvoListItem).kind === 'discovery' ? null : <View style={s.sep} />
-            }
-            renderItem={({ item }) => {
-              if (item.kind === 'discovery') {
-                return <DiscoveryRow onDismiss={() => setShowDiscovery(false)} />
-              }
-              return (
-                <ConvoRow
-                  item={item.c}
-                  viewedIds={viewedIds}
-                  index={item.idx}
-                  myUserId={user?.id ?? ''}
-                  isQuickOpen={quickReplyId === item.c.user.id}
-                  onToggleQuick={() => toggleQuickReply(item.c.user.id)}
-                  onQuickSend={(text) => handleQuickSend(item.c.user.id, item.c.user.name, text)}
-                  onPress={() => {
-                    setQuickReplyId(null)
-                    nav.navigate('Chat', {
-                      userId:           item.c.user.id,
-                      userName:         item.c.user.name,
-                      userAvatar:       item.c.user.avatar,
-                      partnerHasPosts:  item.c.postIds.length > 0,
-                    })
-                  }}
-                />
-              )
-            }}
-            ListEmptyComponent={
+          /* ── Unified feed (personal + uniões) ───────────────────── */
+          <>
+            {connsLoading && connections.length === 0 && unionConvos.length === 0 && (
+              <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                <ActivityIndicator color={colors.primary} size="large" />
+                <Text style={{ fontFamily: fonts.regular, fontSize: 14, color: colors.gray500 }}>A carregar conversas…</Text>
+              </View>
+            )}
+            {connsError && connections.length === 0 && unionConvos.length === 0 && (
               <View style={s.empty}>
                 <View style={s.emptyCircle}>
-                  <Ionicons name="chatbubble-ellipses-outline" size={36} color="#C0C0C8" />
+                  <Ionicons name="wifi-outline" size={36} color="#C0C0C8" />
                 </View>
-                <Text style={s.emptyTitle}>{t.msg_empty}</Text>
-                <Text style={s.emptySub}>{t.msg_empty_sub}</Text>
+                <Text style={s.emptyTitle}>Ligação lenta</Text>
+                <Text style={s.emptySub}>O servidor demorou demasiado. Toca para tentar de novo.</Text>
+                <TouchableOpacity
+                  style={{ marginTop: 16, backgroundColor: colors.primary, paddingHorizontal: 24, paddingVertical: 10, borderRadius: 20 }}
+                  onPress={() => syncConnectionsRef.current?.().catch(() => {})}
+                  activeOpacity={0.8}
+                >
+                  <Text style={{ fontFamily: fonts.semiBold, fontSize: 14, color: colors.white }}>Tentar de novo</Text>
+                </TouchableOpacity>
               </View>
-            }
-          />
+            )}
+            {(!connsLoading || connections.length > 0 || unionConvos.length > 0) && !connsError && (
+              <FlatList
+                data={feedItems}
+                keyExtractor={(item) =>
+                  item.kind === 'discovery' ? '__discovery__'
+                  : item.kind === 'union'   ? `union_${item.m.id}`
+                  : item.kind === 'dupla'   ? `dupla_${item.data.userAId}_${item.data.userBId}`
+                  : item.c.user.id
+                }
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={[s.list, { paddingBottom: Math.max(bottom, 8) + 66 }]}
+                ItemSeparatorComponent={({ leadingItem }) =>
+                  (leadingItem as FeedItem).kind === 'discovery' ? null : <View style={s.sep} />
+                }
+                ListHeaderComponent={
+                  <>
+                    {pendingInvites.length > 0 && (
+                      <View style={s.invitesSection}>
+                        <View style={s.invitesSectionHeader}>
+                          <View style={s.invitesBadge}>
+                            <Text style={s.invitesBadgeTxt}>{pendingInvites.length}</Text>
+                          </View>
+                          <Text style={s.invitesSectionTitle}>Convites Pendentes</Text>
+                        </View>
+                        {pendingInvites.map((invite) => {
+                          const isResponding = respondingId === invite.id
+                          const union = invite.fromUnion
+                          return (
+                            <View key={invite.id} style={s.inviteCard}>
+                              <View style={s.inviteCardTop}>
+                                <View style={s.inviteDualAvatar}>
+                                  {union.memberA.avatar
+                                    ? <Image source={{ uri: union.memberA.avatar }} style={s.inviteAvatarA} contentFit="cover" cachePolicy="memory-disk" />
+                                    : <View style={[s.inviteAvatarA, s.inviteAvatarFallback]}><Ionicons name="person" size={13} color={colors.gray400} /></View>
+                                  }
+                                  {union.memberB.avatar
+                                    ? <Image source={{ uri: union.memberB.avatar }} style={s.inviteAvatarB} contentFit="cover" cachePolicy="memory-disk" />
+                                    : <View style={[s.inviteAvatarB, s.inviteAvatarFallback]}><Ionicons name="person" size={11} color={colors.gray400} /></View>
+                                  }
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                  <View style={s.inviteNameRow}>
+                                    <Text style={s.inviteTypEmoji}>💑</Text>
+                                    <Text style={s.inviteName} numberOfLines={1}>{union.name}</Text>
+                                  </View>
+                                  {union.label ? <Text style={s.inviteType}>{union.label}</Text> : null}
+                                  <Text style={s.inviteMembers} numberOfLines={1}>{union.memberA.name} & {union.memberB.name}</Text>
+                                </View>
+                              </View>
+                              <View style={s.inviteActions}>
+                                <TouchableOpacity
+                                  style={[s.inviteBtnReject, isResponding && s.inviteBtnLoading]}
+                                  onPress={() => handleRespondInvite(invite.id, false)}
+                                  disabled={!!respondingId}
+                                  activeOpacity={0.82}
+                                >
+                                  {isResponding
+                                    ? <ActivityIndicator size="small" color={colors.gray500} />
+                                    : <Text style={s.inviteBtnRejectTxt}>Recusar</Text>
+                                  }
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  style={[s.inviteBtnAccept, isResponding && s.inviteBtnLoading]}
+                                  onPress={() => handleRespondInvite(invite.id, true)}
+                                  disabled={!!respondingId}
+                                  activeOpacity={0.82}
+                                >
+                                  {isResponding
+                                    ? <ActivityIndicator size="small" color="#fff" />
+                                    : <Text style={s.inviteBtnAcceptTxt}>Aceitar</Text>
+                                  }
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          )
+                        })}
+                      </View>
+                    )}
+                    {myUnions.length === 0 && (
+                      <TouchableOpacity
+                        style={s.createUnionBtn}
+                        onPress={() => nav.navigate('CreateUnion')}
+                        activeOpacity={0.82}
+                      >
+                        <View style={s.createUnionIcon}>
+                          <Ionicons name="people-outline" size={18} color={colors.primary} />
+                        </View>
+                        <Text style={s.createUnionTxt}>Criar Nova União</Text>
+                        <Ionicons name="chevron-forward" size={16} color={colors.gray400} />
+                      </TouchableOpacity>
+                    )}
+                  </>
+                }
+                renderItem={({ item }) => {
+                  if (item.kind === 'discovery') {
+                    return <DiscoveryRow onDismiss={() => setShowDiscovery(false)} />
+                  }
+                  if (item.kind === 'dupla') {
+                    return <DuplaRow data={item.data} />
+                  }
+                  if (item.kind === 'union') {
+                    const myUnion = myUnions.find((u) => u.id === item.m.toUnionId || u.id === item.m.fromUnionId)
+                    return (
+                      <UnionConvoRow
+                        item={item.m}
+                        myUnion={myUnion}
+                        liveUnions={liveUnions}
+                        onPress={() => nav.navigate('UnionChat', {
+                          unionId:      myUnion?.id ?? item.m.toUnionId,
+                          otherUnionId: item.m.fromUnionId === myUnion?.id ? item.m.toUnionId : item.m.fromUnionId,
+                          unionName:    item.m.fromUnion?.name ?? 'União',
+                        })}
+                      />
+                    )
+                  }
+                  return (
+                    <ConvoRow
+                      item={item.c}
+                      viewedIds={viewedIds}
+                      index={item.idx}
+                      myUserId={user?.id ?? ''}
+                      isQuickOpen={quickReplyId === item.c.user.id}
+                      onToggleQuick={() => toggleQuickReply(item.c.user.id)}
+                      onQuickSend={(text) => handleQuickSend(item.c.user.id, item.c.user.name, text)}
+                      onPress={() => {
+                        setQuickReplyId(null)
+                        nav.navigate('Chat', {
+                          userId:          item.c.user.id,
+                          userName:        item.c.user.name,
+                          userAvatar:      item.c.user.avatar,
+                          partnerHasPosts: item.c.postIds.length > 0,
+                        })
+                      }}
+                    />
+                  )
+                }}
+                ListEmptyComponent={
+                  <View style={s.empty}>
+                    <View style={s.emptyCircle}>
+                      <Ionicons name="chatbubble-ellipses-outline" size={36} color="#C0C0C8" />
+                    </View>
+                    <Text style={s.emptyTitle}>{t.msg_empty}</Text>
+                    <Text style={s.emptySub}>{t.msg_empty_sub}</Text>
+                  </View>
+                }
+              />
+            )}
+          </>
         )}
 
       </KeyboardAvoidingView>
@@ -863,6 +1266,100 @@ const s = StyleSheet.create({
   /* ── Card grid (search) ── */
   cardGrid: { paddingHorizontal: CARD_H_PAD, paddingBottom: 40, paddingTop: 4 },
   cardRow:  { gap: CARD_GAP, marginBottom: CARD_GAP },
+
+  /* ── Tab selector ── */
+  tabRow: {
+    flexDirection: 'row', gap: 8,
+    paddingHorizontal: 16, paddingBottom: 10,
+  },
+  tabBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 16, paddingVertical: 7,
+    borderRadius: 20, borderWidth: 1.5, borderColor: colors.gray200,
+  },
+  tabBtnActive: { backgroundColor: colors.black, borderColor: colors.black },
+  tabBtnTxt:    { fontFamily: fonts.semiBold, fontSize: 14, color: colors.gray500 },
+  tabBtnTxtActive: { color: colors.white },
+  tabBadge:     { backgroundColor: colors.primary, borderRadius: 10, minWidth: 18, height: 18, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  tabBadgeTxt:  { fontFamily: fonts.bold, fontSize: 11, color: colors.white },
+
+  livePill:    { backgroundColor: '#FF6766', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 },
+  livePillTxt: { fontFamily: fonts.bold, fontSize: 10, color: '#fff', letterSpacing: 0.2 },
+
+  /* ── Create union row ── */
+  createUnionBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    paddingHorizontal: 16, paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.gray100,
+  },
+  createUnionIcon: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: '#FFF5F7', alignItems: 'center', justifyContent: 'center',
+  },
+  createUnionTxt: { flex: 1, fontFamily: fonts.semiBold, fontSize: 15, color: colors.black },
+
+  /* ── Union conversation row dual avatar ── */
+  unionConvoAvatarWrap: { width: AVA, height: AVA, position: 'relative', marginRight: 4 },
+  unionConvoDualA: { width: 36, height: 36, borderRadius: 18, position: 'absolute', top: 0, left: 0, borderWidth: 1.5, borderColor: colors.white },
+  unionConvoDualB: { width: 30, height: 30, borderRadius: 15, position: 'absolute', bottom: 0, right: 0, borderWidth: 1.5, borderColor: colors.white },
+
+  // ── Live dupla row ─────────────────────────────────────────────────────────
+  duplaAvatarWrap: { width: AVA + 14, height: AVA, position: 'relative', flexShrink: 0 },
+  duplaAvatarA: { position: 'absolute', top: 0, left: 0, borderRadius: AVA / 2, borderWidth: 2, borderColor: colors.white, overflow: 'hidden' },
+  duplaAvatarB: { position: 'absolute', bottom: 0, right: 0, borderRadius: AVA / 2, borderWidth: 2, borderColor: colors.white, overflow: 'hidden' },
+  duplaStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  duplaGreenDot:  { width: 6, height: 6, borderRadius: 3, backgroundColor: '#22C55E' },
+  duplaLiveTxt:   { fontSize: 12, fontFamily: fonts.regular, color: '#22C55E' },
+
+  /* ── Pending invites section ── */
+  invitesSection: { marginHorizontal: 16, marginBottom: 8 },
+  invitesSectionHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    marginBottom: 10, marginTop: 14,
+  },
+  invitesBadge: {
+    backgroundColor: colors.primary, borderRadius: 10,
+    minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5,
+  },
+  invitesBadgeTxt:    { fontFamily: fonts.bold, fontSize: 11, color: colors.white },
+  invitesSectionTitle:{ fontFamily: fonts.semiBold, fontSize: 14, color: colors.black },
+
+  inviteCard: {
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    borderWidth: 1, borderColor: colors.gray200,
+    padding: 14, marginBottom: 10,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
+  },
+  inviteCardTop: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 14 },
+
+  inviteDualAvatar: { width: 52, height: 52, position: 'relative', flexShrink: 0 },
+  inviteAvatarA: { width: 36, height: 36, borderRadius: 18, position: 'absolute', top: 0, left: 0, borderWidth: 2, borderColor: colors.white },
+  inviteAvatarB: { width: 30, height: 30, borderRadius: 15, position: 'absolute', bottom: 0, right: 0, borderWidth: 2, borderColor: colors.white },
+  inviteAvatarFallback: { backgroundColor: colors.gray100, alignItems: 'center', justifyContent: 'center' },
+
+  inviteNameRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 2 },
+  inviteTypEmoji: { fontSize: 15 },
+  inviteName:  { fontFamily: fonts.bold, fontSize: 15, color: colors.black, flex: 1, letterSpacing: -0.2 },
+  inviteType:  { fontFamily: fonts.medium, fontSize: 12, color: colors.gray500 },
+  inviteMembers: { fontFamily: fonts.regular, fontSize: 12, color: colors.gray400, marginTop: 2 },
+
+  inviteActions: { flexDirection: 'row', gap: 10 },
+  inviteBtnReject: {
+    flex: 1, height: 40, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: colors.gray200,
+    backgroundColor: colors.white,
+  },
+  inviteBtnAccept: {
+    flex: 1, height: 40, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.primary,
+  },
+  inviteBtnLoading:    { opacity: 0.6 },
+  inviteBtnRejectTxt:  { fontFamily: fonts.semiBold, fontSize: 14, color: colors.gray600 },
+  inviteBtnAcceptTxt:  { fontFamily: fonts.semiBold, fontSize: 14, color: colors.white },
 })
 
 // ── Quick reply box styles ─────────────────────────────────────────────────────
@@ -901,6 +1398,9 @@ const q = StyleSheet.create({
 })
 
 // ── User card styles ──────────────────────────────────────────────────────────
+
+/* ── União tab styles injected into s ── */
+// (appended below the main StyleSheet)
 
 const CARD_H = Math.round(CARD_W * 1.45)
 

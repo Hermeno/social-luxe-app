@@ -47,7 +47,7 @@ function MiniCard({
     if (followed || loading) return
     setLoading(true)
     try {
-      await useFollowStore.getState().toggle(user.id, duration)
+      await useFollowStore.getState().toggle(user.id, duration, { name: user.name, avatar: user.avatar })
       Animated.timing(fadeAnim, { toValue: 0, duration: 350, useNativeDriver: true }).start(onFollow)
     } catch {}
     setLoading(false)

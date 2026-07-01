@@ -54,7 +54,7 @@ export interface TravelNode {
 
 export interface TravelObject {
   id:          string
-  type:        'emoji' | 'sticker'
+  type:        'emoji' | 'sticker' | 'caption'
   value:       string
   countryCode: string
   createdAt:   string
@@ -151,6 +151,86 @@ export interface ApiResponse<T> {
   success: boolean
   message: string
   data: T
+}
+
+// ── União (Duo Profile) ───────────────────────────────────────────────────────
+
+export type UnionInviteStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED'
+
+export interface TogetherStatus {
+  unionId:        string
+  bothPresent:    boolean
+  memberConsents: Record<string, boolean>
+  visibility:     'private' | 'public'
+}
+
+export interface TogetherLivePayload {
+  unionId:     string
+  unionName:   string
+  label:       string | null
+  memberAName: string
+  memberBName: string
+}
+
+// ── Modo Dupla — ephemeral real-time pairing ──────────────────────────────────
+
+export interface DuplaLive {
+  userAId:     string
+  userAName:   string
+  userAAvatar: string | null
+  userBId:     string
+  userBName:   string
+  userBAvatar: string | null
+  vibe:        string
+  vibeColors:  [string, string]
+}
+
+export interface DuplaEnded {
+  userAId: string
+  userBId: string
+}
+
+export interface UnionMember {
+  id:     string
+  name:   string
+  avatar: string | null
+}
+
+export interface Union {
+  id:        string
+  name:      string
+  avatar:    string | null
+  label:     string | null
+  bio:       string | null
+  memberA:   UnionMember
+  memberB:   UnionMember
+  createdAt: string
+}
+
+export interface UnionInvite {
+  id:          string
+  fromUnion:   Union
+  toUserId:    string
+  status:      UnionInviteStatus
+  createdAt:   string
+}
+
+export interface UnionMessage {
+  id:          string
+  fromUnionId: string
+  toUnionId:   string
+  fromUnion:   { id: string; name: string; avatar: string | null; memberA: UnionMember; memberB: UnionMember }
+  content:     string | null
+  mediaUrl:    string | null
+  readAt:      string | null
+  createdAt:   string
+}
+
+export interface UnionConversation {
+  otherUnion:  Union
+  myUnion:     Union
+  lastMessage: UnionMessage | null
+  unreadCount: number
 }
 
 export type FriendshipDuration = 'ONE_DAY' | 'THREE_DAYS' | 'SEVEN_DAYS' | 'THIRTY_DAYS' | 'PERMANENT'

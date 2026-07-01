@@ -152,7 +152,10 @@ export default function SearchScreen() {
     if (followPending.has(userId)) return
     setFollowPending((prev) => new Set([...prev, userId]))
     try {
-      await useFollowStore.getState().toggle(userId, duration)
+      const u = displayList.find((x) => x.id === userId)
+      await useFollowStore.getState().toggle(userId, duration,
+        u ? { name: u.name, avatar: u.avatar } : undefined
+      )
     } catch {
       Toast.show({ type: 'error', text1: t.search_no_network, text2: t.search_follow_err, visibilityTime: 2500 })
     } finally {

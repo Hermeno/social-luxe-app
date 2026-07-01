@@ -334,7 +334,9 @@ export default function ProfileScreen() {
     const wasFollowing = isFollowing
     setFollowerCount((c) => wasFollowing ? c - 1 : c + 1)
     try {
-      await useFollowStore.getState().toggle(targetId)
+      await useFollowStore.getState().toggle(targetId, undefined,
+        profile ? { name: profile.name, avatar: profile.avatar ?? null } : undefined
+      )
     } catch {
       setFollowerCount((c) => wasFollowing ? c + 1 : c - 1)
     }
@@ -438,7 +440,7 @@ export default function ProfileScreen() {
   const topRight = isOwn ? (
     <View style={{ flexDirection: 'row', gap: 8 }}>
       <TouchableOpacity onPress={() => nav2.navigate('Tabs', { screen: 'Create' })} hitSlop={HIT} style={m.floatBtn}>
-        <Ionicons name="add" size={26} color={colors.dark} />
+        <Ionicons name="add" size={26} color="#fff" />
       </TouchableOpacity>
       <TouchableOpacity
         onPress={() => Alert.alert(t.profile_logout, t.profile_logout_confirm, [
@@ -448,7 +450,7 @@ export default function ProfileScreen() {
         hitSlop={HIT}
         style={m.floatBtn}
       >
-        <Ionicons name="ellipsis-horizontal" size={26} color={colors.dark} />
+        <Ionicons name="ellipsis-horizontal" size={26} color="#fff" />
       </TouchableOpacity>
     </View>
   ) : null
@@ -472,7 +474,7 @@ export default function ProfileScreen() {
         <View style={[m.floatNav, { top: top + 8 }]}>
           {canGoBack ? (
             <TouchableOpacity onPress={() => nav2.goBack()} hitSlop={HIT} style={m.floatBtn}>
-              <Ionicons name="chevron-back" size={26} color={colors.dark} />
+              <Ionicons name="chevron-back" size={26} color="#fff" />
             </TouchableOpacity>
           ) : <View style={{ width: 36 }} />}
           <View style={{ flexDirection: 'row', gap: 8 }}>{topRight}</View>

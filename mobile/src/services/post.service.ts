@@ -15,9 +15,10 @@ export async function createPost(
   isAnnouncement?: boolean,
   deviceModel?: string,
   stickersEnabled?: boolean,
+  isTravelEnabled?: boolean,
 ) {
   if (mediaType === 'TEXT') {
-    const res = await api.post<ApiResponse<Post>>('/posts', { caption, bgColor, partnerUserId, isAnnouncement, deviceModel, stickersEnabled })
+    const res = await api.post<ApiResponse<Post>>('/posts', { caption, bgColor, partnerUserId, isAnnouncement, deviceModel, stickersEnabled, isTravelEnabled })
     return res.data.data
   }
 
@@ -25,11 +26,12 @@ export async function createPost(
   const filename = mediaUri!.split('/').pop() ?? 'media'
   const type = mediaType === 'VIDEO' ? 'video/mp4' : 'image/jpeg'
   form.append('media', { uri: mediaUri, name: filename, type } as unknown as Blob)
-  if (caption)          form.append('caption', caption)
-  if (partnerUserId)    form.append('partnerUserId', partnerUserId)
-  if (isAnnouncement)   form.append('isAnnouncement', 'true')
-  if (deviceModel)      form.append('deviceModel', deviceModel)
-  if (stickersEnabled)  form.append('stickersEnabled', 'true')
+  if (caption)                      form.append('caption', caption)
+  if (partnerUserId)                form.append('partnerUserId', partnerUserId)
+  if (isAnnouncement)               form.append('isAnnouncement', 'true')
+  if (deviceModel)                  form.append('deviceModel', deviceModel)
+  if (stickersEnabled)              form.append('stickersEnabled', 'true')
+  if (isTravelEnabled)              form.append('isTravelEnabled', 'true')
   const res = await uploadApi.post<ApiResponse<Post>>('/posts', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })

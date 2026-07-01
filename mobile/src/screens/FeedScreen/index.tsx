@@ -31,6 +31,7 @@ import { getOrDownload, prefetchMedia } from '../../db/mediaCache'
 import { colors, fonts } from '../../theme'
 import ActionBar from './ActionBar'
 import PostInfo from './PostInfo'
+import Travel from '../../components/Travel'
 import CommentSheet from '../../components/CommentSheet'
 import FeedHeader, { FeedUserGroup as UserGroup } from './FeedHeader'
 import StickerLayer from './StickerLayer'
@@ -724,6 +725,9 @@ export default function FeedScreen() {
               onMessageClose={() => resumeFromCurrent()}
             />
           )}
+
+          {/* Travel path + caption + objects — lazy-loads when post becomes active */}
+          <Travel post={post} isActive />
 
           <ActionBar
             post={post}

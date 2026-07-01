@@ -8,10 +8,12 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs'
 import { useNavigation } from '@react-navigation/native'
 import * as ImagePicker from 'expo-image-picker'
 import { fonts } from '../../theme'
 import { createPost } from '../../services/post.service'
+import * as travelService from '../../services/travel.service'
 import { useFeedStore } from '../../store/feed.store'
 import { useAuthStore } from '../../store/auth.store'
 import { toast } from '../../utils/toast'
@@ -38,18 +40,21 @@ type Media = { uri: string; type: 'image' | 'video' }
 export default function CreateScreen() {
   const nav            = useNavigation()
   const insets         = useSafeAreaInsets()
+  const tabBarHeight   = useBottomTabBarHeight()
   const { user }       = useAuthStore()
   const t              = useT()
   const setPendingPost = useFeedStore((s) => s.setPendingPost)
   const captionRef     = useRef<TextInput>(null)
 
-  const [caption,         setCaption]         = useState('')
-  const [bgKey,           setBgKey]           = useState<BgKey>('white')
-  const [media,           setMedia]           = useState<Media | null>(null)
-  const [loading,         setLoading]         = useState(false)
-  const [includePartner,  setIncludePartner]  = useState(false)
-  const [isAnnouncement,  setIsAnnouncement]  = useState(false)
-  const [stickersEnabled, setStickersEnabled] = useState(false)
+  const [caption,          setCaption]          = useState('')
+  const [bgKey,            setBgKey]            = useState<BgKey>('white')
+  const [media,            setMedia]            = useState<Media | null>(null)
+  const [loading,          setLoading]          = useState(false)
+  const [includePartner,   setIncludePartner]   = useState(false)
+  const [isAnnouncement,   setIsAnnouncement]   = useState(false)
+  const [stickersEnabled,  setStickersEnabled]  = useState(false)
+  const [isTravelEnabled,  setIsTravelEnabled]  = useState(false)
+  const [travelCaption,    setTravelCaption]    = useState('')
 
   const hasPartner = !!(user?.partnerId && user?.partnerName)
   const isAdmin    = user?.isAdmin === true
@@ -115,6 +120,7 @@ export default function CreateScreen() {
             isAnnouncement,
             deviceModel,
             stickersEnabled,
+            isTravelEnabled,
           )
         : await createPost(
             null,
@@ -125,14 +131,22 @@ export default function CreateScreen() {
             isAnnouncement,
             deviceModel,
             stickersEnabled,
+            isTravelEnabled,
           )
 
-      if (newPost) setPendingPost(newPost)
+      if (newPost) {
+        setPendingPost(newPost)
+        if (isTravelEnabled && travelCaption.trim()) {
+          travelService.addObject(newPost.id, travelCaption.trim(), 'caption').catch(() => {})
+        }
+      }
       setCaption('')
       setMedia(null)
       setBgKey('white')
       setIsAnnouncement(false)
       setStickersEnabled(false)
+      setIsTravelEnabled(false)
+      setTravelCaption('')
       setIncludePartner(false)
       toast.success(t.feed_published, isAnnouncement ? t.feed_announcement_sub : t.feed_published_sub)
       nav.navigate('Feed' as never)
@@ -234,7 +248,7 @@ export default function CreateScreen() {
       </View>
 
       {/* ── Panel ── */}
-      <View style={[s.panel, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+      <View style={[s.panel, { paddingBottom: tabBarHeight + 8 }]}>
 
         {/* Caption input */}
         <TextInput
@@ -311,6 +325,19 @@ export default function CreateScreen() {
             <Text style={[s.chipTxt, stickersEnabled && s.chipTxtOn]}>Objetos</Text>
           </TouchableOpacity>
 
+          <TouchableOpacity
+            style={[s.chip, isTravelEnabled && s.chipOn]}
+            onPress={() => setIsTravelEnabled((v) => !v)}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name="earth-outline"
+              size={12}
+              color={isTravelEnabled ? '#fff' : '#777'}
+            />
+            <Text style={[s.chipTxt, isTravelEnabled && s.chipTxtOn]}>Viagem</Text>
+          </TouchableOpacity>
+
           {isAdmin && (
             <TouchableOpacity
               style={[s.chip, isAnnouncement && s.chipAnnounce]}
@@ -326,6 +353,22 @@ export default function CreateScreen() {
             </TouchableOpacity>
           )}
         </View>
+
+        {/* Travel caption — only when travel is on */}
+        {isTravelEnabled && (
+          <View style={s.travelCaptionWrap}>
+            <Ionicons name="earth-outline" size={14} color="#777" style={{ marginTop: 1 }} />
+            <TextInput
+              style={s.travelCaptionInput}
+              placeholder="Motivo da viagem…"
+              placeholderTextColor="#C4C4C4"
+              value={travelCaption}
+              onChangeText={setTravelCaption}
+              maxLength={120}
+              returnKeyType="done"
+            />
+          </View>
+        )}
 
         {/* Publish */}
         <TouchableOpacity
@@ -549,6 +592,25 @@ const s = StyleSheet.create({
   chipTxtOn:   { color: '#fff' },
   chipStar:    { fontSize: 11, color: '#777' },
   chipStarOn:  { fontSize: 11, color: '#fff' },
+
+  // Travel caption field
+  travelCaptionWrap: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    gap:             8,
+    backgroundColor: '#F7F7F7',
+    borderRadius:    10,
+    paddingHorizontal: 12,
+    paddingVertical:   9,
+  },
+  travelCaptionInput: {
+    flex:          1,
+    fontFamily:    fonts.regular,
+    fontSize:      14,
+    color:         '#1A1A1A',
+    padding:       0,
+    letterSpacing: -0.1,
+  },
 
   // Publish button
   publishBtn: {

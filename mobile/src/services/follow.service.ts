@@ -23,7 +23,7 @@ export async function getFollowStatus(userId: string): Promise<{ following: bool
 }
 
 export async function getConnections(): Promise<Connection[]> {
-  const res = await api.get<ApiResponse<Connection[]>>('/users/connections')
+  const res = await api.get<ApiResponse<Connection[]>>('/users/connections', { timeout: 60000 })
   return res.data.data
 }
 

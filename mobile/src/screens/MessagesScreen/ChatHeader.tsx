@@ -1,5 +1,5 @@
 import React from 'react'
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { colors, fonts, spacing } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
@@ -8,6 +8,8 @@ import { useT } from '../../i18n'
 
 const AV_SIZE    = 30
 const RING_OUTER = AV_SIZE + 6  // 36
+
+export type DuplaState = 'idle' | 'waiting' | 'invited' | 'vibe-pick' | 'active'
 
 interface Props {
   userName: string
@@ -19,14 +21,44 @@ interface Props {
   onSchedule: () => void
   onProfilePress: () => void
   hasScheduled: boolean
+  duplaState: DuplaState
+  onDuplaPress: () => void
 }
 
 export default function ChatHeader({
   userName, avatarUri, hasPosts, isOnline, isTyping,
-  onBack, onProfilePress,
+  onBack, onProfilePress, duplaState, onDuplaPress,
 }: Props) {
   const t = useT()
   const statusText = isTyping ? t.chat_typing : isOnline ? t.chat_online : t.chat_offline
+
+  function renderDuplaBtn() {
+    if (duplaState === 'waiting') {
+      return <ActivityIndicator size="small" color={colors.primary} style={{ width: 28 }} />
+    }
+    if (duplaState === 'active') {
+      return (
+        <TouchableOpacity onPress={onDuplaPress} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={s.duplaActive}>
+          <View style={s.duplaActiveDot} />
+          <Text style={s.duplaActiveTxt}>dupla</Text>
+        </TouchableOpacity>
+      )
+    }
+    if (duplaState === 'invited') {
+      return (
+        <TouchableOpacity onPress={onDuplaPress} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <View style={s.duplaInvited}>
+            <Ionicons name="people" size={18} color="#fff" />
+          </View>
+        </TouchableOpacity>
+      )
+    }
+    return (
+      <TouchableOpacity onPress={onDuplaPress} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <Ionicons name="add-circle-outline" size={26} color="#000" />
+      </TouchableOpacity>
+    )
+  }
 
   return (
     <View style={s.header}>
@@ -58,12 +90,7 @@ export default function ChatHeader({
       </View>
 
       <View style={s.actions}>
-        <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Ionicons name="videocam-outline" size={22} color="#000" />
-        </TouchableOpacity>
-        <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Ionicons name="call-outline" size={21} color="#000" />
-        </TouchableOpacity>
+        {renderDuplaBtn()}
       </View>
     </View>
   )
@@ -105,5 +132,26 @@ const s = StyleSheet.create({
   onlineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#22C55E' },
   status:    { fontSize: 12, fontFamily: fonts.regular },
 
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  actions: { alignItems: 'center', justifyContent: 'center' },
+
+  duplaActive: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    gap:            5,
+    backgroundColor: '#22C55E',
+    paddingHorizontal: 10,
+    paddingVertical:  4,
+    borderRadius:    20,
+  },
+  duplaActiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#fff' },
+  duplaActiveTxt: { fontSize: 12, fontFamily: fonts.semiBold, color: '#fff' },
+
+  duplaInvited: {
+    backgroundColor: colors.primary,
+    width:           30,
+    height:          30,
+    borderRadius:    15,
+    alignItems:      'center',
+    justifyContent:  'center',
+  },
 })
