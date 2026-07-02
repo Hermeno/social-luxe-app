@@ -260,6 +260,7 @@ export const EN: { [K in keyof typeof import('./pt').PT]: string } = {
   search_no_suggestions_sub: 'Use search to find people',
   search_no_network: 'No connection',
   search_follow_err: 'Could not follow.',
+  follow_err: 'Could not follow. Try again.',
 
   notifs_title: 'Notifications',
   notifs_mark_read: 'Mark read',

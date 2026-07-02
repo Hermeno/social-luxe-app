@@ -14,6 +14,7 @@ import { useT } from '../../i18n'
 import { useAuthStore } from '../../store/auth.store'
 import { useFollowStore } from '../../store/follow.store'
 import { getCache, setCache } from '../../db/database'
+import { toast } from '../../utils/toast'
 import * as postService from '../../services/post.service'
 import { API_BASE } from '../../config'
 import AvatarImage from '../../components/AvatarImage'
@@ -197,7 +198,9 @@ export default function PostInfo({ post, isActive, commentCount: commentCountPro
     setLoadingFollow(true)
     try {
       await useFollowStore.getState().toggle(post.user.id, duration, { name: post.user.name, avatar: post.user.avatar ?? null })
-    } catch {}
+    } catch {
+      toast.error(t.follow_err)
+    }
     setLoadingFollow(false)
   }
 

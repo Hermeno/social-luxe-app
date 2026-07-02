@@ -14,6 +14,8 @@ import { API_BASE } from '../config'
 import { AppStackParams } from '../navigation/AppNavigator'
 import { useFollowStore } from '../store/follow.store'
 import FollowSplitButton, { FollowDuration } from './FollowSplitButton'
+import { toast } from '../utils/toast'
+import { useT } from '../i18n'
 
 const CARD_W = 110
 const CARD_H = 160
@@ -39,6 +41,7 @@ function MiniCard({
   onFollow: () => void
   onPress: () => void
 }) {
+  const t = useT()
   const followed = useFollowStore((s) => s.followingIds.has(user.id))
   const [loading, setLoading]  = useState(false)
   const fadeAnim = useRef(new Animated.Value(1)).current
@@ -49,7 +52,9 @@ function MiniCard({
     try {
       await useFollowStore.getState().toggle(user.id, duration, { name: user.name, avatar: user.avatar })
       Animated.timing(fadeAnim, { toValue: 0, duration: 350, useNativeDriver: true }).start(onFollow)
-    } catch {}
+    } catch {
+      toast.error(t.follow_err)
+    }
     setLoading(false)
   }
 

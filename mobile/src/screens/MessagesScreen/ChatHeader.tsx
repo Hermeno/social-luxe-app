@@ -20,23 +20,29 @@ interface Props {
   onProfilePress: () => void
   hasScheduled: boolean
   isLiveChat: boolean
-  hasSharedLive: boolean
-  onShareLive: () => void
+  onToggleLive: () => void
 }
 
 export default function ChatHeader({
   userName, avatarUri, hasPosts, isOnline, isTyping,
-  onBack, onProfilePress, isLiveChat, hasSharedLive, onShareLive,
+  onBack, onProfilePress, isLiveChat, onToggleLive,
 }: Props) {
   const t = useT()
   const statusText = isTyping ? t.chat_typing : isOnline ? t.chat_online : t.chat_offline
 
   function renderLiveBtn() {
-    if (!isLiveChat) return null
+    if (isLiveChat) {
+      return (
+        <TouchableOpacity onPress={onToggleLive} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={s.liveChip}>
+          <View style={s.liveChipDot} />
+          <Text style={s.liveChipTxt}>Terminar</Text>
+        </TouchableOpacity>
+      )
+    }
     return (
-      <TouchableOpacity onPress={onShareLive} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={s.liveChip}>
-        <View style={s.liveChipDot} />
-        <Text style={s.liveChipTxt}>{hasSharedLive ? 'ao vivo' : 'partilhar'}</Text>
+      <TouchableOpacity onPress={onToggleLive} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={s.startChip}>
+        <Ionicons name="heart" size={12} color={colors.primary} />
+        <Text style={s.startChipTxt}>Iniciar par</Text>
       </TouchableOpacity>
     )
   }
@@ -126,4 +132,15 @@ const s = StyleSheet.create({
   },
   liveChipDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#fff' },
   liveChipTxt: { fontSize: 12, fontFamily: fonts.semiBold, color: '#fff' },
+
+  startChip: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    gap:            5,
+    backgroundColor: '#FFF0F3',
+    paddingHorizontal: 10,
+    paddingVertical:  4,
+    borderRadius:    20,
+  },
+  startChipTxt: { fontSize: 12, fontFamily: fonts.semiBold, color: colors.primary },
 })

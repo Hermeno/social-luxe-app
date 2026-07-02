@@ -829,21 +829,13 @@ export default function MessagesScreen() {
         keyboardVerticalOffset={0}
       >
 
-        {/* ── Nav bar: ← | + | search field | avatar ──────────────── */}
+        {/* ── Nav bar: ← | search field | avatar ──────────────── */}
         <View style={[s.navbar, { paddingTop: top + 12 }]}>
           <TouchableOpacity
             onPress={() => isSearchMode ? exitSearch() : nav.goBack()}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
             <Ionicons name="chevron-back" size={26} color="#000" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => nav.navigate('Tabs', { screen: 'Create' })}
-            activeOpacity={0.75}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons name="add" size={26} color="#000" />
           </TouchableOpacity>
 
           <View style={[s.searchBar, isSearchMode && s.searchBarActive]}>
@@ -1052,19 +1044,6 @@ export default function MessagesScreen() {
                         })}
                       </View>
                     )}
-                    {myUnions.length === 0 && (
-                      <TouchableOpacity
-                        style={s.createUnionBtn}
-                        onPress={() => nav.navigate('CreateUnion')}
-                        activeOpacity={0.82}
-                      >
-                        <View style={s.createUnionIcon}>
-                          <Ionicons name="people-outline" size={18} color={colors.primary} />
-                        </View>
-                        <Text style={s.createUnionTxt}>Criar Nova União</Text>
-                        <Ionicons name="chevron-forward" size={16} color={colors.gray400} />
-                      </TouchableOpacity>
-                    )}
                   </>
                 }
                 renderItem={({ item }) => {
@@ -1271,18 +1250,6 @@ const s = StyleSheet.create({
 
   livePill:    { backgroundColor: '#FF6766', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 },
   livePillTxt: { fontFamily: fonts.bold, fontSize: 10, color: '#fff', letterSpacing: 0.2 },
-
-  /* ── Create union row ── */
-  createUnionBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
-    paddingHorizontal: 16, paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.gray100,
-  },
-  createUnionIcon: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: '#FFF5F7', alignItems: 'center', justifyContent: 'center',
-  },
-  createUnionTxt: { flex: 1, fontFamily: fonts.semiBold, fontSize: 15, color: colors.black },
 
   // ── Live chat pair row ─────────────────────────────────────────────────────
   liveChatStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },

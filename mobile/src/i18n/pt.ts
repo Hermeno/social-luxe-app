@@ -276,6 +276,7 @@ export const PT = {
   search_no_suggestions_sub: 'Usa a pesquisa para encontrar pessoas',
   search_no_network: 'Sem ligação',
   search_follow_err: 'Não foi possível seguir.',
+  follow_err: 'Não foi possível seguir. Tenta novamente.',
 
   // Notifications screen
   notifs_title: 'Notificações',

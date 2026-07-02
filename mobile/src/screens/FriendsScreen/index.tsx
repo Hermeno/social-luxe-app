@@ -16,6 +16,7 @@ import AvatarImage from '../../components/AvatarImage'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { getCache, setCache } from '../../db/database'
 import { isConnected } from '../../services/netinfo.service'
+import { toast } from '../../utils/toast'
 import { useT } from '../../i18n'
 
 type Nav = StackNavigationProp<AppStackParams>
@@ -57,7 +58,9 @@ function FollowButton({ userId }: { userId: string }) {
     setLoading(true)
     try {
       await useFollowStore.getState().toggle(userId)
-    } catch {} finally {
+    } catch {
+      toast.error(t.follow_err)
+    } finally {
       setLoading(false)
     }
   }

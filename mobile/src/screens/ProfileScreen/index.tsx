@@ -28,6 +28,7 @@ import { isConnected } from '../../services/netinfo.service'
 import { useFeedStore } from '../../store/feed.store'
 import { useFollowStore } from '../../store/follow.store'
 import { deletePost as apiDeletePost, updatePost as apiUpdatePost } from '../../services/post.service'
+import { toast } from '../../utils/toast'
 import { getMyUnions, getPendingInvites, respondToInvite } from '../../services/union.service'
 import { Union, UnionInvite } from '../../types'
 import { useT } from '../../i18n'
@@ -337,6 +338,7 @@ export default function ProfileScreen() {
       )
     } catch {
       setFollowerCount((c) => wasFollowing ? c + 1 : c - 1)
+      toast.error(t.follow_err)
     }
     setFollowLoading(false)
   }

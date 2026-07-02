@@ -390,9 +390,8 @@ export default function ChatScreen() {
   const oldestMsgAtRef = useRef<string | undefined>(undefined)
 
   // ── Live Chat Pair ─────────────────────────────────────────────────────────
-  const [isLiveChat,    setIsLiveChat]    = useState(false)
-  const [liveTitle,     setLiveTitle]     = useState<string | null>(null)
-  const [hasSharedLive, setHasSharedLive] = useState(false)
+  const [isLiveChat, setIsLiveChat] = useState(false)
+  const [liveTitle,  setLiveTitle]  = useState<string | null>(null)
 
   const listRef     = useRef<FlatList>(null)
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -587,7 +586,6 @@ export default function ChatScreen() {
       if (!isThisPair) return
       setIsLiveChat(false)
       setLiveTitle(null)
-      setHasSharedLive(false)
     }
 
     socket.on('message:new',      onNewMessage)
@@ -607,22 +605,6 @@ export default function ChatScreen() {
       socket.off('dm:live:ended',    onDmLiveEnded)
     }
   }, [userId, user?.id, userName])
-
-  // ── Live chat pair presence — enter/leave as this chat gains/loses focus ───
-  useFocusEffect(useCallback(() => {
-    const socket = getSocket()
-    socket?.emit('dm:chat:enter', { otherUserId: userId })
-
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') getSocket()?.emit('dm:chat:enter', { otherUserId: userId })
-      else getSocket()?.emit('dm:chat:leave', { otherUserId: userId })
-    })
-
-    return () => {
-      sub.remove()
-      getSocket()?.emit('dm:chat:leave', { otherUserId: userId })
-    }
-  }, [userId]))
 
   // ── Typing indicator ───────────────────────────────────────────────────────
   const handleTextChange = useCallback((val: string) => {
@@ -732,13 +714,11 @@ export default function ChatScreen() {
     }
   }, [checkAndSendDue])
 
-  // ── Live chat pair — opt in to sharing with followers ─────────────────────
-  function handleShareLive() {
+  // ── Live chat pair — manual start/end, visible to followers right away ────
+  function handleToggleLive() {
     const socket = getSocket()
-    if (!socket || !isLiveChat) return
-    const next = !hasSharedLive
-    socket.emit('dm:live:consent', { otherUserId: userId, consent: next })
-    setHasSharedLive(next)
+    if (!socket) return
+    socket.emit(isLiveChat ? 'dm:live:end' : 'dm:live:start', { otherUserId: userId })
   }
 
   // ── Send: optimistic → API → confirm ──────────────────────────────────────
@@ -949,8 +929,7 @@ export default function ChatScreen() {
           onProfilePress={() => nav.navigate('Profile', { userId })}
           hasScheduled={!!scheduledMsg}
           isLiveChat={isLiveChat}
-          hasSharedLive={hasSharedLive}
-          onShareLive={handleShareLive}
+          onToggleLive={handleToggleLive}
         />
 
         {/* ── Live chat pair banner ─────────────────────────────────────────── */}
@@ -961,9 +940,9 @@ export default function ChatScreen() {
             end={{ x: 1, y: 0 }}
             style={t.liveBanner}
           >
-            <Text style={t.liveBannerTxt}>🔥 {liveTitle}</Text>
-            <TouchableOpacity onPress={handleShareLive} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={t.liveShareTxt}>{hasSharedLive ? 'A partilhar' : 'Partilhar'}</Text>
+            <Text style={t.liveBannerTxt}>🔥 {userName.split(' ')[0]} e {user?.name?.split(' ')[0] ?? 'tu'} {liveTitle}</Text>
+            <TouchableOpacity onPress={handleToggleLive} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={t.liveShareTxt}>Terminar</Text>
             </TouchableOpacity>
           </LinearGradient>
         )}
