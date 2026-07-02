@@ -15,16 +15,17 @@ type TogetherRoom = {
 }
 const togetherRooms = new Map<string, TogetherRoom>()
 
-// ── Live Chat Pair — automatic 1:1 presence + opt-in follower broadcast ───────
-type DmPair = {
-  members:   Set<string>          // userId → has this DM chat open right now
-  consented: Map<string, boolean> // userId → agreed to share with followers
+// ── Live Chat Pair — manual start/end, visible to followers immediately ───────
+type LivePairPayload = {
+  userAId: string; userAName: string; userAAvatar: string | null
+  userBId: string; userBName: string; userBAvatar: string | null
+  title: string
 }
-const dmPairs = new Map<string, DmPair>()
+const livePairs = new Map<string, LivePairPayload>()
 
 const LIVE_CHAT_TITLES = [
-  'os dois estão a conversar agora',
-  'os dois estão namorando',
+  'estão a conversar agora',
+  'estão namorando agora',
   'estão a viver um romance',
 ]
 
@@ -32,26 +33,14 @@ function pairKey(a: string, b: string): string {
   return [a, b].sort().join('|')
 }
 
-function getOrCreateDmPair(key: string): DmPair {
-  if (!dmPairs.has(key)) dmPairs.set(key, { members: new Set(), consented: new Map() })
-  return dmPairs.get(key)!
-}
-
-async function emitDmLive(userAId: string, userBId: string) {
-  const [profA, profB] = await Promise.all([
-    prisma.user.findUnique({ where: { id: userAId }, select: { name: true, avatar: true } }),
-    prisma.user.findUnique({ where: { id: userBId }, select: { name: true, avatar: true } }),
-  ])
-  if (!profA || !profB) return null
-  const title = LIVE_CHAT_TITLES[Math.floor(Math.random() * LIVE_CHAT_TITLES.length)]
-  const payload = {
-    userAId, userAName: profA.name, userAAvatar: profA.avatar,
-    userBId, userBName: profB.name, userBAvatar: profB.avatar,
-    title,
-  }
-  io.to(userAId).emit('dm:live:status', payload)
-  io.to(userBId).emit('dm:live:status', payload)
-  return payload
+async function notifyFollowers(userAId: string, userBId: string, event: string, payload: unknown) {
+  const followers = await prisma.follow.findMany({
+    where:  { followingId: { in: [userAId, userBId] } },
+    select: { followerId: true },
+  })
+  const unique = [...new Set(followers.map((f) => f.followerId))]
+    .filter((id) => id !== userAId && id !== userBId)
+  unique.forEach((fId) => emitToUser(fId, event, payload))
 }
 
 function getOrCreateRoom(unionId: string): TogetherRoom {
@@ -228,71 +217,46 @@ export function setupSocket(httpServer: HttpServer): Server {
       } catch {}
     })
 
-    // ── Live Chat Pair ─────────────────────────────────────────────────────────
+    // ── Live Chat Pair — manual start/end ─────────────────────────────────────
 
-    // Either user opened a normal 1:1 chat screen
-    socket.on('dm:chat:enter', ({ otherUserId }: { otherUserId: string }) => {
+    // Either user taps "Iniciar conversa em par" — goes live immediately for
+    // both participants and is broadcast to both of their followers right away
+    // (starting it is the consent — no separate opt-in step).
+    socket.on('dm:live:start', async ({ otherUserId }: { otherUserId: string }) => {
       const key = pairKey(userId, otherUserId)
-      const pair = getOrCreateDmPair(key)
-      pair.members.add(userId)
-      if (pair.members.has(otherUserId)) {
-        emitDmLive(userId, otherUserId).catch(() => {})
-      }
-    })
-
-    // Either user closed / backgrounded / left the chat screen
-    socket.on('dm:chat:leave', async ({ otherUserId }: { otherUserId: string }) => {
-      const key = pairKey(userId, otherUserId)
-      const pair = dmPairs.get(key)
-      if (!pair) return
-
-      const wasLive   = pair.members.has(userId) && pair.members.has(otherUserId)
-      const wasPublic = wasLive && pair.consented.get(userId) === true && pair.consented.get(otherUserId) === true
-
-      pair.members.delete(userId)
-      pair.consented.delete(userId)
-
-      if (wasLive) {
-        const endPayload = { userAId: userId, userBId: otherUserId }
-        io.to(userId).emit('dm:live:ended', endPayload)
-        io.to(otherUserId).emit('dm:live:ended', endPayload)
-
-        if (wasPublic) {
-          try {
-            const followers = await prisma.follow.findMany({
-              where:  { followingId: { in: [userId, otherUserId] } },
-              select: { followerId: true },
-            })
-            const unique = [...new Set(followers.map((f) => f.followerId))]
-              .filter((id) => id !== userId && id !== otherUserId)
-            unique.forEach((fId) => emitToUser(fId, 'dm:live:public:ended', endPayload))
-          } catch {}
-        }
-      }
-      if (pair.members.size === 0) dmPairs.delete(key)
-    })
-
-    // Either user opts in to sharing this live chat with their followers
-    socket.on('dm:live:consent', async ({ otherUserId, consent }: { otherUserId: string; consent: boolean }) => {
-      const key = pairKey(userId, otherUserId)
-      const pair = dmPairs.get(key)
-      if (!pair) return
-      pair.consented.set(userId, consent)
-
-      const bothPresent   = pair.members.has(userId) && pair.members.has(otherUserId)
-      const bothConsented = pair.consented.get(userId) === true && pair.consented.get(otherUserId) === true
-      if (!bothPresent || !bothConsented) return
-
+      if (livePairs.has(key)) return
       try {
-        const payload = await emitDmLive(userId, otherUserId)
-        if (!payload) return
-        const followers = await prisma.follow.findMany({
-          where:  { followingId: { in: [userId, otherUserId] } },
-          select: { followerId: true },
-        })
-        const unique = [...new Set(followers.map((f) => f.followerId))]
-          .filter((id) => id !== userId && id !== otherUserId)
-        unique.forEach((fId) => emitToUser(fId, 'dm:live:public', payload))
+        const [profA, profB] = await Promise.all([
+          prisma.user.findUnique({ where: { id: userId },      select: { name: true, avatar: true } }),
+          prisma.user.findUnique({ where: { id: otherUserId }, select: { name: true, avatar: true } }),
+        ])
+        if (!profA || !profB) return
+
+        const title = LIVE_CHAT_TITLES[Math.floor(Math.random() * LIVE_CHAT_TITLES.length)]
+        const payload: LivePairPayload = {
+          userAId: userId,      userAName: profA.name, userAAvatar: profA.avatar,
+          userBId: otherUserId, userBName: profB.name, userBAvatar: profB.avatar,
+          title,
+        }
+        livePairs.set(key, payload)
+
+        io.to(userId).emit('dm:live:status', payload)
+        io.to(otherUserId).emit('dm:live:status', payload)
+        await notifyFollowers(userId, otherUserId, 'dm:live:public', payload)
+      } catch {}
+    })
+
+    // Either user taps "Terminar"
+    socket.on('dm:live:end', async ({ otherUserId }: { otherUserId: string }) => {
+      const key = pairKey(userId, otherUserId)
+      if (!livePairs.has(key)) return
+      livePairs.delete(key)
+
+      const endPayload = { userAId: userId, userBId: otherUserId }
+      io.to(userId).emit('dm:live:ended', endPayload)
+      io.to(otherUserId).emit('dm:live:ended', endPayload)
+      try {
+        await notifyFollowers(userId, otherUserId, 'dm:live:public:ended', endPayload)
       } catch {}
     })
 
@@ -301,29 +265,8 @@ export function setupSocket(httpServer: HttpServer): Server {
       onlineUsers.delete(userId)
       io.emit('user:offline', { userId })
 
-      // Clean up any live chat pairs this user was in
-      for (const [key, pair] of [...dmPairs]) {
-        if (!pair.members.has(userId)) continue
-        const otherId = [...pair.members].find((id) => id !== userId)
-        const wasPublic = !!otherId && pair.consented.get(userId) === true && pair.consented.get(otherId) === true
-        pair.members.delete(userId)
-        pair.consented.delete(userId)
-        if (otherId) {
-          const endPayload = { userAId: userId, userBId: otherId }
-          io.to(otherId).emit('dm:live:ended', endPayload)
-          if (wasPublic) {
-            prisma.follow.findMany({
-              where:  { followingId: { in: [userId, otherId] } },
-              select: { followerId: true },
-            }).then((followers) => {
-              const unique = [...new Set(followers.map((f) => f.followerId))]
-                .filter((id) => id !== userId && id !== otherId)
-              unique.forEach((fId) => emitToUser(fId, 'dm:live:public:ended', endPayload))
-            }).catch(() => {})
-          }
-        }
-        if (pair.members.size === 0) dmPairs.delete(key)
-      }
+      // Live chat pairs are manual (start/end button) — they intentionally
+      // survive a disconnect, same as they'd survive backgrounding the app.
 
       // Clean up any together rooms this user was in
       for (const [unionId, room] of togetherRooms) {
