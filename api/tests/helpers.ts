@@ -31,5 +31,6 @@ export async function cleanDb() {
   await prisma.post.deleteMany()
   await prisma.friendshipHistory.deleteMany()
   await prisma.friendship.deleteMany()
+  await prisma.deviceToken.deleteMany()
   await prisma.user.deleteMany()
 }

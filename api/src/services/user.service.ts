@@ -38,9 +38,6 @@ export async function updateProfile(userId: string, data: {
   viewsPublic?: boolean
   contact?: string
   defaultFollowDuration?: string
-  relationshipStatus?: string
-  partnerName?: string
-  partnerId?: string
   city?: string
   district?: string
   autoReply?: string
@@ -53,8 +50,7 @@ export async function updateProfile(userId: string, data: {
     select: {
       id: true, name: true, phone: true, countryCode: true,
       avatar: true, bio: true, availability: true, viewsPublic: true,
-      contact: true, defaultFollowDuration: true, relationshipStatus: true,
-      partnerName: true, partnerId: true, city: true, district: true,
+      contact: true, defaultFollowDuration: true, city: true, district: true,
       autoReply: true, showDevice: true, statusLabel: true, createdAt: true,
     },
   })

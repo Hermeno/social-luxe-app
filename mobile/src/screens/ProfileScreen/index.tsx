@@ -28,18 +28,13 @@ import { isConnected } from '../../services/netinfo.service'
 import { useFeedStore } from '../../store/feed.store'
 import { useFollowStore } from '../../store/follow.store'
 import { deletePost as apiDeletePost, updatePost as apiUpdatePost } from '../../services/post.service'
+import { getMyUnions, getPendingInvites, respondToInvite } from '../../services/union.service'
+import { Union, UnionInvite } from '../../types'
 import { useT } from '../../i18n'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type Nav   = StackNavigationProp<AppStackParams>
 type Route = RouteProp<AppStackParams, 'Profile'>
-
-interface PartnerRequest {
-  id: string
-  senderId: string
-  status: string
-  sender: { id: string; name: string; avatar: string | null; bio: string | null }
-}
 
 type FeaturedRow = { type: 'featured'; main: Post; side: (Post | null)[] }
 type RegularRow  = { type: 'regular';  items: Post[] }
@@ -72,18 +67,11 @@ function fmtStat(n: number): string {
   return String(n)
 }
 
-function buildInfoLine(profile: any, hasPartner: boolean): string {
+function buildInfoLine(profile: any, union: Union | null): string {
   const parts: string[] = []
   const loc = [profile?.district, profile?.city].filter(Boolean).join(', ')
   if (loc) parts.push(loc)
-  if (profile?.relationshipStatus) {
-    const pName = hasPartner ? ` com ${profile.partnerName}` : ''
-    const rel =
-      profile.relationshipStatus === 'married'         ? `Casado${pName}` :
-      profile.relationshipStatus === 'in_relationship' ? `Relacionamento${pName}` :
-      profile.relationshipStatus === 'single'          ? 'Solteiro(a)' : ''
-    if (rel) parts.push(rel)
-  }
+  if (union?.label) parts.push(union.label)
   return parts.join(' · ')
 }
 
@@ -196,7 +184,8 @@ export default function ProfileScreen() {
   const [showQR,         setShowQR]         = useState(false)
   const [followSheetMode, setFollowSheetMode] = useState<'followers' | 'following'>('followers')
   const [showFollowSheet, setShowFollowSheet] = useState(false)
-  const [partnerRequests, setPartnerRequests] = useState<PartnerRequest[]>([])
+  const [myUnion,      setMyUnion]      = useState<Union | null>(null)
+  const [unionInvites, setUnionInvites] = useState<UnionInvite[]>([])
   const [menuPost,        setMenuPost]        = useState<Post | null>(null)
   const [editEditing,     setEditEditing]     = useState(false)
   const [editCaption,     setEditCaption]     = useState('')
@@ -283,18 +272,27 @@ export default function ProfileScreen() {
   useFocusEffect(useCallback(() => {
     if (!isOwn) return
     let active = true
-    async function loadPartnerReqs() {
-      const cached = await getCache<PartnerRequest[]>('partner_requests').catch(() => null)
-      if (cached && active) setPartnerRequests(cached)
+    async function loadUnionData() {
+      const [cachedUnions, cachedInvites] = await Promise.all([
+        getCache<Union[]>('my_unions').catch(() => null),
+        getCache<UnionInvite[]>('union_invites').catch(() => null),
+      ])
+      if (active) {
+        if (cachedUnions) setMyUnion(cachedUnions[0] ?? null)
+        if (cachedInvites) setUnionInvites(cachedInvites)
+      }
       if (!isConnected()) return
       try {
-        const r = await api.get('/users/partner-requests')
-        const fresh: PartnerRequest[] = r.data.data ?? []
-        if (active) setPartnerRequests(fresh)
-        setCache('partner_requests', fresh).catch(() => {})
+        const [unions, invites] = await Promise.all([getMyUnions(), getPendingInvites()])
+        if (active) {
+          setMyUnion(unions[0] ?? null)
+          setUnionInvites(invites)
+        }
+        setCache('my_unions', unions).catch(() => {})
+        setCache('union_invites', invites).catch(() => {})
       } catch {}
     }
-    loadPartnerReqs()
+    loadUnionData()
     return () => { active = false }
   }, [isOwn]))
 
@@ -343,20 +341,22 @@ export default function ProfileScreen() {
     setFollowLoading(false)
   }
 
-  async function handlePartnerResponse(id: string, accept: boolean) {
-    setPartnerRequests((prev) => {
+  async function handleUnionInviteResponse(id: string, accept: boolean) {
+    setUnionInvites((prev) => {
       const updated = prev.filter((r) => r.id !== id)
-      setCache('partner_requests', updated).catch(() => {})
+      setCache('union_invites', updated).catch(() => {})
       return updated
     })
     try {
-      await api.put(`/users/partner-requests/${id}/${accept ? 'accept' : 'reject'}`)
-      if (accept) { await refreshUser(); setProfile((p) => p ? { ...p, ...me } : p) }
+      const result = await respondToInvite(id, accept)
+      if (accept && result.union) {
+        setMyUnion(result.union)
+        setCache('my_unions', [result.union]).catch(() => {})
+      }
     } catch {
-      api.get('/users/partner-requests').then((r) => {
-        const fresh = r.data.data ?? []
-        setPartnerRequests(fresh)
-        setCache('partner_requests', fresh).catch(() => {})
+      getPendingInvites().then((fresh) => {
+        setUnionInvites(fresh)
+        setCache('union_invites', fresh).catch(() => {})
       }).catch(() => {})
       Alert.alert(t.error, t.notifs_err_msg)
     }
@@ -433,7 +433,8 @@ export default function ProfileScreen() {
   const canGoBack    = nav2.canGoBack()
   const displayUri   = resolveUrl(pendingAvatarUri ?? profile?.avatar)
   const hasPosts     = posts.length > 0
-  const hasPartner   = Boolean(profile?.partnerId && profile?.partnerName)
+  const hasUnion     = isOwn && Boolean(myUnion)
+  const otherMember  = myUnion ? (myUnion.memberA.id === targetId ? myUnion.memberB : myUnion.memberA) : null
   const rows         = buildRows(posts)
 
   // ── Header component ─────────────────────────────────────────────────────────
@@ -539,19 +540,19 @@ export default function ProfileScreen() {
       </View>
 
       {/* ── Bio card ── */}
-      {(profile?.bio || buildInfoLine(profile, hasPartner) || hasPartner) && (
+      {(profile?.bio || buildInfoLine(profile, hasUnion ? myUnion : null) || hasUnion) && (
         <View style={m.bioCard}>
           {!!profile?.bio && <Text style={m.bioTxt}>{profile.bio}</Text>}
-          {!!buildInfoLine(profile, hasPartner) && (
+          {!!buildInfoLine(profile, hasUnion ? myUnion : null) && (
             <View style={m.infoRow}>
               <Ionicons name="location-outline" size={12} color={colors.gray400} />
-              <Text style={m.infoTxt}>{buildInfoLine(profile, hasPartner)}</Text>
+              <Text style={m.infoTxt}>{buildInfoLine(profile, hasUnion ? myUnion : null)}</Text>
             </View>
           )}
-          {hasPartner && (
+          {hasUnion && otherMember && (
             <LinearGradient colors={['#CA2851', '#FF6766']} style={m.partnerPill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
               <Ionicons name="heart" size={11} color="#fff" />
-              <Text style={m.partnerTxt}>Parceiro · {profile?.partnerName}</Text>
+              <Text style={m.partnerTxt}>Parceiro · {otherMember.name}</Text>
             </LinearGradient>
           )}
         </View>
@@ -615,24 +616,24 @@ export default function ProfileScreen() {
         )}
       </View>
 
-      {/* ── Partner requests ── */}
-      {isOwn && partnerRequests.length > 0 && (
+      {/* ── Union invites ── */}
+      {isOwn && unionInvites.length > 0 && (
         <View style={m.partnerReqs}>
           <View style={m.partnerReqsHeader}>
             <Ionicons name="heart-circle" size={14} color={colors.primary} />
             <Text style={m.partnerReqsTitle}>{t.profile_partner_req}</Text>
           </View>
-          {partnerRequests.map((req) => (
-            <View key={req.id} style={m.partnerReqRow}>
-              <AvatarImage uri={req.sender.avatar} size={38} />
+          {unionInvites.map((inv) => (
+            <View key={inv.id} style={m.partnerReqRow}>
+              <AvatarImage uri={inv.fromUnion.memberA.avatar} size={38} />
               <View style={{ flex: 1 }}>
-                <Text style={m.partnerReqName}>{req.sender.name}</Text>
-                <Text style={m.partnerReqBio} numberOfLines={1}>{req.sender.bio ?? t.profile_partner_req_msg}</Text>
+                <Text style={m.partnerReqName}>{inv.fromUnion.memberA.name}</Text>
+                <Text style={m.partnerReqBio} numberOfLines={1}>{inv.fromUnion.label ?? t.profile_partner_req_msg}</Text>
               </View>
-              <TouchableOpacity style={m.acceptBtn} onPress={() => handlePartnerResponse(req.id, true)} activeOpacity={0.8}>
+              <TouchableOpacity style={m.acceptBtn} onPress={() => handleUnionInviteResponse(inv.id, true)} activeOpacity={0.8}>
                 <Text style={m.acceptBtnTxt}>{t.profile_accept}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={m.rejectBtn} onPress={() => handlePartnerResponse(req.id, false)} activeOpacity={0.8}>
+              <TouchableOpacity style={m.rejectBtn} onPress={() => handleUnionInviteResponse(inv.id, false)} activeOpacity={0.8}>
                 <Ionicons name="close" size={15} color={colors.gray600} />
               </TouchableOpacity>
             </View>

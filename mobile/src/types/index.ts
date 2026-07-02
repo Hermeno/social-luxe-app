@@ -14,9 +14,6 @@ export interface User {
   createdAt: string
   contact?: string | null
   defaultFollowDuration?: string | null
-  relationshipStatus?: string | null
-  partnerName?: string | null
-  partnerId?: string | null
   city?: string | null
   district?: string | null
   autoReply?: string | null
@@ -172,23 +169,24 @@ export interface TogetherLivePayload {
   memberBName: string
 }
 
-// ── Modo Dupla — ephemeral real-time pairing ──────────────────────────────────
+// ── Live Chat Pair — automatic 1:1 live presence ──────────────────────────────
 
-export interface DuplaLive {
+export interface LiveChatStatus {
   userAId:     string
   userAName:   string
   userAAvatar: string | null
   userBId:     string
   userBName:   string
   userBAvatar: string | null
-  vibe:        string
-  vibeColors:  [string, string]
+  title:       string
 }
 
-export interface DuplaEnded {
+export interface LiveChatEnded {
   userAId: string
   userBId: string
 }
+
+export type LiveChatPublic = LiveChatStatus
 
 export interface UnionMember {
   id:     string

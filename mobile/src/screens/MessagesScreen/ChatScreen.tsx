@@ -19,7 +19,7 @@ import { useMessageBadgeStore } from '../../store/messageBadge.store'
 import { getSocket } from '../../socket'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { colors, spacing, radius, fonts } from '../../theme'
-import ChatHeader, { DuplaState } from './ChatHeader'
+import ChatHeader from './ChatHeader'
 import ChatInputBar from './ChatInputBar'
 import ScheduleMessageModal from './ScheduleMessageModal'
 import * as scheduledSvc from '../../services/scheduledMessages.service'
@@ -47,14 +47,6 @@ const MINE_COLOR     = '#CA2851'
 const THEIRS_COLOR   = '#F0F2F5'
 const WALLPAPER_TILE = require('../../../assets/preview_light.png')
 const REACTION_EMOJIS = ['❤️', '😂', '😮', '😢', '🔥', '👏']
-
-const DUPLA_VIBES: { label: string; emoji: string; colors: [string, string] }[] = [
-  { label: 'vibe do amor',     emoji: '💕', colors: ['#FF6B9D', '#FF3D7F'] },
-  { label: 'vibe da saudade',  emoji: '🌙', colors: ['#667EEA', '#764BA2'] },
-  { label: 'vibe parceiros',   emoji: '🤝', colors: ['#11998E', '#38EF7D'] },
-  { label: 'vibe de fogo',     emoji: '🔥', colors: ['#FF6B35', '#F7C59F'] },
-  { label: 'vibe solar',       emoji: '☀️', colors: ['#FFB173', '#CA2851'] },
-]
 
 function formatTime(dateStr: string) {
   const d = new Date(dateStr)
@@ -397,12 +389,10 @@ export default function ChatScreen() {
   const [hasMorePages, setHasMorePages] = useState(false)
   const oldestMsgAtRef = useRef<string | undefined>(undefined)
 
-  // ── Modo Dupla ─────────────────────────────────────────────────────────────
-  const [duplaState,      setDuplaState]     = useState<DuplaState>('idle')
-  const [duplaVibe,       setDuplaVibe]      = useState<{ label: string; colors: [string, string] } | null>(null)
-  const [showVibePicker,  setShowVibePicker] = useState(false)
-  const duplaStateRef = useRef<DuplaState>('idle')
-  useEffect(() => { duplaStateRef.current = duplaState }, [duplaState])
+  // ── Live Chat Pair ─────────────────────────────────────────────────────────
+  const [isLiveChat,    setIsLiveChat]    = useState(false)
+  const [liveTitle,     setLiveTitle]     = useState<string | null>(null)
+  const [hasSharedLive, setHasSharedLive] = useState(false)
 
   const listRef     = useRef<FlatList>(null)
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -585,33 +575,19 @@ export default function ChatScreen() {
       setMessages((prev) => prev.filter((m) => m.id !== messageId))
     }
 
-    // ── dupla events ────────────────────────────────────────────────────────
-    function onDuplaInvited({ fromUserId }: { fromUserId: string }) {
-      if (fromUserId !== userId) return
-      setDuplaState('invited')
-    }
-    function onDuplaAccepted() {
-      setDuplaState('vibe-pick')
-      setShowVibePicker(true)
-    }
-    function onDuplaDeclined({ byUserId }: { byUserId: string }) {
-      if (byUserId !== userId) return
-      setDuplaState('idle')
-      Toast.show({ type: 'info', text1: `${userName} recusou o modo dupla`, visibilityTime: 3000 })
-    }
-    function onDuplaLive(payload: { userAId: string; userBId: string; vibe: string; vibeColors: [string, string] }) {
+    // ── live chat pair events ──────────────────────────────────────────────
+    function onDmLiveStatus(payload: { userAId: string; userBId: string; title: string }) {
       const isThisPair = (payload.userAId === userId || payload.userBId === userId)
       if (!isThisPair) return
-      setDuplaVibe({ label: payload.vibe, colors: payload.vibeColors })
-      setDuplaState('active')
-      setShowVibePicker(false)
+      setIsLiveChat(true)
+      setLiveTitle(payload.title)
     }
-    function onDuplaEnded(payload: { userAId: string; userBId: string }) {
+    function onDmLiveEnded(payload: { userAId: string; userBId: string }) {
       const isThisPair = (payload.userAId === userId || payload.userBId === userId)
       if (!isThisPair) return
-      setDuplaState('idle')
-      setDuplaVibe(null)
-      setShowVibePicker(false)
+      setIsLiveChat(false)
+      setLiveTitle(null)
+      setHasSharedLive(false)
     }
 
     socket.on('message:new',      onNewMessage)
@@ -619,24 +595,34 @@ export default function ChatScreen() {
     socket.on('message:reaction', onReaction)
     socket.on('message:edited',   onEdited)
     socket.on('message:deleted',  onDeleted)
-    socket.on('dupla:invited',    onDuplaInvited)
-    socket.on('dupla:accepted',   onDuplaAccepted)
-    socket.on('dupla:declined',   onDuplaDeclined)
-    socket.on('dupla:live',       onDuplaLive)
-    socket.on('dupla:ended',      onDuplaEnded)
+    socket.on('dm:live:status',   onDmLiveStatus)
+    socket.on('dm:live:ended',    onDmLiveEnded)
     return () => {
       socket.off('message:new',      onNewMessage)
       socket.off('message:typing',   onTyping)
       socket.off('message:reaction', onReaction)
       socket.off('message:edited',   onEdited)
       socket.off('message:deleted',  onDeleted)
-      socket.off('dupla:invited',    onDuplaInvited)
-      socket.off('dupla:accepted',   onDuplaAccepted)
-      socket.off('dupla:declined',   onDuplaDeclined)
-      socket.off('dupla:live',       onDuplaLive)
-      socket.off('dupla:ended',      onDuplaEnded)
+      socket.off('dm:live:status',   onDmLiveStatus)
+      socket.off('dm:live:ended',    onDmLiveEnded)
     }
   }, [userId, user?.id, userName])
+
+  // ── Live chat pair presence — enter/leave as this chat gains/loses focus ───
+  useFocusEffect(useCallback(() => {
+    const socket = getSocket()
+    socket?.emit('dm:chat:enter', { otherUserId: userId })
+
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') getSocket()?.emit('dm:chat:enter', { otherUserId: userId })
+      else getSocket()?.emit('dm:chat:leave', { otherUserId: userId })
+    })
+
+    return () => {
+      sub.remove()
+      getSocket()?.emit('dm:chat:leave', { otherUserId: userId })
+    }
+  }, [userId]))
 
   // ── Typing indicator ───────────────────────────────────────────────────────
   const handleTextChange = useCallback((val: string) => {
@@ -746,41 +732,13 @@ export default function ChatScreen() {
     }
   }, [checkAndSendDue])
 
-  // ── Dupla handlers ────────────────────────────────────────────────────────
-  function handleDuplaPress() {
+  // ── Live chat pair — opt in to sharing with followers ─────────────────────
+  function handleShareLive() {
     const socket = getSocket()
-    if (!socket) return
-    const state = duplaStateRef.current
-    if (state === 'idle') {
-      socket.emit('dupla:invite', { toUserId: userId })
-      setDuplaState('waiting')
-    } else if (state === 'invited') {
-      socket.emit('dupla:respond', { toUserId: userId, accept: true })
-      setDuplaState('vibe-pick')
-      setShowVibePicker(true)
-    } else if (state === 'waiting') {
-      socket.emit('dupla:end', { toUserId: userId })
-      setDuplaState('idle')
-    } else if (state === 'active') {
-      socket.emit('dupla:end', { toUserId: userId })
-      setDuplaState('idle')
-      setDuplaVibe(null)
-    }
-  }
-
-  function handleDeclineDupla() {
-    const socket = getSocket()
-    socket?.emit('dupla:respond', { toUserId: userId, accept: false })
-    setDuplaState('idle')
-  }
-
-  function handlePickVibe(vibe: { label: string; colors: [string, string] }) {
-    const socket = getSocket()
-    if (!socket) return
-    socket.emit('dupla:setVibe', { toUserId: userId, vibe: vibe.label, vibeColors: vibe.colors })
-    setDuplaVibe(vibe)
-    setDuplaState('active')
-    setShowVibePicker(false)
+    if (!socket || !isLiveChat) return
+    const next = !hasSharedLive
+    socket.emit('dm:live:consent', { otherUserId: userId, consent: next })
+    setHasSharedLive(next)
   }
 
   // ── Send: optimistic → API → confirm ──────────────────────────────────────
@@ -990,45 +948,22 @@ export default function ChatScreen() {
           onSchedule={() => setShowScheduler(true)}
           onProfilePress={() => nav.navigate('Profile', { userId })}
           hasScheduled={!!scheduledMsg}
-          duplaState={duplaState}
-          onDuplaPress={handleDuplaPress}
+          isLiveChat={isLiveChat}
+          hasSharedLive={hasSharedLive}
+          onShareLive={handleShareLive}
         />
 
-        {/* ── Dupla invite banner ──────────────────────────────────────────── */}
-        {duplaState === 'invited' && (
-          <View style={t.duplaInviteBanner}>
-            <Text style={t.duplaInviteTxt}>
-              <Text style={t.duplaInviteName}>{userName.split(' ')[0]}</Text>
-              {' '}quer entrar em modo dupla contigo
-            </Text>
-            <View style={t.duplaInviteActions}>
-              <TouchableOpacity style={t.duplaDeclineBtn} onPress={handleDeclineDupla}>
-                <Text style={t.duplaDeclineTxt}>Recusar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={t.duplaAcceptBtn} onPress={handleDuplaPress}>
-                <Ionicons name="people" size={14} color="#fff" />
-                <Text style={t.duplaAcceptTxt}>Aceitar</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {/* ── Active dupla banner ──────────────────────────────────────────── */}
-        {duplaState === 'active' && duplaVibe && (
+        {/* ── Live chat pair banner ─────────────────────────────────────────── */}
+        {isLiveChat && liveTitle && (
           <LinearGradient
-            colors={duplaVibe.colors}
+            colors={['#CA2851', '#FF6766']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
-            style={t.duplaActiveBanner}
+            style={t.liveBanner}
           >
-            <Text style={t.duplaActiveBannerTxt}>
-              💑 {duplaVibe.label}
-            </Text>
-            <TouchableOpacity
-              onPress={handleDuplaPress}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons name="close-circle" size={18} color="rgba(255,255,255,0.8)" />
+            <Text style={t.liveBannerTxt}>🔥 {liveTitle}</Text>
+            <TouchableOpacity onPress={handleShareLive} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={t.liveShareTxt}>{hasSharedLive ? 'A partilhar' : 'Partilhar'}</Text>
             </TouchableOpacity>
           </LinearGradient>
         )}
@@ -1165,35 +1100,6 @@ export default function ChatScreen() {
           onSchedule={handleScheduleMessage}
           onCancelScheduled={handleCancelScheduled}
         />
-
-        {/* ── Vibe picker modal ─────────────────────────────────────────── */}
-        {showVibePicker && (
-          <Modal transparent animationType="slide" visible onRequestClose={() => {
-            handleDeclineDupla()
-            setShowVibePicker(false)
-          }}>
-            <Pressable style={t.vibeOverlay} onPress={() => {
-              handleDeclineDupla()
-              setShowVibePicker(false)
-            }}>
-              <Pressable style={t.vibeSheet} onPress={(e) => e.stopPropagation()}>
-                <View style={t.vibeHandle} />
-                <Text style={t.vibeTitle}>Escolhe a vossa vibe</Text>
-                <Text style={t.viberSub}>Será visível para os vossos seguidores</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={t.vibeRow}>
-                  {DUPLA_VIBES.map((v) => (
-                    <TouchableOpacity key={v.label} onPress={() => handlePickVibe(v)} activeOpacity={0.8}>
-                      <LinearGradient colors={v.colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={t.vibeCard}>
-                        <Text style={t.vibeEmoji}>{v.emoji}</Text>
-                        <Text style={t.vibeLabel}>{v.label}</Text>
-                      </LinearGradient>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </Pressable>
-            </Pressable>
-          </Modal>
-        )}
       </Animated.View>
 
     </View>
@@ -1396,87 +1302,24 @@ const t = StyleSheet.create({
   },
   dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.gray400 },
 
-  // ── Dupla invite banner ───────────────────────────────────────────────────
-  duplaInviteBanner: {
-    backgroundColor: '#FFF3F6',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#FFDDE6',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  duplaInviteTxt:  { flex: 1, fontSize: 13, fontFamily: fonts.regular, color: colors.gray800 },
-  duplaInviteName: { fontFamily: fonts.semiBold, color: colors.primary },
-  duplaInviteActions: { flexDirection: 'row', gap: 8 },
-  duplaDeclineBtn: {
-    paddingHorizontal: 12, paddingVertical: 6,
-    borderRadius: 14, borderWidth: 1, borderColor: colors.gray300,
-  },
-  duplaDeclineTxt: { fontSize: 13, fontFamily: fonts.medium, color: colors.gray600 },
-  duplaAcceptBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: 12, paddingVertical: 6,
-    borderRadius: 14, backgroundColor: colors.primary,
-  },
-  duplaAcceptTxt: { fontSize: 13, fontFamily: fonts.semiBold, color: '#fff' },
-
-  // ── Active dupla banner ───────────────────────────────────────────────────
-  duplaActiveBanner: {
+  // ── Live chat pair banner ─────────────────────────────────────────────────
+  liveBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 8,
   },
-  duplaActiveBannerTxt: {
+  liveBannerTxt: {
     fontSize: 13,
     fontFamily: fonts.semiBold,
     color: '#fff',
     letterSpacing: 0.1,
   },
-
-  // ── Vibe picker ───────────────────────────────────────────────────────────
-  vibeOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'flex-end',
-  },
-  vibeSheet: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingTop: 12,
-    paddingBottom: 36,
-    paddingHorizontal: 20,
-  },
-  vibeHandle: {
-    width: 36, height: 4, borderRadius: 2,
-    backgroundColor: colors.gray200,
-    alignSelf: 'center', marginBottom: 18,
-  },
-  vibeTitle: {
-    fontSize: 17, fontFamily: fonts.semiBold, color: colors.gray800,
-    textAlign: 'center', marginBottom: 4,
-  },
-  viberSub: {
-    fontSize: 13, fontFamily: fonts.regular, color: colors.gray400,
-    textAlign: 'center', marginBottom: 20,
-  },
-  vibeRow: { gap: 12, paddingBottom: 4 },
-  vibeCard: {
-    width: 110, height: 110,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    padding: 10,
-  },
-  vibeEmoji: { fontSize: 30 },
-  vibeLabel: {
-    fontSize: 11, fontFamily: fonts.semiBold, color: '#fff',
-    textAlign: 'center', letterSpacing: 0.1,
+  liveShareTxt: {
+    fontSize: 12,
+    fontFamily: fonts.semiBold,
+    color: '#fff',
+    textDecorationLine: 'underline',
   },
 })

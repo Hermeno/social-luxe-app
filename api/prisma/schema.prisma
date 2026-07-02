@@ -56,9 +56,6 @@ model User {
   coinBalance          Int      @default(0)
   contact              String?
   defaultFollowDuration String? @default("forever")
-  relationshipStatus   String?
-  partnerName          String?
-  partnerId            String?
   city                 String?
   district             String?
   autoReply            String?
@@ -89,9 +86,6 @@ model User {
   blocksGiven      Block[]             @relation("Blocker")
   blocksReceived   Block[]             @relation("Blocked")
   reports          Report[]
-  groupsCreated    GroupChat[]         @relation("GroupCreator")
-  groupMemberships GroupMember[]
-  groupMessages    GroupMessage[]      @relation("GroupSender")
   extendVotes      PostExtendVote[]
   highlights       Highlight[]
   coinsSent        LuxeCoin[]          @relation("CoinSender")
@@ -103,11 +97,7 @@ model User {
   collabPostsB     CollabPost[]        @relation("CollabB")
   following        Follow[]            @relation("Follower")
   followers        Follow[]            @relation("Following")
-  sentPartnerReqs     PartnerRequest[] @relation("SentPartnerReqs")
-  receivedPartnerReqs PartnerRequest[] @relation("ReceivedPartnerReqs")
   partnerPosts     Post[]              @relation("PostPartner")
-  products         Product[]
-  productSaves     ProductSave[]
   donationsGiven   Donation[]         @relation("DonorDonations")
   donationsReceived Donation[]        @relation("RequesterDonations")
   donationFeedbacks DonationFeedback[] @relation("FeedbackGiver")
@@ -391,52 +381,6 @@ model MessageReaction {
   @@unique([messageId, userId])
 }
 
-enum GroupType {
-  COMMUNITY
-  GROUP
-}
-
-model GroupChat {
-  id          String    @id @default(cuid())
-  name        String
-  avatar      String?
-  description String?
-  type        GroupType @default(COMMUNITY)
-  createdBy   String
-  createdAt   DateTime  @default(now())
-
-  creator  User           @relation("GroupCreator", fields: [createdBy], references: [id])
-  members  GroupMember[]
-  messages GroupMessage[]
-}
-
-model GroupMember {
-  id       String    @id @default(cuid())
-  groupId  String
-  userId   String
-  isAdmin  Boolean   @default(false)
-  joinedAt DateTime  @default(now())
-
-  group GroupChat @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  user  User      @relation(fields: [userId],  references: [id], onDelete: Cascade)
-
-  @@unique([groupId, userId])
-}
-
-model GroupMessage {
-  id        String   @id @default(cuid())
-  groupId   String
-  senderId  String
-  content   String?
-  replyToId String?
-  createdAt DateTime @default(now())
-
-  group   GroupChat     @relation(fields: [groupId],   references: [id], onDelete: Cascade)
-  sender  User          @relation("GroupSender",        fields: [senderId],  references: [id], onDelete: Cascade)
-  replyTo GroupMessage? @relation("GroupReplies",       fields: [replyToId], references: [id], onDelete: SetNull)
-  replies GroupMessage[] @relation("GroupReplies")
-}
-
 // ─── Stories ─────────────────────────────────────────────────────────────────
 
 model Story {
@@ -631,61 +575,6 @@ model Follow {
   @@unique([followerId, followingId])
 }
 
-// ─── Partner Request ─────────────────────────────────────────────────────────
-
-model PartnerRequest {
-  id         String   @id @default(cuid())
-  senderId   String
-  receiverId String
-  status     String   @default("pending")  // "pending" | "accepted" | "rejected"
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  sender   User @relation("SentPartnerReqs",     fields: [senderId],   references: [id], onDelete: Cascade)
-  receiver User @relation("ReceivedPartnerReqs", fields: [receiverId], references: [id], onDelete: Cascade)
-
-  @@unique([senderId, receiverId])
-}
-
-// ─── Store / Listings ──────────────────────────────────────────────────────────
-
-model Product {
-  id            String   @id @default(cuid())
-  sellerId      String
-  title         String
-  description   String
-  price         Float
-  currency      String   @default("MZN")
-  category      String
-  type          String
-  images        String[]
-  quantity      Int      @default(1)
-  city          String?
-  country       String?
-  hasShipping   Boolean  @default(false)
-  shippingPrice Float?
-  tags          String[]
-  status        String   @default("active")
-  views         Int      @default(0)
-  saves         Int      @default(0)
-  createdAt     DateTime @default(now())
-
-  seller User @relation(fields: [sellerId], references: [id], onDelete: Cascade)
-  saves_by ProductSave[]
-}
-
-model ProductSave {
-  id        String   @id @default(cuid())
-  productId String
-  userId    String
-  createdAt DateTime @default(now())
-
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId],    references: [id], onDelete: Cascade)
-
-  @@unique([productId, userId])
-}
-
 // ─── Donations (Piedade) ─────────────────────────────────────────────────────
 
 enum DonationType {
@@ -801,6 +690,7 @@ model PasswordReset {
   code      String
   expiresAt DateTime
   used      Boolean  @default(false)
+  attempts  Int      @default(0)
   createdAt DateTime @default(now())
 
   @@index([phone])

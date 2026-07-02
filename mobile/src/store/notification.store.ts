@@ -2,7 +2,7 @@ import { create } from 'zustand'
 
 export interface AppNotification {
   id: string
-  type: 'like' | 'comment' | 'reaction' | 'message' | 'coin' | 'extend_vote' | 'partner_request'
+  type: 'like' | 'comment' | 'reaction' | 'message' | 'coin' | 'extend_vote' | 'union_invite'
   message: string
   read: boolean
   createdAt: string
@@ -11,17 +11,17 @@ export interface AppNotification {
 interface NotificationState {
   notifications: AppNotification[]
   badge: number
-  partnerRequestBadge: number
+  unionInviteBadge: number
   addNotification: (n: AppNotification) => void
   markAllRead: () => void
-  setPartnerRequestBadge: (count: number) => void
+  setUnionInviteBadge: (count: number) => void
   reset: () => void
 }
 
 export const useNotificationStore = create<NotificationState>((set) => ({
   notifications: [],
   badge: 0,
-  partnerRequestBadge: 0,
+  unionInviteBadge: 0,
 
   addNotification: (n) =>
     set((state) => ({
@@ -35,7 +35,7 @@ export const useNotificationStore = create<NotificationState>((set) => ({
       badge: 0,
     })),
 
-  setPartnerRequestBadge: (count) => set({ partnerRequestBadge: count }),
+  setUnionInviteBadge: (count) => set({ unionInviteBadge: count }),
 
-  reset: () => set({ notifications: [], badge: 0, partnerRequestBadge: 0 }),
+  reset: () => set({ notifications: [], badge: 0, unionInviteBadge: 0 }),
 }))

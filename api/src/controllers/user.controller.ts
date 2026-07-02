@@ -34,8 +34,8 @@ export async function updateProfile(req: AuthRequest, res: Response) {
   try {
     const {
       name, bio, availability, lat, lng, viewsPublic,
-      contact, defaultFollowDuration, relationshipStatus,
-      partnerName, partnerId, city, district, autoReply,
+      contact, defaultFollowDuration,
+      city, district, autoReply,
       showDevice: rawShowDevice, statusLabel,
     } = req.body
     let avatar: string | undefined
@@ -48,8 +48,8 @@ export async function updateProfile(req: AuthRequest, res: Response) {
     const user = await userService.updateProfile(req.user!.userId, {
       name, bio, avatar, availability,
       ...location, ...extra, ...deviceExtra,
-      contact, defaultFollowDuration, relationshipStatus,
-      partnerName, partnerId, city, district, autoReply,
+      contact, defaultFollowDuration,
+      city, district, autoReply,
       statusLabel: statusLabel !== undefined ? (statusLabel || null) : undefined,
     })
     return ok(res, user)

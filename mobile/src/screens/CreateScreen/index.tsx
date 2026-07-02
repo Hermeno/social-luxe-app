@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Keyboard,
@@ -14,6 +14,8 @@ import * as ImagePicker from 'expo-image-picker'
 import { fonts } from '../../theme'
 import { createPost } from '../../services/post.service'
 import * as travelService from '../../services/travel.service'
+import { getMyUnions } from '../../services/union.service'
+import { Union } from '../../types'
 import { useFeedStore } from '../../store/feed.store'
 import { useAuthStore } from '../../store/auth.store'
 import { toast } from '../../utils/toast'
@@ -55,8 +57,14 @@ export default function CreateScreen() {
   const [stickersEnabled,  setStickersEnabled]  = useState(false)
   const [isTravelEnabled,  setIsTravelEnabled]  = useState(false)
   const [travelCaption,    setTravelCaption]    = useState('')
+  const [myUnion,          setMyUnion]          = useState<Union | null>(null)
 
-  const hasPartner = !!(user?.partnerId && user?.partnerName)
+  useEffect(() => {
+    getMyUnions().then((unions) => setMyUnion(unions[0] ?? null)).catch(() => {})
+  }, [])
+
+  const otherMember   = myUnion ? (myUnion.memberA.id === user?.id ? myUnion.memberB : myUnion.memberA) : null
+  const hasPartner = !!otherMember
   const isAdmin    = user?.isAdmin === true
   const canPublish = !!caption.trim() || !!media
   const hasText    = !!caption.trim()
@@ -106,7 +114,7 @@ export default function CreateScreen() {
     Keyboard.dismiss()
     setLoading(true)
     try {
-      const partnerId   = hasPartner && includePartner && !isAnnouncement ? user!.partnerId! : undefined
+      const partnerId   = hasPartner && includePartner && !isAnnouncement ? otherMember!.id : undefined
       const deviceModel = getDeviceModel()
       const bgColor     = `${activeBg.bg}|${activeBg.bg}`
 
@@ -311,7 +319,7 @@ export default function CreateScreen() {
                 color={includePartner ? '#fff' : '#CA2851'}
               />
               <Text style={[s.chipTxt, includePartner && s.chipTxtOn]}>
-                {user!.partnerName}
+                {otherMember!.name}
               </Text>
             </TouchableOpacity>
           )}

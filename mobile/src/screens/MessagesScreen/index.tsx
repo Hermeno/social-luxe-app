@@ -19,7 +19,7 @@ import Toast from 'react-native-toast-message'
 import * as msgService from '../../services/message.service'
 import * as unionService from '../../services/union.service'
 import { getConnections, FollowDuration } from '../../services/follow.service'
-import { Connection, Union, UnionMessage, TogetherLivePayload, DuplaLive, DuplaEnded } from '../../types'
+import { Connection, Union, UnionMessage, TogetherLivePayload, LiveChatStatus, LiveChatEnded } from '../../types'
 import { useUnionStore } from '../../store/union.store'
 import {
   getViewedPostIds,
@@ -45,6 +45,7 @@ import { AppStackParams } from '../../navigation/AppNavigator'
 import { colors, fonts } from '../../theme'
 import { useT } from '../../i18n'
 import AvatarImage from '../../components/AvatarImage'
+import DuoAvatar from '../../components/DuoAvatar'
 import SegmentedRing from '../../components/SegmentedRing'
 import DiscoveryRow from '../../components/DiscoveryRow'
 
@@ -324,16 +325,11 @@ function UnionConvoRow({ item, myUnion, liveUnions, onPress }: {
 
   return (
     <TouchableOpacity style={s.row} activeOpacity={0.6} onPress={onPress}>
-      <View style={s.unionConvoAvatarWrap}>
-        {memberA?.avatar
-          ? <Image source={{ uri: memberA.avatar }} style={s.unionConvoDualA} contentFit="cover" />
-          : <View style={[s.unionConvoDualA, { backgroundColor: colors.gray100, alignItems: 'center', justifyContent: 'center' }]}><Ionicons name="people" size={13} color={colors.gray400} /></View>
-        }
-        {memberB?.avatar
-          ? <Image source={{ uri: memberB.avatar }} style={s.unionConvoDualB} contentFit="cover" />
-          : <View style={[s.unionConvoDualB, { backgroundColor: colors.gray200, alignItems: 'center', justifyContent: 'center' }]}><Ionicons name="person" size={11} color={colors.gray400} /></View>
-        }
-      </View>
+      <DuoAvatar
+        aUri={memberA?.avatar} aName={memberA?.name}
+        bUri={memberB?.avatar} bName={memberB?.name}
+        size={36} secondarySize={30} wrapWidth={AVA} wrapHeight={AVA} borderWidth={1.5}
+      />
 
       <View style={s.info}>
         <View style={s.topRow}>
@@ -355,30 +351,20 @@ function UnionConvoRow({ item, myUnion, liveUnions, onPress }: {
   )
 }
 
-// ── Live dupla row ────────────────────────────────────────────────────────────
+// ── Live chat pair row ────────────────────────────────────────────────────────
 
-function DuplaRow({ data }: { data: DuplaLive }) {
+function LiveChatRow({ data }: { data: LiveChatStatus }) {
   return (
     <View style={s.row}>
-      {/* Overlapping dual avatars */}
-      <View style={s.duplaAvatarWrap}>
-        <View style={s.duplaAvatarA}>
-          <AvatarImage uri={data.userAAvatar} name={data.userAName} size={AVA} />
-        </View>
-        <View style={s.duplaAvatarB}>
-          <AvatarImage uri={data.userBAvatar} name={data.userBName} size={AVA} />
-        </View>
-      </View>
+      <DuoAvatar aUri={data.userAAvatar} aName={data.userAName} bUri={data.userBAvatar} bName={data.userBName} size={AVA} />
 
       <View style={s.info}>
         <Text style={s.name} numberOfLines={1}>
           {data.userAName.split(' ')[0]} & {data.userBName.split(' ')[0]}
         </Text>
-        <View style={s.duplaStatusRow}>
-          <View style={s.duplaGreenDot} />
-          <Text style={s.duplaLiveTxt} numberOfLines={1}>
-            online, a viver {data.vibe}
-          </Text>
+        <View style={s.liveChatStatusRow}>
+          <View style={s.liveChatGreenDot} />
+          <Text style={s.liveChatLiveTxt} numberOfLines={1}>{data.title}</Text>
         </View>
       </View>
 
@@ -425,7 +411,7 @@ export default function MessagesScreen() {
   const [unionConvoLoad,  setUnionConvoLoad]  = useState(false)
   const [respondingId,    setRespondingId]    = useState<string | null>(null)
   const [liveUnions,      setLiveUnions]      = useState<Set<string>>(new Set())
-  const [liveDuplas,      setLiveDuplas]      = useState<Record<string, DuplaLive>>({})
+  const [liveChats,       setLiveChats]       = useState<Record<string, LiveChatStatus>>({})
   const { myUnions, setMyUnions, addInvite, incrementUnread, setPendingInvites, removeInvite, addUnion, hydrateFromCache } = useUnionStore()
   const pendingInvites   = useUnionStore((s) => s.pendingInvites)
 
@@ -484,13 +470,13 @@ export default function MessagesScreen() {
       setLiveUnions((prev) => { const n = new Set(prev); n.delete(unionId); return n })
     }
 
-    const onDuplaLive = (data: DuplaLive) => {
+    const onDmLive = (data: LiveChatStatus) => {
       const key = [data.userAId, data.userBId].sort().join('|')
-      setLiveDuplas((prev) => ({ ...prev, [key]: data }))
+      setLiveChats((prev) => ({ ...prev, [key]: data }))
     }
-    const onDuplaEnded = (data: DuplaEnded) => {
+    const onDmEnded = (data: LiveChatEnded) => {
       const key = [data.userAId, data.userBId].sort().join('|')
-      setLiveDuplas((prev) => {
+      setLiveChats((prev) => {
         const next = { ...prev }
         delete next[key]
         return next
@@ -501,15 +487,15 @@ export default function MessagesScreen() {
     socket.on('union:message:new',  onMsg)
     socket.on('union:together:live',  onLive)
     socket.on('union:together:ended', onEnded)
-    socket.on('dupla:live',           onDuplaLive)
-    socket.on('dupla:ended',          onDuplaEnded)
+    socket.on('dm:live:status',       onDmLive)
+    socket.on('dm:live:ended',        onDmEnded)
     return () => {
       socket.off('union:invite',       onInvite)
       socket.off('union:message:new',  onMsg)
       socket.off('union:together:live',  onLive)
       socket.off('union:together:ended', onEnded)
-      socket.off('dupla:live',           onDuplaLive)
-      socket.off('dupla:ended',          onDuplaEnded)
+      socket.off('dm:live:status',       onDmLive)
+      socket.off('dm:live:ended',        onDmEnded)
     }
   }, [])
 
@@ -802,15 +788,15 @@ export default function MessagesScreen() {
   const displayCards  = query.trim() ? searchResults : suggested
   const isCardLoading = query.trim() ? searchLoading : suggestLoading
 
-  // ── Unified feed — duplas live + personal + uniões merged by recency ────
+  // ── Unified feed — live chats + personal + uniões merged by recency ─────
   type FeedItem =
     | { kind: 'personal';  c: Connection; idx: number }
     | { kind: 'union';     m: UnionMessage }
-    | { kind: 'dupla';     data: DuplaLive }
+    | { kind: 'liveChat';  data: LiveChatStatus }
     | { kind: 'discovery' }
 
   const INJECT_AT = 3
-  const allMsgItems: { item: Exclude<FeedItem, { kind: 'discovery' } | { kind: 'dupla'; data: DuplaLive }>; ts: number }[] = [
+  const allMsgItems: { item: Exclude<FeedItem, { kind: 'discovery' } | { kind: 'liveChat'; data: LiveChatStatus }>; ts: number }[] = [
     ...connections.map((c, i) => ({
       item: { kind: 'personal' as const, c, idx: i },
       ts:   c.lastMessage ? new Date(c.lastMessage.createdAt).getTime() : 0,
@@ -822,10 +808,10 @@ export default function MessagesScreen() {
   ]
   allMsgItems.sort((a, b) => b.ts - a.ts)
 
-  // Live dupla rows always appear at the very top
-  const duplaItems: FeedItem[] = Object.values(liveDuplas).map((data) => ({ kind: 'dupla' as const, data }))
+  // Live chat pair rows always appear at the very top
+  const liveChatItems: FeedItem[] = Object.values(liveChats).map((data) => ({ kind: 'liveChat' as const, data }))
 
-  const feedItems: FeedItem[] = [...duplaItems]
+  const feedItems: FeedItem[] = [...liveChatItems]
   allMsgItems.forEach(({ item }, i) => {
     if (i === INJECT_AT && showDiscovery) feedItems.push({ kind: 'discovery' })
     feedItems.push(item as FeedItem)
@@ -994,7 +980,7 @@ export default function MessagesScreen() {
                 keyExtractor={(item) =>
                   item.kind === 'discovery' ? '__discovery__'
                   : item.kind === 'union'   ? `union_${item.m.id}`
-                  : item.kind === 'dupla'   ? `dupla_${item.data.userAId}_${item.data.userBId}`
+                  : item.kind === 'liveChat' ? `livechat_${item.data.userAId}_${item.data.userBId}`
                   : item.c.user.id
                 }
                 showsVerticalScrollIndicator={false}
@@ -1085,8 +1071,8 @@ export default function MessagesScreen() {
                   if (item.kind === 'discovery') {
                     return <DiscoveryRow onDismiss={() => setShowDiscovery(false)} />
                   }
-                  if (item.kind === 'dupla') {
-                    return <DuplaRow data={item.data} />
+                  if (item.kind === 'liveChat') {
+                    return <LiveChatRow data={item.data} />
                   }
                   if (item.kind === 'union') {
                     const myUnion = myUnions.find((u) => u.id === item.m.toUnionId || u.id === item.m.fromUnionId)
@@ -1298,18 +1284,10 @@ const s = StyleSheet.create({
   },
   createUnionTxt: { flex: 1, fontFamily: fonts.semiBold, fontSize: 15, color: colors.black },
 
-  /* ── Union conversation row dual avatar ── */
-  unionConvoAvatarWrap: { width: AVA, height: AVA, position: 'relative', marginRight: 4 },
-  unionConvoDualA: { width: 36, height: 36, borderRadius: 18, position: 'absolute', top: 0, left: 0, borderWidth: 1.5, borderColor: colors.white },
-  unionConvoDualB: { width: 30, height: 30, borderRadius: 15, position: 'absolute', bottom: 0, right: 0, borderWidth: 1.5, borderColor: colors.white },
-
-  // ── Live dupla row ─────────────────────────────────────────────────────────
-  duplaAvatarWrap: { width: AVA + 14, height: AVA, position: 'relative', flexShrink: 0 },
-  duplaAvatarA: { position: 'absolute', top: 0, left: 0, borderRadius: AVA / 2, borderWidth: 2, borderColor: colors.white, overflow: 'hidden' },
-  duplaAvatarB: { position: 'absolute', bottom: 0, right: 0, borderRadius: AVA / 2, borderWidth: 2, borderColor: colors.white, overflow: 'hidden' },
-  duplaStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  duplaGreenDot:  { width: 6, height: 6, borderRadius: 3, backgroundColor: '#22C55E' },
-  duplaLiveTxt:   { fontSize: 12, fontFamily: fonts.regular, color: '#22C55E' },
+  // ── Live chat pair row ─────────────────────────────────────────────────────
+  liveChatStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  liveChatGreenDot:  { width: 6, height: 6, borderRadius: 3, backgroundColor: '#22C55E' },
+  liveChatLiveTxt:   { fontSize: 12, fontFamily: fonts.regular, color: '#22C55E' },
 
   /* ── Pending invites section ── */
   invitesSection: { marginHorizontal: 16, marginBottom: 8 },

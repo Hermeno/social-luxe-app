@@ -7,9 +7,6 @@ import MessagesScreen from '../screens/MessagesScreen'
 import CreateScreen from '../screens/CreateScreen'
 import ProfileScreen from '../screens/ProfileScreen'
 import ChatScreen from '../screens/MessagesScreen/ChatScreen'
-// COMMUNITY BLOCKED FOR LAUNCH
-// import GroupChatScreen from '../screens/GroupChatScreen'
-// import CreateGroupScreen from '../screens/CreateGroupScreen'
 import TabBar from '../components/TabBar'
 import BookmarksScreen from '../screens/BookmarksScreen'
 import ChallengesScreen from '../screens/ChallengesScreen'
@@ -29,11 +26,6 @@ import NotifSettingsScreen from '../screens/NotifSettingsScreen'
 import AppearanceScreen from '../screens/AppearanceScreen'
 import LanguageScreen from '../screens/LanguageScreen'
 import HelpScreen from '../screens/HelpScreen'
-import StoreScreen from '../screens/StoreScreen'
-import ProductDetailScreen from '../screens/ProductDetailScreen'
-import CreateListingScreen from '../screens/CreateListingScreen'
-import CartScreen from '../screens/CartScreen'
-import MyStoreScreen from '../screens/MyStoreScreen'
 import DonationsScreen from '../screens/DonationsScreen'
 import CreateDonationScreen from '../screens/DonationsScreen/CreateDonationScreen'
 import CreateUnionScreen from '../screens/CreateUnionScreen'
@@ -56,11 +48,6 @@ export type AppStackParams = {
   Chat: { userId: string; userName: string; userAvatar: string | null; partnerHasPosts?: boolean }
   About: undefined
   Verified: undefined
-  // COMMUNITY BLOCKED FOR LAUNCH
-  // GroupChat: { groupId: string; groupName: string; groupAvatar?: string | null }
-  // CreateGroup: undefined
-  GroupChat: { groupId: string; groupName: string; groupAvatar?: string | null }
-  CreateGroup: undefined
   Bookmarks: undefined
   Challenges: undefined
   Coins: undefined
@@ -77,11 +64,6 @@ export type AppStackParams = {
   StoryViewer: { groups: StoryGroup[]; startGroupIndex: number }
   CreateStory: undefined
   Highlights: { userId: string }
-  Store: undefined
-  ProductDetail: { productId: string }
-  CreateListing: undefined
-  Cart: undefined
-  MyStore: undefined
   Donations: undefined
   CreateDonation: undefined
   CreateUnion: undefined
@@ -140,10 +122,6 @@ export default function AppNavigator({ defaultTab }: { defaultTab: 'Feed' | 'Mes
       <Stack.Screen name="Tabs">{() => <Tabs defaultTab={defaultTab} />}</Stack.Screen>
       <Stack.Screen name="Profile" component={ProfileScreen} />
       <Stack.Screen name="Chat" component={ChatScreen} />
-      {/* COMMUNITY BLOCKED FOR LAUNCH
-      <Stack.Screen name="GroupChat" component={GroupChatScreen} />
-      <Stack.Screen name="CreateGroup" component={CreateGroupScreen} />
-      */}
       <Stack.Screen name="Bookmarks" component={BookmarksScreen} />
       <Stack.Screen name="Challenges" component={ChallengesScreen} />
       <Stack.Screen name="Coins" component={CoinsScreen} />
@@ -162,11 +140,6 @@ export default function AppNavigator({ defaultTab }: { defaultTab: 'Feed' | 'Mes
       <Stack.Screen name="Appearance" component={AppearanceScreen} />
       <Stack.Screen name="Language" component={LanguageScreen} />
       <Stack.Screen name="Help" component={HelpScreen} />
-      <Stack.Screen name="Store" component={StoreScreen} />
-      <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
-      <Stack.Screen name="CreateListing" component={CreateListingScreen} />
-      <Stack.Screen name="Cart" component={CartScreen} />
-      <Stack.Screen name="MyStore" component={MyStoreScreen} />
       <Stack.Screen name="Donations" component={DonationsScreen} />
       <Stack.Screen name="CreateDonation" component={CreateDonationScreen} />
       <Stack.Screen name="CreateUnion" component={CreateUnionScreen} />

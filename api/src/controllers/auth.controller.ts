@@ -1,6 +1,6 @@
 import { Response } from 'express'
 import * as authService from '../services/auth.service'
-import { ok, created, badRequest, serverError, notFound, forbidden } from '../utils/response'
+import { ok, created, badRequest, serverError, notFound, forbidden, tooManyRequests } from '../utils/response'
 import { handleError } from '../utils/errors'
 import { AuthRequest, RegisterBody, LoginBody } from '../types'
 import { prisma } from '../config/database'
@@ -63,15 +63,21 @@ export async function changePassword(req: AuthRequest, res: Response) {
   } catch (err) { return handleError(res, err) }
 }
 
-// ── Request password reset (generates code, no SMS — shown in response) ──────
+// ── Request password reset (generates code; delivery via SMS is not wired up yet) ──
 export async function requestPasswordReset(req: AuthRequest, res: Response) {
   try {
     const { phone, countryCode } = req.body
     if (!phone || !countryCode) return badRequest(res, 'phone and countryCode required')
 
+    const genericMessage = 'If this account exists, a reset code was generated'
     const user = await prisma.user.findFirst({ where: { phone, countryCode } })
     // Always respond the same to avoid user enumeration
-    if (!user) return ok(res, null, 'If this account exists, a reset code was generated')
+    if (!user) return ok(res, null, genericMessage)
+
+    const recentCount = await prisma.passwordReset.count({
+      where: { phone, createdAt: { gt: new Date(Date.now() - 60 * 60 * 1000) } },
+    })
+    if (recentCount >= 3) return tooManyRequests(res, 'Too many reset requests — try again later')
 
     // Invalidate old codes
     await prisma.passwordReset.updateMany({ where: { phone, used: false }, data: { used: true } })
@@ -81,8 +87,8 @@ export async function requestPasswordReset(req: AuthRequest, res: Response) {
 
     await prisma.passwordReset.create({ data: { phone, code, expiresAt } })
 
-    // TODO: When SMS is available, send via provider instead of returning in response
-    return ok(res, { code, expiresAt }, 'Reset code generated')
+    // TODO: integrate an SMS provider and send `code` there. Never return the code in the API response.
+    return ok(res, { expiresAt }, genericMessage)
   } catch (err) { return handleError(res, err) }
 }
 
@@ -94,9 +100,16 @@ export async function confirmPasswordReset(req: AuthRequest, res: Response) {
     if (newPassword.length < 6) return badRequest(res, 'Password must be at least 6 characters')
 
     const reset = await prisma.passwordReset.findFirst({
-      where: { phone, code, used: false, expiresAt: { gt: new Date() } },
+      where: { phone, used: false, expiresAt: { gt: new Date() } },
+      orderBy: { createdAt: 'desc' },
     })
     if (!reset) return badRequest(res, 'Invalid or expired code')
+    if (reset.attempts >= 5) return tooManyRequests(res, 'Too many attempts — request a new code')
+
+    if (reset.code !== code) {
+      await prisma.passwordReset.update({ where: { id: reset.id }, data: { attempts: { increment: 1 } } })
+      return badRequest(res, 'Invalid or expired code')
+    }
 
     const user = await prisma.user.findFirst({ where: { phone, countryCode } })
     if (!user) return badRequest(res, 'User not found')

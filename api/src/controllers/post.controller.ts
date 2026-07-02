@@ -33,8 +33,16 @@ export async function createPost(req: AuthRequest, res: Response) {
     const { partnerUserId: requestedPartner, isAnnouncement: rawAnnouncement, deviceModel } = req.body
     let partnerUserId: string | null = null
     if (requestedPartner) {
-      const me = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { partnerId: true } })
-      if (me?.partnerId === requestedPartner) partnerUserId = requestedPartner
+      const myUnion = await prisma.union.findFirst({
+        where: {
+          OR: [
+            { memberAId: req.user!.userId, memberBId: requestedPartner },
+            { memberBId: req.user!.userId, memberAId: requestedPartner },
+          ],
+        },
+        select: { id: true },
+      })
+      if (myUnion) partnerUserId = requestedPartner
     }
 
     let isAnnouncement = false

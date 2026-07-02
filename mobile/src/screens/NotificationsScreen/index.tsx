@@ -9,21 +9,14 @@ import { StackNavigationProp } from '@react-navigation/stack'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { Ionicons } from '@expo/vector-icons'
 import { useNotificationStore, AppNotification } from '../../store/notification.store'
-import { api } from '../../services/api'
 import { getCache, setCache } from '../../db/database'
 import { isConnected } from '../../services/netinfo.service'
 import { getPartnerPostInvites, respondPartnerPost } from '../../services/post.service'
-import { Post } from '../../types'
+import { getPendingInvites, respondToInvite } from '../../services/union.service'
+import { Post, UnionInvite } from '../../types'
 import AvatarImage from '../../components/AvatarImage'
 import { colors, fonts, spacing, radius } from '../../theme'
 import { useT } from '../../i18n'
-
-interface PartnerRequest {
-  id: string
-  senderId: string
-  status: string
-  sender: { id: string; name: string; avatar: string | null; bio: string | null }
-}
 
 
 function notifIcon(type: AppNotification['type']): string {
@@ -34,7 +27,7 @@ function notifIcon(type: AppNotification['type']): string {
     case 'message':         return 'paper-plane'
     case 'coin':            return 'diamond'
     case 'extend_vote':     return 'timer'
-    case 'partner_request': return 'heart-circle'
+    case 'union_invite':    return 'heart-circle'
     default:                return 'notifications'
   }
 }
@@ -47,7 +40,7 @@ function notifColor(type: AppNotification['type']): string {
     case 'message':         return '#10B981'
     case 'coin':            return '#8B5CF6'
     case 'extend_vote':     return '#CA2851'
-    case 'partner_request': return '#FF4B6E'
+    case 'union_invite':    return '#FF4B6E'
     default:                return '#6B7280'
   }
 }
@@ -55,7 +48,7 @@ function notifColor(type: AppNotification['type']): string {
 export default function NotificationsScreen() {
   const nav = useNavigation<StackNavigationProp<AppStackParams>>()
   const { top } = useSafeAreaInsets()
-  const { notifications, badge, markAllRead, setPartnerRequestBadge } = useNotificationStore()
+  const { notifications, badge, markAllRead, setUnionInviteBadge } = useNotificationStore()
   const t = useT()
 
   const tAgo = (date: string) => {
@@ -66,7 +59,7 @@ export default function NotificationsScreen() {
     return `${Math.floor(m / 1440)}${t.time_d_ago}`
   }
 
-  const [partnerRequests,  setPartnerRequests]  = useState<PartnerRequest[]>([])
+  const [unionInvites,     setUnionInvites]     = useState<UnionInvite[]>([])
   const [postInvites,      setPostInvites]      = useState<Post[]>([])
   const [loadingPartner,   setLoadingPartner]   = useState(true)
   const [respondingId,     setRespondingId]      = useState<string | null>(null)
@@ -75,25 +68,24 @@ export default function NotificationsScreen() {
     let active = true
     async function load() {
       // 1. Cache first — show immediately
-      const cached = await getCache<PartnerRequest[]>('partner_requests').catch(() => null)
+      const cached = await getCache<UnionInvite[]>('union_invites').catch(() => null)
       if (cached && active) {
-        setPartnerRequests(cached)
-        setPartnerRequestBadge(cached.length)
+        setUnionInvites(cached)
+        setUnionInviteBadge(cached.length)
       }
       // 2. Network sync in background
       if (!isConnected()) { setLoadingPartner(false); return }
       setLoadingPartner(true)
       try {
-        const [reqRes, invites] = await Promise.all([
-          api.get('/users/partner-requests'),
+        const [fresh, invites] = await Promise.all([
+          getPendingInvites(),
           getPartnerPostInvites().catch(() => []),
         ])
-        const fresh: PartnerRequest[] = reqRes.data.data ?? []
         if (active) {
-          setPartnerRequests(fresh)
-          setPartnerRequestBadge(fresh.length)
+          setUnionInvites(fresh)
+          setUnionInviteBadge(fresh.length)
           setPostInvites(invites)
-          setCache('partner_requests', fresh).catch(() => {})
+          setCache('union_invites', fresh).catch(() => {})
         }
       } catch {}
       if (active) setLoadingPartner(false)
@@ -102,27 +94,27 @@ export default function NotificationsScreen() {
     return () => { active = false }
   }, []))
 
-  async function handlePartnerResponse(id: string, accept: boolean) {
+  async function handleUnionInviteResponse(id: string, accept: boolean) {
     setRespondingId(id)
     // Optimistic remove
-    const remaining = partnerRequests.filter((r) => r.id !== id)
-    setPartnerRequests(remaining)
-    setPartnerRequestBadge(remaining.length)
-    setCache('partner_requests', remaining).catch(() => {})
+    const remaining = unionInvites.filter((r) => r.id !== id)
+    setUnionInvites(remaining)
+    setUnionInviteBadge(remaining.length)
+    setCache('union_invites', remaining).catch(() => {})
     try {
-      await api.put(`/users/partner-requests/${id}/${accept ? 'accept' : 'reject'}`)
+      await respondToInvite(id, accept)
       if (accept) Alert.alert(t.notifs_partner_accepted, t.notifs_partner_accepted_msg)
     } catch {
       // Rollback
-      setPartnerRequests(partnerRequests)
-      setPartnerRequestBadge(partnerRequests.length)
-      setCache('partner_requests', partnerRequests).catch(() => {})
+      setUnionInvites(unionInvites)
+      setUnionInviteBadge(unionInvites.length)
+      setCache('union_invites', unionInvites).catch(() => {})
       Alert.alert(t.error, t.notifs_err_msg)
     }
     setRespondingId(null)
   }
 
-  const totalBadge = badge + partnerRequests.length
+  const totalBadge = badge + unionInvites.length
 
   return (
     <View style={[s.container, { paddingTop: top }]}>
@@ -153,43 +145,43 @@ export default function NotificationsScreen() {
         contentContainerStyle={s.list}
         ListHeaderComponent={
           <>
-            {/* Partner requests section */}
-            {(loadingPartner || partnerRequests.length > 0) && (
+            {/* Union invites section */}
+            {(loadingPartner || unionInvites.length > 0) && (
               <View style={s.partnerSection}>
                 <View style={s.sectionTitleRow}>
                   <Ionicons name="heart-circle" size={16} color="#FF4B6E" />
                   <Text style={s.sectionTitle}>{t.notifs_partner_reqs}</Text>
                 </View>
 
-                {loadingPartner && partnerRequests.length === 0 && (
+                {loadingPartner && unionInvites.length === 0 && (
                   <ActivityIndicator color={colors.primary} style={{ marginVertical: 16 }} />
                 )}
 
-                {partnerRequests.map((req) => (
-                  <View key={req.id} style={s.partnerCard}>
-                    <AvatarImage uri={req.sender.avatar} name={req.sender.name} size={50} />
+                {unionInvites.map((inv) => (
+                  <View key={inv.id} style={s.partnerCard}>
+                    <AvatarImage uri={inv.fromUnion.memberA.avatar} name={inv.fromUnion.memberA.name} size={50} />
                     <View style={s.partnerInfo}>
-                      <Text style={s.partnerName}>{req.sender.name}</Text>
+                      <Text style={s.partnerName}>{inv.fromUnion.memberA.name}</Text>
                       <Text style={s.partnerSub}>
-                        {req.sender.bio ?? t.notifs_partner_req_msg}
+                        {inv.fromUnion.label ?? t.notifs_partner_req_msg}
                       </Text>
                     </View>
                     <View style={s.partnerActions}>
                       <TouchableOpacity
                         style={s.acceptBtn}
-                        onPress={() => handlePartnerResponse(req.id, true)}
-                        disabled={respondingId === req.id}
+                        onPress={() => handleUnionInviteResponse(inv.id, true)}
+                        disabled={respondingId === inv.id}
                         activeOpacity={0.8}
                       >
-                        {respondingId === req.id
+                        {respondingId === inv.id
                           ? <ActivityIndicator size="small" color="#fff" />
                           : <Text style={s.acceptTxt}>{t.notifs_accept}</Text>
                         }
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={s.rejectBtn}
-                        onPress={() => handlePartnerResponse(req.id, false)}
-                        disabled={respondingId === req.id}
+                        onPress={() => handleUnionInviteResponse(inv.id, false)}
+                        disabled={respondingId === inv.id}
                         activeOpacity={0.8}
                       >
                         <Ionicons name="close" size={18} color={colors.gray600} />
@@ -242,13 +234,13 @@ export default function NotificationsScreen() {
             )}
 
             {/* Divider only if both sections have content */}
-            {(partnerRequests.length > 0 || postInvites.length > 0) && notifications.length > 0 && (
+            {(unionInvites.length > 0 || postInvites.length > 0) && notifications.length > 0 && (
               <View style={s.sectionDivider} />
             )}
           </>
         }
         ListEmptyComponent={
-          partnerRequests.length === 0 ? (
+          unionInvites.length === 0 ? (
             <View style={s.center}>
               <Ionicons name="notifications-outline" size={56} color={colors.gray200} />
               <Text style={s.emptyText}>{t.notifs_empty}</Text>

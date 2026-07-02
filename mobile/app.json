@@ -34,7 +34,7 @@
         "foregroundImage": "./assets/files/luxee-chat-icon-1024.png",
         "backgroundColor": "#0E0E12"
       },
-      "package": "com.luxoo.app",
+      "package": "com.luxee.app",
       "versionCode": 1,
       "permissions": [
         "android.permission.CAMERA",

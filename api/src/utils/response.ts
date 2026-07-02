@@ -27,3 +27,7 @@ export function notFound(res: Response, message = 'Not found') {
 export function serverError(res: Response, message = 'Internal server error') {
   return res.status(500).json({ success: false, message })
 }
+
+export function tooManyRequests(res: Response, message = 'Too many requests') {
+  return res.status(429).json({ success: false, message })
+}
