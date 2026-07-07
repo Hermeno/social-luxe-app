@@ -972,6 +972,7 @@ export default function MessagesScreen() {
 
             {!isCardLoading && displayCards.length > 0 && (
               <FlatList
+                key="search-grid"
                 data={displayCards}
                 keyExtractor={(u) => u.id}
                 numColumns={2}
@@ -1060,6 +1061,7 @@ export default function MessagesScreen() {
             )}
             {(!connsLoading || connections.length > 0 || unionConvos.length > 0) && !connsError && feedItems.length > 0 && (
               <FlatList
+                key="feed-list"
                 data={feedItems}
                 keyExtractor={(item) =>
                   item.kind === 'discovery'  ? '__discovery__'

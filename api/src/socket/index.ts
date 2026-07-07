@@ -230,7 +230,14 @@ export function setupSocket(httpServer: HttpServer): Server {
     // (starting it is the consent — no separate opt-in step).
     socket.on('dm:live:start', async ({ otherUserId }: { otherUserId: string }) => {
       const key = pairKey(userId, otherUserId)
-      if (livePairs.has(key)) return
+      const existing = livePairs.get(key)
+      if (existing) {
+        // Server already thinks this pair is live (e.g. the client lost sync
+        // after leaving and returning) — resync instead of silently no-op'ing,
+        // so tapping "Iniciar" never does nothing.
+        socket.emit('dm:live:status', existing)
+        return
+      }
       try {
         const [profA, profB] = await Promise.all([
           prisma.user.findUnique({ where: { id: userId },      select: { name: true, avatar: true } }),

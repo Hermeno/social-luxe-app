@@ -535,11 +535,6 @@ export default function ChatScreen() {
     const socket = getSocket()
     if (!socket) return
 
-    // Re-sync live-pair status on (re)mount — `dm:live:status` only reaches
-    // sockets connected at the moment `dm:live:start` fired, so leaving and
-    // returning to the chat would otherwise forget an already-live pair.
-    socket.emit('dm:live:query', { otherUserId: userId })
-
     function onNewMessage(msg: Message) {
       const isThisConvo = (
         (msg.senderId === userId   && msg.receiverId === user?.id) ||
@@ -603,6 +598,13 @@ export default function ChatScreen() {
     socket.on('message:deleted',  onDeleted)
     socket.on('dm:live:status',   onDmLiveStatus)
     socket.on('dm:live:ended',    onDmLiveEnded)
+
+    // Re-sync live-pair status now that the listener above is attached —
+    // `dm:live:status` only reaches sockets connected at the moment
+    // `dm:live:start` fired, so leaving and returning to the chat would
+    // otherwise forget an already-live pair.
+    socket.emit('dm:live:query', { otherUserId: userId })
+
     return () => {
       socket.off('message:new',      onNewMessage)
       socket.off('message:typing',   onTyping)

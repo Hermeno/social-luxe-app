@@ -16,6 +16,7 @@ import { fonts } from '../../theme'
 import { API_BASE } from '../../config'
 import { api } from '../../services/api'
 import { useT } from '../../i18n'
+import { INTERESTS } from '../OnboardingScreen'
 
 export const DEFAULT_TAB_KEY = 'default_tab'
 export type DefaultTab = 'Feed' | 'Messages'
@@ -81,12 +82,22 @@ export default function EditProfileScreen() {
   const [customInput, setCustomInput] = useState('')
   const [saving,      setSaving]      = useState(false)
   const [defaultTab,  setDefaultTab]  = useState<DefaultTab>('Feed')
+  const [interests,   setInterests]   = useState<Set<string>>(new Set(user?.interests ?? []))
 
   // Sync from store whenever user object updates (e.g. after refreshUser)
   useEffect(() => {
     setShowDevice(user?.showDevice ?? false)
     setStatusLabel(user?.statusLabel ?? '')
-  }, [user?.showDevice, user?.statusLabel])
+    setInterests(new Set(user?.interests ?? []))
+  }, [user?.showDevice, user?.statusLabel, user?.interests])
+
+  function toggleInterest(tag: string) {
+    setInterests((prev) => {
+      const next = new Set(prev)
+      next.has(tag) ? next.delete(tag) : next.add(tag)
+      return next
+    })
+  }
 
   useEffect(() => {
     AsyncStorage.getItem(DEFAULT_TAB_KEY)
@@ -102,12 +113,17 @@ export default function EditProfileScreen() {
   const avatarUri = avatar
     ?? (user?.avatar ? (user.avatar.startsWith('http') ? user.avatar : `${API_BASE}${user.avatar}`) : null)
 
+  const savedInterests = user?.interests ?? []
+  const interestsDirty = savedInterests.length !== interests.size
+    || savedInterests.some((tag) => !interests.has(tag))
+
   const isDirty =
     name !== (user?.name ?? '') ||
     bio  !== (user?.bio  ?? '') ||
     !!avatar ||
     showDevice  !== (user?.showDevice  ?? false) ||
-    statusLabel !== (user?.statusLabel ?? '')
+    statusLabel !== (user?.statusLabel ?? '') ||
+    interestsDirty
 
   async function pickAvatar() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
@@ -143,6 +159,9 @@ export default function EditProfileScreen() {
       await api.put('/users/profile', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
+      if (interestsDirty) {
+        await api.put('/users/interests', { interests: [...interests] })
+      }
       await refreshUser()
       nav.goBack()
     } catch (e: any) {
@@ -221,6 +240,27 @@ export default function EditProfileScreen() {
               />
               <Text style={s.charCount}>{bio.length}/160</Text>
             </View>
+          </View>
+        </View>
+
+        {/* Interesses */}
+        <View style={s.section}>
+          <Text style={s.sectionLabel}>Interesses</Text>
+          <View style={s.interestsWrap}>
+            {INTERESTS.map(({ label, emoji }) => {
+              const on = interests.has(label)
+              return (
+                <TouchableOpacity
+                  key={label}
+                  style={[s.interestTag, on && s.interestTagOn]}
+                  onPress={() => toggleInterest(label)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={s.interestEmoji}>{emoji}</Text>
+                  <Text style={[s.interestTagTxt, on && s.interestTagTxtOn]}>{label}</Text>
+                </TouchableOpacity>
+              )
+            })}
           </View>
         </View>
 
@@ -437,6 +477,17 @@ const s = StyleSheet.create({
   section:      { marginBottom: 16 },
   sectionLabel: { fontFamily: fonts.bold, fontSize: 11, color: M, letterSpacing: 1, textTransform: 'uppercase', paddingLeft: 6, paddingBottom: 8 },
   card:         { backgroundColor: SX, borderWidth: 1, borderColor: CARD_BD, borderRadius: 18, overflow: 'hidden' },
+
+  interestsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  interestTag: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 13, paddingVertical: 9,
+    borderRadius: 999, borderWidth: 1.3, borderColor: BD, backgroundColor: BG,
+  },
+  interestTagOn:    { backgroundColor: T, borderColor: T },
+  interestEmoji:    { fontSize: 13 },
+  interestTagTxt:   { fontFamily: fonts.semiBold, fontSize: 13, color: T },
+  interestTagTxtOn: { color: BG },
 
   bioWrap:  { padding: 14 },
   bioInput: { fontFamily: fonts.medium, fontSize: 15, color: T, minHeight: 80, padding: 0 },

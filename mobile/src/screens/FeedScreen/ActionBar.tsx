@@ -6,9 +6,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Heart, MessageCircle, Send, Eye, MoreVertical, Pencil, Trash2, Tag } from 'lucide-react-native'
 
-const FULL_LIFE_MS = 24 * 60 * 60 * 1000
-const DYING_THRESH  =  2 * 60 * 60 * 1000
-const BATTERY_H     = 28
 import { Post } from '../../types'
 import { colors, fonts } from '../../theme'
 import * as postService from '../../services/post.service'
@@ -27,10 +24,6 @@ interface Props {
   onEdited?: (id: string, caption: string) => void
   newPostsCount?: number
   commentCount?: number
-  voted?: boolean
-  extraMs?: number
-  voteLoading?: boolean
-  onVoteToggle?: () => void
 }
 
 type HeartP = {
@@ -51,7 +44,6 @@ export default React.memo(function ActionBar({
   post, onCommentPress, onStickerPress, liked: likedProp = false,
   onLikeChange, onDeleted, onEdited, newPostsCount = 0,
   commentCount: commentCountProp,
-  voted = false, extraMs: extraMsProp = 0, voteLoading = false, onVoteToggle,
 }: Props) {
   const { bottom: safeBottom } = useSafeAreaInsets()
   const tabOffset = 42 + Math.max(safeBottom, 8)
@@ -68,50 +60,6 @@ export default React.memo(function ActionBar({
   const [editText,  setEditText]  = useState(post.caption ?? '')
   const [hearts,    setHearts]    = useState<HeartP[]>([])
   const heartIdRef = useRef(0)
-
-  const batFloatY   = useRef(new Animated.Value(0)).current
-  const batFloatOp  = useRef(new Animated.Value(0)).current
-  const voteDirectionRef = useRef<'+' | '-'>('+')
-
-  // ── Battery ────────────────────────────────────────────────────────────────
-  const [nowBat, setNowBat] = useState(Date.now)
-
-  const expiresMs   = (post.expiresAt ? new Date(post.expiresAt).getTime() : 0) + extraMsProp
-  const remainingMs = Math.max(0, expiresMs - nowBat)
-  const energyPct   = expiresMs > 0 ? Math.min(100, (remainingMs / FULL_LIFE_MS) * 100) : 0
-  const isDyingPost = remainingMs > 0 && remainingMs < DYING_THRESH
-
-  // Initialize at the real level so bar doesn't animate from empty on first render
-  const fillAnim     = useRef(new Animated.Value(energyPct)).current
-  const batPulseAnim = useRef(new Animated.Value(1)).current
-
-  const fillColor = fillAnim.interpolate({
-    inputRange:  [0,        15,        40,        100],
-    outputRange: ['#CA2851', '#FF6766', '#FFB173', 'rgba(255,255,255,0.85)'],
-  })
-
-  useEffect(() => {
-    const id = setInterval(() => setNowBat(Date.now()), 30_000)
-    return () => clearInterval(id)
-  }, [])
-
-  useEffect(() => {
-    Animated.timing(fillAnim, { toValue: energyPct, duration: 600, useNativeDriver: false }).start()
-  }, [post.id])
-
-  useEffect(() => {
-    if (!isDyingPost) { batPulseAnim.setValue(1); return }
-    const loop = Animated.loop(Animated.sequence([
-      Animated.timing(batPulseAnim, { toValue: 0.3, duration: 700, useNativeDriver: true }),
-      Animated.timing(batPulseAnim, { toValue: 1,   duration: 700, useNativeDriver: true }),
-    ]))
-    loop.start()
-    return () => loop.stop()
-  }, [isDyingPost])
-
-  const fillHeight = fillAnim.interpolate({
-    inputRange: [0, 100], outputRange: [0, BATTERY_H - 3],
-  })
 
   function burstHearts() {
     const newHearts: HeartP[] = []
@@ -155,8 +103,6 @@ export default React.memo(function ActionBar({
     setShareCount(post._count?.shares ?? 0)
     setShowReactions(false); setShowMenu(false); setEditMode(false)
     setEditText(post.caption ?? '')
-    batFloatY.setValue(0)
-    batFloatOp.setValue(0)
   }, [post.id])
 
   async function handleLike() {
@@ -175,21 +121,6 @@ export default React.memo(function ActionBar({
       setLiked(was); setLikeCount(prev); onLikeChange?.(was)
       updateCachedPost(post.id, { _count: { ...post._count, likes: prev } }).catch(() => {})
     }
-  }
-
-  function handleVoteBattery() {
-    if (voteLoading) return
-    voteDirectionRef.current = voted ? '-' : '+'
-    batFloatY.setValue(0)
-    batFloatOp.setValue(1)
-    Animated.parallel([
-      Animated.timing(batFloatY,  { toValue: -44, duration: 900, useNativeDriver: true }),
-      Animated.sequence([
-        Animated.delay(350),
-        Animated.timing(batFloatOp, { toValue: 0, duration: 550, useNativeDriver: true }),
-      ]),
-    ]).start()
-    onVoteToggle?.()
   }
 
   async function handleShare() {
@@ -286,22 +217,6 @@ export default React.memo(function ActionBar({
               <Tag size={26} strokeWidth={2} color="#fff" />
             </View>
           </TouchableOpacity>
-        )}
-
-        {/* Battery life — tappable to extend */}
-        {!isAnnouncement && expiresMs > 0 && (
-          <View style={s.batteryWrap}>
-            <Animated.Text style={[s.batteryFloat, { transform: [{ translateY: batFloatY }], opacity: batFloatOp, color: voteDirectionRef.current === '+' ? '#4CD964' : '#FF6766' }]}>
-              {voteDirectionRef.current === '+' ? '+10min' : '-10min'}
-            </Animated.Text>
-            <TouchableOpacity onPress={handleVoteBattery} disabled={voteLoading} activeOpacity={0.75}>
-              <Animated.View style={{ opacity: isDyingPost ? batPulseAnim : 1 }}>
-                <View style={s.batteryBody}>
-                  <Animated.View style={[s.batteryFill, { height: fillHeight, backgroundColor: fillColor }]} />
-                </View>
-              </Animated.View>
-            </TouchableOpacity>
-          </View>
         )}
 
         {/* Views */}
@@ -417,38 +332,6 @@ const s = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.28)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
-  },
-
-  // ── Battery ──────────────────────────────────────────────────────────────
-  batteryWrap: {
-    width: 52,
-    alignItems: 'center',
-    paddingVertical: 9,
-  },
-  batteryFloat: {
-    position: 'absolute',
-    top: 2,
-    left: 0,
-    right: 0,
-    textAlign: 'center',
-    color: '#4CD964',
-    fontFamily: fonts.bold,
-    fontSize: 11,
-    zIndex: 30,
-  },
-  batteryBody: {
-    width: 14,
-    height: BATTERY_H,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.65)',
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  batteryFill: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
   },
 
   // ── Modais ──────────────────────────────────────────────────────────────────

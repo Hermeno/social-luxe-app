@@ -5,7 +5,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
-import Svg, { Polygon, Path } from 'react-native-svg'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { Post } from '../../types'
@@ -52,66 +51,17 @@ type Nav = StackNavigationProp<AppStackParams>
 const FULL_LIFE_MS  = 24 * 60 * 60 * 1000   // 24h baseline
 const DYING_THRESH  =  2 * 60 * 60 * 1000   // <2h = dying
 
-// ─── Hourglass Icon (Lucide style) ───────────────────────────────────────────
-// Viewbox 24×24. Funnel corners: top (7,2)–(17,2), pinch (12,12), bottom (7,22)–(17,22)
-// Upper sand shrinks toward pinch as pct drops; lower sand grows from bottom.
-function HourglassIcon({ pct, color }: { pct: number; color: string }) {
-  const p = Math.max(0, Math.min(100, pct)) / 100   // 1 = full, 0 = empty
-
-  // Upper chamber sand: triangle from (12-p*5, 12-p*10) → (12+p*5, 12-p*10) → (12,12)
-  const upY  = 12 - p * 10
-  const upHW = p * 5
-
-  // Lower chamber sand: quad from (7,22)→(17,22)→(12+p*5, 12+p*10)→(12-p*5, 12+p*10)
-  const loY  = 12 + p * 10
-  const loHW = p * 5
-
-  return (
-    <Svg width={15} height={15} viewBox="0 0 24 24" fill="none">
-      {/* Sand in upper chamber (shrinks as time passes) */}
-      {p > 0.02 && (
-        <Polygon
-          points={`${12 - upHW},${upY} ${12 + upHW},${upY} 12,12`}
-          fill={color}
-          opacity={0.82}
-        />
-      )}
-      {/* Sand in lower chamber (grows as time passes) */}
-      {p < 0.98 && (
-        <Polygon
-          points={`7,22 17,22 ${12 + loHW},${loY} ${12 - loHW},${loY}`}
-          fill={color}
-          opacity={0.82}
-        />
-      )}
-      {/* Hourglass outline — exact Lucide paths */}
-      <Path
-        d="M5 22h14M5 2h14M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"
-        stroke={color}
-        strokeWidth={1.7}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        opacity={0.92}
-      />
-    </Svg>
-  )
-}
-
 interface Props {
   post: Post
   isActive: boolean
   commentCount?: number
   onExpired?: () => void
-  voted?: boolean
-  extraMs?: number
-  voteLoading?: boolean
-  onVoteToggle?: () => void
 }
 
 // Height of tab bar above the device safe-area bottom (paddingTop + icon row)
 const TAB_BAR_ABOVE_SAFE = 42
 
-export default function PostInfo({ post, isActive, commentCount: commentCountProp, onExpired, voted = false, extraMs: extraMsProp = 0, voteLoading = false, onVoteToggle }: Props) {
+export default function PostInfo({ post, isActive, commentCount: commentCountProp, onExpired }: Props) {
   const { bottom: safeBottom } = useSafeAreaInsets()
   const tabOffset = TAB_BAR_ABOVE_SAFE + Math.max(safeBottom, 8)
   const { user }    = useAuthStore()
@@ -122,12 +72,6 @@ export default function PostInfo({ post, isActive, commentCount: commentCountPro
   const [loadingFollow, setLoadingFollow] = useState(false)
   const [now, setNow]                     = useState(Date.now)
   const [extraCommenters, setExtraCommenters] = useState<CommenterThumb[]>([])
-
-  // Vote animation refs
-  const hourglassScale = useRef(new Animated.Value(1)).current
-  const floatY         = useRef(new Animated.Value(0)).current
-  const floatOpacity   = useRef(new Animated.Value(0)).current
-  const voteDirectionRef = useRef<'+' | '-'>('+')  // direction of last tap
 
   const caption   = post.caption ?? ''
   const isLong    = caption.length > 80
@@ -212,9 +156,8 @@ export default function PostInfo({ post, isActive, commentCount: commentCountPro
   }, [post.recentCommenters, extraCommenters])
 
   // ── Energy calculations ─────────────────────────────────────────────────────
-  const expiresMs   = (post.expiresAt ? new Date(post.expiresAt).getTime() : 0) + extraMsProp
+  const expiresMs   = post.expiresAt ? new Date(post.expiresAt).getTime() : 0
   const remainingMs = Math.max(0, expiresMs - now)
-  const energyPct   = Math.min(100, (remainingMs / FULL_LIFE_MS) * 100)
   const isDying     = remainingMs > 0 && remainingMs < DYING_THRESH
   const isExpired   = expiresMs > 0 && remainingMs === 0
 
@@ -237,32 +180,6 @@ export default function PostInfo({ post, isActive, commentCount: commentCountPro
     if (h > 0) return `${h}h`
     const m = Math.floor(remainingMs / 60_000)
     return `${m}m`
-  }
-
-  const clockColor = isDying ? '#FF3B30' : 'rgba(255,255,255,0.65)'
-
-  function handleVoteExtend() {
-    if (voteLoading || post.isAnnouncement) return
-    voteDirectionRef.current = voted ? '-' : '+'
-
-    // Hourglass pulse
-    Animated.sequence([
-      Animated.spring(hourglassScale, { toValue: 1.6, useNativeDriver: true, speed: 60, bounciness: 14 }),
-      Animated.spring(hourglassScale, { toValue: 1,   useNativeDriver: true, speed: 25, bounciness: 8 }),
-    ]).start()
-
-    // Floating label rises and fades
-    floatY.setValue(0)
-    floatOpacity.setValue(1)
-    Animated.parallel([
-      Animated.timing(floatY,       { toValue: -52, duration: 900, useNativeDriver: true }),
-      Animated.sequence([
-        Animated.delay(350),
-        Animated.timing(floatOpacity, { toValue: 0, duration: 550, useNativeDriver: true }),
-      ]),
-    ]).start()
-
-    onVoteToggle?.()
   }
 
   return (
@@ -361,24 +278,9 @@ export default function PostInfo({ post, isActive, commentCount: commentCountPro
         {/* Timer + device badge */}
         {!post.isAnnouncement && (
           <View style={s.timerRow}>
-            <View style={s.timerTapWrap}>
-              <TouchableOpacity
-                onPress={handleVoteExtend}
-                activeOpacity={0.7}
-                style={s.timerTap}
-                disabled={voteLoading}
-              >
-                <Animated.View style={[{ opacity: isDying ? pulseAnim : 1 }, { transform: [{ scale: hourglassScale }] }]}>
-                  <HourglassIcon pct={energyPct} color={clockColor} />
-                </Animated.View>
-                <Text style={[s.timer, isDying && s.timerDying]}> {timeLeft()}</Text>
-              </TouchableOpacity>
-
-              {/* Floating +10min / -10min label */}
-              <Animated.Text style={[s.floatLabel, { transform: [{ translateY: floatY }], opacity: floatOpacity, color: voteDirectionRef.current === '+' ? '#4CD964' : '#FF6766' }]}>
-                {voteDirectionRef.current === '+' ? '+10min' : '-10min'}
-              </Animated.Text>
-            </View>
+            <Animated.View style={{ opacity: isDying ? pulseAnim : 1 }}>
+              <Text style={[s.timer, isDying && s.timerDying]}>{timeLeft()}</Text>
+            </Animated.View>
 
             {post.user.showDevice && (
               <LinearGradient
@@ -436,22 +338,8 @@ const s = StyleSheet.create({
   seeMore:    { color: 'rgba(255,255,255,0.50)', fontFamily: fonts.medium },
 
   timerRow:     { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  timerTapWrap: { position: 'relative' },
-  timerTap:     { flexDirection: 'row', alignItems: 'center' },
   timer:        { color: 'rgba(255,255,255,0.65)', fontFamily: fonts.medium, fontSize: 12, letterSpacing: 0.1 },
   timerDying:   { color: '#FF3B30' },
-  floatLabel: {
-    position: 'absolute',
-    left: 0,
-    bottom: 0,
-    color: '#4CD964',
-    fontFamily: fonts.bold,
-    fontSize: 13,
-    letterSpacing: 0.3,
-    textShadowColor: 'rgba(0,0,0,0.4)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
 
   // ── Commenter avatars ────────────────────────────────────────────────────────
   commentersRow: {

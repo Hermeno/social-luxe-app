@@ -33,16 +33,16 @@ export default function ChatHeader({
   function renderLiveBtn() {
     if (isLiveChat) {
       return (
-        <TouchableOpacity onPress={onToggleLive} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={s.liveChip}>
-          <View style={s.liveChipDot} />
-          <Text style={s.liveChipTxt}>Terminar</Text>
+        <TouchableOpacity onPress={onToggleLive} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={s.chip}>
+          <View style={s.liveDot} />
+          <Text style={s.chipTxt}>Terminar</Text>
         </TouchableOpacity>
       )
     }
     return (
-      <TouchableOpacity onPress={onToggleLive} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={s.startChip}>
-        <Ionicons name="heart" size={12} color={colors.primary} />
-        <Text style={s.startChipTxt}>Iniciar par</Text>
+      <TouchableOpacity onPress={onToggleLive} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={s.chip}>
+        <Ionicons name="heart-outline" size={13} color="#0A0A0A" />
+        <Text style={s.chipTxt}>Iniciar par</Text>
       </TouchableOpacity>
     )
   }
@@ -121,26 +121,17 @@ const s = StyleSheet.create({
 
   actions: { alignItems: 'center', justifyContent: 'center' },
 
-  liveChip: {
+  chip: {
     flexDirection:  'row',
     alignItems:     'center',
-    gap:            5,
-    backgroundColor: '#22C55E',
-    paddingHorizontal: 10,
-    paddingVertical:  4,
+    gap:            6,
+    backgroundColor: 'transparent',
+    borderWidth:    1.3,
+    borderColor:    '#0A0A0A',
+    paddingHorizontal: 12,
+    paddingVertical:  6,
     borderRadius:    20,
   },
-  liveChipDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#fff' },
-  liveChipTxt: { fontSize: 12, fontFamily: fonts.semiBold, color: '#fff' },
-
-  startChip: {
-    flexDirection:  'row',
-    alignItems:     'center',
-    gap:            5,
-    backgroundColor: '#FFF0F3',
-    paddingHorizontal: 10,
-    paddingVertical:  4,
-    borderRadius:    20,
-  },
-  startChipTxt: { fontSize: 12, fontFamily: fonts.semiBold, color: colors.primary },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#22C55E' },
+  chipTxt: { fontSize: 12.5, fontFamily: fonts.semiBold, color: '#0A0A0A' },
 })

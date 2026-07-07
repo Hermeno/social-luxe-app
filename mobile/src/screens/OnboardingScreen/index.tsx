@@ -238,7 +238,7 @@ const ps = StyleSheet.create({
 })
 
 // ── Step 2: Interests ─────────────────────────────────────────────────────────
-const INTERESTS: { label: string; emoji: string }[] = [
+export const INTERESTS: { label: string; emoji: string }[] = [
   { label: 'Fotografia',       emoji: '📷' }, { label: 'Música',          emoji: '🎵' },
   { label: 'Viagens',          emoji: '✈️' }, { label: 'Culinária',        emoji: '🍳' },
   { label: 'Moda',             emoji: '👗' }, { label: 'Arte',            emoji: '🎨' },

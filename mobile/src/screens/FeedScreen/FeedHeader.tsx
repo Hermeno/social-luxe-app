@@ -23,7 +23,7 @@ export interface FeedUserGroup {
 
 const AV_SIZE      = 52
 const RING_OUTER   = AV_SIZE + 8   // 60 — container with ring padding (4px each side)
-const RING_STROKE  = 2
+const RING_STROKE  = 3
 const BUBBLE_SIZE  = 56
 const BADGE_SIZE   = 20
 const OVERLAP      = 16

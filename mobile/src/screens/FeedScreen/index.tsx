@@ -107,12 +107,19 @@ export default function FeedScreen() {
   const [stickerPickerOpen,  setStickerPickerOpen]  = useState(false)
   const [pendingSticker, setPendingSticker] = useState<StickerChoice | null>(null)
   const [localStickers, setLocalStickers] = useState<Record<string, PostSticker[]>>({})
-  const [voteState, setVoteState] = useState<Record<string, { voted: boolean; extraMs: number; loading: boolean }>>({})
+  const [stickerDragging, setStickerDragging] = useState(false)
+  const stickerDragPos = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current
   // Refs needed inside PanResponder (avoids stale closure in useMemo)
   const pendingStickerRef    = useRef(pendingSticker)
   pendingStickerRef.current  = pendingSticker
   const stickerPickerRef     = useRef(stickerPickerOpen)
   stickerPickerRef.current   = stickerPickerOpen
+  const viewerWRef           = useRef(viewerW)
+  viewerWRef.current         = viewerW
+  const viewerHRef           = useRef(viewerH)
+  viewerHRef.current         = viewerH
+  const handlePlaceStickerRef = useRef(handlePlaceSticker)
+  handlePlaceStickerRef.current = handlePlaceSticker
   // playerRef assigned below after `player` is declared (line ~213)
   const playerRef            = useRef<ReturnType<typeof useVideoPlayer> | null>(null)
   const pauseTimerRef        = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -137,6 +144,28 @@ export default function FeedScreen() {
         else           goNextRef.current()
       }
     },
+  }), [])
+
+  // PanResponder — sticker placement. Captures on touch-start (this overlay only
+  // renders while `pendingSticker` is set, so nothing else needs the gesture).
+  // A plain tap places on release with no movement; a drag moves the preview
+  // with the finger via `stickerDragPos` and places at the final release point.
+  const stickerDragResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onPanResponderGrant: (e) => {
+      stickerDragPos.setValue({ x: e.nativeEvent.locationX, y: e.nativeEvent.locationY })
+      setStickerDragging(true)
+    },
+    onPanResponderMove: (e) => {
+      stickerDragPos.setValue({ x: e.nativeEvent.locationX, y: e.nativeEvent.locationY })
+    },
+    onPanResponderRelease: (e) => {
+      setStickerDragging(false)
+      const x = Math.max(2, Math.min(98, (e.nativeEvent.locationX / viewerWRef.current) * 100))
+      const y = Math.max(2, Math.min(98, (e.nativeEvent.locationY / viewerHRef.current) * 100))
+      handlePlaceStickerRef.current(x, y)
+    },
+    onPanResponderTerminate: () => setStickerDragging(false),
   }), [])
   const likedLoadedRef = useRef(false)
   const likedSyncedFromServerRef = useRef(false)
@@ -559,33 +588,6 @@ export default function FeedScreen() {
     }
   }
 
-  function handleVoteToggle(postId: string) {
-    const p = flatPostsRef.current.find((fp) => fp.id === postId)
-    const currentVoted  = voteState[postId]?.voted  ?? (p?.hasVotedExtend ?? false)
-    const currentExtraMs = voteState[postId]?.extraMs ?? 0
-    const willVote = !currentVoted
-    const deltaMs  = willVote ? 10 * 60_000 : -10 * 60_000
-
-    setVoteState((prev) => ({
-      ...prev,
-      [postId]: { voted: willVote, extraMs: currentExtraMs + deltaMs, loading: true },
-    }))
-
-    postService.voteExtend(postId)
-      .then((res) => {
-        setVoteState((prev) => ({
-          ...prev,
-          [postId]: { ...prev[postId], voted: res.voted, loading: false },
-        }))
-      })
-      .catch(() => {
-        setVoteState((prev) => ({
-          ...prev,
-          [postId]: { voted: currentVoted, extraMs: currentExtraMs, loading: false },
-        }))
-      })
-  }
-
   function handleRemoveSticker(stickerId: string) {
     const p = post
     if (!p) return
@@ -599,10 +601,6 @@ export default function FeedScreen() {
   const currentStickers = post
     ? (localStickers[post.id] ?? post.stickers ?? [])
     : []
-
-  const currentVoteVoted   = post ? (voteState[post.id]?.voted   ?? (post.hasVotedExtend ?? false)) : false
-  const currentVoteExtraMs = post ? (voteState[post.id]?.extraMs ?? 0) : 0
-  const currentVoteLoading = post ? (voteState[post.id]?.loading ?? false) : false
 
   // ── Viewer dimensions measured for reliable native clipping ───────────────
   const videoStyle = useMemo(
@@ -667,7 +665,7 @@ export default function FeedScreen() {
             <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.72)']} style={s.bottomGradient} pointerEvents="none" />
           )}
 
-          {/* User info + follow button + timer + energy bar */}
+          {/* User info + follow button + timer */}
           <PostInfo
             key={post.id}
             post={post}
@@ -677,10 +675,6 @@ export default function FeedScreen() {
               removePost(post.id)
               navigateTo(Math.max(0, currentIndex - 1))
             }}
-            voted={currentVoteVoted}
-            extraMs={currentVoteExtraMs}
-            voteLoading={currentVoteLoading}
-            onVoteToggle={() => handleVoteToggle(post.id)}
           />
 
           {post.isAnnouncement && (
@@ -690,25 +684,28 @@ export default function FeedScreen() {
             </View>
           )}
 
-          {/* Sticker placement overlay — tap anywhere to place */}
+          {/* Sticker placement overlay — drag follows the finger, release to place; a plain tap places instantly */}
           {pendingSticker && (
-            <Pressable
-              style={s.stickerPlacementOverlay}
-              onPress={(e) => {
-                const x = Math.max(2, Math.min(98, (e.nativeEvent.locationX / viewerW) * 100))
-                const y = Math.max(2, Math.min(98, (e.nativeEvent.locationY / viewerH) * 100))
-                handlePlaceSticker(x, y)
-              }}
-            >
+            <View style={s.stickerPlacementOverlay} {...stickerDragResponder.panHandlers}>
               <View style={s.stickerPlacementDecoLayer} pointerEvents="none" />
-              <View style={s.stickerDragHintWrap} pointerEvents="none">
-                <Text style={s.stickerDragHintEmoji}>{pendingSticker.type === 'message' ? '💌' : pendingSticker.emoji}</Text>
-                <Text style={s.stickerDragHintText}>Toque onde deseja colocar</Text>
-              </View>
-              <Pressable style={s.stickerPlacementCancel} onPress={() => { setPendingSticker(null); resumeFromCurrent() }}>
+              {!stickerDragging && (
+                <View style={s.stickerDragHintWrap} pointerEvents="none">
+                  <Text style={s.stickerDragHintEmoji}>{pendingSticker.type === 'message' ? '💌' : pendingSticker.emoji}</Text>
+                  <Text style={s.stickerDragHintText}>Arraste ou toque onde deseja colocar</Text>
+                </View>
+              )}
+              {stickerDragging && (
+                <Animated.View
+                  pointerEvents="none"
+                  style={[s.stickerDragFollow, { transform: stickerDragPos.getTranslateTransform() }]}
+                >
+                  <Text style={s.stickerDragFollowEmoji}>{pendingSticker.type === 'message' ? '💌' : pendingSticker.emoji}</Text>
+                </Animated.View>
+              )}
+              <Pressable style={s.stickerPlacementCancel} onPress={() => { setStickerDragging(false); setPendingSticker(null); resumeFromCurrent() }}>
                 <Text style={s.stickerPlacementCancelTxt}>Cancelar</Text>
               </Pressable>
-            </Pressable>
+            </View>
           )}
 
           {/* StickerLayer INSIDE viewer, BEFORE ActionBar.
@@ -760,10 +757,6 @@ export default function FeedScreen() {
             commentCount={(post._count?.comments ?? 0) + (commentDeltas[post.id] ?? 0)}
             onDeleted={(id) => { removePost(id); navigateTo(Math.max(0, currentIndex - 1)) }}
             onEdited={(id, caption) => updatePost(id, caption)}
-            voted={currentVoteVoted}
-            extraMs={currentVoteExtraMs}
-            voteLoading={currentVoteLoading}
-            onVoteToggle={() => handleVoteToggle(post.id)}
           />
         </View>
       ) : (
@@ -931,6 +924,13 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.42)',
     borderRadius: 16, paddingHorizontal: 18, paddingVertical: 8,
   },
+  stickerDragFollow: {
+    position: 'absolute', left: -42, top: -42,
+    width: 84, height: 84, borderRadius: 42,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  stickerDragFollowEmoji: { fontSize: 44 },
   stickerPlacementCancel: {
     position: 'absolute', bottom: 110,
     alignSelf: 'center',

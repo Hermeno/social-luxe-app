@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet, Modal,
   TextInput, KeyboardAvoidingView, Platform, Animated, Pressable,
+  Dimensions, PanResponder,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
@@ -44,17 +45,21 @@ interface Props {
 
 type Tab = 'emoji' | 'gift' | 'message'
 
+const { height: SCREEN_H } = Dimensions.get('window')
+
 export default function StickerPicker({ visible, onClose, onSelect }: Props) {
-  const { top } = useSafeAreaInsets()
+  const { bottom } = useSafeAreaInsets()
   const [tab,    setTab]    = useState<Tab>('emoji')
   const [msgText, setMsgText] = useState('')
 
-  // Slide from top: starts -600, springs to 0
-  const slideY = useRef(new Animated.Value(-600)).current
+  // Bottom sheet — slides up from off-screen, same feel as the comments sheet
+  const slideY  = useRef(new Animated.Value(SCREEN_H)).current
+  const dragY   = useRef(new Animated.Value(0)).current
 
   useEffect(() => {
     if (visible) {
-      slideY.setValue(-600)
+      slideY.setValue(SCREEN_H)
+      dragY.setValue(0)
       Animated.spring(slideY, {
         toValue:     0,
         speed:       18,
@@ -65,9 +70,22 @@ export default function StickerPicker({ visible, onClose, onSelect }: Props) {
   }, [visible])
 
   function close() {
-    Animated.timing(slideY, { toValue: -600, duration: 190, useNativeDriver: true })
+    Animated.timing(slideY, { toValue: SCREEN_H, duration: 220, useNativeDriver: true })
       .start(() => { setMsgText(''); setTab('emoji'); onClose() })
   }
+
+  // Drag the handle down to dismiss, like a native bottom sheet
+  const panResponder = useRef(PanResponder.create({
+    onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 4 && Math.abs(g.dy) > Math.abs(g.dx),
+    onPanResponderMove: (_, g) => { if (g.dy > 0) dragY.setValue(g.dy) },
+    onPanResponderRelease: (_, g) => {
+      if (g.dy > 110 || g.vy > 1.2) {
+        close()
+      } else {
+        Animated.spring(dragY, { toValue: 0, useNativeDriver: true, speed: 20, bounciness: 6 }).start()
+      }
+    },
+  })).current
 
   function selectEmoji(emoji: string, type: 'emoji' | 'gift') {
     onSelect({ emoji, type })
@@ -87,12 +105,17 @@ export default function StickerPicker({ visible, onClose, onSelect }: Props) {
       {/* Backdrop */}
       <Pressable style={StyleSheet.absoluteFill} onPress={close} />
 
-      {/* Top sheet */}
+      {/* Bottom sheet */}
       <Animated.View
-        style={[s.sheet, { paddingTop: top + 10, transform: [{ translateY: slideY }] }]}
+        style={[
+          s.sheet,
+          { paddingBottom: bottom + 12, transform: [{ translateY: Animated.add(slideY, dragY) }] },
+        ]}
       >
-        {/* Drag handle */}
-        <View style={s.handle} />
+        {/* Drag handle — swipe down to dismiss */}
+        <View {...panResponder.panHandlers} style={s.handleArea}>
+          <View style={s.handle} />
+        </View>
 
         {/* Header */}
         <View style={s.header}>
@@ -232,22 +255,26 @@ function TabPill({ label, icon, active, onPress, gift }: {
 const s = StyleSheet.create({
   sheet: {
     position: 'absolute',
-    top: 0, left: 0, right: 0,
+    bottom: 0, left: 0, right: 0,
     backgroundColor: '#fff',
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
-    maxHeight: '70%',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    maxHeight: '78%',
+    paddingTop: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.20,
-    shadowRadius: 28,
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
     elevation: 20,
+  },
+  handleArea: {
+    paddingTop: 8,
+    paddingBottom: 12,
   },
   handle: {
     width: 36, height: 4, borderRadius: 2,
     backgroundColor: '#E0E0E0',
     alignSelf: 'center',
-    marginBottom: 14,
   },
   header: {
     flexDirection: 'row',
