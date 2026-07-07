@@ -61,6 +61,7 @@ model User {
   autoReply            String?
   showDevice           Boolean  @default(false)
   statusLabel          String?
+  interests            String[] @default([])
   lat          Float?
   lng          Float?
   isAdmin      Boolean  @default(false)

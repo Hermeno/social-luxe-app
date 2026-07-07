@@ -19,6 +19,7 @@ export interface User {
   autoReply?: string | null
   showDevice?: boolean
   statusLabel?: string | null
+  interests?: string[]
   isAdmin?: boolean
   lastSeen?: string | null
 }

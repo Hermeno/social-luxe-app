@@ -15,8 +15,47 @@ import { getPartnerPostInvites, respondPartnerPost } from '../../services/post.s
 import { getPendingInvites, respondToInvite } from '../../services/union.service'
 import { Post, UnionInvite } from '../../types'
 import AvatarImage from '../../components/AvatarImage'
+import FollowSplitButton from '../../components/FollowSplitButton'
+import { useFollowStore } from '../../store/follow.store'
 import { colors, fonts, spacing, radius } from '../../theme'
 import { useT } from '../../i18n'
+
+function NotifRow({ item, timeLabel, onPress }: { item: AppNotification; timeLabel: string; onPress: () => void }) {
+  const followed = useFollowStore((s) => item.fromUser ? s.followingIds.has(item.fromUser.id) : false)
+  const [loading, setLoading] = useState(false)
+
+  async function handleFollowBack() {
+    if (!item.fromUser || loading) return
+    setLoading(true)
+    try {
+      await useFollowStore.getState().toggle(item.fromUser.id, undefined, {
+        name: item.fromUser.name, avatar: item.fromUser.avatar,
+      })
+    } catch {}
+    setLoading(false)
+  }
+
+  return (
+    <TouchableOpacity style={[s.notifRow, !item.read && s.notifUnread]} onPress={onPress} activeOpacity={0.7}>
+      {item.type === 'follow' && item.fromUser
+        ? <AvatarImage uri={item.fromUser.avatar} name={item.fromUser.name} size={40} />
+        : (
+          <View style={[s.iconWrap, { backgroundColor: notifColor(item.type) + '22' }]}>
+            <Ionicons name={notifIcon(item.type) as any} size={20} color={notifColor(item.type)} />
+          </View>
+        )
+      }
+      <View style={s.notifBody}>
+        <Text style={s.notifMessage}>{item.message}</Text>
+        <Text style={s.notifTime}>{timeLabel}</Text>
+      </View>
+      {item.type === 'follow' && item.fromUser && !followed && (
+        <FollowSplitButton following={false} loading={loading} onFollow={handleFollowBack} theme="light" />
+      )}
+      {!item.read && <View style={s.unreadDot} />}
+    </TouchableOpacity>
+  )
+}
 
 
 function notifIcon(type: AppNotification['type']): string {
@@ -28,6 +67,7 @@ function notifIcon(type: AppNotification['type']): string {
     case 'coin':            return 'diamond'
     case 'extend_vote':     return 'timer'
     case 'union_invite':    return 'heart-circle'
+    case 'follow':          return 'person-add'
     default:                return 'notifications'
   }
 }
@@ -41,6 +81,7 @@ function notifColor(type: AppNotification['type']): string {
     case 'coin':            return '#8B5CF6'
     case 'extend_vote':     return '#CA2851'
     case 'union_invite':    return '#FF4B6E'
+    case 'follow':          return '#1A1A1A'
     default:                return '#6B7280'
   }
 }
@@ -249,16 +290,15 @@ export default function NotificationsScreen() {
           ) : null
         }
         renderItem={({ item }: { item: AppNotification }) => (
-          <View style={[s.notifRow, !item.read && s.notifUnread]}>
-            <View style={[s.iconWrap, { backgroundColor: notifColor(item.type) + '22' }]}>
-              <Ionicons name={notifIcon(item.type) as any} size={20} color={notifColor(item.type)} />
-            </View>
-            <View style={s.notifBody}>
-              <Text style={s.notifMessage}>{item.message}</Text>
-              <Text style={s.notifTime}>{tAgo(item.createdAt)}</Text>
-            </View>
-            {!item.read && <View style={s.unreadDot} />}
-          </View>
+          <NotifRow
+            item={item}
+            timeLabel={tAgo(item.createdAt)}
+            onPress={() => {
+              if (item.type === 'follow' && item.fromUser) {
+                nav.navigate('Profile', { userId: item.fromUser.id })
+              }
+            }}
+          />
         )}
       />
     </View>

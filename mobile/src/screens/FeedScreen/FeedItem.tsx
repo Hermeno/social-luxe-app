@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { View, StyleSheet, Dimensions, TouchableWithoutFeedback, Animated, ActivityIndicator } from 'react-native'
-import { useVideoPlayer, VideoView, useVideoPlayerStatus } from 'expo-video'
+import { useVideoPlayer, VideoView, VideoPlayerStatus } from 'expo-video'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { Post } from '../../types'
@@ -20,16 +20,25 @@ interface Props {
 }
 
 export default function FeedItem({ post, isActive, onCommentPress }: Props) {
-  const uri = post.mediaUrl ?? ''.startsWith('http') ? post.mediaUrl ?? '' : `${API_BASE}${post.mediaUrl ?? ''}`
+  const uri = post.mediaUrl?.startsWith('http') ? post.mediaUrl : `${API_BASE}${post.mediaUrl ?? ''}`
 
-  const player = useVideoPlayer(
-    post.mediaType === 'VIDEO' ? { uri } : null,
-    (p) => { p.loop = true; p.muted = false }
+  // Memoized so the player is only recreated when the source actually changes —
+  // an inline `{ uri }` literal would get a new reference on every re-render
+  // (e.g. liking the post), causing expo-video to spin up a fresh player that
+  // never receives a play() call, which is what caused the black-screen bug.
+  const source = useMemo(
+    () => (post.mediaType === 'VIDEO' ? { uri } : null),
+    [post.mediaType, uri],
   )
-  const videoStatus = useVideoPlayerStatus(post.mediaType === 'VIDEO' ? player : null)
-  const isBuffering = post.mediaType === 'VIDEO' && isActive && (
-    videoStatus?.isBuffering === true || videoStatus?.status === 'loading'
-  )
+  const player = useVideoPlayer(source, (p) => { p.loop = true; p.muted = false })
+
+  const [status, setStatus] = useState<VideoPlayerStatus>('idle')
+  useEffect(() => {
+    if (post.mediaType !== 'VIDEO') return
+    const sub = player.addListener('statusChange', ({ status: s }) => setStatus(s))
+    return () => sub.remove()
+  }, [player, post.mediaType])
+  const isBuffering = post.mediaType === 'VIDEO' && isActive && status === 'loading'
 
   // Double-tap to like
   const lastTap   = useRef(0)
@@ -39,9 +48,13 @@ export default function FeedItem({ post, isActive, onCommentPress }: Props) {
 
   useEffect(() => {
     if (post.mediaType !== 'VIDEO') return
-    if (isActive) player.play()
-    else player.pause()
-  }, [isActive])
+    if (isActive) {
+      player.currentTime = 0
+      player.play()
+    } else {
+      player.pause()
+    }
+  }, [isActive, player, post.mediaType])
 
   function handleTap() {
     const now = Date.now()

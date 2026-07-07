@@ -8,34 +8,28 @@ interface Props {
   aName?: string | null
   bUri: string | null | undefined
   bName?: string | null
-  size?: number           // top-left avatar size
-  secondarySize?: number  // bottom-right avatar size; defaults to `size`
-  wrapWidth?: number
-  wrapHeight?: number
+  size?: number
+  overlap?: number   // how much the second avatar tucks behind the first, in px
   borderWidth?: number
 }
 
 export default function DuoAvatar({
-  aUri, aName, bUri, bName,
-  size = 54, secondarySize, wrapWidth, wrapHeight, borderWidth = 2,
+  aUri, aName, bUri, bName, size = 40, overlap = 14, borderWidth = 2,
 }: Props) {
-  const bSize = secondarySize ?? size
-  const w = wrapWidth ?? size + 14
-  const h = wrapHeight ?? size
+  const ringStyle = {
+    borderRadius: size / 2,
+    borderWidth,
+    borderColor: colors.white,
+    overflow: 'hidden' as const,
+  }
 
   return (
-    <View style={{ width: w, height: h, position: 'relative', flexShrink: 0 }}>
-      <View style={{
-        position: 'absolute', top: 0, left: 0, borderRadius: size / 2,
-        borderWidth, borderColor: colors.white, overflow: 'hidden',
-      }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 0 }}>
+      <View style={[ringStyle, { zIndex: 2 }]}>
         <AvatarImage uri={aUri} name={aName} size={size} />
       </View>
-      <View style={{
-        position: 'absolute', bottom: 0, right: 0, borderRadius: bSize / 2,
-        borderWidth, borderColor: colors.white, overflow: 'hidden',
-      }}>
-        <AvatarImage uri={bUri} name={bName} size={bSize} />
+      <View style={[ringStyle, { marginLeft: -overlap, zIndex: 1 }]}>
+        <AvatarImage uri={bUri} name={bName} size={size} />
       </View>
     </View>
   )

@@ -560,6 +560,17 @@ export default function ProfileScreen() {
         </View>
       )}
 
+      {/* ── Interests ── */}
+      {!!profile?.interests?.length && (
+        <View style={m.interestsWrap}>
+          {profile.interests.map((tag) => (
+            <View key={tag} style={m.interestChip}>
+              <Text style={m.interestChipTxt}>{tag}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
       {/* ── Action buttons ── */}
       <View style={m.actionsArea}>
         {isOwn ? (
@@ -828,6 +839,17 @@ const m = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   partnerTxt: { fontSize: 12, fontFamily: fonts.semiBold, color: '#fff' },
+
+  // ── Interests ──────────────────────────────────────────────────────────────
+  interestsWrap: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 8,
+    marginHorizontal: 16, marginBottom: 16,
+  },
+  interestChip: {
+    borderWidth: 1, borderColor: colors.gray200,
+    borderRadius: 14, paddingHorizontal: 12, paddingVertical: 6,
+  },
+  interestChipTxt: { fontSize: 12.5, fontFamily: fonts.medium, color: colors.gray800 },
 
   // ── Action buttons ───────────────────────────────────────────────────────────
   actionsArea: { paddingHorizontal: 16, marginBottom: 6 },

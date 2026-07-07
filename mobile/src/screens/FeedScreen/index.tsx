@@ -423,6 +423,16 @@ export default function FeedScreen() {
         }, 80)
       }
 
+      function beginPlayback() {
+        if (started || cancelled) return
+        started = true
+        const dur = Math.round(player.duration * 1000)
+        videoDurRef.current = dur
+        safePlayer(() => { player.currentTime = 0; player.play() })
+        revealMedia()   // ← fade out the thumbnail overlay to reveal the video
+        startProgress(dur)
+      }
+
       const remoteUrl = resolveMedia(post.mediaUrl ?? '')
       const mountDelay = setTimeout(async () => {
         if (cancelled) return
@@ -430,18 +440,15 @@ export default function FeedScreen() {
         const localPath = await getOrDownload(remoteUrl)
         if (cancelled) return
         safePlayer(() => player.replace({ uri: localPath ?? remoteUrl }))
+        // Revisiting a post whose video is already loaded (e.g. swiping back
+        // to it after it played once) — replace() can be a no-op on an
+        // identical source, so `statusChange` never fires again. Catch that
+        // case right here instead of waiting for an event that won't come.
+        if (player.status === 'readyToPlay' && player.duration > 0) beginPlayback()
       }, 60)
 
       const sub = (player as any).addListener('statusChange', ({ status }: { status: string }) => {
-        if (started || cancelled) return
-        if (status === 'readyToPlay' && player.duration > 0) {
-          started = true
-          const dur = Math.round(player.duration * 1000)
-          videoDurRef.current = dur
-          safePlayer(() => player.play())
-          revealMedia()   // ← fade out the thumbnail overlay to reveal the video
-          startProgress(dur)
-        }
+        if (status === 'readyToPlay' && player.duration > 0) beginPlayback()
       })
 
       return () => {

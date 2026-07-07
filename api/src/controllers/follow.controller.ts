@@ -4,6 +4,7 @@ import { AuthRequest as Request } from '../types'
 import { sendPush } from '../services/notification.service'
 import { ok, badRequest } from '../utils/response'
 import { handleError } from '../utils/errors'
+import { emitToUser } from '../socket'
 
 function calcExpiresAt(duration?: string): Date | null {
   const now = new Date()
@@ -32,8 +33,19 @@ export async function followUser(req: Request, res: Response) {
     const expiresAt = calcExpiresAt(req.body?.duration)
     await prisma.follow.create({ data: { followerId, followingId, expiresAt } })
 
-    const follower = await prisma.user.findUnique({ where: { id: followerId }, select: { name: true } })
-    sendPush(followingId, '👤 Novo seguidor', `${follower?.name} começou a seguir-te`, { type: 'follow', userId: followerId }).catch(() => {})
+    const follower = await prisma.user.findUnique({
+      where: { id: followerId }, select: { id: true, name: true, avatar: true },
+    })
+    const message = `${follower?.name} começou a seguir-te. Segue de volta?`
+    sendPush(followingId, '👤 Novo seguidor', message, { type: 'follow', userId: followerId }).catch(() => {})
+    emitToUser(followingId, 'notification:new', {
+      id: `follow_${followerId}_${Date.now()}`,
+      type: 'follow',
+      message,
+      read: false,
+      createdAt: new Date().toISOString(),
+      fromUser: follower,
+    })
 
     return ok(res, { following: true })
   } catch (err) {

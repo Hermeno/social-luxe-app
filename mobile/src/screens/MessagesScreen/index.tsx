@@ -108,39 +108,41 @@ function UserCard({
   const photoUri  = resolveUri(user.avatar)
 
   return (
-    <TouchableOpacity style={c.card} onPress={onPress} activeOpacity={0.88}>
-      {/* Full-bleed photo */}
-      {photoUri
-        ? <Image source={{ uri: photoUri }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
-        : <View style={[StyleSheet.absoluteFill, c.photoFallback]}>
-            <Ionicons name="person" size={44} color="rgba(255,255,255,0.25)" />
+    <TouchableOpacity style={c.cardShadow} onPress={onPress} activeOpacity={0.9}>
+      <View style={c.card}>
+        {/* Full-bleed photo */}
+        {photoUri
+          ? <Image source={{ uri: photoUri }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
+          : <View style={[StyleSheet.absoluteFill, c.photoFallback]}>
+              <Ionicons name="person" size={44} color="rgba(255,255,255,0.25)" />
+            </View>
+        }
+
+        {/* Dark gradient — fades in from mid-card downward */}
+        <LinearGradient
+          colors={['transparent', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.88)']}
+          locations={[0.35, 0.65, 1]}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+
+        {/* Info + button pinned to bottom */}
+        <View style={c.info}>
+          <Text style={c.cardName} numberOfLines={1}>{user.name}</Text>
+          <View style={c.statsRow}>
+            <Text style={c.statTxt}>{fmtCount(posts)} posts</Text>
+            <View style={c.statDot} />
+            <Text style={c.statTxt}>{fmtCount(followers)} {followers === 1 ? t.follower : t.followers}</Text>
           </View>
-      }
-
-      {/* Dark gradient — fades in from mid-card downward */}
-      <LinearGradient
-        colors={['transparent', 'rgba(0,0,0,0.55)', 'rgba(0,0,0,0.92)']}
-        locations={[0.3, 0.6, 1]}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
-
-      {/* Info + button pinned to bottom */}
-      <View style={c.info}>
-        <Text style={c.cardName} numberOfLines={1}>{user.name}</Text>
-        <View style={c.statsRow}>
-          <Text style={c.statTxt}>{fmtCount(posts)} posts</Text>
-          <View style={c.statDot} />
-          <Text style={c.statTxt}>{fmtCount(followers)} {followers === 1 ? t.follower : t.followers}</Text>
-        </View>
-        <View style={c.followWrap}>
-          <FollowSplitButton
-            following={followed}
-            followBack={followBack}
-            loading={loadingFollow}
-            onFollow={onFollow}
-            theme="light"
-          />
+          <View style={c.followWrap}>
+            <FollowSplitButton
+              following={followed}
+              followBack={followBack}
+              loading={loadingFollow}
+              onFollow={onFollow}
+              theme="light"
+            />
+          </View>
         </View>
       </View>
     </TouchableOpacity>
@@ -328,7 +330,7 @@ function UnionConvoRow({ item, myUnion, liveUnions, onPress }: {
       <DuoAvatar
         aUri={memberA?.avatar} aName={memberA?.name}
         bUri={memberB?.avatar} bName={memberB?.name}
-        size={36} secondarySize={30} wrapWidth={AVA} wrapHeight={AVA} borderWidth={1.5}
+        size={34} overlap={10} borderWidth={1.5}
       />
 
       <View style={s.info}>
@@ -351,27 +353,58 @@ function UnionConvoRow({ item, myUnion, liveUnions, onPress }: {
   )
 }
 
-// ── Live chat pair row ────────────────────────────────────────────────────────
+// ── Suggested user row — a single, quiet suggestion woven into the list ──────
 
-function LiveChatRow({ data }: { data: LiveChatStatus }) {
+function SuggestedUserRow({ user, onPress }: { user: UserResult; onPress: () => void }) {
+  const followed = useFollowStore((s) => s.followingIds.has(user.id))
+  const [loading, setLoading] = useState(false)
+
+  async function handleFollow(duration: FollowDuration) {
+    if (loading) return
+    setLoading(true)
+    try {
+      await useFollowStore.getState().toggle(user.id, duration, { name: user.name, avatar: user.avatar })
+    } catch {
+      Toast.show({ type: 'error', text1: 'Erro', text2: 'Não foi possível seguir.', visibilityTime: 2500 })
+    }
+    setLoading(false)
+  }
+
   return (
-    <View style={s.row}>
-      <DuoAvatar aUri={data.userAAvatar} aName={data.userAName} bUri={data.userBAvatar} bName={data.userBName} size={AVA} />
-
+    <TouchableOpacity style={[s.row, sg.row]} onPress={onPress} activeOpacity={0.6}>
+      <AvatarImage uri={user.avatar} name={user.name} size={AVA} />
       <View style={s.info}>
-        <Text style={s.name} numberOfLines={1}>
-          {data.userAName.split(' ')[0]} & {data.userBName.split(' ')[0]}
-        </Text>
-        <View style={s.liveChatStatusRow}>
-          <View style={s.liveChatGreenDot} />
-          <Text style={s.liveChatLiveTxt} numberOfLines={1}>{data.title}</Text>
+        <Text style={s.name} numberOfLines={1}>{user.name}</Text>
+        <View style={sg.tag}>
+          <Ionicons name="sparkles" size={10} color={colors.primary} />
+          <Text style={sg.tagTxt}>Sugestão para ti</Text>
         </View>
       </View>
+      <FollowSplitButton following={followed} loading={loading} onFollow={handleFollow} theme="light" />
+    </TouchableOpacity>
+  )
+}
 
-      <View style={s.livePill}>
-        <Text style={s.livePillTxt}>● ao vivo</Text>
+// ── Live "together now" card — vertical card in the horizontal carousel ──────
+
+function LiveTogetherCard({ data, onPress }: { data: LiveChatStatus; onPress: () => void }) {
+  return (
+    <TouchableOpacity style={g.card} onPress={onPress} activeOpacity={0.7}>
+      <DuoAvatar
+        aUri={data.userAAvatar} aName={data.userAName}
+        bUri={data.userBAvatar} bName={data.userBName}
+        size={36} overlap={12} borderWidth={2}
+      />
+      <View style={g.textCol}>
+        <View style={g.liveRow}>
+          <View style={g.liveDot} />
+          <Text style={g.names} numberOfLines={1}>
+            {data.userAName.split(' ')[0]} & {data.userBName.split(' ')[0]}
+          </Text>
+        </View>
+        <Text style={g.title} numberOfLines={1}>{data.title}</Text>
       </View>
-    </View>
+    </TouchableOpacity>
   )
 }
 
@@ -418,6 +451,13 @@ export default function MessagesScreen() {
   // Hydrate from cache on first mount (offline-first)
   useEffect(() => {
     hydrateFromCache()
+  }, [])
+
+  // Preload suggested profiles + follow state — used both by search mode and
+  // by the empty-chat-list state (suggestions shown when there's no one to talk to yet)
+  useEffect(() => {
+    loadSuggested()
+    loadFollowersState()
   }, [])
 
   useFocusEffect(useCallback(() => {
@@ -788,15 +828,16 @@ export default function MessagesScreen() {
   const displayCards  = query.trim() ? searchResults : suggested
   const isCardLoading = query.trim() ? searchLoading : suggestLoading
 
-  // ── Unified feed — live chats + personal + uniões merged by recency ─────
+  // ── Unified feed — personal + uniões merged by recency ──────────────────
   type FeedItem =
-    | { kind: 'personal';  c: Connection; idx: number }
-    | { kind: 'union';     m: UnionMessage }
-    | { kind: 'liveChat';  data: LiveChatStatus }
+    | { kind: 'personal';   c: Connection; idx: number }
+    | { kind: 'union';      m: UnionMessage }
+    | { kind: 'suggestion'; user: UserResult }
     | { kind: 'discovery' }
 
   const INJECT_AT = 3
-  const allMsgItems: { item: Exclude<FeedItem, { kind: 'discovery' } | { kind: 'liveChat'; data: LiveChatStatus }>; ts: number }[] = [
+  const SUGGEST_EVERY = 7
+  const allMsgItems: { item: Exclude<FeedItem, { kind: 'discovery' } | { kind: 'suggestion'; user: UserResult }>; ts: number }[] = [
     ...connections.map((c, i) => ({
       item: { kind: 'personal' as const, c, idx: i },
       ts:   c.lastMessage ? new Date(c.lastMessage.createdAt).getTime() : 0,
@@ -808,13 +849,23 @@ export default function MessagesScreen() {
   ]
   allMsgItems.sort((a, b) => b.ts - a.ts)
 
-  // Live chat pair rows always appear at the very top
-  const liveChatItems: FeedItem[] = Object.values(liveChats).map((data) => ({ kind: 'liveChat' as const, data }))
+  const liveTogetherList = Object.values(liveChats)
+  const weavableSuggestions = suggested.filter((u) => !followingIds.has(u.id))
 
-  const feedItems: FeedItem[] = [...liveChatItems]
+  const feedItems: FeedItem[] = []
+  let suggestIdx = 0
   allMsgItems.forEach(({ item }, i) => {
     if (i === INJECT_AT && showDiscovery) feedItems.push({ kind: 'discovery' })
     feedItems.push(item as FeedItem)
+
+    // Weave in one quiet suggestion every few real conversations — never
+    // right at the very end, and only once the list is long enough that it
+    // doesn't compete with the empty-state / top discovery row.
+    const isLastItem = i === allMsgItems.length - 1
+    if (!isLastItem && (i + 1) % SUGGEST_EVERY === 0 && weavableSuggestions.length > 0) {
+      feedItems.push({ kind: 'suggestion', user: weavableSuggestions[suggestIdx % weavableSuggestions.length] })
+      suggestIdx++
+    }
   })
   if (showDiscovery && allMsgItems.length > 0 && allMsgItems.length <= INJECT_AT) {
     feedItems.push({ kind: 'discovery' })
@@ -829,20 +880,39 @@ export default function MessagesScreen() {
         keyboardVerticalOffset={0}
       >
 
-        {/* ── Nav bar: ← | search field | avatar ──────────────── */}
+        {/* ── Nav bar: ← | avatar | search field ──────────────── */}
         <View style={[s.navbar, { paddingTop: top + 12 }]}>
           <TouchableOpacity
             onPress={() => isSearchMode ? exitSearch() : nav.goBack()}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={s.navBackBtn}
+            activeOpacity={0.6}
           >
-            <Ionicons name="chevron-back" size={26} color="#000" />
+            <Ionicons name="chevron-back" size={24} color="#0A0A0A" />
+          </TouchableOpacity>
+
+          {/* Avatar + ring if user has posts */}
+          <TouchableOpacity
+            onPress={() => nav.navigate('Profile', { userId: user?.id })}
+            activeOpacity={0.75}
+          >
+            <View style={s.navAvatarOuter}>
+              {myHasPosts && (
+                <SegmentedRing count={1} size={38} strokeWidth={1.5} />
+              )}
+              <View style={s.navAvatarInner}>
+                <View style={s.navAvatarCircle}>
+                  <AvatarImage uri={user?.avatar ?? null} name={user?.name} size={32} borderWidth={0} borderColor="transparent" />
+                </View>
+              </View>
+            </View>
           </TouchableOpacity>
 
           <View style={[s.searchBar, isSearchMode && s.searchBarActive]}>
             <Ionicons
               name="search-outline"
               size={16}
-              color={isSearchMode ? colors.primary : '#1A1A1A'}
+              color={isSearchMode ? colors.primary : '#8E8E93'}
             />
             <TextInput
               ref={inputRef}
@@ -865,23 +935,6 @@ export default function MessagesScreen() {
               </TouchableOpacity>
             )}
           </View>
-
-          {/* Avatar + ring if user has posts */}
-          <TouchableOpacity
-            onPress={() => nav.navigate('Profile', { userId: user?.id })}
-            activeOpacity={0.75}
-          >
-            <View style={s.navAvatarOuter}>
-              {myHasPosts && (
-                <SegmentedRing count={1} size={32} strokeWidth={1.5} />
-              )}
-              <View style={s.navAvatarInner}>
-                <View style={s.navAvatarCircle}>
-                  <AvatarImage uri={user?.avatar ?? null} name={user?.name} size={26} borderWidth={0} borderColor="transparent" />
-                </View>
-              </View>
-            </View>
-          </TouchableOpacity>
         </View>
 
 
@@ -966,13 +1019,52 @@ export default function MessagesScreen() {
                 </TouchableOpacity>
               </View>
             )}
-            {(!connsLoading || connections.length > 0 || unionConvos.length > 0) && !connsError && (
+            {!connsLoading && !connsError && feedItems.length === 0 && (
+              <View style={s.chatEmptyWrap}>
+                <LinearGradient
+                  colors={['#CA2851', '#FF6766']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={s.chatEmptyIcon}
+                >
+                  <Ionicons name="chatbubbles" size={28} color="#fff" />
+                </LinearGradient>
+                <Text style={s.emptyTitle}>Comece uma conversa</Text>
+                <Text style={s.emptySub}>Segue alguém para poderes falar com essa pessoa aqui</Text>
+
+                {suggested.length > 0 && (
+                  <>
+                    <Text style={s.chatEmptySuggestLabel}>Sugestões para ti</Text>
+                    <FlatList
+                      data={suggested.slice(0, 10)}
+                      keyExtractor={(u) => u.id}
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={s.chatEmptySuggestList}
+                      contentContainerStyle={s.chatEmptySuggestContent}
+                      ItemSeparatorComponent={() => <View style={{ width: CARD_GAP }} />}
+                      renderItem={({ item }) => (
+                        <UserCard
+                          user={item}
+                          followed={followingIds.has(item.id)}
+                          followBack={followers.has(item.id) && !followingIds.has(item.id)}
+                          loadingFollow={followPending.has(item.id)}
+                          onFollow={(duration) => handleFollow(item.id, duration)}
+                          onPress={() => nav.navigate('Profile', { userId: item.id })}
+                        />
+                      )}
+                    />
+                  </>
+                )}
+              </View>
+            )}
+            {(!connsLoading || connections.length > 0 || unionConvos.length > 0) && !connsError && feedItems.length > 0 && (
               <FlatList
                 data={feedItems}
                 keyExtractor={(item) =>
-                  item.kind === 'discovery' ? '__discovery__'
-                  : item.kind === 'union'   ? `union_${item.m.id}`
-                  : item.kind === 'liveChat' ? `livechat_${item.data.userAId}_${item.data.userBId}`
+                  item.kind === 'discovery'  ? '__discovery__'
+                  : item.kind === 'union'     ? `union_${item.m.id}`
+                  : item.kind === 'suggestion' ? `suggest_${item.user.id}`
                   : item.c.user.id
                 }
                 showsVerticalScrollIndicator={false}
@@ -982,6 +1074,29 @@ export default function MessagesScreen() {
                 }
                 ListHeaderComponent={
                   <>
+                    {liveTogetherList.length > 0 && (
+                      <View style={g.section}>
+                        <Text style={g.sectionLabel}>Juntos agora</Text>
+                        <FlatList
+                          data={liveTogetherList}
+                          keyExtractor={(d) => `${d.userAId}_${d.userBId}`}
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          contentContainerStyle={g.sectionContent}
+                          ItemSeparatorComponent={() => <View style={{ width: 10 }} />}
+                          renderItem={({ item }) => (
+                            <LiveTogetherCard
+                              data={item}
+                              onPress={() => nav.navigate('Chat', {
+                                userId:     item.userAId === user?.id ? item.userBId  : item.userAId,
+                                userName:   item.userAId === user?.id ? item.userBName : item.userAName,
+                                userAvatar: item.userAId === user?.id ? item.userBAvatar : item.userAAvatar,
+                              })}
+                            />
+                          )}
+                        />
+                      </View>
+                    )}
                     {pendingInvites.length > 0 && (
                       <View style={s.invitesSection}>
                         <View style={s.invitesSectionHeader}>
@@ -1050,8 +1165,13 @@ export default function MessagesScreen() {
                   if (item.kind === 'discovery') {
                     return <DiscoveryRow onDismiss={() => setShowDiscovery(false)} />
                   }
-                  if (item.kind === 'liveChat') {
-                    return <LiveChatRow data={item.data} />
+                  if (item.kind === 'suggestion') {
+                    return (
+                      <SuggestedUserRow
+                        user={item.user}
+                        onPress={() => nav.navigate('Profile', { userId: item.user.id })}
+                      />
+                    )
                   }
                   if (item.kind === 'union') {
                     const myUnion = myUnions.find((u) => u.id === item.m.toUnionId || u.id === item.m.fromUnionId)
@@ -1119,18 +1239,28 @@ const s = StyleSheet.create({
   navbar: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingBottom: 14,
     gap: 10,
+    backgroundColor: colors.white,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#EDEDF0',
+  },
+  navBackBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   searchBar: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F0F0F5',
-    borderRadius: 22,
+    borderRadius: 20,
     paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingVertical: 9,
     gap: 8,
     borderWidth: 1.5,
     borderColor: 'transparent',
@@ -1148,8 +1278,8 @@ const s = StyleSheet.create({
   },
   /* ── Nav avatar + ring ── */
   navAvatarOuter: {
-    width: 32,
-    height: 32,
+    width: 38,
+    height: 38,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1159,9 +1289,9 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   navAvatarCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     overflow: 'hidden',
   },
   /* ── Section label ── */
@@ -1189,6 +1319,23 @@ const s = StyleSheet.create({
   countPillTxt: { fontSize: 11, fontFamily: fonts.semiBold, color: colors.primary },
 
   spinnerWrap: { flex: 1, alignItems: 'center', paddingTop: 60 },
+
+  /* ── Empty chat list — suggestions to start a conversation ── */
+  chatEmptyWrap:          { flex: 1, alignItems: 'center', paddingTop: 84, gap: 10 },
+  chatEmptyIcon: {
+    width: 64, height: 64, borderRadius: 32,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 4,
+    shadowColor: colors.primary, shadowOpacity: 0.25, shadowRadius: 14, shadowOffset: { width: 0, height: 6 },
+  },
+  chatEmptySuggestLabel: {
+    alignSelf: 'flex-start',
+    fontSize: 12, fontFamily: fonts.bold, color: '#8E8E93',
+    letterSpacing: 0.6, textTransform: 'uppercase',
+    marginTop: 22, marginBottom: 12, paddingHorizontal: CARD_H_PAD,
+  },
+  chatEmptySuggestList:   { width: '100%' },
+  chatEmptySuggestContent:{ paddingHorizontal: CARD_H_PAD },
 
   /* ── Conversations list ── */
   list: { paddingTop: 4 },
@@ -1250,11 +1397,6 @@ const s = StyleSheet.create({
 
   livePill:    { backgroundColor: '#FF6766', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 },
   livePillTxt: { fontFamily: fonts.bold, fontSize: 10, color: '#fff', letterSpacing: 0.2 },
-
-  // ── Live chat pair row ─────────────────────────────────────────────────────
-  liveChatStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  liveChatGreenDot:  { width: 6, height: 6, borderRadius: 3, backgroundColor: '#22C55E' },
-  liveChatLiveTxt:   { fontSize: 12, fontFamily: fonts.regular, color: '#22C55E' },
 
   /* ── Pending invites section ── */
   invitesSection: { marginHorizontal: 16, marginBottom: 8 },
@@ -1350,10 +1492,19 @@ const q = StyleSheet.create({
 const CARD_H = Math.round(CARD_W * 1.45)
 
 const c = StyleSheet.create({
-  card: {
+  cardShadow: {
     width:        CARD_W,
     height:       CARD_H,
-    borderRadius: 18,
+    borderRadius: 24,
+    shadowColor:  '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.16,
+    shadowRadius: 14,
+    elevation:    5,
+  },
+  card: {
+    flex:         1,
+    borderRadius: 24,
     overflow:     'hidden',
     backgroundColor: '#1A1A1A',
   },
@@ -1367,14 +1518,14 @@ const c = StyleSheet.create({
     bottom:   0,
     left:     0,
     right:    0,
-    padding:  12,
-    gap:      4,
+    padding:  14,
+    gap:      5,
   },
   cardName: {
-    fontSize:    14,
+    fontSize:    15,
     fontFamily:  fonts.bold,
     color:       '#fff',
-    letterSpacing: -0.2,
+    letterSpacing: -0.3,
   },
   statsRow: {
     flexDirection: 'row',
@@ -1382,9 +1533,9 @@ const c = StyleSheet.create({
     gap:           5,
   },
   statTxt: {
-    fontSize:   11,
-    fontFamily: fonts.regular,
-    color:      'rgba(255,255,255,0.65)',
+    fontSize:   11.5,
+    fontFamily: fonts.medium,
+    color:      'rgba(255,255,255,0.7)',
   },
   statDot: {
     width:        3,
@@ -1395,4 +1546,40 @@ const c = StyleSheet.create({
   followWrap: {
     marginTop: 8,
   },
+})
+
+// ── "Juntos agora" horizontal carousel ────────────────────────────────────────
+const g = StyleSheet.create({
+  section: { marginTop: 18, marginBottom: 8 },
+  sectionLabel: {
+    fontSize: 12, fontFamily: fonts.bold, color: '#8E8E93',
+    letterSpacing: 0.6, textTransform: 'uppercase',
+    marginBottom: 12, paddingHorizontal: 16,
+  },
+  sectionContent: { paddingHorizontal: 16 },
+
+  // Horizontal rectangle — black/white/transparent, colour only as a small accent
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: '#EEEEF0',
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  textCol: { gap: 2 },
+  liveRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.primary },
+  names: { fontSize: 13, fontFamily: fonts.bold, color: '#0A0A0A', letterSpacing: -0.1 },
+  title: { fontSize: 11.5, fontFamily: fonts.regular, color: '#8E8E93' },
+})
+
+// ── Suggested user row ────────────────────────────────────────────────────────
+const sg = StyleSheet.create({
+  row: { backgroundColor: '#FFFAFB' },
+  tag: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  tagTxt: { fontSize: 12, fontFamily: fonts.medium, color: colors.primary },
 })

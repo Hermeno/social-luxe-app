@@ -56,6 +56,17 @@ export async function updateProfile(req: AuthRequest, res: Response) {
   } catch (err) { return handleError(res, err) }
 }
 
+export async function updateInterests(req: AuthRequest, res: Response) {
+  try {
+    const { interests } = req.body
+    if (!Array.isArray(interests) || interests.some((i) => typeof i !== 'string')) {
+      return badRequest(res, 'interests must be an array of strings')
+    }
+    const user = await userService.updateProfile(req.user!.userId, { interests })
+    return ok(res, user)
+  } catch (err) { return handleError(res, err) }
+}
+
 export async function getUserPosts(req: AuthRequest, res: Response) {
   try {
     const posts = await userService.getUserPosts(req.params.id)

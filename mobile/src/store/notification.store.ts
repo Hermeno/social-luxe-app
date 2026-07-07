@@ -2,10 +2,11 @@ import { create } from 'zustand'
 
 export interface AppNotification {
   id: string
-  type: 'like' | 'comment' | 'reaction' | 'message' | 'coin' | 'extend_vote' | 'union_invite'
+  type: 'like' | 'comment' | 'reaction' | 'message' | 'coin' | 'extend_vote' | 'union_invite' | 'follow'
   message: string
   read: boolean
   createdAt: string
+  fromUser?: { id: string; name: string; avatar: string | null }
 }
 
 interface NotificationState {

@@ -23,11 +23,7 @@ type LivePairPayload = {
 }
 const livePairs = new Map<string, LivePairPayload>()
 
-const LIVE_CHAT_TITLES = [
-  'estão a conversar agora',
-  'estão namorando agora',
-  'estão a viver um romance',
-]
+const LIVE_CHAT_TITLE = 'estão juntos agora'
 
 function pairKey(a: string, b: string): string {
   return [a, b].sort().join('|')
@@ -219,6 +215,16 @@ export function setupSocket(httpServer: HttpServer): Server {
 
     // ── Live Chat Pair — manual start/end ─────────────────────────────────────
 
+    // Client asks "is this pair currently live?" — used when the chat screen
+    // (re)mounts, since `dm:live:start` only reaches sockets connected at that
+    // exact moment. Without this, leaving and returning to the chat forgets
+    // the live status entirely (and a second `dm:live:start` would be a no-op).
+    socket.on('dm:live:query', ({ otherUserId }: { otherUserId: string }) => {
+      const key = pairKey(userId, otherUserId)
+      const payload = livePairs.get(key)
+      if (payload) socket.emit('dm:live:status', payload)
+    })
+
     // Either user taps "Iniciar conversa em par" — goes live immediately for
     // both participants and is broadcast to both of their followers right away
     // (starting it is the consent — no separate opt-in step).
@@ -232,7 +238,7 @@ export function setupSocket(httpServer: HttpServer): Server {
         ])
         if (!profA || !profB) return
 
-        const title = LIVE_CHAT_TITLES[Math.floor(Math.random() * LIVE_CHAT_TITLES.length)]
+        const title = LIVE_CHAT_TITLE
         const payload: LivePairPayload = {
           userAId: userId,      userAName: profA.name, userAAvatar: profA.avatar,
           userBId: otherUserId, userBName: profB.name, userBAvatar: profB.avatar,

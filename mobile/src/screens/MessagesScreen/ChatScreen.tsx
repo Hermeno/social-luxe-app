@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import {
-  View, Text, FlatList, StyleSheet, ImageBackground, ActivityIndicator,
+  View, Text, FlatList, StyleSheet, ActivityIndicator,
   Keyboard, Platform, Animated, Pressable, TouchableOpacity, Modal, StatusBar, AppState,
   ScrollView,
 } from 'react-native'
@@ -45,7 +45,6 @@ type NavProp = StackNavigationProp<AppStackParams>
 const CHAT_BG        = '#FFFFFF'
 const MINE_COLOR     = '#CA2851'
 const THEIRS_COLOR   = '#F0F2F5'
-const WALLPAPER_TILE = require('../../../assets/preview_light.png')
 const REACTION_EMOJIS = ['❤️', '😂', '😮', '😢', '🔥', '👏']
 
 function formatTime(dateStr: string) {
@@ -407,8 +406,12 @@ export default function ChatScreen() {
     const hideEvt = isIOS ? 'keyboardWillHide' : 'keyboardDidHide'
 
     const sub1 = Keyboard.addListener(showEvt, (e) => {
+      // Clamp — some Android keyboards/OEM skins occasionally report a
+      // wildly incorrect height, which pushed the whole screen off the top.
+      const raw = e.endCoordinates.height - (isIOS ? bottom : 0)
+      const safeHeight = Math.max(0, Math.min(raw, 420))
       Animated.timing(kbAnim, {
-        toValue: e.endCoordinates.height - (isIOS ? bottom : 0),
+        toValue: safeHeight,
         duration: isIOS ? (e.duration ?? 250) : 0,
         useNativeDriver: false,
       }).start()
@@ -531,6 +534,11 @@ export default function ChatScreen() {
   useEffect(() => {
     const socket = getSocket()
     if (!socket) return
+
+    // Re-sync live-pair status on (re)mount — `dm:live:status` only reaches
+    // sockets connected at the moment `dm:live:start` fired, so leaving and
+    // returning to the chat would otherwise forget an already-live pair.
+    socket.emit('dm:live:query', { otherUserId: userId })
 
     function onNewMessage(msg: Message) {
       const isThisConvo = (
@@ -947,11 +955,7 @@ export default function ChatScreen() {
           </LinearGradient>
         )}
 
-        <ImageBackground
-          source={WALLPAPER_TILE}
-          resizeMode="repeat"
-          style={t.wallpaper}
-        >
+        <View style={t.wallpaper}>
           <FlatList
             ref={listRef}
             data={[...items].reverse()}
@@ -985,7 +989,7 @@ export default function ChatScreen() {
           />
 
           {isTyping && <TypingBubble />}
-        </ImageBackground>
+        </View>
 
         {editingMsg && (
           <View style={t.editBanner}>

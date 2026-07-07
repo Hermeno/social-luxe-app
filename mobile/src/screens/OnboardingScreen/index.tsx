@@ -238,17 +238,27 @@ const ps = StyleSheet.create({
 })
 
 // ── Step 2: Interests ─────────────────────────────────────────────────────────
-const INTERESTS = [
-  'Fotografia', 'Música', 'Viagens', 'Culinária',
-  'Moda', 'Arte', 'Desporto', 'Tecnologia',
-  'Fitness', 'Cinema', 'Natureza', 'Negócios',
-  'Dança', 'Literatura', 'Jogos', 'Bem-estar',
-  'Animais', 'Arquitectura', 'Automóveis', 'Beleza',
-  'Podcast', 'Espiritualidade', 'Política', 'Ciência',
-  'Sustentabilidade', 'Voluntariado', 'Empreendedorismo', 'Investimento',
-  'Futebol', 'Basquete', 'Surf', 'Corrida',
-  'Yoga', 'Meditação', 'Gastronomia', 'Vinho',
-  'Tatuagem', 'Graffiti', 'Teatro', 'Comédia',
+const INTERESTS: { label: string; emoji: string }[] = [
+  { label: 'Fotografia',       emoji: '📷' }, { label: 'Música',          emoji: '🎵' },
+  { label: 'Viagens',          emoji: '✈️' }, { label: 'Culinária',        emoji: '🍳' },
+  { label: 'Moda',             emoji: '👗' }, { label: 'Arte',            emoji: '🎨' },
+  { label: 'Desporto',         emoji: '⚽️' }, { label: 'Tecnologia',      emoji: '💻' },
+  { label: 'Fitness',          emoji: '💪' }, { label: 'Cinema',          emoji: '🎬' },
+  { label: 'Natureza',         emoji: '🌿' }, { label: 'Negócios',        emoji: '💼' },
+  { label: 'Dança',            emoji: '💃' }, { label: 'Literatura',      emoji: '📚' },
+  { label: 'Jogos',            emoji: '🎮' }, { label: 'Bem-estar',       emoji: '🧘' },
+  { label: 'Animais',          emoji: '🐾' }, { label: 'Arquitectura',    emoji: '🏛️' },
+  { label: 'Automóveis',       emoji: '🚗' }, { label: 'Beleza',          emoji: '💄' },
+  { label: 'Podcast',          emoji: '🎙️' }, { label: 'Espiritualidade', emoji: '✨' },
+  { label: 'Política',         emoji: '🏛️' }, { label: 'Ciência',         emoji: '🔬' },
+  { label: 'Sustentabilidade', emoji: '🌍' }, { label: 'Voluntariado',    emoji: '🤝' },
+  { label: 'Empreendedorismo', emoji: '🚀' }, { label: 'Investimento',    emoji: '📈' },
+  { label: 'Futebol',          emoji: '🏆' }, { label: 'Basquete',        emoji: '🏀' },
+  { label: 'Surf',             emoji: '🏄' }, { label: 'Corrida',         emoji: '🏃' },
+  { label: 'Yoga',             emoji: '🧘‍♀️' }, { label: 'Meditação',      emoji: '🕊️' },
+  { label: 'Gastronomia',      emoji: '🍽️' }, { label: 'Vinho',           emoji: '🍷' },
+  { label: 'Tatuagem',         emoji: '🖋️' }, { label: 'Graffiti',        emoji: '🎨' },
+  { label: 'Teatro',           emoji: '🎭' }, { label: 'Comédia',         emoji: '😂' },
 ]
 
 function InterestsStep({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
@@ -256,6 +266,7 @@ function InterestsStep({ onDone, onBack }: { onDone: () => void; onBack: () => v
   const [finishing, setFinishing] = useState(false)
   const { top, bottom } = useSafeAreaInsets()
   const { scale, bounce } = useBounce()
+  const { refreshUser }  = useAuthStore()
 
   function toggle(tag: string) {
     setSelected((prev) => {
@@ -268,8 +279,11 @@ function InterestsStep({ onDone, onBack }: { onDone: () => void; onBack: () => v
   async function handleDone() {
     bounce(async () => {
       setFinishing(true)
+      const interests = [...selected]
       try {
-        await AsyncStorage.setItem('interests', JSON.stringify([...selected]))
+        await AsyncStorage.setItem('interests', JSON.stringify(interests))
+        await api.put('/users/interests', { interests }).catch(() => {})
+        await refreshUser().catch(() => {})
         await clearAllLocalData().catch(() => {})
         await AsyncStorage.setItem('onboarding_done', '1')
       } catch {}
@@ -303,16 +317,22 @@ function InterestsStep({ onDone, onBack }: { onDone: () => void; onBack: () => v
 
         {/* Tags */}
         <View style={is.tagsWrap}>
-          {INTERESTS.map((tag) => {
-            const on = selected.has(tag)
+          {INTERESTS.map(({ label, emoji }) => {
+            const on = selected.has(label)
             return (
               <TouchableOpacity
-                key={tag}
+                key={label}
                 style={[is.tag, on && is.tagOn]}
-                onPress={() => toggle(tag)}
-                activeOpacity={0.75}
+                onPress={() => toggle(label)}
+                activeOpacity={0.7}
               >
-                <Text style={[is.tagTxt, on && is.tagTxtOn]}>{tag}</Text>
+                <Text style={is.tagEmoji}>{emoji}</Text>
+                <Text style={[is.tagTxt, on && is.tagTxtOn]}>{label}</Text>
+                {on && (
+                  <View style={is.tagCheck}>
+                    <Ionicons name="checkmark" size={11} color={B} />
+                  </View>
+                )}
               </TouchableOpacity>
             )
           })}
@@ -364,25 +384,31 @@ const is = StyleSheet.create({
   heading: { fontFamily: fonts.extraBold, fontSize: 30, lineHeight: 36, letterSpacing: -0.9, color: T },
   sub:     { fontFamily: fonts.regular, fontSize: 15, lineHeight: 22, color: S },
 
-  tagsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  tagsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   tag: {
-    paddingHorizontal: 24, paddingVertical: 14,
+    flexDirection: 'row', alignItems: 'center', gap: 7,
+    paddingHorizontal: 16, paddingVertical: 12,
     borderRadius: 999,
     borderWidth: 1.5, borderColor: BD,
     backgroundColor: BG,
   },
-  tagOn:     { backgroundColor: B, borderColor: B },
-  tagTxt:    { fontFamily: fonts.semiBold, fontSize: 16, color: T },
+  tagOn:     { backgroundColor: T, borderColor: T },
+  tagEmoji:  { fontSize: 15 },
+  tagTxt:    { fontFamily: fonts.semiBold, fontSize: 15, color: T },
   tagTxtOn:  { color: '#fff' },
+  tagCheck: {
+    width: 16, height: 16, borderRadius: 8,
+    backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center',
+  },
 
   footer:   { paddingHorizontal: 24, gap: 10, borderTopWidth: 1, borderTopColor: BD, paddingTop: 14 },
   countTxt: { fontFamily: fonts.medium, fontSize: 13, color: M, textAlign: 'center' },
 
   cta: {
-    height: 52, borderRadius: 16, backgroundColor: B,
+    height: 52, borderRadius: 16, backgroundColor: T,
     alignItems: 'center', justifyContent: 'center',
     ...Platform.select({
-      ios: { shadowColor: B, shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.65, shadowRadius: 18 },
+      ios: { shadowColor: T, shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 16 },
       android: { elevation: 8 },
     }),
   },

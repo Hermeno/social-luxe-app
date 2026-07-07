@@ -46,7 +46,7 @@ export async function getProfile(userId: string) {
       avatar: true, bio: true, availability: true, ghostMode: true,
       coinBalance: true, viewsPublic: true, contact: true,
       defaultFollowDuration: true, city: true, district: true,
-      autoReply: true, showDevice: true, statusLabel: true,
+      autoReply: true, showDevice: true, statusLabel: true, interests: true,
       isAdmin: true, createdAt: true,
     },
   })

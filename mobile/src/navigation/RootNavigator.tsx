@@ -13,6 +13,7 @@ import { connectSocket, disconnectSocket, getSocket } from '../socket'
 import { useSync } from '../hooks/useSync'
 import { getCachedConnections } from '../db/database'
 import { useMessageBadgeStore } from '../store/messageBadge.store'
+import { useNotificationStore, AppNotification } from '../store/notification.store'
 import AuthNavigator from './AuthNavigator'
 import AppNavigator from './AppNavigator'
 import OnboardingScreen from '../screens/OnboardingScreen'
@@ -207,12 +208,18 @@ export default function RootNavigator({ onboardingDone, setOnboardingDone, defau
       })
     })
 
+    // Real-time notifications (new follower, etc.) — feeds the in-app notification list
+    socket.on('notification:new', (n: AppNotification) => {
+      useNotificationStore.getState().addNotification(n)
+    })
+
     return () => {
       socket.off('users:online:snapshot')
       socket.off('user:online')
       socket.off('user:offline')
       socket.off('union:together:live')
       socket.off('dm:live:public')
+      socket.off('notification:new')
     }
   }, [isAuthenticated, token])
 
