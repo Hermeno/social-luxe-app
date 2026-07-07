@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
-import { Post } from '../../types'
+import { Post, Pairing } from '../../types'
 import { colors, fonts } from '../../theme'
 import { useT } from '../../i18n'
 import { useAuthStore } from '../../store/auth.store'
@@ -15,6 +15,7 @@ import { useFollowStore } from '../../store/follow.store'
 import { getCache, setCache } from '../../db/database'
 import { toast } from '../../utils/toast'
 import * as postService from '../../services/post.service'
+import * as pairingService from '../../services/pairing.service'
 import { API_BASE } from '../../config'
 import AvatarImage from '../../components/AvatarImage'
 import FollowSplitButton, { FollowDuration } from '../../components/FollowSplitButton'
@@ -72,6 +73,7 @@ export default function PostInfo({ post, isActive, commentCount: commentCountPro
   const [loadingFollow, setLoadingFollow] = useState(false)
   const [now, setNow]                     = useState(Date.now)
   const [extraCommenters, setExtraCommenters] = useState<CommenterThumb[]>([])
+  const [authorPairing, setAuthorPairing] = useState<Pairing | null>(null)
 
   const caption   = post.caption ?? ''
   const isLong    = caption.length > 80
@@ -108,6 +110,15 @@ export default function PostInfo({ post, isActive, commentCount: commentCountPro
     setExpanded(false)
     setExtraCommenters([])
   }, [post.id])
+
+  // Pairing badge — only fetched for the post currently on screen, not the whole feed
+  useEffect(() => {
+    setAuthorPairing(null)
+    if (!isActive) return
+    let cancelled = false
+    pairingService.getUserPairing(post.user.id).then((p) => { if (!cancelled) setAuthorPairing(p) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [post.user.id, isActive])
 
   // Load extra commenters only when recentCommenters is absent (old cached posts)
   useEffect(() => {
@@ -237,6 +248,20 @@ export default function PostInfo({ post, isActive, commentCount: commentCountPro
           </View>
         </View>
 
+        {/* Pairing badge */}
+        {authorPairing?.status === 'ACTIVE' && (
+          <TouchableOpacity
+            onPress={() => nav.navigate('Profile', { userId: pairingService.pairingPartner(authorPairing, post.user.id).id })}
+            activeOpacity={0.8}
+            style={s.pairingRow}
+          >
+            <View style={s.pairingDot} />
+            <Text style={s.pairingRowTxt} numberOfLines={1}>
+              {pairingService.pairingLabel(authorPairing)} · {pairingService.pairingPartner(authorPairing, post.user.id).name}
+            </Text>
+          </TouchableOpacity>
+        )}
+
         {/* Avatares dos comentadores */}
         {commenters.length > 0 && (
           <View style={s.commentersRow}>
@@ -314,6 +339,13 @@ const s = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.5)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
+  },
+
+  pairingRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: -2 },
+  pairingDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: colors.primary },
+  pairingRowTxt: {
+    color: 'rgba(255,255,255,0.75)', fontFamily: fonts.medium, fontSize: 11.5, letterSpacing: -0.1,
+    textShadowColor: 'rgba(0,0,0,0.4)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2,
   },
 
   extBadge:     { backgroundColor: colors.primary, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },

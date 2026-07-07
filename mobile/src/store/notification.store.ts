@@ -2,7 +2,7 @@ import { create } from 'zustand'
 
 export interface AppNotification {
   id: string
-  type: 'like' | 'comment' | 'reaction' | 'message' | 'coin' | 'extend_vote' | 'union_invite' | 'follow'
+  type: 'like' | 'comment' | 'reaction' | 'message' | 'coin' | 'extend_vote' | 'union_invite' | 'follow' | 'pairing_invite' | 'pairing_accept'
   message: string
   read: boolean
   createdAt: string

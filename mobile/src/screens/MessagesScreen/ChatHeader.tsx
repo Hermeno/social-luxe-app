@@ -5,6 +5,8 @@ import { colors, fonts, spacing } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
 import SegmentedRing from '../../components/SegmentedRing'
 import { useT } from '../../i18n'
+import { Pairing } from '../../types'
+import { pairingLabel } from '../../services/pairing.service'
 
 const AV_SIZE    = 30
 const RING_OUTER = AV_SIZE + 6  // 36
@@ -19,30 +21,58 @@ interface Props {
   onSchedule: () => void
   onProfilePress: () => void
   hasScheduled: boolean
-  isLiveChat: boolean
-  onToggleLive: () => void
+  pairing: Pairing | null
+  myUserId: string
+  onInvitePairing: () => void
+  onAcceptPairing: () => void
+  onDeclinePairing: () => void
+  onEndPairing: () => void
 }
 
 export default function ChatHeader({
   userName, avatarUri, hasPosts, isOnline, isTyping,
-  onBack, onProfilePress, isLiveChat, onToggleLive,
+  onBack, onProfilePress, pairing, myUserId,
+  onInvitePairing, onAcceptPairing, onDeclinePairing, onEndPairing,
 }: Props) {
   const t = useT()
   const statusText = isTyping ? t.chat_typing : isOnline ? t.chat_online : t.chat_offline
 
-  function renderLiveBtn() {
-    if (isLiveChat) {
+  function renderPairingChip() {
+    if (!pairing) {
       return (
-        <TouchableOpacity onPress={onToggleLive} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={s.chip}>
-          <View style={s.liveDot} />
-          <Text style={s.chipTxt}>Terminar</Text>
+        <TouchableOpacity onPress={onInvitePairing} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={s.chip}>
+          <Ionicons name="heart-outline" size={13} color="#0A0A0A" />
+          <Text style={s.chipTxt}>Formar par</Text>
         </TouchableOpacity>
       )
     }
+
+    if (pairing.status === 'PENDING') {
+      if (pairing.requestedBy === myUserId) {
+        return (
+          <TouchableOpacity onPress={onEndPairing} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={s.chip}>
+            <View style={s.pendingDot} />
+            <Text style={s.chipTxt}>Convite enviado</Text>
+          </TouchableOpacity>
+        )
+      }
+      return (
+        <View style={s.pendingActions}>
+          <TouchableOpacity onPress={onDeclinePairing} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={s.chipGhost}>
+            <Ionicons name="close" size={14} color="#0A0A0A" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onAcceptPairing} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={s.chip}>
+            <Ionicons name="heart" size={13} color="#0A0A0A" />
+            <Text style={s.chipTxt}>Aceitar</Text>
+          </TouchableOpacity>
+        </View>
+      )
+    }
+
     return (
-      <TouchableOpacity onPress={onToggleLive} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={s.chip}>
-        <Ionicons name="heart-outline" size={13} color="#0A0A0A" />
-        <Text style={s.chipTxt}>Iniciar par</Text>
+      <TouchableOpacity onPress={onEndPairing} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={s.chip}>
+        <View style={s.liveDot} />
+        <Text style={s.chipTxt}>{pairingLabel(pairing)}</Text>
       </TouchableOpacity>
     )
   }
@@ -77,7 +107,7 @@ export default function ChatHeader({
       </View>
 
       <View style={s.actions}>
-        {renderLiveBtn()}
+        {renderPairingChip()}
       </View>
     </View>
   )
@@ -133,5 +163,13 @@ const s = StyleSheet.create({
     borderRadius:    20,
   },
   liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#22C55E' },
+  pendingDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#FFB173' },
   chipTxt: { fontSize: 12.5, fontFamily: fonts.semiBold, color: '#0A0A0A' },
+
+  pendingActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  chipGhost: {
+    alignItems: 'center', justifyContent: 'center',
+    width: 28, height: 28, borderRadius: 14,
+    borderWidth: 1.3, borderColor: '#0A0A0A',
+  },
 })

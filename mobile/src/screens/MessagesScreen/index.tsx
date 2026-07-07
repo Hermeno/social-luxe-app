@@ -19,7 +19,8 @@ import Toast from 'react-native-toast-message'
 import * as msgService from '../../services/message.service'
 import * as unionService from '../../services/union.service'
 import { getConnections, FollowDuration } from '../../services/follow.service'
-import { Connection, Union, UnionMessage, TogetherLivePayload, LiveChatStatus, LiveChatEnded } from '../../types'
+import { Connection, Union, UnionMessage, TogetherLivePayload, Pairing } from '../../types'
+import * as pairingService from '../../services/pairing.service'
 import { useUnionStore } from '../../store/union.store'
 import {
   getViewedPostIds,
@@ -385,24 +386,24 @@ function SuggestedUserRow({ user, onPress }: { user: UserResult; onPress: () => 
   )
 }
 
-// ── Live "together now" card — vertical card in the horizontal carousel ──────
+// ── Pairing card — vertical card in the horizontal carousel ──────────────────
 
-function LiveTogetherCard({ data, onPress }: { data: LiveChatStatus; onPress: () => void }) {
+function PairingCard({ data, onPress }: { data: Pairing; onPress: () => void }) {
   return (
     <TouchableOpacity style={g.card} onPress={onPress} activeOpacity={0.7}>
       <DuoAvatar
-        aUri={data.userAAvatar} aName={data.userAName}
-        bUri={data.userBAvatar} bName={data.userBName}
+        aUri={data.userA.avatar} aName={data.userA.name}
+        bUri={data.userB.avatar} bName={data.userB.name}
         size={36} overlap={12} borderWidth={2}
       />
       <View style={g.textCol}>
         <View style={g.liveRow}>
           <View style={g.liveDot} />
           <Text style={g.names} numberOfLines={1}>
-            {data.userAName.split(' ')[0]} & {data.userBName.split(' ')[0]}
+            {data.userA.name.split(' ')[0]} & {data.userB.name.split(' ')[0]}
           </Text>
         </View>
-        <Text style={g.title} numberOfLines={1}>{data.title}</Text>
+        <Text style={g.title} numberOfLines={1}>{pairingService.pairingLabel(data)}</Text>
       </View>
     </TouchableOpacity>
   )
@@ -444,7 +445,7 @@ export default function MessagesScreen() {
   const [unionConvoLoad,  setUnionConvoLoad]  = useState(false)
   const [respondingId,    setRespondingId]    = useState<string | null>(null)
   const [liveUnions,      setLiveUnions]      = useState<Set<string>>(new Set())
-  const [liveChats,       setLiveChats]       = useState<Record<string, LiveChatStatus>>({})
+  const [myPairing,       setMyPairing]       = useState<Pairing | null>(null)
   const { myUnions, setMyUnions, addInvite, incrementUnread, setPendingInvites, removeInvite, addUnion, hydrateFromCache } = useUnionStore()
   const pendingInvites   = useUnionStore((s) => s.pendingInvites)
 
@@ -471,6 +472,11 @@ export default function MessagesScreen() {
   // Track current connections in a ref so onNewMessage can read it without closures
   const connectionsRef = useRef<Connection[]>([])
   useEffect(() => { connectionsRef.current = connections }, [connections])
+
+  // Pairing is persistent (DB-backed) — fetch on mount, socket events keep it live after that
+  useEffect(() => {
+    pairingService.getMyPairing().then(setMyPairing).catch(() => {})
+  }, [])
 
   // ── Respond to union invite ───────────────────────────────────────────────
   async function handleRespondInvite(inviteId: string, accept: boolean) {
@@ -510,34 +516,33 @@ export default function MessagesScreen() {
       setLiveUnions((prev) => { const n = new Set(prev); n.delete(unionId); return n })
     }
 
-    const onDmLive = (data: LiveChatStatus) => {
-      const key = [data.userAId, data.userBId].sort().join('|')
-      setLiveChats((prev) => ({ ...prev, [key]: data }))
+    const onPairingInvited = ({ pairing }: { pairing: Pairing }) => {
+      if (pairing.userA.id === user?.id || pairing.userB.id === user?.id) setMyPairing(pairing)
     }
-    const onDmEnded = (data: LiveChatEnded) => {
-      const key = [data.userAId, data.userBId].sort().join('|')
-      setLiveChats((prev) => {
-        const next = { ...prev }
-        delete next[key]
-        return next
-      })
+    const onPairingActive = ({ pairing }: { pairing: Pairing }) => {
+      if (pairing.userA.id === user?.id || pairing.userB.id === user?.id) setMyPairing(pairing)
+    }
+    const onPairingEnded = ({ pairing }: { pairing: Pairing }) => {
+      if (pairing.userA.id === user?.id || pairing.userB.id === user?.id) setMyPairing(null)
     }
 
     socket.on('union:invite',       onInvite)
     socket.on('union:message:new',  onMsg)
     socket.on('union:together:live',  onLive)
     socket.on('union:together:ended', onEnded)
-    socket.on('dm:live:status',       onDmLive)
-    socket.on('dm:live:ended',        onDmEnded)
+    socket.on('pairing:invited',    onPairingInvited)
+    socket.on('pairing:active',     onPairingActive)
+    socket.on('pairing:ended',      onPairingEnded)
     return () => {
       socket.off('union:invite',       onInvite)
       socket.off('union:message:new',  onMsg)
       socket.off('union:together:live',  onLive)
       socket.off('union:together:ended', onEnded)
-      socket.off('dm:live:status',       onDmLive)
-      socket.off('dm:live:ended',        onDmEnded)
+      socket.off('pairing:invited',    onPairingInvited)
+      socket.off('pairing:active',     onPairingActive)
+      socket.off('pairing:ended',      onPairingEnded)
     }
-  }, [])
+  }, [user?.id])
 
   // ── Load connections (SQLite first → always background sync) ────────────
   const syncConnectionsRef = useRef<(() => Promise<void>) | null>(null)
@@ -849,7 +854,7 @@ export default function MessagesScreen() {
   ]
   allMsgItems.sort((a, b) => b.ts - a.ts)
 
-  const liveTogetherList = Object.values(liveChats)
+  const liveTogetherList = myPairing?.status === 'ACTIVE' ? [myPairing] : []
   const weavableSuggestions = suggested.filter((u) => !followingIds.has(u.id))
 
   const feedItems: FeedItem[] = []
@@ -1078,24 +1083,27 @@ export default function MessagesScreen() {
                   <>
                     {liveTogetherList.length > 0 && (
                       <View style={g.section}>
-                        <Text style={g.sectionLabel}>Juntos agora</Text>
+                        <Text style={g.sectionLabel}>Em par</Text>
                         <FlatList
                           data={liveTogetherList}
-                          keyExtractor={(d) => `${d.userAId}_${d.userBId}`}
+                          keyExtractor={(d) => d.id}
                           horizontal
                           showsHorizontalScrollIndicator={false}
                           contentContainerStyle={g.sectionContent}
                           ItemSeparatorComponent={() => <View style={{ width: 10 }} />}
-                          renderItem={({ item }) => (
-                            <LiveTogetherCard
-                              data={item}
-                              onPress={() => nav.navigate('Chat', {
-                                userId:     item.userAId === user?.id ? item.userBId  : item.userAId,
-                                userName:   item.userAId === user?.id ? item.userBName : item.userAName,
-                                userAvatar: item.userAId === user?.id ? item.userBAvatar : item.userAAvatar,
-                              })}
-                            />
-                          )}
+                          renderItem={({ item }) => {
+                            const partner = pairingService.pairingPartner(item, user?.id ?? '')
+                            return (
+                              <PairingCard
+                                data={item}
+                                onPress={() => nav.navigate('Chat', {
+                                  userId:     partner.id,
+                                  userName:   partner.name,
+                                  userAvatar: partner.avatar,
+                                })}
+                              />
+                            )
+                          }}
                         />
                       </View>
                     )}

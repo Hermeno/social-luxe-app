@@ -68,6 +68,8 @@ function notifIcon(type: AppNotification['type']): string {
     case 'extend_vote':     return 'timer'
     case 'union_invite':    return 'heart-circle'
     case 'follow':          return 'person-add'
+    case 'pairing_invite':  return 'people-circle'
+    case 'pairing_accept':  return 'people-circle'
     default:                return 'notifications'
   }
 }
@@ -82,6 +84,8 @@ function notifColor(type: AppNotification['type']): string {
     case 'extend_vote':     return '#CA2851'
     case 'union_invite':    return '#FF4B6E'
     case 'follow':          return '#1A1A1A'
+    case 'pairing_invite':  return '#0A0A0A'
+    case 'pairing_accept':  return '#0A0A0A'
     default:                return '#6B7280'
   }
 }
@@ -296,6 +300,9 @@ export default function NotificationsScreen() {
             onPress={() => {
               if (item.type === 'follow' && item.fromUser) {
                 nav.navigate('Profile', { userId: item.fromUser.id })
+              }
+              if ((item.type === 'pairing_invite' || item.type === 'pairing_accept') && item.fromUser) {
+                nav.navigate('Chat', { userId: item.fromUser.id, userName: item.fromUser.name, userAvatar: item.fromUser.avatar })
               }
             }}
           />

@@ -30,7 +30,8 @@ import { useFollowStore } from '../../store/follow.store'
 import { deletePost as apiDeletePost, updatePost as apiUpdatePost } from '../../services/post.service'
 import { toast } from '../../utils/toast'
 import { getMyUnions, getPendingInvites, respondToInvite } from '../../services/union.service'
-import { Union, UnionInvite } from '../../types'
+import { Union, UnionInvite, Pairing } from '../../types'
+import * as pairingService from '../../services/pairing.service'
 import { useT } from '../../i18n'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -187,6 +188,7 @@ export default function ProfileScreen() {
   const [showFollowSheet, setShowFollowSheet] = useState(false)
   const [myUnion,      setMyUnion]      = useState<Union | null>(null)
   const [unionInvites, setUnionInvites] = useState<UnionInvite[]>([])
+  const [profilePairing, setProfilePairing] = useState<Pairing | null>(null)
   const [menuPost,        setMenuPost]        = useState<Post | null>(null)
   const [editEditing,     setEditEditing]     = useState(false)
   const [editCaption,     setEditCaption]     = useState('')
@@ -296,6 +298,13 @@ export default function ProfileScreen() {
     loadUnionData()
     return () => { active = false }
   }, [isOwn]))
+
+  // Pairing badge — visible to anyone viewing this profile, not just the owner
+  useFocusEffect(useCallback(() => {
+    let active = true
+    pairingService.getUserPairing(targetId).then((p) => { if (active) setProfilePairing(p) }).catch(() => {})
+    return () => { active = false }
+  }, [targetId]))
 
   async function handleRefresh() {
     setRefreshing(true)
@@ -556,6 +565,14 @@ export default function ProfileScreen() {
               <Ionicons name="heart" size={11} color="#fff" />
               <Text style={m.partnerTxt}>Parceiro · {otherMember.name}</Text>
             </LinearGradient>
+          )}
+          {profilePairing?.status === 'ACTIVE' && (
+            <View style={m.pairingPill}>
+              <View style={m.pairingPillDot} />
+              <Text style={m.pairingPillTxt}>
+                {pairingService.pairingLabel(profilePairing)} · {pairingService.pairingPartner(profilePairing, targetId).name}
+              </Text>
+            </View>
           )}
         </View>
       )}
@@ -839,6 +856,14 @@ const m = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   partnerTxt: { fontSize: 12, fontFamily: fonts.semiBold, color: '#fff' },
+  pairingPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5,
+    alignSelf: 'flex-start',
+    borderWidth: 1.3, borderColor: '#0A0A0A',
+  },
+  pairingPillDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.primary },
+  pairingPillTxt: { fontSize: 12, fontFamily: fonts.semiBold, color: '#0A0A0A' },
 
   // ── Interests ──────────────────────────────────────────────────────────────
   interestsWrap: {

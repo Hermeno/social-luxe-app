@@ -18,7 +18,7 @@ import AuthNavigator from './AuthNavigator'
 import AppNavigator from './AppNavigator'
 import OnboardingScreen from '../screens/OnboardingScreen'
 import { api } from '../services/api'
-import { TogetherLivePayload, LiveChatPublic } from '../types'
+import { TogetherLivePayload } from '../types'
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -197,17 +197,6 @@ export default function RootNavigator({ onboardingDone, setOnboardingDone, defau
       })
     })
 
-    // Live chat pair partilhado com seguidores — notificar com um toast
-    socket.on('dm:live:public', ({ userAName, userBName, title }: LiveChatPublic) => {
-      Toast.show({
-        type:            'success',
-        text1:           `🔥 ${userAName} & ${userBName}`,
-        text2:           title,
-        visibilityTime:  5000,
-        position:        'top',
-      })
-    })
-
     // Real-time notifications (new follower, etc.) — feeds the in-app notification list
     socket.on('notification:new', (n: AppNotification) => {
       useNotificationStore.getState().addNotification(n)
@@ -218,7 +207,6 @@ export default function RootNavigator({ onboardingDone, setOnboardingDone, defau
       socket.off('user:online')
       socket.off('user:offline')
       socket.off('union:together:live')
-      socket.off('dm:live:public')
       socket.off('notification:new')
     }
   }, [isAuthenticated, token])

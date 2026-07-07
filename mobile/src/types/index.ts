@@ -170,24 +170,23 @@ export interface TogetherLivePayload {
   memberBName: string
 }
 
-// ── Live Chat Pair — automatic 1:1 live presence ──────────────────────────────
+// ── Pairing — persistent relationship tag between two users ──────────────────
 
-export interface LiveChatStatus {
-  userAId:     string
-  userAName:   string
-  userAAvatar: string | null
-  userBId:     string
-  userBName:   string
-  userBAvatar: string | null
-  title:       string
+export type PairingType = 'AMIGOS' | 'AMORES' | 'IRMAOS' | 'BESTS' | 'BONITONAS' | 'GEMEAS' | 'OUTRO'
+export type PairingStatus = 'PENDING' | 'ACTIVE' | 'ENDED'
+
+export interface Pairing {
+  id:          string
+  type:        PairingType
+  customLabel: string | null
+  status:      PairingStatus
+  requestedBy: string
+  createdAt:   string
+  respondedAt: string | null
+  endedAt:     string | null
+  userA: { id: string; name: string; avatar: string | null }
+  userB: { id: string; name: string; avatar: string | null }
 }
-
-export interface LiveChatEnded {
-  userAId: string
-  userBId: string
-}
-
-export type LiveChatPublic = LiveChatStatus
 
 export interface UnionMember {
   id:     string

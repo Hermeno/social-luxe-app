@@ -15,30 +15,6 @@ type TogetherRoom = {
 }
 const togetherRooms = new Map<string, TogetherRoom>()
 
-// ── Live Chat Pair — manual start/end, visible to followers immediately ───────
-type LivePairPayload = {
-  userAId: string; userAName: string; userAAvatar: string | null
-  userBId: string; userBName: string; userBAvatar: string | null
-  title: string
-}
-const livePairs = new Map<string, LivePairPayload>()
-
-const LIVE_CHAT_TITLE = 'estão juntos agora'
-
-function pairKey(a: string, b: string): string {
-  return [a, b].sort().join('|')
-}
-
-async function notifyFollowers(userAId: string, userBId: string, event: string, payload: unknown) {
-  const followers = await prisma.follow.findMany({
-    where:  { followingId: { in: [userAId, userBId] } },
-    select: { followerId: true },
-  })
-  const unique = [...new Set(followers.map((f) => f.followerId))]
-    .filter((id) => id !== userAId && id !== userBId)
-  unique.forEach((fId) => emitToUser(fId, event, payload))
-}
-
 function getOrCreateRoom(unionId: string): TogetherRoom {
   if (!togetherRooms.has(unionId)) {
     togetherRooms.set(unionId, { members: new Set(), consented: new Map(), visibility: 'private' })
@@ -213,73 +189,10 @@ export function setupSocket(httpServer: HttpServer): Server {
       } catch {}
     })
 
-    // ── Live Chat Pair — manual start/end ─────────────────────────────────────
-
-    // Client asks "is this pair currently live?" — used when the chat screen
-    // (re)mounts, since `dm:live:start` only reaches sockets connected at that
-    // exact moment. Without this, leaving and returning to the chat forgets
-    // the live status entirely (and a second `dm:live:start` would be a no-op).
-    socket.on('dm:live:query', ({ otherUserId }: { otherUserId: string }) => {
-      const key = pairKey(userId, otherUserId)
-      const payload = livePairs.get(key)
-      if (payload) socket.emit('dm:live:status', payload)
-    })
-
-    // Either user taps "Iniciar conversa em par" — goes live immediately for
-    // both participants and is broadcast to both of their followers right away
-    // (starting it is the consent — no separate opt-in step).
-    socket.on('dm:live:start', async ({ otherUserId }: { otherUserId: string }) => {
-      const key = pairKey(userId, otherUserId)
-      const existing = livePairs.get(key)
-      if (existing) {
-        // Server already thinks this pair is live (e.g. the client lost sync
-        // after leaving and returning) — resync instead of silently no-op'ing,
-        // so tapping "Iniciar" never does nothing.
-        socket.emit('dm:live:status', existing)
-        return
-      }
-      try {
-        const [profA, profB] = await Promise.all([
-          prisma.user.findUnique({ where: { id: userId },      select: { name: true, avatar: true } }),
-          prisma.user.findUnique({ where: { id: otherUserId }, select: { name: true, avatar: true } }),
-        ])
-        if (!profA || !profB) return
-
-        const title = LIVE_CHAT_TITLE
-        const payload: LivePairPayload = {
-          userAId: userId,      userAName: profA.name, userAAvatar: profA.avatar,
-          userBId: otherUserId, userBName: profB.name, userBAvatar: profB.avatar,
-          title,
-        }
-        livePairs.set(key, payload)
-
-        io.to(userId).emit('dm:live:status', payload)
-        io.to(otherUserId).emit('dm:live:status', payload)
-        await notifyFollowers(userId, otherUserId, 'dm:live:public', payload)
-      } catch {}
-    })
-
-    // Either user taps "Terminar"
-    socket.on('dm:live:end', async ({ otherUserId }: { otherUserId: string }) => {
-      const key = pairKey(userId, otherUserId)
-      if (!livePairs.has(key)) return
-      livePairs.delete(key)
-
-      const endPayload = { userAId: userId, userBId: otherUserId }
-      io.to(userId).emit('dm:live:ended', endPayload)
-      io.to(otherUserId).emit('dm:live:ended', endPayload)
-      try {
-        await notifyFollowers(userId, otherUserId, 'dm:live:public:ended', endPayload)
-      } catch {}
-    })
-
     // ── disconnect ──────────────────────────────────────────────────────────
     socket.on('disconnect', async () => {
       onlineUsers.delete(userId)
       io.emit('user:offline', { userId })
-
-      // Live chat pairs are manual (start/end button) — they intentionally
-      // survive a disconnect, same as they'd survive backgrounding the app.
 
       // Clean up any together rooms this user was in
       for (const [unionId, room] of togetherRooms) {

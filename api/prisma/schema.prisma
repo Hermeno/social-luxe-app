@@ -110,6 +110,8 @@ model User {
   unionsAsA        Union[]        @relation("UnionMemberA")
   unionsAsB        Union[]        @relation("UnionMemberB")
   unionInvites     UnionInvite[]
+  pairingsAsA      Pairing[]      @relation("PairingUserA")
+  pairingsAsB      Pairing[]      @relation("PairingUserB")
 }
 
 // ─── Post ────────────────────────────────────────────────────────────────────
@@ -681,6 +683,44 @@ model UnionMessage {
 
   @@index([fromUnionId, toUnionId, createdAt(sort: Desc)])
   @@index([toUnionId, fromUnionId, createdAt(sort: Desc)])
+}
+
+// ─── Pairing (persistent relationship tag between two users) ─────────────────
+
+enum PairingType {
+  AMIGOS
+  AMORES
+  IRMAOS
+  BESTS
+  BONITONAS
+  GEMEAS
+  OUTRO
+}
+
+enum PairingStatus {
+  PENDING
+  ACTIVE
+  ENDED
+}
+
+model Pairing {
+  id          String        @id @default(cuid())
+  userAId     String
+  userBId     String
+  type        PairingType
+  customLabel String?
+  status      PairingStatus @default(PENDING)
+  requestedBy String
+  createdAt   DateTime      @default(now())
+  respondedAt DateTime?
+  endedAt     DateTime?
+
+  userA User @relation("PairingUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB User @relation("PairingUserB", fields: [userBId], references: [id], onDelete: Cascade)
+
+  @@unique([userAId, userBId])
+  @@index([userAId])
+  @@index([userBId])
 }
 
 // ─── PasswordReset ────────────────────────────────────────────────────────────

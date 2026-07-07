@@ -2,17 +2,17 @@ import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import {
   View, Text, FlatList, StyleSheet, ActivityIndicator,
   Keyboard, Platform, Animated, Pressable, TouchableOpacity, Modal, StatusBar, AppState,
-  ScrollView,
+  ScrollView, Alert, TextInput,
 } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
 import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { RouteProp, useNavigation, useRoute, useFocusEffect } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Message, MessageReaction } from '../../types'
+import { Message, MessageReaction, Pairing, PairingType } from '../../types'
 import * as msgService from '../../services/message.service'
+import * as pairingService from '../../services/pairing.service'
 import { useAuthStore } from '../../store/auth.store'
 import { useOnlineStore } from '../../store/online.store'
 import { useMessageBadgeStore } from '../../store/messageBadge.store'
@@ -46,6 +46,16 @@ const CHAT_BG        = '#FFFFFF'
 const MINE_COLOR     = '#CA2851'
 const THEIRS_COLOR   = '#F0F2F5'
 const REACTION_EMOJIS = ['❤️', '😂', '😮', '😢', '🔥', '👏']
+
+const PAIRING_TYPE_OPTIONS: { type: PairingType; emoji: string; label: string }[] = [
+  { type: 'AMIGOS',    emoji: '🤝', label: 'Amigos' },
+  { type: 'AMORES',    emoji: '💕', label: 'Amores' },
+  { type: 'IRMAOS',    emoji: '👯', label: 'Irmãos' },
+  { type: 'BESTS',     emoji: '✨', label: 'Bests' },
+  { type: 'BONITONAS', emoji: '💅', label: 'Bonitonas' },
+  { type: 'GEMEAS',    emoji: '🫂', label: 'Gémeas' },
+  { type: 'OUTRO',     emoji: '✍️', label: 'Outro...' },
+]
 
 function formatTime(dateStr: string) {
   const d = new Date(dateStr)
@@ -388,9 +398,11 @@ export default function ChatScreen() {
   const [hasMorePages, setHasMorePages] = useState(false)
   const oldestMsgAtRef = useRef<string | undefined>(undefined)
 
-  // ── Live Chat Pair ─────────────────────────────────────────────────────────
-  const [isLiveChat, setIsLiveChat] = useState(false)
-  const [liveTitle,  setLiveTitle]  = useState<string | null>(null)
+  // ── Pairing (persistent relationship tag) ──────────────────────────────────
+  const [pairing, setPairing]             = useState<Pairing | null>(null)
+  const [pairingPickerOpen, setPairingPickerOpen] = useState(false)
+  const [customizingPairing, setCustomizingPairing] = useState(false)
+  const [customPairingLabel, setCustomPairingLabel] = useState('')
 
   const listRef     = useRef<FlatList>(null)
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -577,18 +589,18 @@ export default function ChatScreen() {
       setMessages((prev) => prev.filter((m) => m.id !== messageId))
     }
 
-    // ── live chat pair events ──────────────────────────────────────────────
-    function onDmLiveStatus(payload: { userAId: string; userBId: string; title: string }) {
-      const isThisPair = (payload.userAId === userId || payload.userBId === userId)
-      if (!isThisPair) return
-      setIsLiveChat(true)
-      setLiveTitle(payload.title)
+    // ── pairing events ──────────────────────────────────────────────────────
+    function involvesThisChat(p: Pairing) {
+      return p.userA.id === userId || p.userB.id === userId
     }
-    function onDmLiveEnded(payload: { userAId: string; userBId: string }) {
-      const isThisPair = (payload.userAId === userId || payload.userBId === userId)
-      if (!isThisPair) return
-      setIsLiveChat(false)
-      setLiveTitle(null)
+    function onPairingInvited({ pairing: p }: { pairing: Pairing }) {
+      if (involvesThisChat(p)) setPairing(p)
+    }
+    function onPairingActive({ pairing: p }: { pairing: Pairing }) {
+      if (involvesThisChat(p)) setPairing(p)
+    }
+    function onPairingEnded({ pairing: p }: { pairing: Pairing }) {
+      if (involvesThisChat(p)) setPairing(null)
     }
 
     socket.on('message:new',      onNewMessage)
@@ -596,14 +608,9 @@ export default function ChatScreen() {
     socket.on('message:reaction', onReaction)
     socket.on('message:edited',   onEdited)
     socket.on('message:deleted',  onDeleted)
-    socket.on('dm:live:status',   onDmLiveStatus)
-    socket.on('dm:live:ended',    onDmLiveEnded)
-
-    // Re-sync live-pair status now that the listener above is attached —
-    // `dm:live:status` only reaches sockets connected at the moment
-    // `dm:live:start` fired, so leaving and returning to the chat would
-    // otherwise forget an already-live pair.
-    socket.emit('dm:live:query', { otherUserId: userId })
+    socket.on('pairing:invited',  onPairingInvited)
+    socket.on('pairing:active',   onPairingActive)
+    socket.on('pairing:ended',    onPairingEnded)
 
     return () => {
       socket.off('message:new',      onNewMessage)
@@ -611,10 +618,22 @@ export default function ChatScreen() {
       socket.off('message:reaction', onReaction)
       socket.off('message:edited',   onEdited)
       socket.off('message:deleted',  onDeleted)
-      socket.off('dm:live:status',   onDmLiveStatus)
-      socket.off('dm:live:ended',    onDmLiveEnded)
+      socket.off('pairing:invited',  onPairingInvited)
+      socket.off('pairing:active',   onPairingActive)
+      socket.off('pairing:ended',    onPairingEnded)
     }
   }, [userId, user?.id, userName])
+
+  // Pairing is persistent (DB-backed), so fetch it whenever this chat is focused —
+  // unlike the old ephemeral live-status, a socket-only sync would miss updates
+  // that happened while this screen wasn't mounted.
+  useFocusEffect(
+    useCallback(() => {
+      pairingService.getMyPairing()
+        .then((p) => setPairing(p && (p.userA.id === userId || p.userB.id === userId) ? p : null))
+        .catch(() => {})
+    }, [userId]),
+  )
 
   // ── Typing indicator ───────────────────────────────────────────────────────
   const handleTextChange = useCallback((val: string) => {
@@ -724,11 +743,64 @@ export default function ChatScreen() {
     }
   }, [checkAndSendDue])
 
-  // ── Live chat pair — manual start/end, visible to followers right away ────
-  function handleToggleLive() {
-    const socket = getSocket()
-    if (!socket) return
-    socket.emit(isLiveChat ? 'dm:live:end' : 'dm:live:start', { otherUserId: userId })
+  // ── Pairing — persistent relationship tag, needs the other side to accept ──
+  function handleInvitePairing() {
+    setCustomizingPairing(false)
+    setCustomPairingLabel('')
+    setPairingPickerOpen(true)
+  }
+
+  async function handleSelectPairingType(type: PairingType, customLabel?: string) {
+    setPairingPickerOpen(false)
+    try {
+      const p = await pairingService.invitePairing(userId, type, customLabel)
+      setPairing(p)
+    } catch (e: any) {
+      Alert.alert('Não foi possível', e.message ?? 'Tenta novamente.')
+    }
+  }
+
+  async function handleAcceptPairing() {
+    if (!pairing) return
+    try {
+      const p = await pairingService.respondPairing(pairing.id, true)
+      setPairing(p)
+    } catch (e: any) {
+      Alert.alert('Não foi possível', e.message ?? 'Tenta novamente.')
+    }
+  }
+
+  async function handleDeclinePairing() {
+    if (!pairing) return
+    try {
+      await pairingService.respondPairing(pairing.id, false)
+      setPairing(null)
+    } catch (e: any) {
+      Alert.alert('Não foi possível', e.message ?? 'Tenta novamente.')
+    }
+  }
+
+  function handleEndPairing() {
+    if (!pairing) return
+    const isPending = pairing.status === 'PENDING'
+    Alert.alert(
+      isPending ? 'Cancelar convite?' : 'Desfazer par?',
+      isPending ? 'O convite deixa de estar pendente.' : 'Isto termina o vínculo entre vocês.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: isPending ? 'Cancelar convite' : 'Desfazer', style: 'destructive',
+          onPress: async () => {
+            try {
+              await pairingService.endPairing(pairing.id)
+              setPairing(null)
+            } catch (e: any) {
+              Alert.alert('Não foi possível', e.message ?? 'Tenta novamente.')
+            }
+          },
+        },
+      ],
+    )
   }
 
   // ── Send: optimistic → API → confirm ──────────────────────────────────────
@@ -938,23 +1010,25 @@ export default function ChatScreen() {
           onSchedule={() => setShowScheduler(true)}
           onProfilePress={() => nav.navigate('Profile', { userId })}
           hasScheduled={!!scheduledMsg}
-          isLiveChat={isLiveChat}
-          onToggleLive={handleToggleLive}
+          pairing={pairing}
+          myUserId={user?.id ?? ''}
+          onInvitePairing={handleInvitePairing}
+          onAcceptPairing={handleAcceptPairing}
+          onDeclinePairing={handleDeclinePairing}
+          onEndPairing={handleEndPairing}
         />
 
-        {/* ── Live chat pair banner ─────────────────────────────────────────── */}
-        {isLiveChat && liveTitle && (
-          <LinearGradient
-            colors={['#CA2851', '#FF6766']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={t.liveBanner}
-          >
-            <Text style={t.liveBannerTxt}>🔥 {userName.split(' ')[0]} e {user?.name?.split(' ')[0] ?? 'tu'} {liveTitle}</Text>
-            <TouchableOpacity onPress={handleToggleLive} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={t.liveShareTxt}>Terminar</Text>
+        {/* ── Pairing banner — active relationship tag ────────────────────── */}
+        {pairing?.status === 'ACTIVE' && (
+          <View style={t.pairingBanner}>
+            <View style={t.pairingBannerDot} />
+            <Text style={t.pairingBannerTxt} numberOfLines={1}>
+              {userName.split(' ')[0]} e {user?.name?.split(' ')[0] ?? 'tu'} são {pairingService.pairingLabel(pairing)}
+            </Text>
+            <TouchableOpacity onPress={handleEndPairing} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={t.pairingBannerAction}>Desfazer</Text>
             </TouchableOpacity>
-          </LinearGradient>
+          </View>
         )}
 
         <View style={t.wallpaper}>
@@ -1085,6 +1159,51 @@ export default function ChatScreen() {
           onSchedule={handleScheduleMessage}
           onCancelScheduled={handleCancelScheduled}
         />
+
+        <Modal
+          visible={pairingPickerOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setPairingPickerOpen(false)}
+        >
+          <Pressable style={t.pickerOverlay} onPress={() => setPairingPickerOpen(false)}>
+            <Pressable style={t.pickerCard} onPress={() => {}}>
+              <Text style={t.pickerTitle}>Formar par com {userName.split(' ')[0]}</Text>
+              <Text style={t.pickerSub}>{userName.split(' ')[0]} vai precisar de aceitar o convite.</Text>
+
+              {PAIRING_TYPE_OPTIONS.map((opt) => (
+                <TouchableOpacity
+                  key={opt.type}
+                  style={t.pickerOption}
+                  onPress={() => opt.type === 'OUTRO' ? setCustomizingPairing(true) : handleSelectPairingType(opt.type)}
+                >
+                  <Text style={t.pickerOptionEmoji}>{opt.emoji}</Text>
+                  <Text style={t.pickerOptionTxt}>{opt.label}</Text>
+                </TouchableOpacity>
+              ))}
+
+              {customizingPairing && (
+                <View style={t.pickerCustomRow}>
+                  <TextInput
+                    style={t.pickerCustomInput}
+                    placeholder="Escreve o vínculo..."
+                    placeholderTextColor={colors.gray400}
+                    value={customPairingLabel}
+                    onChangeText={setCustomPairingLabel}
+                    maxLength={24}
+                    autoFocus
+                  />
+                  <TouchableOpacity
+                    disabled={!customPairingLabel.trim()}
+                    onPress={() => handleSelectPairingType('OUTRO', customPairingLabel.trim())}
+                  >
+                    <Text style={[t.pickerCustomSend, !customPairingLabel.trim() && { opacity: 0.35 }]}>Enviar</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </Pressable>
+          </Pressable>
+        </Modal>
       </Animated.View>
 
     </View>
@@ -1287,24 +1406,59 @@ const t = StyleSheet.create({
   },
   dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.gray400 },
 
-  // ── Live chat pair banner ─────────────────────────────────────────────────
-  liveBanner: {
+  // ── Pairing banner ────────────────────────────────────────────────────────
+  pairingBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 8,
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 9,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(0,0,0,0.08)',
   },
-  liveBannerTxt: {
-    fontSize: 13,
+  pairingBannerDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.primary },
+  pairingBannerTxt: {
+    flex: 1,
+    fontSize: 12.5,
     fontFamily: fonts.semiBold,
-    color: '#fff',
+    color: colors.gray800,
     letterSpacing: 0.1,
   },
-  liveShareTxt: {
+  pairingBannerAction: {
     fontSize: 12,
     fontFamily: fonts.semiBold,
-    color: '#fff',
+    color: colors.gray400,
     textDecorationLine: 'underline',
   },
+
+  // ── Pairing type picker ───────────────────────────────────────────────────
+  pickerOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center', alignItems: 'center', padding: 24,
+  },
+  pickerCard: {
+    width: '100%', maxWidth: 360,
+    backgroundColor: colors.white, borderRadius: 24,
+    padding: 20, gap: 4,
+  },
+  pickerTitle: { fontSize: 16, fontFamily: fonts.semiBold, color: colors.gray800, letterSpacing: -0.2 },
+  pickerSub:   { fontSize: 12.5, fontFamily: fonts.regular, color: colors.gray400, marginBottom: 10 },
+  pickerOption: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: 12, paddingHorizontal: 10,
+    borderRadius: 14,
+  },
+  pickerOptionEmoji: { fontSize: 20, width: 26, textAlign: 'center' },
+  pickerOptionTxt:   { fontSize: 14.5, fontFamily: fonts.medium, color: colors.gray800 },
+  pickerCustomRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    marginTop: 6, paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.gray200,
+  },
+  pickerCustomInput: {
+    flex: 1, fontSize: 14, fontFamily: fonts.regular, color: colors.gray800,
+    borderWidth: 1.3, borderColor: '#0A0A0A', borderRadius: 14,
+    paddingHorizontal: 14, paddingVertical: 9,
+  },
+  pickerCustomSend: { fontSize: 14, fontFamily: fonts.semiBold, color: '#0A0A0A' },
 })
