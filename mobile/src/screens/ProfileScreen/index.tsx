@@ -45,9 +45,9 @@ type GridRow = FeaturedRow | RegularRow
 // ── Constants ──────────────────────────────────────────────────────────────────
 const { width: W, height: H } = Dimensions.get('window')
 const HERO_H      = Math.round(H * 0.38)
-const AV_OUTER    = 104          // ring container
+const AV_OUTER    = 106          // ring container
 const AV_SIZE     = 92           // crisp avatar inside ring
-const RING_STROKE = 2.5
+const RING_STROKE = 4
 const GAP         = 2
 const SMALL_W     = (W - GAP * 2) / 3
 const SMALL_H     = SMALL_W
@@ -805,8 +805,6 @@ const m = StyleSheet.create({
   avatarCircle: {
     width: AV_SIZE, height: AV_SIZE, borderRadius: AV_SIZE / 2,
     overflow: 'hidden', backgroundColor: colors.gray100,
-    // white border so it separates from the blurred background
-    borderWidth: 3, borderColor: '#fff',
   },
   avatarImg:      { width: '100%', height: '100%' },
   avatarFallback: { alignItems: 'center', justifyContent: 'center', backgroundColor: `${colors.primary}20` },

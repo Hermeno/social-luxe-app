@@ -3,6 +3,13 @@ import supertest from 'supertest'
 import app from '../src/app'
 import { hashPassword } from '../src/utils/hash'
 
+// Same check as tests/jest.setup.ts, repeated here so cleanDb() is safe even if this
+// file is ever imported/run outside the normal Jest bootstrap (setupFiles).
+const PRODUCTION_HOST = 'ep-summer-resonance-apkj1bw3'
+if ((process.env.DATABASE_URL ?? '').includes(PRODUCTION_HOST)) {
+  throw new Error('REFUSING TO LOAD tests/helpers.ts: DATABASE_URL points at production.')
+}
+
 export const prisma = new PrismaClient()
 export const request = supertest(app)
 

@@ -200,7 +200,9 @@ export default function PostInfo({ post, isActive, commentCount: commentCountPro
         <View style={s.userRow}>
           <View style={s.avatarStack}>
             <TouchableOpacity onPress={() => nav.navigate('Profile', { userId: post.user.id })} activeOpacity={0.8}>
-              <AvatarImage uri={post.user.avatar} size={32} borderColor="rgba(255,255,255,0.9)" borderWidth={1.5} />
+              <View style={s.avatarRing}>
+                <AvatarImage uri={post.user.avatar} size={30} />
+              </View>
             </TouchableOpacity>
             {post.partnerUser && post.partnerAccepted && (
               <TouchableOpacity
@@ -330,7 +332,12 @@ const s = StyleSheet.create({
 
   userRow:     { flexDirection: 'row', alignItems: 'center', gap: 8 },
   avatarStack: { flexDirection: 'row', alignItems: 'flex-start' },
-  partnerAvatarOverlap: { marginLeft: -14, marginTop: 6, zIndex: 1 },
+  avatarRing: {
+    width: 38, height: 38, borderRadius: 19,
+    borderWidth: 1.3, borderColor: 'rgba(255,255,255,0.85)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  partnerAvatarOverlap: { marginLeft: -14, marginTop: 9, zIndex: 1 },
 
   nameGroup: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
   username: {

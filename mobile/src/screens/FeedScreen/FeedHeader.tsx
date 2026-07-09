@@ -1,4 +1,4 @@
-import React, { memo, useRef, useEffect } from 'react'
+import React, { memo, useRef, useEffect, useState } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity,
   ScrollView, StyleSheet, Animated,
@@ -21,12 +21,13 @@ export interface FeedUserGroup {
   posts: Post[]
 }
 
-const AV_SIZE      = 52
-const RING_OUTER   = AV_SIZE + 8   // 60 — container with ring padding (4px each side)
+const AV_SIZE      = 36   // TEST: was 68
 const RING_STROKE  = 3
+const RING_OUTER   = AV_SIZE + RING_STROKE * 2 + 6   // ring sits a visible ~3px away from the avatar, like Instagram
 const BUBBLE_SIZE  = 56
-const BADGE_SIZE   = 20
-const OVERLAP      = 16
+const BADGE_SIZE   = 14   // TEST: was 22 — scaled down for the smaller AV_SIZE
+const OVERLAP      = 21
+const MAX_VISIBLE_AVATARS = 7
 const ONLINE_THRESH = 5 * 60 * 1000
 
 const GRAD: [string, string, string] = ['#CA2851', '#FF6766', '#FFB173']
@@ -119,6 +120,9 @@ export default memo(function FeedHeader({
   const t = useT()
   const isSocketOnline = useOnlineStore((s) => s.isOnline)
   const currentUser    = useAuthStore((s) => s.user)
+  const [avatarsExpanded, setAvatarsExpanded] = useState(false)
+  const hiddenAvatarsCount = Math.max(0, filteredGroups.length - MAX_VISIBLE_AVATARS)
+  const visibleGroups = avatarsExpanded ? filteredGroups : filteredGroups.slice(0, MAX_VISIBLE_AVATARS)
 
   /* ── Search panel ────────────────────────────────────────────────────────── */
   if (searchMode) {
@@ -187,7 +191,7 @@ export default memo(function FeedHeader({
         style={s.barScroll}
         contentContainerStyle={s.barContent}
       >
-        {/* ── Add button — user avatar + "+" badge ── */}
+        {/* ── Add button — user avatar + round black "+" badge ── */}
         <TouchableOpacity onPress={onCreatePress} activeOpacity={0.78} style={s.addWrap}>
           <View style={s.avatarCircle}>
             {currentUser?.avatar
@@ -203,12 +207,12 @@ export default memo(function FeedHeader({
             }
           </View>
           <View style={s.addBadge}>
-            <Ionicons name="add" size={12} color="#fff" />
+            <Ionicons name="add" size={9} color="#fff" />
           </View>
         </TouchableOpacity>
 
         {/* ── Friend avatars — overlapping, always coloured ring ── */}
-        {filteredGroups.map((g) => {
+        {visibleGroups.map((g, i) => {
           const online = isSocketOnline(g.user.id) || isOnlineByLastSeen(g.user.lastSeen)
 
           return (
@@ -216,11 +220,11 @@ export default memo(function FeedHeader({
               key={g.user.id}
               onPress={() => onBubblePress(g)}
               activeOpacity={0.78}
-              style={[s.avatarTap, { marginLeft: -OVERLAP }]}
+              style={[s.avatarTap, i > 0 && { marginLeft: -OVERLAP }]}
             >
               <View style={s.avatarOuter}>
                 {/* Gradient ring — always coloured, count=1 viewedCount=0 forces active state */}
-                <SegmentedRing count={1} size={RING_OUTER} strokeWidth={RING_STROKE} />
+                {/* TEST: ring hidden temporarily — <SegmentedRing count={1} size={RING_OUTER} strokeWidth={RING_STROKE} /> */}
                 <View style={s.avatarCircle}>
                   <AvatarImage
                     uri={g.user.avatar}
@@ -239,6 +243,19 @@ export default memo(function FeedHeader({
             </TouchableOpacity>
           )
         })}
+
+        {/* ── "+N" — keeps the bar from flooding the screen past 7 avatars ── */}
+        {!avatarsExpanded && hiddenAvatarsCount > 0 && (
+          <TouchableOpacity
+            onPress={() => setAvatarsExpanded(true)}
+            activeOpacity={0.78}
+            style={[s.avatarTap, { marginLeft: -OVERLAP }]}
+          >
+            <View style={s.moreCircle}>
+              <Text style={s.moreCircleTxt}>+{hiddenAvatarsCount}</Text>
+            </View>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </View>
   )
@@ -257,7 +274,7 @@ const s = StyleSheet.create({
     paddingLeft:     16,
     paddingRight:    20,
     paddingVertical: 10,
-    alignItems:      'flex-start',
+    alignItems:      'center',
     flexDirection:   'row',
   },
 
@@ -283,6 +300,24 @@ const s = StyleSheet.create({
     backgroundColor: '#2A2A2A',
   },
 
+  // ── "+N" bubble — tap to reveal avatars past MAX_VISIBLE_AVATARS ─────────
+  moreCircle: {
+    width:           RING_OUTER,
+    height:          RING_OUTER,
+    borderRadius:    RING_OUTER / 2,
+    alignItems:      'center',
+    justifyContent:  'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth:     1.3,
+    borderColor:     'rgba(255,255,255,0.35)',
+  },
+  moreCircleTxt: {
+    fontSize:      15,
+    fontFamily:    fonts.semiBold,
+    color:         '#fff',
+    letterSpacing: -0.2,
+  },
+
   // ── Online badge ──────────────────────────────────────────────────────────
   onlineBadgeWrap: {
     position:   'absolute',
@@ -293,20 +328,20 @@ const s = StyleSheet.create({
     zIndex:     10,
   },
   onlineBadge: {
-    borderRadius:      6,
-    paddingHorizontal: 5,
-    paddingVertical:   2,
+    borderRadius:      4,
+    paddingHorizontal: 3,
+    paddingVertical:   1,
   },
   onlineBadgeTxt: {
-    fontSize:      9,
+    fontSize:      6.5,
     fontFamily:    fonts.bold,
     color:         '#fff',
-    letterSpacing: 0.4,
+    letterSpacing: 0.2,
   },
 
-  // ── Add button ───────────────────────────────────────────────────────────
+  // ── Add button — kept clear of the overlapping avatars ───────────────────
   addWrap: {
-    marginRight: 4,
+    marginRight: 14,
   },
   addPlaceholder: {
     flex:            1,
@@ -317,13 +352,11 @@ const s = StyleSheet.create({
   addBadge: {
     position:        'absolute',
     bottom:          0,
-    left:            0,
+    right:           0,
     width:           BADGE_SIZE,
     height:          BADGE_SIZE,
     borderRadius:    BADGE_SIZE / 2,
-    backgroundColor: colors.primary,
-    borderWidth:     2,
-    borderColor:     '#000',
+    backgroundColor: '#000',
     alignItems:      'center',
     justifyContent:  'center',
   },

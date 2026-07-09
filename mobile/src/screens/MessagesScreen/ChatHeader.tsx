@@ -9,7 +9,7 @@ import { Pairing } from '../../types'
 import { pairingLabel } from '../../services/pairing.service'
 
 const AV_SIZE    = 30
-const RING_OUTER = AV_SIZE + 6  // 36
+const RING_OUTER = AV_SIZE + 8  // 38 — small visible gap between avatar and ring
 
 interface Props {
   userName: string

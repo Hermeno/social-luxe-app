@@ -16,7 +16,7 @@ export function uploadToCloudinary(
     ? {
         folder,
         resource_type: 'video' as const,
-        quality:     'auto:good',
+        quality:     'auto:best',
         video_codec: 'h264',
         audio_codec: 'aac',
       }

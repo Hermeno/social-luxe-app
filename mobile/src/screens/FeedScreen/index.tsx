@@ -101,6 +101,10 @@ export default function FeedScreen() {
   const [viewerW, setViewerW] = useState(SCREEN_W)
   const [viewerH, setViewerH] = useState(SCREEN_H)
   const [imgH,    setImgH]    = useState<number | null>(null)
+  // 'cover' (fills screen, minor crop) unless the video's own shape is too far from the
+  // screen's to crop tastefully (e.g. a landscape clip) — then 'contain' letterboxes
+  // top/bottom instead of zooming in on a sliver of the frame.
+  const [videoFit, setVideoFit] = useState<'cover' | 'contain'>('cover')
   // Per-post comment and like deltas — persists while FeedScreen stays mounted
   const [commentDeltas, setCommentDeltas] = useState<Record<string, number>>({})
   const [likedPostIds,  setLikedPostIds]  = useState<Set<string>>(new Set())
@@ -442,6 +446,7 @@ export default function FeedScreen() {
       videoDurRef.current = 0
       let started   = false
       let cancelled = false
+      setVideoFit('cover')   // reset — recomputed below once the video's real size is known
 
       // Fade out the thumbnail overlay after a short delay so iOS has time
       // to decode and render the first video frame before we reveal it.
@@ -452,9 +457,25 @@ export default function FeedScreen() {
         }, 80)
       }
 
+      // Cropping under "cover" is fine as long as it's not too extreme (a portrait
+      // video on a portrait screen loses maybe ~15-20% off one side and still reads
+      // fine full-bleed). A landscape clip would need a massive zoom to cover a tall
+      // screen, so past a threshold we switch to "contain" and letterbox top/bottom
+      // instead — the black comes from mediaClip's own background, nothing to draw.
+      function updateVideoFit() {
+        const size = player.videoTrack?.size
+        const vw = size?.width, vh = size?.height
+        const cw = viewerWRef.current, ch = viewerHRef.current
+        if (!vw || !vh || !cw || !ch) return
+        const sw = cw / vw, sh = ch / vh
+        const matchRatio = Math.min(sw, sh) / Math.max(sw, sh)   // 1 = same shape, →0 = very different
+        setVideoFit(matchRatio < 0.65 ? 'contain' : 'cover')
+      }
+
       function beginPlayback() {
         if (started || cancelled) return
         started = true
+        updateVideoFit()
         const dur = Math.round(player.duration * 1000)
         videoDurRef.current = dur
         safePlayer(() => { player.currentTime = 0; player.play() })
@@ -636,12 +657,12 @@ export default function FeedScreen() {
             })() : post.mediaType === 'VIDEO' ? (
               <>
                 {post.thumbnailUrl ? (
-                  <Image source={{ uri: post.thumbnailUrl }} style={s.absLayer} contentFit="cover" cachePolicy="disk" recyclingKey={`thumb-bg-${post.id}`} />
+                  <Image source={{ uri: post.thumbnailUrl }} style={s.absLayer} contentFit={videoFit} cachePolicy="disk" recyclingKey={`thumb-bg-${post.id}`} />
                 ) : null}
-                <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="cover" nativeControls={false} />
+                <VideoView player={player} style={StyleSheet.absoluteFill} contentFit={videoFit} nativeControls={false} />
                 <Animated.View style={[s.absLayer, s.videoOverlay, { opacity: thumbnailOverlayOpacity }]} pointerEvents="none">
                   {post.thumbnailUrl ? (
-                    <Image source={{ uri: post.thumbnailUrl }} style={s.absLayer} contentFit="cover" cachePolicy="disk" recyclingKey={`thumb-overlay-${post.id}`} />
+                    <Image source={{ uri: post.thumbnailUrl }} style={s.absLayer} contentFit={videoFit} cachePolicy="disk" recyclingKey={`thumb-overlay-${post.id}`} />
                   ) : null}
                   <View style={s.spinnerWrap}>
                     <ActivityIndicator size="large" color="rgba(255,255,255,0.75)" />

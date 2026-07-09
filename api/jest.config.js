@@ -3,6 +3,7 @@ module.exports = {
   testEnvironment: 'node',
   testMatch: ['**/tests/**/*.test.ts'],
   testTimeout: 20000,
+  setupFiles: ['<rootDir>/tests/jest.setup.ts'],
   setupFilesAfterFramework: [],
   moduleNameMapper: {
     '^expo-server-sdk$': '<rootDir>/tests/__mocks__/expo-server-sdk.js',

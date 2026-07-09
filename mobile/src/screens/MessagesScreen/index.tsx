@@ -589,14 +589,24 @@ export default function MessagesScreen() {
       try {
         const fresh = await getConnections()
         if (cancelled) return
-        setConnections(fresh)
+        // getConnections() is message-history based (see api's getConversations) — it
+        // structurally never includes someone you've followed but never messaged yet.
+        // Keep those local-only stubs instead of letting this overwrite wipe them out
+        // right after handleFollow optimistically added one.
+        const freshIds = new Set(fresh.map((c) => c.user.id))
+        let merged: Connection[] = fresh
+        setConnections((prev) => {
+          const localOnly = prev.filter((c) => !c.lastMessage && !freshIds.has(c.user.id))
+          merged = localOnly.length > 0 ? [...fresh, ...localOnly] : fresh
+          return merged
+        })
         setConnsLoading(false)
         setConnsError(false)
         const viewedFresh = await getViewedPostIds().catch(() => new Set<string>())
         if (!cancelled) setViewedIds(viewedFresh)
-        cacheConnections(fresh).catch(() => {})
+        cacheConnections(merged).catch(() => {})
         setSyncMeta('connections_sync', String(Date.now())).catch(() => {})
-        setTotalUnread(fresh.reduce((s, c) => s + c.unreadCount, 0))
+        setTotalUnread(merged.reduce((s, c) => s + c.unreadCount, 0))
       } catch {
         if (!cancelled) {
           setConnsLoading(false)
@@ -903,7 +913,7 @@ export default function MessagesScreen() {
           >
             <View style={s.navAvatarOuter}>
               {myHasPosts && (
-                <SegmentedRing count={1} size={38} strokeWidth={1.5} />
+                <SegmentedRing count={1} size={40} strokeWidth={1.5} />
               )}
               <View style={s.navAvatarInner}>
                 <View style={s.navAvatarCircle}>
@@ -1288,8 +1298,8 @@ const s = StyleSheet.create({
   },
   /* ── Nav avatar + ring ── */
   navAvatarOuter: {
-    width: 38,
-    height: 38,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
