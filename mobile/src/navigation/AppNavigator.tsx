@@ -28,6 +28,7 @@ import LanguageScreen from '../screens/LanguageScreen'
 import HelpScreen from '../screens/HelpScreen'
 import DonationsScreen from '../screens/DonationsScreen'
 import CreateDonationScreen from '../screens/DonationsScreen/CreateDonationScreen'
+import DonationDetailScreen from '../screens/DonationsScreen/DonationDetailScreen'
 import UnionProfileScreen from '../screens/UnionProfileScreen'
 import UnionChatScreen from '../screens/UnionChatScreen'
 import { Post } from '../types'
@@ -65,6 +66,7 @@ export type AppStackParams = {
   Highlights: { userId: string }
   Donations: undefined
   CreateDonation: undefined
+  DonationDetail: { donationId: string }
   UnionProfile: { unionId: string }
   UnionChat: { unionId: string; otherUnionId?: string; unionName?: string }
 }
@@ -140,6 +142,7 @@ export default function AppNavigator({ defaultTab }: { defaultTab: 'Feed' | 'Mes
       <Stack.Screen name="Help" component={HelpScreen} />
       <Stack.Screen name="Donations" component={DonationsScreen} />
       <Stack.Screen name="CreateDonation" component={CreateDonationScreen} />
+      <Stack.Screen name="DonationDetail" component={DonationDetailScreen} />
       <Stack.Screen name="UnionProfile" component={UnionProfileScreen} />
       <Stack.Screen name="UnionChat" component={UnionChatScreen} />
     </Stack.Navigator>

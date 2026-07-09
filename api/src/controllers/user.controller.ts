@@ -1,7 +1,7 @@
 import { Response } from 'express'
 import * as userService from '../services/user.service'
-import { ok, badRequest, serverError, notFound, forbidden, created } from '../utils/response'
-import { handleError } from '../utils/errors'
+import { ok, badRequest, serverError, notFound, forbidden, created, unauthorized } from '../utils/response'
+import { handleError, isSelfRecordNotFound } from '../utils/errors'
 import { AuthRequest } from '../types'
 import { prisma } from '../config/database'
 import { Prisma } from '@prisma/client'
@@ -53,7 +53,10 @@ export async function updateProfile(req: AuthRequest, res: Response) {
       statusLabel: statusLabel !== undefined ? (statusLabel || null) : undefined,
     })
     return ok(res, user)
-  } catch (err) { return handleError(res, err) }
+  } catch (err) {
+    if (isSelfRecordNotFound(err)) return unauthorized(res, 'Sessão inválida. Inicia sessão novamente.')
+    return handleError(res, err)
+  }
 }
 
 export async function updateInterests(req: AuthRequest, res: Response) {
@@ -64,7 +67,10 @@ export async function updateInterests(req: AuthRequest, res: Response) {
     }
     const user = await userService.updateProfile(req.user!.userId, { interests })
     return ok(res, user)
-  } catch (err) { return handleError(res, err) }
+  } catch (err) {
+    if (isSelfRecordNotFound(err)) return unauthorized(res, 'Sessão inválida. Inicia sessão novamente.')
+    return handleError(res, err)
+  }
 }
 
 export async function getUserPosts(req: AuthRequest, res: Response) {
@@ -195,5 +201,8 @@ export async function toggleGhostMode(req: AuthRequest, res: Response) {
     if (typeof ghostMode !== 'boolean') return badRequest(res, 'ghostMode must be a boolean')
     const user = await userService.toggleGhostMode(req.user!.userId, ghostMode)
     return ok(res, user)
-  } catch (err) { return handleError(res, err) }
+  } catch (err) {
+    if (isSelfRecordNotFound(err)) return unauthorized(res, 'Sessão inválida. Inicia sessão novamente.')
+    return handleError(res, err)
+  }
 }

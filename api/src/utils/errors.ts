@@ -27,6 +27,15 @@ function isSafeMessage(msg: string): boolean {
   return SAFE_MESSAGES.has(msg)
 }
 
+// A P2025 (record not found) on an update/delete keyed by the AUTHENTICATED user's own
+// id means their account no longer exists — a stale JWT for a deleted user, not a normal
+// 404. Controllers that write to req.user!.userId should check this before handleError()
+// and return unauthorized() instead, so the client's existing 401 handler logs them out
+// instead of surfacing a confusing "record not found" forever.
+export function isSelfRecordNotFound(err: unknown): boolean {
+  return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025'
+}
+
 // Map Prisma error codes to clean client-facing messages
 function handlePrismaError(err: Prisma.PrismaClientKnownRequestError): { status: number; message: string } {
   switch (err.code) {

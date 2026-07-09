@@ -1,16 +1,170 @@
-import React from 'react'
-import { View, Text, StyleSheet } from 'react-native'
+import React, { useState, useCallback } from 'react'
+import {
+  View, Text, TouchableOpacity, StyleSheet, FlatList,
+  ActivityIndicator, RefreshControl, Image,
+} from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useNavigation } from '@react-navigation/native'
-import { TouchableOpacity } from 'react-native'
+import { useNavigation, useFocusEffect } from '@react-navigation/native'
+import { StackNavigationProp } from '@react-navigation/stack'
 import { Ionicons, Feather } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
+import * as Location from 'expo-location'
 import { colors, fonts } from '../../theme'
+import AvatarImage from '../../components/AvatarImage'
+import { getNearbyDonations, getMyDonations, Donation, DonationStatus } from '../../services/donation.service'
+import { AppStackParams } from '../../navigation/AppNavigator'
+
+type Nav = StackNavigationProp<AppStackParams>
+type Tab = 'nearby' | 'mine'
+
+const STATUS_LABEL: Record<DonationStatus, string> = {
+  AVAILABLE: 'Disponível',
+  RESERVED:  'Reservada',
+  DELIVERED: 'Entregue',
+  EXPIRED:   'Expirada',
+}
+const STATUS_COLOR: Record<DonationStatus, string> = {
+  AVAILABLE: colors.primary,
+  RESERVED:  '#B8860B',
+  DELIVERED: '#2E9E5B',
+  EXPIRED:   colors.gray400,
+}
+
+function DonationCard({ item, mine, onPress }: { item: Donation; mine: boolean; onPress: () => void }) {
+  const photo = item.photos?.[0] ?? null
+  return (
+    <TouchableOpacity style={s.card} onPress={onPress} activeOpacity={0.85}>
+      {photo ? (
+        <Image source={{ uri: photo }} style={s.cardImg} />
+      ) : (
+        <LinearGradient colors={['#CA2851', '#FF6766']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.cardImg}>
+          <Ionicons name={item.type === 'ITEM' ? 'gift' : 'cash'} size={24} color="#fff" />
+        </LinearGradient>
+      )}
+
+      <View style={s.cardBody}>
+        <View style={s.cardTopRow}>
+          <Text style={s.cardTitle} numberOfLines={1}>{item.title}</Text>
+          <View style={[s.statusPill, { backgroundColor: `${STATUS_COLOR[item.status]}18` }]}>
+            <View style={[s.statusDot, { backgroundColor: STATUS_COLOR[item.status] }]} />
+            <Text style={[s.statusTxt, { color: STATUS_COLOR[item.status] }]}>{STATUS_LABEL[item.status]}</Text>
+          </View>
+        </View>
+
+        {!!item.description && (
+          <Text style={s.cardDesc} numberOfLines={2}>{item.description}</Text>
+        )}
+
+        <View style={s.cardFooter}>
+          {mine ? (
+            item.requester ? (
+              <View style={s.footerRow}>
+                <AvatarImage uri={item.requester.avatar} name={item.requester.name} size={16} />
+                <Text style={s.footerTxt} numberOfLines={1}>{item.requester.name} pediu</Text>
+              </View>
+            ) : (
+              <Text style={s.footerTxt}>Ainda ninguém pediu</Text>
+            )
+          ) : (
+            <View style={s.footerRow}>
+              <AvatarImage uri={item.donor.avatar} name={item.donor.name} size={16} />
+              <Text style={s.footerTxt} numberOfLines={1}>{item.donor.name}</Text>
+              {item.distanceKm != null && (
+                <Text style={s.footerDist}>· {item.distanceKm} km</Text>
+              )}
+            </View>
+          )}
+        </View>
+      </View>
+    </TouchableOpacity>
+  )
+}
 
 export default function DonationsScreen() {
-  const { top } = useSafeAreaInsets()
-  const nav = useNavigation()
+  const { top, bottom } = useSafeAreaInsets()
+  const nav = useNavigation<Nav>()
   const canGoBack = nav.canGoBack()
+
+  const [tab,         setTab]         = useState<Tab>('nearby')
+  const [donations,   setDonations]   = useState<Donation[]>([])
+  const [loading,     setLoading]     = useState(true)
+  const [refreshing,  setRefreshing]  = useState(false)
+  const [locDenied,   setLocDenied]   = useState(false)
+  const [loadError,   setLoadError]   = useState(false)
+
+  const load = useCallback(async (activeTab: Tab, isRefresh = false) => {
+    isRefresh ? setRefreshing(true) : setLoading(true)
+    setLoadError(false)
+    try {
+      if (activeTab === 'mine') {
+        setDonations(await getMyDonations())
+        setLocDenied(false)
+      } else {
+        const { status } = await Location.requestForegroundPermissionsAsync()
+        if (status !== 'granted') {
+          setLocDenied(true)
+          setDonations([])
+          return
+        }
+        setLocDenied(false)
+        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+        setDonations(await getNearbyDonations(pos.coords.latitude, pos.coords.longitude))
+      }
+    } catch {
+      setLoadError(true)
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }, [])
+
+  useFocusEffect(useCallback(() => { load(tab) }, [tab, load]))
+
+  function renderEmpty() {
+    if (loading) return null
+    if (locDenied) {
+      return (
+        <View style={s.empty}>
+          <Ionicons name="location-outline" size={36} color={colors.gray300} />
+          <Text style={s.emptyTitle}>Precisamos da tua localização</Text>
+          <Text style={s.emptySub}>Para mostrar doações perto de ti, ativa a permissão de localização.</Text>
+          <TouchableOpacity style={s.emptyBtn} onPress={() => load('nearby')} activeOpacity={0.85}>
+            <Text style={s.emptyBtnTxt}>Tentar novamente</Text>
+          </TouchableOpacity>
+        </View>
+      )
+    }
+    if (loadError) {
+      return (
+        <View style={s.empty}>
+          <Ionicons name="wifi-outline" size={36} color={colors.gray300} />
+          <Text style={s.emptyTitle}>Não foi possível carregar</Text>
+          <Text style={s.emptySub}>Verifica a tua ligação e tenta de novo.</Text>
+          <TouchableOpacity style={s.emptyBtn} onPress={() => load(tab)} activeOpacity={0.85}>
+            <Text style={s.emptyBtnTxt}>Tentar novamente</Text>
+          </TouchableOpacity>
+        </View>
+      )
+    }
+    return (
+      <View style={s.empty}>
+        <LinearGradient colors={['#CA2851', '#FF6766', '#FFB173']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.emptyIcon}>
+          <Feather name="heart" size={30} color="#fff" />
+        </LinearGradient>
+        <Text style={s.emptyTitle}>
+          {tab === 'mine' ? 'Ainda não publicaste nada' : 'Nenhuma doação por perto'}
+        </Text>
+        <Text style={s.emptySub}>
+          {tab === 'mine'
+            ? 'Publica algo que já não precisas — item ou ajuda financeira.'
+            : 'Sê o primeiro a partilhar algo com quem está perto de ti.'}
+        </Text>
+        <TouchableOpacity style={s.emptyBtn} onPress={() => nav.navigate('CreateDonation')} activeOpacity={0.85}>
+          <Text style={s.emptyBtnTxt}>Publicar doação</Text>
+        </TouchableOpacity>
+      </View>
+    )
+  }
 
   return (
     <View style={s.screen}>
@@ -23,26 +177,44 @@ export default function DonationsScreen() {
           : <View style={{ width: 26 }} />
         }
         <Text style={s.headerTitle}>Piedade</Text>
-        <View style={{ width: 26 }} />
+        <TouchableOpacity onPress={() => nav.navigate('CreateDonation')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Ionicons name="add-circle" size={27} color={colors.primary} />
+        </TouchableOpacity>
       </View>
 
-      {/* Content */}
-      <View style={s.body}>
-        <LinearGradient
-          colors={['#CA2851', '#FF6766', '#FFB173']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={s.iconWrap}
-        >
-          <Feather name="hexagon" size={36} color="#fff" />
-        </LinearGradient>
-
-        <Text style={s.title}>Funcionalidade indisponível</Text>
-        <Text style={s.sub}>
-          Esta secção está em desenvolvimento e será lançada em breve.{'\n'}
-          Fique atento às atualizações do luxee.
-        </Text>
+      {/* Tabs */}
+      <View style={s.tabRow}>
+        <TouchableOpacity style={[s.tabBtn, tab === 'nearby' && s.tabBtnActive]} onPress={() => setTab('nearby')} activeOpacity={0.8}>
+          <Text style={[s.tabTxt, tab === 'nearby' && s.tabTxtActive]}>Perto de ti</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[s.tabBtn, tab === 'mine' && s.tabBtnActive]} onPress={() => setTab('mine')} activeOpacity={0.8}>
+          <Text style={[s.tabTxt, tab === 'mine' && s.tabTxtActive]}>Minhas doações</Text>
+        </TouchableOpacity>
       </View>
+
+      {loading ? (
+        <View style={s.loadingWrap}>
+          <ActivityIndicator color={colors.primary} size="large" />
+        </View>
+      ) : (
+        <FlatList
+          data={donations}
+          keyExtractor={(d) => d.id}
+          contentContainerStyle={[s.list, { paddingBottom: Math.max(bottom, 16) + 24 }, donations.length === 0 && { flex: 1 }]}
+          ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+          ListEmptyComponent={renderEmpty}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={() => load(tab, true)} tintColor={colors.primary} />
+          }
+          renderItem={({ item }) => (
+            <DonationCard
+              item={item}
+              mine={tab === 'mine'}
+              onPress={() => nav.navigate('DonationDetail', { donationId: item.id })}
+            />
+          )}
+        />
+      )}
     </View>
   )
 }
@@ -51,51 +223,54 @@ const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.white },
 
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#EBEBEB',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingBottom: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#EBEBEB',
   },
-  headerTitle: {
-    fontSize: 17,
-    fontFamily: fonts.bold,
-    color: colors.dark,
-    letterSpacing: -0.2,
-  },
+  headerTitle: { fontSize: 17, fontFamily: fonts.bold, color: colors.dark, letterSpacing: -0.2 },
 
-  body: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 48,
-    gap: 16,
+  tabRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingVertical: 12 },
+  tabBtn: {
+    flex: 1, alignItems: 'center', paddingVertical: 10,
+    borderRadius: 12, backgroundColor: colors.gray100,
   },
+  tabBtnActive: { backgroundColor: colors.primary },
+  tabTxt:       { fontSize: 13.5, fontFamily: fonts.semiBold, color: colors.gray500 },
+  tabTxtActive: { color: '#fff' },
 
-  iconWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
+  loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
-  title: {
-    fontSize: 20,
-    fontFamily: fonts.bold,
-    color: colors.dark,
-    letterSpacing: -0.4,
-    textAlign: 'center',
-  },
+  list: { paddingHorizontal: 16 },
 
-  sub: {
-    fontSize: 14,
-    fontFamily: fonts.regular,
-    color: colors.gray500,
-    textAlign: 'center',
-    lineHeight: 22,
+  card: {
+    flexDirection: 'row', gap: 12,
+    borderRadius: 16, padding: 10,
+    borderWidth: 1, borderColor: colors.gray200,
   },
+  cardImg: {
+    width: 64, height: 64, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.gray100,
+  },
+  cardBody: { flex: 1, gap: 4, justifyContent: 'center' },
+  cardTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cardTitle: { flex: 1, fontSize: 15, fontFamily: fonts.semiBold, color: colors.dark, letterSpacing: -0.2 },
+
+  statusPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+  statusDot:  { width: 5, height: 5, borderRadius: 2.5 },
+  statusTxt:  { fontSize: 10.5, fontFamily: fonts.semiBold },
+
+  cardDesc: { fontSize: 12.5, fontFamily: fonts.regular, color: colors.gray500, lineHeight: 17 },
+
+  cardFooter: { marginTop: 2 },
+  footerRow:  { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  footerTxt:  { fontSize: 12, fontFamily: fonts.medium, color: colors.gray600, flexShrink: 1 },
+  footerDist: { fontSize: 12, fontFamily: fonts.regular, color: colors.gray400 },
+
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 10 },
+  emptyIcon: { width: 76, height: 76, borderRadius: 22, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+  emptyTitle: { fontSize: 17, fontFamily: fonts.bold, color: colors.dark, textAlign: 'center', letterSpacing: -0.3 },
+  emptySub:   { fontSize: 13, fontFamily: fonts.regular, color: colors.gray500, textAlign: 'center', lineHeight: 19 },
+  emptyBtn:   { marginTop: 8, backgroundColor: colors.primary, paddingHorizontal: 22, paddingVertical: 11, borderRadius: 14 },
+  emptyBtnTxt: { fontSize: 14, fontFamily: fonts.semiBold, color: '#fff' },
 })
