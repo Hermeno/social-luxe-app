@@ -413,26 +413,25 @@ export default function ChatScreen() {
   const kbAnim = useRef(new Animated.Value(0)).current
 
   useEffect(() => {
-    const isIOS = Platform.OS === 'ios'
-    const showEvt = isIOS ? 'keyboardWillShow' : 'keyboardDidShow'
-    const hideEvt = isIOS ? 'keyboardWillHide' : 'keyboardDidHide'
+    // iOS only: the window doesn't resize, so we pad the layout by the keyboard
+    // height ourselves. On Android the window already resizes (adjustResize) —
+    // padding on top of that doubled the offset and threw the input bar to the
+    // top of the screen, leaving the keyboard alone at the bottom.
+    if (Platform.OS !== 'ios') return
 
-    const sub1 = Keyboard.addListener(showEvt, (e) => {
-      // Clamp — some Android keyboards/OEM skins occasionally report a
-      // wildly incorrect height, which pushed the whole screen off the top.
-      const raw = e.endCoordinates.height - (isIOS ? bottom : 0)
-      const safeHeight = Math.max(0, Math.min(raw, 420))
+    const sub1 = Keyboard.addListener('keyboardWillShow', (e) => {
+      const safeHeight = Math.max(0, e.endCoordinates.height - bottom)
       Animated.timing(kbAnim, {
         toValue: safeHeight,
-        duration: isIOS ? (e.duration ?? 250) : 0,
+        duration: e.duration ?? 250,
         useNativeDriver: false,
       }).start()
     })
 
-    const sub2 = Keyboard.addListener(hideEvt, (e) => {
+    const sub2 = Keyboard.addListener('keyboardWillHide', (e) => {
       Animated.timing(kbAnim, {
         toValue: 0,
-        duration: isIOS ? (e.duration ?? 250) : 0,
+        duration: e.duration ?? 250,
         useNativeDriver: false,
       }).start()
     })

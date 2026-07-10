@@ -17,6 +17,7 @@ import donationRoutes from './donation.routes'
 import travelRoutes from './travel.routes'
 import unionRoutes from './union.routes'
 import pairingRoutes from './pairing.routes'
+import circleRoutes from './circle.routes'
 
 const router = Router()
 
@@ -38,5 +39,6 @@ router.use('/donations', donationRoutes)
 router.use('/travel', travelRoutes)
 router.use('/unions', unionRoutes)
 router.use('/pairings', pairingRoutes)
+router.use('/circle', circleRoutes)
 
 export default router

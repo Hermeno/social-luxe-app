@@ -26,6 +26,7 @@ import NotifSettingsScreen from '../screens/NotifSettingsScreen'
 import AppearanceScreen from '../screens/AppearanceScreen'
 import LanguageScreen from '../screens/LanguageScreen'
 import HelpScreen from '../screens/HelpScreen'
+import CircleScreen from '../screens/CircleScreen'
 import DonationsScreen from '../screens/DonationsScreen'
 import CreateDonationScreen from '../screens/DonationsScreen/CreateDonationScreen'
 import DonationDetailScreen from '../screens/DonationsScreen/DonationDetailScreen'
@@ -38,7 +39,7 @@ export type AppTabParams = {
   Feed: undefined
   Messages: undefined
   Create: undefined          // accessed via FeedHeader / ChallengesScreen, not shown in tab bar
-  Donations: undefined
+  Circle: undefined
   Profile: { userId?: string }
 }
 
@@ -84,7 +85,7 @@ function Tabs({ defaultTab }: { defaultTab: 'Feed' | 'Messages' }) {
       <Tab.Screen name="Feed"      component={FeedScreen} />
       <Tab.Screen name="Messages"  component={MessagesScreen} />
       <Tab.Screen name="Create"    component={CreateScreen} />
-      <Tab.Screen name="Donations" component={DonationsScreen} />
+      <Tab.Screen name="Circle"    component={CircleScreen} />
       <Tab.Screen name="Profile"   component={ProfileScreen} />
     </Tab.Navigator>
   )

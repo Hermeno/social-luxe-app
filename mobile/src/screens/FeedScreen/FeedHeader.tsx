@@ -1,7 +1,7 @@
-import React, { memo, useRef, useEffect, useState } from 'react'
+import React, { memo } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity,
-  ScrollView, StyleSheet, Animated,
+  ScrollView, StyleSheet,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -21,13 +21,18 @@ export interface FeedUserGroup {
   posts: Post[]
 }
 
-const AV_SIZE      = 36   // TEST: was 68
-const RING_STROKE  = 3
-const RING_OUTER   = AV_SIZE + RING_STROKE * 2 + 6   // ring sits a visible ~3px away from the avatar, like Instagram
+// ── Geometry — hairline rings, real breathing room ──────────────────────────
+// The ring floats 3.5px off the avatar; the stroke itself is 1.6px. Every
+// number below derives from AV_SIZE so the rail scales as one piece.
+const AV_SIZE      = 54
+const RING_STROKE  = 1.6
+const RING_GAP     = 3.5
+const RING_OUTER   = Math.round(AV_SIZE + (RING_GAP + RING_STROKE) * 2)   // 64
+const TILE_W       = RING_OUTER + 4
+const TILE_GAP     = 14
+const DOT_SIZE     = 11
+const BADGE_SIZE   = 21
 const BUBBLE_SIZE  = 56
-const BADGE_SIZE   = 14   // TEST: was 22 — scaled down for the smaller AV_SIZE
-const OVERLAP      = 21
-const MAX_VISIBLE_AVATARS = 7
 const ONLINE_THRESH = 5 * 60 * 1000
 
 const GRAD: [string, string, string] = ['#CA2851', '#FF6766', '#FFB173']
@@ -40,61 +45,6 @@ function resolveAvatar(uri: string | null | undefined): string | null {
 function isOnlineByLastSeen(lastSeen?: string | null): boolean {
   if (!lastSeen) return false
   return Date.now() - new Date(lastSeen).getTime() < ONLINE_THRESH
-}
-
-// ─── White water-ripple rings — clipped inside avatar ────────────────────────
-function OnlineRipple({ size }: { size: number }) {
-  const a0 = useRef(new Animated.Value(0)).current
-  const a1 = useRef(new Animated.Value(0)).current
-  const a2 = useRef(new Animated.Value(0)).current
-
-  useEffect(() => {
-    const makeLoop = (anim: Animated.Value, delay: number) =>
-      Animated.loop(
-        Animated.sequence([
-          Animated.delay(delay),
-          Animated.timing(anim, { toValue: 1, duration: 1600, useNativeDriver: true }),
-          Animated.timing(anim, { toValue: 0, duration: 0,    useNativeDriver: true }),
-        ])
-      )
-    const l0 = makeLoop(a0, 0)
-    const l1 = makeLoop(a1, 530)
-    const l2 = makeLoop(a2, 1060)
-    l0.start(); l1.start(); l2.start()
-    return () => { l0.stop(); l1.stop(); l2.stop() }
-  }, [])
-
-  const ring = (anim: Animated.Value) => ({
-    position: 'absolute' as const,
-    top: 0, left: 0, right: 0, bottom: 0,
-    borderRadius: size / 2,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.95)',
-    opacity:   anim.interpolate({ inputRange: [0, 0.08, 0.55, 1], outputRange: [0, 0.9, 0.3, 0] }),
-    transform: [{ scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.15, 1.08] }) }],
-  })
-
-  return (
-    <>
-      <Animated.View pointerEvents="none" style={ring(a0)} />
-      <Animated.View pointerEvents="none" style={ring(a1)} />
-      <Animated.View pointerEvents="none" style={ring(a2)} />
-    </>
-  )
-}
-
-// ─── Online badge pill ────────────────────────────────────────────────────────
-function OnlineBadge() {
-  return (
-    <LinearGradient
-      colors={GRAD}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 0 }}
-      style={s.onlineBadge}
-    >
-      <Text style={s.onlineBadgeTxt}>online</Text>
-    </LinearGradient>
-  )
 }
 
 export interface FeedHeaderProps {
@@ -120,14 +70,11 @@ export default memo(function FeedHeader({
   const t = useT()
   const isSocketOnline = useOnlineStore((s) => s.isOnline)
   const currentUser    = useAuthStore((s) => s.user)
-  const [avatarsExpanded, setAvatarsExpanded] = useState(false)
-  const hiddenAvatarsCount = Math.max(0, filteredGroups.length - MAX_VISIBLE_AVATARS)
-  const visibleGroups = avatarsExpanded ? filteredGroups : filteredGroups.slice(0, MAX_VISIBLE_AVATARS)
 
-  /* ── Search panel ────────────────────────────────────────────────────────── */
+  /* ── Search panel — replaces the rail in-flow, post card stays below ─────── */
   if (searchMode) {
     return (
-      <View style={[s.searchPanel, { paddingTop: top + 10 }]}>
+      <View style={[s.wrapper, { paddingTop: top + 8 }]}>
         <View style={s.searchRow}>
           <View style={s.searchField}>
             <Search size={14} strokeWidth={2} color="rgba(255,255,255,0.5)" />
@@ -170,7 +117,7 @@ export default memo(function FeedHeader({
                 <TouchableOpacity key={g.user.id} style={s.bubble}
                   onPress={() => { onBubblePress(g); onSearchChange('') }} activeOpacity={0.78}>
                   <View style={[s.bubbleRing, isActive && s.bubbleRingActive]}>
-                    <AvatarImage uri={g.user.avatar} size={BUBBLE_SIZE} borderWidth={0} borderColor="transparent" />
+                    <AvatarImage uri={g.user.avatar} name={g.user.name} size={BUBBLE_SIZE} borderWidth={0} borderColor="transparent" />
                   </View>
                   <Text style={s.bubbleName} numberOfLines={1}>{g.user.name.split(' ')[0]}</Text>
                 </TouchableOpacity>
@@ -178,197 +125,197 @@ export default memo(function FeedHeader({
             })
           )}
         </ScrollView>
+        <View style={s.divider} />
       </View>
     )
   }
 
-  /* ── Normal bar — overlapping avatars with gradient ring ─────────────────── */
+  /* ── Rail — who posted, first-class section at the top of the feed ───────── */
   return (
-    <View style={[s.wrapper, { paddingTop: top }]} pointerEvents="box-none">
+    <View style={[s.wrapper, { paddingTop: top + 6 }]}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        style={s.barScroll}
-        contentContainerStyle={s.barContent}
+        contentContainerStyle={s.railContent}
       >
-        {/* ── Add button — user avatar + round black "+" badge ── */}
-        <TouchableOpacity onPress={onCreatePress} activeOpacity={0.78} style={s.addWrap}>
-          <View style={s.avatarCircle}>
-            {currentUser?.avatar
-              ? <AvatarImage
+        {/* Create tile — your avatar, quiet hairline, brand badge */}
+        <TouchableOpacity onPress={onCreatePress} activeOpacity={0.72} style={s.tile}>
+          <View style={s.ringWrap}>
+            <View style={s.neutralRing} />
+            <View style={s.avatarCircle}>
+              {currentUser?.avatar ? (
+                <AvatarImage
                   uri={resolveAvatar(currentUser.avatar)}
+                  name={currentUser.name}
                   size={AV_SIZE}
                   borderWidth={0}
                   borderColor="transparent"
                 />
-              : <View style={s.addPlaceholder}>
-                  <Ionicons name="person" size={22} color="rgba(255,255,255,0.45)" />
+              ) : (
+                <View style={s.addPlaceholder}>
+                  <Ionicons name="person" size={26} color="rgba(255,255,255,0.4)" />
                 </View>
-            }
+              )}
+            </View>
+            <LinearGradient colors={GRAD} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.addBadge}>
+              <Ionicons name="add" size={13} color="#fff" />
+            </LinearGradient>
           </View>
-          <View style={s.addBadge}>
-            <Ionicons name="add" size={9} color="#fff" />
-          </View>
+          <Text style={s.tileName} numberOfLines={1}>{t.feed_create}</Text>
         </TouchableOpacity>
 
-        {/* ── Friend avatars — overlapping, always coloured ring ── */}
-        {visibleGroups.map((g, i) => {
-          const online = isSocketOnline(g.user.id) || isOnlineByLastSeen(g.user.lastSeen)
+        {/* Posters — hairline gradient ring while unseen, quiet when seen,
+            white when on screen. Presence is a single precise dot. */}
+        {filteredGroups.map((g) => {
+          const online      = isSocketOnline(g.user.id) || isOnlineByLastSeen(g.user.lastSeen)
+          const isActive    = g.user.id === activeUserId
+          const viewedCount = g.posts.filter((p) => viewedIds.has(p.id)).length
 
           return (
             <TouchableOpacity
               key={g.user.id}
               onPress={() => onBubblePress(g)}
-              activeOpacity={0.78}
-              style={[s.avatarTap, i > 0 && { marginLeft: -OVERLAP }]}
+              activeOpacity={0.72}
+              style={s.tile}
             >
-              <View style={s.avatarOuter}>
-                {/* Gradient ring — always coloured, count=1 viewedCount=0 forces active state */}
-                {/* TEST: ring hidden temporarily — <SegmentedRing count={1} size={RING_OUTER} strokeWidth={RING_STROKE} /> */}
+              <View style={s.ringWrap}>
+                {isActive ? (
+                  <View style={s.activeRing} />
+                ) : (
+                  <SegmentedRing
+                    count={g.posts.length}
+                    viewedCount={viewedCount}
+                    size={RING_OUTER}
+                    strokeWidth={RING_STROKE}
+                    inactiveColor="rgba(0,0,0,0.12)"
+                  />
+                )}
                 <View style={s.avatarCircle}>
                   <AvatarImage
                     uri={g.user.avatar}
+                    name={g.user.name}
                     size={AV_SIZE}
                     borderWidth={0}
                     borderColor="transparent"
                   />
-                  {online && <OnlineRipple size={AV_SIZE} />}
                 </View>
-                {online && (
-                  <View style={s.onlineBadgeWrap}>
-                    <OnlineBadge />
-                  </View>
-                )}
+                {online && <View style={s.onlineDot} />}
               </View>
+              <Text style={[s.tileName, isActive && s.tileNameActive]} numberOfLines={1}>
+                {g.user.name.split(' ')[0]}
+              </Text>
             </TouchableOpacity>
           )
         })}
-
-        {/* ── "+N" — keeps the bar from flooding the screen past 7 avatars ── */}
-        {!avatarsExpanded && hiddenAvatarsCount > 0 && (
-          <TouchableOpacity
-            onPress={() => setAvatarsExpanded(true)}
-            activeOpacity={0.78}
-            style={[s.avatarTap, { marginLeft: -OVERLAP }]}
-          >
-            <View style={s.moreCircle}>
-              <Text style={s.moreCircleTxt}>+{hiddenAvatarsCount}</Text>
-            </View>
-          </TouchableOpacity>
-        )}
       </ScrollView>
+      <View style={s.divider} />
     </View>
   )
 })
 
 const s = StyleSheet.create({
 
-  /* ── Normal bar ───────────────────────────────────────────────────────────── */
+  /* ── Rail — pure white stage above the dark feed ──────────────────────────── */
   wrapper: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0,
-    zIndex: 40,
+    backgroundColor: colors.white,
   },
-  barScroll: { flex: 1 },
-  barContent: {
-    paddingLeft:     16,
-    paddingRight:    20,
-    paddingVertical: 10,
-    alignItems:      'center',
-    flexDirection:   'row',
+  railContent: {
+    paddingHorizontal: 14,
+    paddingTop:        6,
+    paddingBottom:     10,
+    flexDirection:     'row',
+    alignItems:        'flex-start',
+    gap:               TILE_GAP,
+  },
+  divider: {
+    height:          StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(0,0,0,0.10)',
   },
 
-  // ── Avatar tap target (includes optional badge below) ────────────────────
-  avatarTap: {
+  // ── Tile — ring + avatar + first name ─────────────────────────────────────
+  tile: {
+    width:      TILE_W,
     alignItems: 'center',
+    gap:        6,
   },
-
-  // ── Outer ring container — NOT overflow:hidden so ring shows ─────────────
-  avatarOuter: {
-    width:           RING_OUTER,
-    height:          RING_OUTER,
-    alignItems:      'center',
-    justifyContent:  'center',
+  ringWrap: {
+    width:          RING_OUTER,
+    height:         RING_OUTER,
+    alignItems:     'center',
+    justifyContent: 'center',
   },
-
-  // ── Clipped avatar circle ─────────────────────────────────────────────────
   avatarCircle: {
     width:           AV_SIZE,
     height:          AV_SIZE,
     borderRadius:    AV_SIZE / 2,
     overflow:        'hidden',
-    backgroundColor: '#2A2A2A',
+    backgroundColor: '#EAEAEA',
+  },
+  // Thicker crimson ring marks the user whose post is on screen — same single
+  // ring colour as the rest of the app, weight carries the state
+  activeRing: {
+    position:     'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    borderRadius: RING_OUTER / 2,
+    borderWidth:  2.2,
+    borderColor:  colors.primary,
+  },
+  // Quiet hairline for the create tile
+  neutralRing: {
+    position:     'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    borderRadius: RING_OUTER / 2,
+    borderWidth:  RING_STROKE,
+    borderColor:  'rgba(0,0,0,0.12)',
+  },
+  tileName: {
+    color:         'rgba(0,0,0,0.55)',
+    fontFamily:    fonts.medium,
+    fontSize:      10.5,
+    letterSpacing: 0.1,
+    maxWidth:      TILE_W,
+    textAlign:     'center',
+  },
+  tileNameActive: {
+    color:      colors.black,
+    fontFamily: fonts.semiBold,
   },
 
-  // ── "+N" bubble — tap to reveal avatars past MAX_VISIBLE_AVATARS ─────────
-  moreCircle: {
-    width:           RING_OUTER,
-    height:          RING_OUTER,
-    borderRadius:    RING_OUTER / 2,
-    alignItems:      'center',
-    justifyContent:  'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth:     1.3,
-    borderColor:     'rgba(255,255,255,0.35)',
-  },
-  moreCircleTxt: {
-    fontSize:      15,
-    fontFamily:    fonts.semiBold,
-    color:         '#fff',
-    letterSpacing: -0.2,
+  // ── Presence dot — rimmed so it reads on any avatar ──────────────────────
+  onlineDot: {
+    position:        'absolute',
+    right:           3,
+    bottom:          3,
+    width:           DOT_SIZE,
+    height:          DOT_SIZE,
+    borderRadius:    DOT_SIZE / 2,
+    backgroundColor: colors.success,
+    borderWidth:     2,
+    borderColor:     colors.white,
   },
 
-  // ── Online badge ──────────────────────────────────────────────────────────
-  onlineBadgeWrap: {
-    position:   'absolute',
-    bottom:     -2,
-    left:       0,
-    right:      0,
-    alignItems: 'center',
-    zIndex:     10,
-  },
-  onlineBadge: {
-    borderRadius:      4,
-    paddingHorizontal: 3,
-    paddingVertical:   1,
-  },
-  onlineBadgeTxt: {
-    fontSize:      6.5,
-    fontFamily:    fonts.bold,
-    color:         '#fff',
-    letterSpacing: 0.2,
-  },
-
-  // ── Add button — kept clear of the overlapping avatars ───────────────────
-  addWrap: {
-    marginRight: 14,
-  },
+  // ── Create tile details ───────────────────────────────────────────────────
   addPlaceholder: {
-    flex:            1,
+    width:           AV_SIZE,
+    height:          AV_SIZE,
     alignItems:      'center',
     justifyContent:  'center',
-    backgroundColor: '#2A2A2A',
+    backgroundColor: '#EAEAEA',
   },
   addBadge: {
     position:        'absolute',
-    bottom:          0,
-    right:           0,
+    bottom:          -1,
+    right:           -1,
     width:           BADGE_SIZE,
     height:          BADGE_SIZE,
     borderRadius:    BADGE_SIZE / 2,
-    backgroundColor: '#000',
     alignItems:      'center',
     justifyContent:  'center',
+    borderWidth:     2,
+    borderColor:     colors.white,
   },
 
   /* ── Search panel ─────────────────────────────────────────────────────────── */
-  searchPanel: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0,
-    zIndex: 40,
-    backgroundColor: 'rgba(0,0,0,0.88)',
-    paddingBottom: 14,
-  },
   searchRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, marginBottom: 12, gap: 12,
@@ -388,13 +335,13 @@ const s = StyleSheet.create({
 
   /* ── Bubbles row (search mode) ─────────────────────────────────────────────── */
   bubbleScroll:  { flexGrow: 0 },
-  bubbleContent: { paddingHorizontal: 16, gap: 14, alignItems: 'flex-start', paddingBottom: 2 },
+  bubbleContent: { paddingHorizontal: 16, gap: 14, alignItems: 'flex-start', paddingBottom: 12 },
   bubble: { alignItems: 'center', gap: 5, width: BUBBLE_SIZE + 14 },
   bubbleRing: {
-    borderRadius: (BUBBLE_SIZE + 6) / 2, borderWidth: 2,
+    borderRadius: (BUBBLE_SIZE + 6) / 2, borderWidth: 1.6,
     borderColor: colors.primary, padding: 2,
   },
-  bubbleRingActive: { borderColor: '#FFB173' },
+  bubbleRingActive: { borderWidth: 2.2 },
   bubbleName: {
     color: 'rgba(255,255,255,0.82)', fontFamily: fonts.medium,
     fontSize: 11, textAlign: 'center', maxWidth: BUBBLE_SIZE + 12,

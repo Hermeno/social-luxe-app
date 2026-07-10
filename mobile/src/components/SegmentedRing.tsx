@@ -1,5 +1,6 @@
 import React from 'react'
-import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg'
+import Svg, { Circle } from 'react-native-svg'
+import { colors } from '../theme'
 
 interface Props {
   count: number
@@ -9,6 +10,7 @@ interface Props {
   inactiveColor?: string
 }
 
+// Todos os anéis da app usam uma única cor: o crimson da marca.
 export default function SegmentedRing({
   count,
   viewedCount = 0,
@@ -25,21 +27,12 @@ export default function SegmentedRing({
 
   return (
     <Svg width={size} height={size} style={{ position: 'absolute' }}>
-      {!allViewed && (
-        <Defs>
-          <LinearGradient id="ring-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <Stop offset="0%"   stopColor="#CA2851" stopOpacity={1} />
-            <Stop offset="50%"  stopColor="#FF6766" stopOpacity={1} />
-            <Stop offset="100%" stopColor="#FFB173" stopOpacity={1} />
-          </LinearGradient>
-        </Defs>
-      )}
       <Circle
         cx={cx}
         cy={cy}
         r={r}
         fill="none"
-        stroke={allViewed ? inactiveColor : 'url(#ring-grad)'}
+        stroke={allViewed ? inactiveColor : colors.primary}
         strokeWidth={strokeWidth}
       />
     </Svg>

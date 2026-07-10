@@ -67,7 +67,8 @@
           "color": "#CA2851",
           "defaultChannel": "messages"
         }
-      ]
+      ],
+      "expo-font"
     ],
     "extra": {
       "eas": {

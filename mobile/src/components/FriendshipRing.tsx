@@ -1,14 +1,6 @@
 import React from 'react'
 import Svg, { Circle } from 'react-native-svg'
-
-// Tier colors: 1=subtle → 5=pink (primary)
-const TIER_COLORS = [
-  'rgba(255,255,255,0.45)', // tier 1 — branco suave
-  '#4A9EFF',               // tier 2 — azul
-  '#A855F7',               // tier 3 — roxo
-  '#F59E0B',               // tier 4 — ouro
-  '#CA2851',               // tier 5 — rosa (primary)
-]
+import { colors } from '../theme'
 
 interface Props {
   level: number   // 0–100
@@ -17,12 +9,13 @@ interface Props {
   strokeWidth?: number
 }
 
-export default function FriendshipRing({ level, tier, size, strokeWidth = 3 }: Props) {
+export default function FriendshipRing({ level, size, strokeWidth = 3 }: Props) {
   const r = (size - strokeWidth) / 2
   const circumference = 2 * Math.PI * r
   const filled = (level / 100) * circumference
   const dashoffset = circumference - filled
-  const color = TIER_COLORS[Math.max(0, Math.min(4, tier - 1))]
+  // Uma única cor de anel em toda a app; o tier é comunicado pelo preenchimento
+  const color = colors.primary
   const cx = size / 2
   const cy = size / 2
 

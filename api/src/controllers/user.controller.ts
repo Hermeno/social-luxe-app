@@ -101,6 +101,28 @@ export async function getConnections(req: AuthRequest, res: Response) {
       if (f.followingId !== userId) userMap.set(f.followingId, f.following)
     })
 
+    // 1b. Anyone with message history is a connection too — a conversation must
+    // never vanish from the inbox just because there's no follow relationship
+    const msgPartners = await prisma.$queryRaw<{ id: string; name: string; avatar: string | null }[]>`
+      SELECT DISTINCT u.id, u.name, u.avatar
+      FROM "Message" m
+      JOIN "User" u
+        ON u.id = CASE WHEN m."senderId" = ${userId} THEN m."receiverId" ELSE m."senderId" END
+      WHERE m."senderId" = ${userId} OR m."receiverId" = ${userId}
+    `
+    for (const u of msgPartners) {
+      if (u.id !== userId && !userMap.has(u.id)) userMap.set(u.id, u)
+    }
+
+    // Blocked users (either direction) never appear in the inbox
+    const blocks = await prisma.block.findMany({
+      where:  { OR: [{ blockerId: userId }, { blockedId: userId }] },
+      select: { blockerId: true, blockedId: true },
+    })
+    for (const b of blocks) {
+      userMap.delete(b.blockerId === userId ? b.blockedId : b.blockerId)
+    }
+
     const connectionIds = Array.from(userMap.keys())
     if (connectionIds.length === 0) return ok(res, [])
 
@@ -113,19 +135,23 @@ export async function getConnections(req: AuthRequest, res: Response) {
     }
 
     const [rawLastMessages, unreadGroups, activePosts] = await Promise.all([
-      // Last message per conversation — DISTINCT ON is O(messages) not O(N*messages)
+      // Last message per conversation. NOTE: DISTINCT ON is not usable here —
+      // Prisma numbers each ${userId} as a separate parameter ($1, $5, …), so
+      // Postgres treats the DISTINCT ON and ORDER BY expressions as different
+      // and rejects the query (42P10). ROW_NUMBER has no such restriction.
       prisma.$queryRaw<RawMsg[]>`
-        SELECT DISTINCT ON (
-            CASE WHEN m."senderId" = ${userId} THEN m."receiverId" ELSE m."senderId" END
-          )
-          m.id, m.content, m."senderId", m."receiverId", m."readAt", m."createdAt",
-          CASE WHEN m."senderId" = ${userId} THEN m."receiverId" ELSE m."senderId" END AS partner_id
-        FROM "Message" m
-        WHERE (m."senderId" = ${userId} AND m."receiverId" = ANY(${connectionIds}::text[]))
-           OR (m."senderId" = ANY(${connectionIds}::text[]) AND m."receiverId" = ${userId})
-        ORDER BY
-          CASE WHEN m."senderId" = ${userId} THEN m."receiverId" ELSE m."senderId" END,
-          m."createdAt" DESC
+        SELECT id, content, "senderId", "receiverId", "readAt", "createdAt", partner_id
+        FROM (
+          SELECT m.id, m.content, m."senderId", m."receiverId", m."readAt", m."createdAt",
+                 CASE WHEN m."senderId" = ${userId} THEN m."receiverId" ELSE m."senderId" END AS partner_id,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY CASE WHEN m."senderId" = ${userId} THEN m."receiverId" ELSE m."senderId" END
+                   ORDER BY m."createdAt" DESC
+                 ) AS rn
+          FROM "Message" m
+          WHERE m."senderId" = ${userId} OR m."receiverId" = ${userId}
+        ) t
+        WHERE rn = 1
       `,
 
       // Unread counts — one GROUP BY instead of N COUNT queries

@@ -13,6 +13,7 @@ import {
   PanResponder,
 } from 'react-native'
 import { Image } from 'expo-image'
+import { setStatusBarStyle } from 'expo-status-bar'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { useFocusEffect } from '@react-navigation/native'
@@ -532,6 +533,8 @@ export default function FeedScreen() {
 
   useFocusEffect(useCallback(() => {
     isFocusedRef.current = true
+    // White rail at the top → dark status-bar icons while the feed is focused
+    setStatusBarStyle('dark')
     refreshRef.current()
 
     const task = InteractionManager.runAfterInteractions(() => {
@@ -551,6 +554,7 @@ export default function FeedScreen() {
 
     return () => {
       isFocusedRef.current = false
+      setStatusBarStyle('light')
       task.cancel()
       progressRef.current?.stop()
       safePlayer(() => player.pause())
@@ -634,8 +638,21 @@ export default function FeedScreen() {
   return (
     <View style={s.container}>
 
-      {/* ── Current post viewer (slides with swipe gesture) ─────────────────── */}
-      {/* ── Viewer: fills full screen from top to bottom ────────────────────── */}
+      {/* ── Rail: who posted — first-class section at the top ───────────────── */}
+      <FeedHeader
+        filteredGroups={filteredGroups}
+        viewedIds={viewedIds}
+        activeUserId={post?.user.id}
+        searchMode={searchMode}
+        searchQuery={searchQuery}
+        onSearchClose={handleSearchClose}
+        onSearchChange={handleSearchChange}
+        onSearchPress={handleSearchOpen}
+        onBubblePress={handleBubblePress}
+        onCreatePress={handleCreatePress}
+      />
+
+      {/* ── Post: full-bleed below the rail, exactly as before ──────────────── */}
       {post ? (
         <View
           style={s.viewer}
@@ -786,20 +803,6 @@ export default function FeedScreen() {
           <Text style={[s.emptyTitle, { color: 'rgba(255,255,255,0.75)' }]}>Preparando teu feed...</Text>
         </View>
       )}
-
-      {/* ── Floating header — absolute overlay over the viewer ──────────────── */}
-      <FeedHeader
-        filteredGroups={filteredGroups}
-        viewedIds={viewedIds}
-        activeUserId={post?.user.id}
-        searchMode={searchMode}
-        searchQuery={searchQuery}
-        onSearchClose={handleSearchClose}
-        onSearchChange={handleSearchChange}
-        onSearchPress={handleSearchOpen}
-        onBubblePress={handleBubblePress}
-        onCreatePress={handleCreatePress}
-      />
 
       {commentPost && (
         <CommentSheet

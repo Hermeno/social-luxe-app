@@ -24,6 +24,10 @@ const SAFE_MESSAGES = new Set([
   'You cannot message this user',
   'Message must have content or media',
   'Receiver not found',
+  'Este círculo já fechou',
+  'Já entraste neste círculo',
+  'Captura não encontrada',
+  'Não podes verificar a tua própria captura',
 ])
 
 function isSafeMessage(msg: string): boolean {

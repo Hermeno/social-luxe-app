@@ -2,7 +2,7 @@ import React, { useRef, useEffect } from 'react'
 import { View, TouchableOpacity, StyleSheet, Text, Image, Animated } from 'react-native'
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Search, Home, MessageCircle, User, Squircle } from 'lucide-react-native'
+import { Search, Home, MessageCircle, User, Circle } from 'lucide-react-native'
 import { colors, fonts } from '../../theme'
 import { useFeedStore } from '../../store/feed.store'
 import { useAuthStore } from '../../store/auth.store'
@@ -85,7 +85,7 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
   const searchActive = activeTab === 'Feed' && openSearch
   const homeActive   = activeTab === 'Feed' && !openSearch
   const msgActive    = activeTab === 'Messages'
-  const donActive    = activeTab === 'Donations'
+  const circActive   = activeTab === 'Circle'
   const profActive   = activeTab === 'Profile'
 
   return (
@@ -124,13 +124,13 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
           </View>
         </TouchableOpacity>
 
-        {/* Donations */}
-        <TouchableOpacity style={s.btn} onPress={() => goTo('Donations')} activeOpacity={0.7}>
-          <Squircle
+        {/* Círculo */}
+        <TouchableOpacity style={s.btn} onPress={() => goTo('Circle')} activeOpacity={0.7}>
+          <Circle
             size={SZ}
-            strokeWidth={donActive ? 2.5 : 2}
-            color={donActive ? iconActive : iconInactv}
-            fill={donActive ? iconActive : 'transparent'}
+            strokeWidth={circActive ? 2.5 : 2}
+            color={circActive ? iconActive : iconInactv}
+            fill={circActive ? iconActive : 'transparent'}
           />
         </TouchableOpacity>
 

@@ -112,6 +112,8 @@ model User {
   unionInvites     UnionInvite[]
   pairingsAsA      Pairing[]      @relation("PairingUserA")
   pairingsAsB      Pairing[]      @relation("PairingUserB")
+  circleCaptures   CircleCapture[]
+  circleVotes      CircleVote[]
 }
 
 // ─── Post ────────────────────────────────────────────────────────────────────
@@ -721,6 +723,56 @@ model Pairing {
   @@unique([userAId, userBId])
   @@index([userAId])
   @@index([userBId])
+}
+
+// ─── Círculo (caça a objetos do mundo real, verificada pela comunidade) ──────
+
+enum CircleCaptureStatus {
+  PENDING
+  LIVE
+  REJECTED
+}
+
+model CircleTarget {
+  id        String   @id @default(cuid())
+  title     String
+  emoji     String
+  startsAt  DateTime @default(now())
+  endsAt    DateTime
+  createdAt DateTime @default(now())
+
+  captures CircleCapture[]
+}
+
+model CircleCapture {
+  id         String              @id @default(cuid())
+  targetId   String
+  userId     String
+  mediaUrl   String
+  status     CircleCaptureStatus @default(PENDING)
+  approvals  Int                 @default(0)
+  rejections Int                 @default(0)
+  createdAt  DateTime            @default(now())
+
+  target CircleTarget @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  votes  CircleVote[]
+
+  @@unique([targetId, userId])
+  @@index([targetId, status])
+}
+
+model CircleVote {
+  id        String   @id @default(cuid())
+  captureId String
+  voterId   String
+  match     Boolean
+  createdAt DateTime @default(now())
+
+  capture CircleCapture @relation(fields: [captureId], references: [id], onDelete: Cascade)
+  voter   User          @relation(fields: [voterId], references: [id], onDelete: Cascade)
+
+  @@unique([captureId, voterId])
 }
 
 // ─── PasswordReset ────────────────────────────────────────────────────────────
