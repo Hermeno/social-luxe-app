@@ -1,9 +1,18 @@
 import dotenv from 'dotenv'
 dotenv.config()
 
+const nodeEnv = process.env.NODE_ENV ?? 'development'
+const jwtSecret = process.env.JWT_SECRET ?? ''
+
+// A missing/placeholder secret in production would make every token forgeable.
+// Refuse to boot rather than run wide open. ('dev-secret' fallback is dev-only.)
+if (nodeEnv === 'production' && (jwtSecret.length === 0 || jwtSecret === 'secret' || jwtSecret === 'dev-secret')) {
+  throw new Error('[env] JWT_SECRET must be set to a strong value in production — refusing to start')
+}
+
 export const env = {
   databaseUrl:          process.env.DATABASE_URL ?? '',
-  jwtSecret:            process.env.JWT_SECRET ?? 'secret',
+  jwtSecret:            jwtSecret || 'dev-secret',
   jwtExpiresIn:         process.env.JWT_EXPIRES_IN ?? '365d',
   port:                 Number(process.env.PORT ?? 3000),
   nodeEnv:              process.env.NODE_ENV ?? 'development',

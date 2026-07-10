@@ -5,8 +5,8 @@ import { handleError } from '../utils/errors'
 import { AuthRequest, RegisterBody, LoginBody } from '../types'
 import { prisma } from '../config/database'
 import { comparePassword as compareHash, hashPassword } from '../utils/hash'
-import fs from 'fs'
-import path from 'path'
+import { deleteFromCloudinary } from '../utils/cloudinary.util'
+import { deleteFromR2, isR2Url } from '../utils/r2.util'
 
 export async function checkPhone(req: AuthRequest, res: Response) {
   try {
@@ -136,13 +136,28 @@ export async function deleteAccount(req: AuthRequest, res: Response) {
     const valid = await compareHash(password, user.password)
     if (!valid) return badRequest(res, 'Incorrect password')
 
-    // Media is on Cloudinary — no local file deletion needed
-    if (user.avatar) {
-      fs.unlink(path.join(process.cwd(), user.avatar), () => {})
-    }
+    // Collect media URLs before the rows disappear (DB cascades remove the rows,
+    // but storage on Cloudinary/R2 must be cleaned up explicitly)
+    const [posts, stories, messages] = await Promise.all([
+      prisma.post.findMany({ where: { userId: user.id, mediaUrl: { not: null } }, select: { mediaUrl: true } }),
+      prisma.story.findMany({ where: { userId: user.id }, select: { mediaUrl: true } }),
+      prisma.message.findMany({ where: { senderId: user.id, mediaUrl: { not: null } }, select: { mediaUrl: true } }),
+    ])
 
-    // Cascade delete (Prisma handles related records via onDelete: Cascade in schema)
     await prisma.user.delete({ where: { id: user.id } })
+
+    // Best-effort storage cleanup — a failure here must not undo the deletion
+    const mediaUrls = [
+      user.avatar,
+      ...posts.map((p) => p.mediaUrl),
+      ...stories.map((s) => s.mediaUrl),
+      ...messages.map((m) => m.mediaUrl),
+    ]
+    for (const url of mediaUrls) {
+      if (!url) continue
+      if (isR2Url(url)) deleteFromR2(url).catch(() => {})
+      else deleteFromCloudinary(url).catch(() => {})
+    }
 
     return ok(res, null, 'Account deleted')
   } catch (err) { return handleError(res, err) }

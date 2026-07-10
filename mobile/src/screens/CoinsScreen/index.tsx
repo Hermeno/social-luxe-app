@@ -278,7 +278,7 @@ const s = StyleSheet.create({
   txMsg:          { color: colors.gray400, fontFamily: fonts.regular, fontSize: 12 },
   txTime:         { color: colors.gray400, fontFamily: fonts.regular, fontSize: 11 },
   txAmount:       { fontFamily: fonts.bold, fontSize: 15 },
-  received:       { color: '#4CAF50' },
+  received:       { color: '#22C55E' },
   sent:           { color: colors.primary },
   modal:          { flex: 1, backgroundColor: colors.white, padding: spacing.lg, gap: spacing.md },
   modalHeader:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

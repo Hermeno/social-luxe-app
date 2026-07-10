@@ -70,12 +70,25 @@ export async function getFollowStatus(req: Request, res: Response) {
   }
 }
 
-const activeFollow = { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }
+// Must be a function — a module-level object would freeze `new Date()` at boot
+const activeFollow = () => ({ OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] })
+
+// Lightweight count for the app's badge poller — avoids shipping the full list
+export async function getMyFollowerCount(req: Request, res: Response) {
+  try {
+    const count = await prisma.follow.count({
+      where: { followingId: req.user!.userId, ...activeFollow() },
+    })
+    return ok(res, { count })
+  } catch (err) {
+    return handleError(res, err, 'getMyFollowerCount')
+  }
+}
 
 export async function getMyFollowers(req: Request, res: Response) {
   try {
     const rows = await prisma.follow.findMany({
-      where:   { followingId: req.user!.userId, ...activeFollow },
+      where:   { followingId: req.user!.userId, ...activeFollow() },
       orderBy: { createdAt: 'desc' },
       select:  { follower: { select: { id: true, name: true, avatar: true, bio: true } }, createdAt: true, expiresAt: true },
     })
@@ -88,7 +101,7 @@ export async function getMyFollowers(req: Request, res: Response) {
 export async function getMyFollowing(req: Request, res: Response) {
   try {
     const rows = await prisma.follow.findMany({
-      where:   { followerId: req.user!.userId, ...activeFollow },
+      where:   { followerId: req.user!.userId, ...activeFollow() },
       orderBy: { createdAt: 'desc' },
       select:  { following: { select: { id: true, name: true, avatar: true, bio: true } }, createdAt: true, expiresAt: true },
     })
@@ -101,7 +114,7 @@ export async function getMyFollowing(req: Request, res: Response) {
 export async function getUserFollowers(req: Request, res: Response) {
   try {
     const rows = await prisma.follow.findMany({
-      where:   { followingId: req.params.id, ...activeFollow },
+      where:   { followingId: req.params.id, ...activeFollow() },
       orderBy: { createdAt: 'desc' },
       select:  { follower: { select: { id: true, name: true, avatar: true, bio: true } }, createdAt: true, expiresAt: true },
     })
@@ -114,7 +127,7 @@ export async function getUserFollowers(req: Request, res: Response) {
 export async function getUserFollowing(req: Request, res: Response) {
   try {
     const rows = await prisma.follow.findMany({
-      where:   { followerId: req.params.id, ...activeFollow },
+      where:   { followerId: req.params.id, ...activeFollow() },
       orderBy: { createdAt: 'desc' },
       select:  { following: { select: { id: true, name: true, avatar: true, bio: true } }, createdAt: true, expiresAt: true },
     })

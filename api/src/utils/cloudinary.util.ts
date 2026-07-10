@@ -1,16 +1,20 @@
+import fs from 'fs'
 import { cloudinary } from '../config/cloudinary'
 import { UploadApiResponse } from 'cloudinary'
 import { MediaType } from '@prisma/client'
 
 // ── Upload ─────────────────────────────────────────────────────────────────────
 
-export function uploadToCloudinary(
-  buffer: Buffer,
-  mimetype: string,
+// Multer (diskStorage) hands us a temp file path; Cloudinary reads it from disk
+// so the file is never held in memory. The temp file is always removed here.
+type UploadedFile = { path: string; mimetype: string }
+
+export async function uploadToCloudinary(
+  file: UploadedFile,
   folder: string = 'luxe',
 ): Promise<string> {
-  const isVideo = mimetype.startsWith('video')
-  const isAudio = mimetype.startsWith('audio')
+  const isVideo = file.mimetype.startsWith('video')
+  const isAudio = file.mimetype.startsWith('audio')
 
   const options = isVideo
     ? {
@@ -31,16 +35,27 @@ export function uploadToCloudinary(
         quality: 'auto:best',
       }
 
-  return new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      options,
-      (err: Error | undefined, result: UploadApiResponse | undefined) => {
-        if (err || !result) return reject(err ?? new Error('Upload failed'))
-        resolve(result.secure_url)
-      },
-    )
-    stream.end(buffer)
-  })
+  try {
+    if (isVideo) {
+      // upload_large streams from disk in chunks — required for files > ~100 MB
+      const result = await new Promise<UploadApiResponse>((resolve, reject) => {
+        cloudinary.uploader.upload_large(
+          file.path,
+          { ...options, chunk_size: 20 * 1024 * 1024 },
+          (err: Error | undefined, res: UploadApiResponse | undefined) => {
+            if (err || !res) return reject(err ?? new Error('Upload failed'))
+            resolve(res)
+          },
+        )
+      })
+      return result.secure_url
+    }
+
+    const result = await cloudinary.uploader.upload(file.path, options)
+    return result.secure_url
+  } finally {
+    fs.unlink(file.path, () => {})
+  }
 }
 
 // ── Delete ─────────────────────────────────────────────────────────────────────

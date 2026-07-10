@@ -32,6 +32,11 @@ export async function getMyFollowers(): Promise<FollowUser[]> {
   return res.data.data ?? res.data
 }
 
+export async function getMyFollowerCount(): Promise<number> {
+  const res = await api.get('/users/followers/count')
+  return (res.data.data ?? res.data).count ?? 0
+}
+
 export async function getMyFollowing(): Promise<FollowUser[]> {
   const res = await api.get('/users/following')
   return res.data.data ?? res.data

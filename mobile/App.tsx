@@ -23,7 +23,7 @@ import { useI18n } from './src/i18n'
 import { useNotificationStore } from './src/store/notification.store'
 import { useFriendsStore } from './src/store/friends.store'
 import { useMessageBadgeStore } from './src/store/messageBadge.store'
-import { getMyFollowers } from './src/services/follow.service'
+import { getMyFollowerCount } from './src/services/follow.service'
 import { api, onTokenExpired } from './src/services/api'
 
 // Hold the native splash screen open until we explicitly release it.
@@ -213,12 +213,11 @@ function FollowerPoller() {
     if (!isAuthenticated) return
     const poll = async () => {
       try {
-        const list = await getMyFollowers()
-        setFollowerCount(list.length)
+        setFollowerCount(await getMyFollowerCount())
       } catch {}
     }
     poll()
-    const id = setInterval(poll, 30000)
+    const id = setInterval(poll, 60000)
     return () => clearInterval(id)
   }, [isAuthenticated])
 

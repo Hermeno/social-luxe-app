@@ -135,8 +135,8 @@ model Post {
   stickersEnabled  Boolean   @default(false)
   isTravelEnabled  Boolean   @default(false)
 
-  user           User             @relation(fields: [userId], references: [id])
-  partnerUser    User?            @relation("PostPartner", fields: [partnerUserId], references: [id])
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  partnerUser    User?            @relation("PostPartner", fields: [partnerUserId], references: [id], onDelete: SetNull)
   likes          Like[]
   comments       Comment[]
   shares         Share[]
@@ -255,8 +255,8 @@ model Friendship {
   renewedAt DateTime?
   createdAt DateTime           @default(now())
 
-  userA User @relation("FriendA", fields: [userAId], references: [id])
-  userB User @relation("FriendB", fields: [userBId], references: [id])
+  userA User @relation("FriendA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB User @relation("FriendB", fields: [userBId], references: [id], onDelete: Cascade)
 
   @@unique([userAId, userBId])
 }
@@ -269,8 +269,8 @@ model FriendshipHistory {
   startedAt DateTime
   endedAt   DateTime
 
-  userA User @relation("HistoryA", fields: [userAId], references: [id])
-  userB User @relation("HistoryB", fields: [userBId], references: [id])
+  userA User @relation("HistoryA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB User @relation("HistoryB", fields: [userBId], references: [id], onDelete: Cascade)
 }
 
 // ─── Interactions ─────────────────────────────────────────────────────────────
@@ -281,8 +281,8 @@ model Like {
   postId    String
   createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id])
-  post Post @relation(fields: [postId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@unique([userId, postId])
 }
@@ -295,8 +295,8 @@ model Reaction {
   anonymous Boolean      @default(false)
   createdAt DateTime     @default(now())
 
-  user User @relation(fields: [userId], references: [id])
-  post Post @relation(fields: [postId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@unique([userId, postId])
 }
@@ -309,9 +309,9 @@ model Comment {
   parentId  String?
   createdAt DateTime @default(now())
 
-  user    User      @relation(fields: [userId], references: [id])
-  post    Post      @relation(fields: [postId], references: [id])
-  parent  Comment?  @relation("Replies", fields: [parentId], references: [id])
+  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post    Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  parent  Comment?  @relation("Replies", fields: [parentId], references: [id], onDelete: Cascade)
   replies Comment[] @relation("Replies")
 }
 
@@ -321,8 +321,8 @@ model Share {
   postId    String
   createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id])
-  post Post @relation(fields: [postId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
 }
 
 model View {
@@ -331,8 +331,8 @@ model View {
   postId    String
   createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id])
-  post Post @relation(fields: [postId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@unique([userId, postId])
 }
@@ -343,8 +343,8 @@ model Bookmark {
   postId    String
   createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id])
-  post Post @relation(fields: [postId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@unique([userId, postId])
 }
@@ -361,8 +361,8 @@ model Message {
   replyToId   String?
   createdAt   DateTime  @default(now())
 
-  sender    User              @relation("Sender",   fields: [senderId],   references: [id])
-  receiver  User              @relation("Receiver", fields: [receiverId], references: [id])
+  sender    User              @relation("Sender",   fields: [senderId],   references: [id], onDelete: Cascade)
+  receiver  User              @relation("Receiver", fields: [receiverId], references: [id], onDelete: Cascade)
   replyTo   Message?          @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
   replies   Message[]         @relation("MessageReplies")
   reactions MessageReaction[]
@@ -394,7 +394,7 @@ model Story {
   expiresAt DateTime
   createdAt DateTime    @default(now())
 
-  user  User        @relation(fields: [userId], references: [id])
+  user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   views StoryView[]
 }
 
@@ -404,8 +404,8 @@ model StoryView {
   viewerId  String
   createdAt DateTime @default(now())
 
-  story  Story @relation(fields: [storyId], references: [id])
-  viewer User  @relation("StoryViewer", fields: [viewerId], references: [id])
+  story  Story @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  viewer User  @relation("StoryViewer", fields: [viewerId], references: [id], onDelete: Cascade)
 
   @@unique([storyId, viewerId])
 }
@@ -418,8 +418,8 @@ model Block {
   blockedId String
   createdAt DateTime @default(now())
 
-  blocker User @relation("Blocker", fields: [blockerId], references: [id])
-  blocked User @relation("Blocked", fields: [blockedId], references: [id])
+  blocker User @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
 
   @@unique([blockerId, blockedId])
 }
@@ -432,7 +432,7 @@ model Report {
   reason     String
   createdAt  DateTime     @default(now())
 
-  reporter User @relation(fields: [reporterId], references: [id])
+  reporter User @relation(fields: [reporterId], references: [id], onDelete: Cascade)
 }
 
 // ─── Post Extend Vote ────────────────────────────────────────────────────────
@@ -443,8 +443,8 @@ model PostExtendVote {
   userId    String
   createdAt DateTime @default(now())
 
-  post Post @relation(fields: [postId], references: [id])
-  user User @relation(fields: [userId], references: [id])
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([postId, userId])
 }
@@ -458,7 +458,7 @@ model Highlight {
   coverUrl  String?
   createdAt DateTime        @default(now())
 
-  user  User            @relation(fields: [userId], references: [id])
+  user  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   posts HighlightPost[]
 }
 
@@ -470,7 +470,7 @@ model HighlightPost {
   caption     String?
   addedAt     DateTime  @default(now())
 
-  highlight Highlight @relation(fields: [highlightId], references: [id])
+  highlight Highlight @relation(fields: [highlightId], references: [id], onDelete: Cascade)
 }
 
 // ─── Challenges ──────────────────────────────────────────────────────────────
@@ -497,9 +497,9 @@ model LuxeCoin {
   message    String?
   createdAt  DateTime @default(now())
 
-  sender   User  @relation("CoinSender",   fields: [senderId],   references: [id])
-  receiver User  @relation("CoinReceiver", fields: [receiverId], references: [id])
-  post     Post? @relation(fields: [postId], references: [id])
+  sender   User  @relation("CoinSender",   fields: [senderId],   references: [id], onDelete: Cascade)
+  receiver User  @relation("CoinReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  post     Post? @relation(fields: [postId], references: [id], onDelete: SetNull)
 }
 
 // ─── Momento ─────────────────────────────────────────────────────────────────
@@ -513,7 +513,7 @@ model Momento {
   expiresAt DateTime
   createdAt DateTime      @default(now())
 
-  user    User          @relation(fields: [userId], references: [id])
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   viewers MomentoView[]
 }
 
@@ -523,8 +523,8 @@ model MomentoView {
   viewerId  String
   createdAt DateTime @default(now())
 
-  momento Momento @relation(fields: [momentoId], references: [id])
-  viewer  User    @relation("MomentoViewer", fields: [viewerId], references: [id])
+  momento Momento @relation(fields: [momentoId], references: [id], onDelete: Cascade)
+  viewer  User    @relation("MomentoViewer", fields: [viewerId], references: [id], onDelete: Cascade)
 
   @@unique([momentoId, viewerId])
 }
@@ -538,7 +538,7 @@ model DeviceToken {
   platform  String
   createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, token])
 }
@@ -559,8 +559,8 @@ model CollabPost {
   expiresAt  DateTime?
   createdAt  DateTime   @default(now())
 
-  userA User  @relation("CollabA", fields: [userAId],  references: [id])
-  userB User? @relation("CollabB", fields: [userBId],  references: [id])
+  userA User  @relation("CollabA", fields: [userAId],  references: [id], onDelete: Cascade)
+  userB User? @relation("CollabB", fields: [userBId],  references: [id], onDelete: SetNull)
 }
 
 // ─── Follow ───────────────────────────────────────────────────────────────────
@@ -607,9 +607,9 @@ model Donation {
   updatedAt   DateTime       @updatedAt
 
   donorId     String
-  donor       User           @relation("DonorDonations",     fields: [donorId],     references: [id])
+  donor       User           @relation("DonorDonations",     fields: [donorId],     references: [id], onDelete: Cascade)
   requesterId String?
-  requester   User?          @relation("RequesterDonations", fields: [requesterId], references: [id])
+  requester   User?          @relation("RequesterDonations", fields: [requesterId], references: [id], onDelete: SetNull)
   feedbacks   DonationFeedback[]
 }
 
@@ -622,7 +622,7 @@ model DonationFeedback {
   createdAt  DateTime @default(now())
 
   donation   Donation @relation(fields: [donationId], references: [id], onDelete: Cascade)
-  from       User     @relation("FeedbackGiver", fields: [fromUserId], references: [id])
+  from       User     @relation("FeedbackGiver", fields: [fromUserId], references: [id], onDelete: Cascade)
 }
 
 // ─── União (Duo Profile) ─────────────────────────────────────────────────────

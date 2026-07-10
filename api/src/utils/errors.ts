@@ -21,6 +21,9 @@ const SAFE_MESSAGES = new Set([
   'Incorrect password',
   'Password confirmation required',
   'File type not allowed',
+  'You cannot message this user',
+  'Message must have content or media',
+  'Receiver not found',
 ])
 
 function isSafeMessage(msg: string): boolean {

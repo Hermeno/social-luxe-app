@@ -1,9 +1,12 @@
 import multer, { FileFilterCallback } from 'multer'
+import os from 'os'
 import { Request } from 'express'
 import { env } from '../config/env'
 
-// Store files in memory — we upload straight to Cloudinary
-const storage = multer.memoryStorage()
+// Stream uploads to the OS temp dir instead of buffering whole files in RAM —
+// a few concurrent 150 MB videos in memoryStorage would OOM the server.
+// The temp file is removed by uploadToCloudinary() once the upload finishes.
+const storage = multer.diskStorage({ destination: os.tmpdir() })
 
 function fileFilter(_req: Request, file: Express.Multer.File, cb: FileFilterCallback) {
   const allowed = [

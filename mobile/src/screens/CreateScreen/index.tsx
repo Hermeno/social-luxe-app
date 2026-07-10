@@ -355,7 +355,7 @@ export default function CreateScreen() {
               <Ionicons
                 name="megaphone-outline"
                 size={12}
-                color={isAnnouncement ? '#fff' : '#E67E22'}
+                color={isAnnouncement ? '#fff' : '#F59E0B'}
               />
               <Text style={[s.chipTxt, isAnnouncement && s.chipTxtOn]}>Anúncio</Text>
             </TouchableOpacity>
@@ -595,7 +595,7 @@ const s = StyleSheet.create({
     borderColor:       '#E8E8E8',
   },
   chipOn:      { backgroundColor: '#CA2851', borderColor: '#CA2851' },
-  chipAnnounce: { backgroundColor: '#E67E22', borderColor: '#E67E22' },
+  chipAnnounce: { backgroundColor: '#F59E0B', borderColor: '#F59E0B' },
   chipTxt:     { fontFamily: fonts.semiBold, fontSize: 12, color: '#333' },
   chipTxtOn:   { color: '#fff' },
   chipStar:    { fontSize: 11, color: '#777' },

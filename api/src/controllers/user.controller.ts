@@ -40,7 +40,7 @@ export async function updateProfile(req: AuthRequest, res: Response) {
     } = req.body
     let avatar: string | undefined
     if (req.file) {
-      avatar = await uploadToCloudinary(req.file.buffer, req.file.mimetype, 'luxe/avatars')
+      avatar = await uploadToCloudinary(req.file, 'luxe/avatars')
     }
     const location = lat != null && lng != null ? { lat: parseFloat(lat), lng: parseFloat(lng) } : {}
     const extra = viewsPublic != null ? { viewsPublic: viewsPublic === true || viewsPublic === 'true' } : {}

@@ -26,7 +26,7 @@ export async function createPost(req: AuthRequest, res: Response) {
       mediaType = MediaType.TEXT
     } else {
       mediaType = file.mimetype.startsWith('video') ? MediaType.VIDEO : MediaType.IMAGE
-      mediaUrl  = await uploadToCloudinary(file.buffer, file.mimetype, 'luxe/posts')
+      mediaUrl  = await uploadToCloudinary(file, 'luxe/posts')
     }
 
     // Include partner if user has an accepted partner and opted in

@@ -45,7 +45,7 @@ export async function updateUnion(req: AuthRequest, res: Response) {
     let avatar: string | undefined
 
     if (req.file) {
-      avatar = await uploadToCloudinary(req.file.buffer, req.file.mimetype, 'luxe/unions')
+      avatar = await uploadToCloudinary(req.file, 'luxe/unions')
     }
 
     const union = await unionService.updateUnion(req.params.id, userId, { name, bio, label, avatar })
@@ -139,7 +139,7 @@ export async function sendUnionMessage(req: AuthRequest, res: Response) {
 
     let mediaUrl: string | undefined
     if (req.file) {
-      mediaUrl = await uploadToCloudinary(req.file.buffer, req.file.mimetype, 'luxe/union-messages')
+      mediaUrl = await uploadToCloudinary(req.file, 'luxe/union-messages')
     }
 
     const msg = await unionService.sendUnionMessage(req.params.id, toUnionId, userId, content, mediaUrl)

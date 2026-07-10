@@ -21,6 +21,15 @@ export const colors = {
   overlay:      'rgba(0,0,0,0.4)',
   overlayLight: 'rgba(0,0,0,0.2)',
   transparent:  'transparent',
+
+  // Cores funcionais — uma de cada, sempre estas
+  error:   '#FF3B30',
+  success: '#22C55E',
+  warning: '#F59E0B',
+
+  // Cores semânticas de features
+  heart: '#FF4B6E',   // likes / love no feed escuro
+  gold:  '#B8860B',   // reservado / destaque premium
 }
 
 export const gradients = {

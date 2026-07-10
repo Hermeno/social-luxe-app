@@ -906,7 +906,7 @@ const s = StyleSheet.create({
   announcementBadge: {
     position: 'absolute', left: 16, top: 16, zIndex: 21,
     flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: 'rgba(230,126,34,0.88)',
+    backgroundColor: 'rgba(245,158,11,0.88)',
     paddingHorizontal: 10, paddingVertical: 5,
     borderRadius: 20,
   },

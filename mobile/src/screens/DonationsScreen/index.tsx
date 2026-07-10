@@ -26,7 +26,7 @@ const STATUS_LABEL: Record<DonationStatus, string> = {
 const STATUS_COLOR: Record<DonationStatus, string> = {
   AVAILABLE: colors.primary,
   RESERVED:  '#B8860B',
-  DELIVERED: '#2E9E5B',
+  DELIVERED: '#22C55E',
   EXPIRED:   colors.gray400,
 }
 

@@ -232,14 +232,14 @@ export default function VoiceRecorder({ onSend, onCancel }: Props) {
   if (phase === 'ERROR') {
     return (
       <View style={s.row}>
-        <Ionicons name="alert-circle" size={18} color="#FF4444" />
-        <Text style={[s.uploadTxt, { color: '#FF4444', flex: 1 }]} numberOfLines={1}>
+        <Ionicons name="alert-circle" size={18} color="#FF3B30" />
+        <Text style={[s.uploadTxt, { color: '#FF3B30', flex: 1 }]} numberOfLines={1}>
           {state.error ?? 'Falha no envio'}
         </Text>
         <TouchableOpacity onPress={handleRetry} style={s.retryBtn} activeOpacity={0.75}>
           <Text style={s.retryTxt}>Tentar novamente</Text>
         </TouchableOpacity>
-        <IconBtn name="trash-outline" size={18} color="#FF4444" onPress={handleDelete} />
+        <IconBtn name="trash-outline" size={18} color="#FF3B30" onPress={handleDelete} />
       </View>
     )
   }
@@ -250,7 +250,7 @@ export default function VoiceRecorder({ onSend, onCancel }: Props) {
     return (
       <View style={s.row}>
         {/* Delete */}
-        <IconBtn name="trash-outline" size={22} color="#FF4444" onPress={handleDelete} />
+        <IconBtn name="trash-outline" size={22} color="#FF3B30" onPress={handleDelete} />
 
         {/* Live waveform */}
         <RecordingWave active={!isPaused} />
@@ -278,7 +278,7 @@ export default function VoiceRecorder({ onSend, onCancel }: Props) {
     return (
       <View style={s.row}>
         {/* Delete */}
-        <IconBtn name="trash-outline" size={22} color="#FF4444" onPress={handleDelete} />
+        <IconBtn name="trash-outline" size={22} color="#FF3B30" onPress={handleDelete} />
 
         {/* Preview waveform with playback progress */}
         <PreviewWave uri={state.uri!} progress={progress} />

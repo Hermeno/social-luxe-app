@@ -146,7 +146,7 @@ export default function ScheduleMessageModal({
 
         {/* Cancel CTA */}
         <TouchableOpacity style={m.cancelCta} onPress={onCancelScheduled} activeOpacity={0.8}>
-          <Ionicons name="trash-outline" size={17} color="#E05C5C" />
+          <Ionicons name="trash-outline" size={17} color="#FF3B30" />
           <Text style={m.cancelCtaTxt}>{t.sched_cancel_sched}</Text>
         </TouchableOpacity>
 
@@ -238,7 +238,7 @@ export default function ScheduleMessageModal({
           <Ionicons
             name={isPast ? 'alert-circle-outline' : 'checkmark-circle-outline'}
             size={13}
-            color={isPast ? '#E05C5C' : colors.secondary}
+            color={isPast ? '#FF3B30' : colors.secondary}
           />
           <Text style={[m.statusTxt, isPast && m.statusTxtWarn]}>
             {isPast ? t.sched_past_time : `${chosen.label} · ${hStr}:${mStr}`}
@@ -326,11 +326,11 @@ const m = StyleSheet.create({
   divider: { height: 1, backgroundColor: colors.gray200, marginBottom: 16 },
   cancelCta: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    borderWidth: 1.5, borderColor: '#E05C5C', borderRadius: 16,
+    borderWidth: 1.5, borderColor: '#FF3B30', borderRadius: 16,
     paddingVertical: 14, marginBottom: 14,
     backgroundColor: 'rgba(224,92,92,0.06)',
   },
-  cancelCtaTxt: { fontSize: 15, fontFamily: fonts.semiBold, color: '#E05C5C' },
+  cancelCtaTxt: { fontSize: 15, fontFamily: fonts.semiBold, color: '#FF3B30' },
   premiumTeaser: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 6, paddingBottom: 4,
@@ -373,7 +373,7 @@ const m = StyleSheet.create({
   statusTag: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: `${colors.secondary}12`, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
   statusTagWarn: { backgroundColor: 'rgba(224,92,92,0.10)' },
   statusTxt:     { fontSize: 12, fontFamily: fonts.semiBold, color: colors.secondary, flexShrink: 1 },
-  statusTxtWarn: { color: '#E05C5C' },
+  statusTxtWarn: { color: '#FF3B30' },
 
   /* CTA */
   cta: {

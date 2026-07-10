@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { colors } from '../../theme'
 
 const AVAIL_COLOR: Record<string, string> = {
-  'Disponível': '#4CAF50',
+  'Disponível': '#22C55E',
   'Ocupado':    '#FF9800',
   'Ausente':    '#9E9E9E',
 }
@@ -13,7 +13,7 @@ const AVAIL_COLOR: Record<string, string> = {
 interface Props { uri: string | null; availability?: string | null; onPress: () => void }
 
 export default function AvatarSection({ uri, availability, onPress }: Props) {
-  const dotColor = availability ? (AVAIL_COLOR[availability] ?? '#4CAF50') : undefined
+  const dotColor = availability ? (AVAIL_COLOR[availability] ?? '#22C55E') : undefined
   return (
     <Pressable style={s.wrap} onPress={onPress}>
       {uri ? (

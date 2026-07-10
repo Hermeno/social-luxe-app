@@ -11,7 +11,7 @@ export async function createStory(req: AuthRequest, res: Response) {
     const file = req.file
     if (!file) return badRequest(res, 'Media file required')
     const mediaType = file.mimetype.startsWith('video') ? MediaType.VIDEO : MediaType.IMAGE
-    const mediaUrl = await uploadToCloudinary(file.buffer, file.mimetype, 'luxe/stories')
+    const mediaUrl = await uploadToCloudinary(file, 'luxe/stories')
     const story = await storyService.createStory(req.user!.userId, mediaUrl, mediaType)
     return created(res, story)
   } catch (err: unknown) {

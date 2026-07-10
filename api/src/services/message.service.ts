@@ -7,16 +7,30 @@ const MSG_SELECT = {
 } as const
 
 export async function getConversations(userId: string) {
-  const messages = await prisma.message.findMany({
-    where: { OR: [{ senderId: userId }, { receiverId: userId }] },
+  // Latest message per conversation, computed in the DB — Prisma's `distinct`
+  // loads every message for the user and dedupes in memory, which degrades
+  // as history grows.
+  const rows = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT id FROM (
+      SELECT id, ROW_NUMBER() OVER (
+        PARTITION BY LEAST("senderId", "receiverId"), GREATEST("senderId", "receiverId")
+        ORDER BY "createdAt" DESC
+      ) AS rn
+      FROM "Message"
+      WHERE "senderId" = ${userId} OR "receiverId" = ${userId}
+    ) t
+    WHERE rn = 1
+  `
+  if (rows.length === 0) return []
+
+  return prisma.message.findMany({
+    where: { id: { in: rows.map((r) => r.id) } },
     include: {
       sender:   { select: { id: true, name: true, avatar: true } },
       receiver: { select: { id: true, name: true, avatar: true } },
     },
     orderBy: { createdAt: 'desc' },
-    distinct: ['senderId', 'receiverId'],
   })
-  return messages
 }
 
 export async function getMessages(
@@ -49,6 +63,18 @@ export async function sendMessage(
   if (!content && !mediaUrl) throw new Error('Message must have content or media')
   const receiver = await prisma.user.findUnique({ where: { id: receiverId } })
   if (!receiver) throw new Error('Receiver not found')
+
+  // A block in either direction kills the conversation
+  const blocked = await prisma.block.findFirst({
+    where: {
+      OR: [
+        { blockerId: receiverId, blockedId: senderId },
+        { blockerId: senderId,   blockedId: receiverId },
+      ],
+    },
+    select: { id: true },
+  })
+  if (blocked) throw new Error('You cannot message this user')
 
   return prisma.message.create({
     data: { senderId, receiverId, content, mediaUrl, replyToId },

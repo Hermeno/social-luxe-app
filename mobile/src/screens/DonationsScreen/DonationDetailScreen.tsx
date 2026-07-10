@@ -22,7 +22,7 @@ type Route = RouteProp<AppStackParams, 'DonationDetail'>
 
 const TYPE_LABEL   = { ITEM: 'Item', FINANCIAL: 'Ajuda financeira' } as const
 const STATUS_LABEL = { AVAILABLE: 'Disponível', RESERVED: 'Reservada', DELIVERED: 'Entregue', EXPIRED: 'Expirada' } as const
-const STATUS_COLOR = { AVAILABLE: colors.primary, RESERVED: '#B8860B', DELIVERED: '#2E9E5B', EXPIRED: colors.gray400 } as const
+const STATUS_COLOR = { AVAILABLE: colors.primary, RESERVED: '#B8860B', DELIVERED: '#22C55E', EXPIRED: colors.gray400 } as const
 
 function Stars({ value, onChange }: { value: number; onChange?: (n: number) => void }) {
   return (

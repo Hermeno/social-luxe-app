@@ -40,7 +40,7 @@ export async function sendMessage(req: AuthRequest, res: Response) {
     if (block) return badRequest(res, 'Cannot send message to this user')
 
     const mediaUrl = req.file
-      ? await uploadToCloudinary(req.file.buffer, req.file.mimetype, 'luxe/messages')
+      ? await uploadToCloudinary(req.file, 'luxe/messages')
       : undefined
     const message = await messageService.sendMessage(
       req.user!.userId, receiverId, content, mediaUrl, replyToId,

@@ -1135,7 +1135,7 @@ export default function ChatScreen() {
                     handleDeleteMessage(contextMenuMsg.id)
                     setContextMenuMsg(null)
                   }}>
-                    <Ionicons name="trash-outline" size={20} color="#FF4444" />
+                    <Ionicons name="trash-outline" size={20} color="#FF3B30" />
                     <Text style={[t.ctxLabel, t.ctxLabelDanger]}>Excluir</Text>
                   </TouchableOpacity>
                 )}
@@ -1392,7 +1392,7 @@ const t = StyleSheet.create({
   },
   ctxItemDanger: { borderBottomWidth: 0 },
   ctxLabel:      { fontSize: 15, fontFamily: fonts.medium, color: colors.gray800 },
-  ctxLabelDanger:{ color: '#FF4444' },
+  ctxLabelDanger:{ color: '#FF3B30' },
 
   // ── Typing dots ───────────────────────────────────────────────────────────
   typingWrap:   { paddingHorizontal: 12, paddingBottom: 4 },

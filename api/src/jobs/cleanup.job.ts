@@ -75,7 +75,32 @@ async function processExpiredPosts() {
   }
 }
 
+// Expired stories are already hidden from every query, but their DB rows and
+// media files would otherwise accumulate forever.
+async function processExpiredStories() {
+  const expired = await prisma.story.findMany({
+    where:  { expiresAt: { lte: new Date() } },
+    select: { id: true, mediaUrl: true },
+  })
+  for (const story of expired) {
+    deleteMediaUrl(story.mediaUrl).catch(() => {})
+    // StoryView rows cascade at the DB level
+    await prisma.story.delete({ where: { id: story.id } }).catch(() => {})
+  }
+}
+
+// Momentos have no media — a bulk delete is enough (views cascade)
+async function processExpiredMomentos() {
+  await prisma.momento.deleteMany({ where: { expiresAt: { lte: new Date() } } })
+}
+
+async function runCleanup() {
+  await processExpiredPosts().catch((err) => console.error('[Cron] post cleanup failed:', err))
+  await processExpiredStories().catch((err) => console.error('[Cron] story cleanup failed:', err))
+  await processExpiredMomentos().catch((err) => console.error('[Cron] momento cleanup failed:', err))
+}
+
 export function startCleanupJob() {
-  cron.schedule('0 * * * *', processExpiredPosts)
-  console.log('[Cron] Post cleanup job started')
+  cron.schedule('0 * * * *', runCleanup)
+  console.log('[Cron] Cleanup job started (posts, stories, momentos)')
 }
