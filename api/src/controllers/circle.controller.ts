@@ -24,6 +24,15 @@ export async function submitCapture(req: AuthRequest, res: Response) {
   } catch (err) { return handleError(res, err, 'circle.submitCapture') }
 }
 
+export async function spark(req: AuthRequest, res: Response) {
+  try {
+    const lat = typeof req.body?.lat === 'number' ? req.body.lat : undefined
+    const lng = typeof req.body?.lng === 'number' ? req.body.lng : undefined
+    const result = await circleService.spark(req.user!.userId, lat, lng)
+    return ok(res, result)
+  } catch (err) { return handleError(res, err, 'circle.spark') }
+}
+
 export async function vote(req: AuthRequest, res: Response) {
   try {
     const raw = req.body?.match

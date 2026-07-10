@@ -1,10 +1,12 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react'
 import {
-  View, Text, StyleSheet, TouchableOpacity, FlatList,
+  View, Text, StyleSheet, TouchableOpacity, FlatList, Pressable,
   ActivityIndicator, Alert, RefreshControl, Animated, Dimensions,
 } from 'react-native'
 import { Image } from 'expo-image'
-import * as ImagePicker from 'expo-image-picker'
+import { CameraView, useCameraPermissions } from 'expo-camera'
+import * as Location from 'expo-location'
+import { setStatusBarStyle } from 'expo-status-bar'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useFocusEffect } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
@@ -16,9 +18,13 @@ import { CircleState, CircleCapture } from '../../services/circle.service'
 const { width: W } = Dimensions.get('window')
 
 // Grelha de círculos: 3 colunas, tudo redondo — a geometria É a identidade
-const GRID_PAD  = 20
-const GRID_GAP  = 14
-const CELL      = Math.floor((W - GRID_PAD * 2 - GRID_GAP * 2) / 3)
+const GRID_PAD = 20
+const GRID_GAP = 14
+const CELL     = Math.floor((W - GRID_PAD * 2 - GRID_GAP * 2) / 3)
+
+// Obturador à Apple: anel branco fino + disco crimson que respira ao toque
+const SHUTTER_OUTER = 78
+const SHUTTER_INNER = 62
 
 function timeLeft(endsAt: string): string {
   const ms = new Date(endsAt).getTime() - Date.now()
@@ -86,12 +92,40 @@ function VerifyCard({
 // ── Ecrã ──────────────────────────────────────────────────────────────────────
 export default function CircleScreen() {
   const { top, bottom } = useSafeAreaInsets()
+  const tabClear = 42 + Math.max(bottom, 8)   // barra de navegação flutuante
+
+  const [permission, requestPermission] = useCameraPermissions()
+  const camRef = useRef<CameraView>(null)
 
   const [state,      setState]      = useState<CircleState | null>(null)
+  const [mode,       setMode]       = useState<'camera' | 'grid'>('camera')
+  const [focused,    setFocused]    = useState(false)
+  const [facing,     setFacing]     = useState<'back' | 'front'>('back')
+  const [flash,      setFlash]      = useState<'off' | 'on'>('off')
+  const [previewUri, setPreviewUri] = useState<string | null>(null)
   const [loading,    setLoading]    = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [shooting,   setShooting]   = useState(false)
   const [verifyQueue, setVerifyQueue] = useState<{ id: string; mediaUrl: string }[]>([])
+
+  const stateRef = useRef<CircleState | null>(null)
+  stateRef.current = state
+  const sparkSentRef = useRef(false)
+
+  // Anel do obturador respira enquanto a câmera está aberta
+  const shutterPulse = useRef(new Animated.Value(1)).current
+  const shutterPress = useRef(new Animated.Value(1)).current
+  const hintOpacity  = useRef(new Animated.Value(0)).current
+
+  useEffect(() => {
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(shutterPulse, { toValue: 1.06, duration: 1400, useNativeDriver: true }),
+      Animated.timing(shutterPulse, { toValue: 1,    duration: 1400, useNativeDriver: true }),
+    ]))
+    loop.start()
+    return () => loop.stop()
+  }, [])
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
@@ -99,28 +133,82 @@ export default function CircleScreen() {
       const fresh = await circleService.getCircle()
       setState(fresh)
       setVerifyQueue(fresh.toVerify)
+      // Já entrou hoje → a câmera não tem propósito; mostra o círculo
+      if (fresh.myCapture) setMode('grid')
     } catch {}
     setLoading(false)
     setRefreshing(false)
   }, [])
 
-  useFocusEffect(useCallback(() => { load(state !== null) }, []))
+  // ── Spark: abrir a câmera avisa quem está perto (1x por visita ao ecrã) ────
+  async function sendSpark() {
+    if (sparkSentRef.current) return
+    sparkSentRef.current = true
+    try {
+      let lat: number | undefined
+      let lng: number | undefined
+      const { status } = await Location.getForegroundPermissionsAsync()
+      if (status === 'granted') {
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+        lat = loc.coords.latitude
+        lng = loc.coords.longitude
+      }
+      const { notified } = await circleService.spark(lat, lng)
+      if (notified > 0) {
+        Animated.sequence([
+          Animated.timing(hintOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+          Animated.delay(3200),
+          Animated.timing(hintOpacity, { toValue: 0, duration: 400, useNativeDriver: true }),
+        ]).start()
+      }
+    } catch {}
+  }
 
-  async function handleShoot() {
-    if (!state || submitting) return
-    const { status } = await ImagePicker.requestCameraPermissionsAsync()
-    if (status !== 'granted') {
-      Alert.alert('Permissão necessária', 'Permite o acesso à câmara nas definições.')
-      return
+  useFocusEffect(useCallback(() => {
+    setFocused(true)
+    load(stateRef.current !== null)
+    return () => {
+      setFocused(false)
+      sparkSentRef.current = false
+      setPreviewUri(null)
+      setStatusBarStyle('light')
     }
-    // Só câmara ao vivo — a galeria não vale: o círculo é sobre estar lá
-    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8 })
-    if (result.canceled || !result.assets[0]) return
+  }, []))
 
+  // Status bar acompanha o palco: câmera escura → ícones claros; grelha branca → escuros
+  useEffect(() => {
+    if (!focused) return
+    setStatusBarStyle(mode === 'camera' || previewUri ? 'light' : 'dark')
+  }, [focused, mode, previewUri])
+
+  // Câmera pronta e autorizada → dispara o aviso aos próximos
+  useEffect(() => {
+    if (focused && mode === 'camera' && permission?.granted) sendSpark()
+  }, [focused, mode, permission?.granted])
+
+  // ── Disparo ────────────────────────────────────────────────────────────────
+  async function handleShutter() {
+    if (shooting || !camRef.current) return
+    setShooting(true)
+    Animated.sequence([
+      Animated.timing(shutterPress, { toValue: 0.86, duration: 90,  useNativeDriver: true }),
+      Animated.spring(shutterPress, { toValue: 1, tension: 200, friction: 6, useNativeDriver: true }),
+    ]).start()
+    try {
+      const pic = await camRef.current.takePictureAsync({ quality: 0.8 })
+      if (pic?.uri) setPreviewUri(pic.uri)
+    } catch {}
+    setShooting(false)
+  }
+
+  async function handleConfirm() {
+    if (!state || !previewUri || submitting) return
     setSubmitting(true)
     try {
-      await circleService.submitCapture(state.target.id, result.assets[0].uri)
+      await circleService.submitCapture(state.target.id, previewUri)
+      setPreviewUri(null)
       await load(true)
+      setMode('grid')
     } catch (e) {
       Alert.alert('Círculo', e instanceof Error ? e.message : 'Não foi possível enviar. Tenta de novo.')
     }
@@ -136,9 +224,116 @@ export default function CircleScreen() {
 
   const my = state?.myCapture ?? null
 
+  /* ════ MODO CÂMERA ═══════════════════════════════════════════════════════ */
+  if (mode === 'camera' && !my) {
+    // Sem permissão → pedir com dignidade, nunca com um alert seco
+    if (!permission?.granted) {
+      return (
+        <View style={[s.permScreen, { paddingTop: top }]}>
+          <View style={s.permRing}><Text style={s.permEmoji}>⭕</Text></View>
+          <Text style={s.permTitle}>A câmara é o Círculo</Text>
+          <Text style={s.permSub}>
+            Todos os dias, um alvo. Encontra-o no mundo real,{'\n'}fotografa, e entra no círculo de hoje.
+          </Text>
+          <TouchableOpacity style={s.permBtn} onPress={requestPermission} activeOpacity={0.85}>
+            <Text style={s.permBtnTxt}>Permitir câmara</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setMode('grid')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Text style={s.permSkip}>Ver o círculo de hoje</Text>
+          </TouchableOpacity>
+        </View>
+      )
+    }
+
+    return (
+      <View style={s.camScreen}>
+        {focused && !previewUri && (
+          <CameraView ref={camRef} style={StyleSheet.absoluteFill} facing={facing} flash={flash} />
+        )}
+        {previewUri && (
+          <Image source={{ uri: previewUri }} style={StyleSheet.absoluteFill} contentFit="cover" />
+        )}
+
+        {/* ── Topo: fechar · alvo · flash ── */}
+        <View style={[s.camTop, { paddingTop: top + 8 }]}>
+          <TouchableOpacity
+            style={s.camGlassBtn}
+            onPress={() => (previewUri ? setPreviewUri(null) : setMode('grid'))}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="close" size={20} color="#fff" />
+          </TouchableOpacity>
+
+          <View style={s.camTargetPill}>
+            <Text style={s.camTargetEmoji}>{state?.target.emoji ?? '⭕'}</Text>
+            <Text style={s.camTargetTxt} numberOfLines={1}>{state?.target.title ?? '…'}</Text>
+          </View>
+
+          {!previewUri ? (
+            <TouchableOpacity
+              style={s.camGlassBtn}
+              onPress={() => setFlash((f) => (f === 'off' ? 'on' : 'off'))}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              activeOpacity={0.8}
+            >
+              <Ionicons name={flash === 'on' ? 'flash' : 'flash-off'} size={17} color="#fff" />
+            </TouchableOpacity>
+          ) : (
+            <View style={s.camGlassSpacer} />
+          )}
+        </View>
+
+        {/* Aviso discreto: quem está perto foi chamado */}
+        <Animated.View style={[s.sparkHint, { top: top + 64, opacity: hintOpacity }]} pointerEvents="none">
+          <Text style={s.sparkHintTxt}>Quem está perto foi avisado ⭕</Text>
+        </Animated.View>
+
+        {/* ── Fundo: controlos ── */}
+        {!previewUri ? (
+          <View style={[s.camControls, { paddingBottom: tabClear + 22 }]}>
+            <TouchableOpacity style={s.camSideBtn} onPress={() => setMode('grid')} activeOpacity={0.8}>
+              <Ionicons name="ellipse-outline" size={22} color="#fff" />
+              {state && state.liveCount > 0 && (
+                <View style={s.camSideBadge}><Text style={s.camSideBadgeTxt}>{state.liveCount}</Text></View>
+              )}
+            </TouchableOpacity>
+
+            <Pressable onPress={handleShutter} disabled={shooting}>
+              <Animated.View style={[s.shutterOuter, { transform: [{ scale: Animated.multiply(shutterPulse, shutterPress) }] }]}>
+                <View style={s.shutterInner}>
+                  {shooting && <ActivityIndicator color={colors.white} />}
+                </View>
+              </Animated.View>
+            </Pressable>
+
+            <TouchableOpacity
+              style={s.camSideBtn}
+              onPress={() => setFacing((f) => (f === 'back' ? 'front' : 'back'))}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="camera-reverse-outline" size={22} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={[s.previewActions, { paddingBottom: tabClear + 22 }]}>
+            <TouchableOpacity style={s.previewRetake} onPress={() => setPreviewUri(null)} activeOpacity={0.85} disabled={submitting}>
+              <Text style={s.previewRetakeTxt}>Repetir</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.previewConfirm} onPress={handleConfirm} activeOpacity={0.85} disabled={submitting}>
+              {submitting
+                ? <ActivityIndicator color={colors.white} size="small" />
+                : <Text style={s.previewConfirmTxt}>Entrar no círculo ⭕</Text>}
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    )
+  }
+
+  /* ════ MODO GRELHA ═══════════════════════════════════════════════════════ */
   return (
     <View style={s.screen}>
-      {/* ── Cabeçalho: o alvo de hoje ── */}
       <View style={[s.header, { paddingTop: top + 18 }]}>
         <Text style={s.overline}>O CÍRCULO DE HOJE</Text>
         <View style={s.targetRow}>
@@ -165,14 +360,13 @@ export default function CircleScreen() {
           keyExtractor={(c) => c.id}
           numColumns={3}
           columnWrapperStyle={s.gridRow}
-          contentContainerStyle={[s.gridContent, { paddingBottom: bottom + 160 }]}
+          contentContainerStyle={[s.gridContent, { paddingBottom: bottom + 170 }]}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true) }} tintColor={colors.primary} />
           }
           ListHeaderComponent={
             <>
-              {/* Verificação captcha — o utilizador é o juiz, um achado de cada vez */}
               {verifyQueue.length > 0 && state && (
                 <VerifyCard
                   target={state.target.title}
@@ -181,8 +375,6 @@ export default function CircleScreen() {
                   onVote={handleVote}
                 />
               )}
-
-              {/* Estado da minha captura */}
               {my && (
                 <View style={s.myStrip}>
                   <View style={s.myThumbRing}>
@@ -212,13 +404,11 @@ export default function CircleScreen() {
         />
       )}
 
-      {/* ── Obturador: um círculo crimson, e mais nada ── */}
+      {/* Voltar à câmera — só faz sentido se ainda não entrei */}
       {state && !my && (
-        <View style={[s.shutterWrap, { paddingBottom: bottom + 74 }]} pointerEvents="box-none">
-          <TouchableOpacity style={s.shutter} onPress={handleShoot} disabled={submitting} activeOpacity={0.85}>
-            {submitting
-              ? <ActivityIndicator color={colors.white} />
-              : <Ionicons name="camera" size={26} color={colors.white} />}
+        <View style={[s.shutterWrap, { paddingBottom: tabClear + 24 }]} pointerEvents="box-none">
+          <TouchableOpacity style={s.gridShutter} onPress={() => setMode('camera')} activeOpacity={0.85}>
+            <Ionicons name="camera" size={24} color={colors.white} />
           </TouchableOpacity>
           <Text style={s.shutterHint}>Encontra e fotografa</Text>
         </View>
@@ -231,7 +421,111 @@ const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.white },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
-  /* ── Cabeçalho ── */
+  /* ── Câmera ── */
+  camScreen: { flex: 1, backgroundColor: colors.black },
+  camTop: {
+    position: 'absolute', top: 0, left: 0, right: 0,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 14, gap: 10, zIndex: 10,
+  },
+  camGlassBtn: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: 'rgba(0,0,0,0.38)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  camGlassSpacer: { width: 38, height: 38 },
+  camTargetPill: {
+    flexShrink: 1,
+    flexDirection: 'row', alignItems: 'center', gap: 7,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8,
+  },
+  camTargetEmoji: { fontSize: 15 },
+  camTargetTxt: {
+    color: '#fff', fontFamily: fonts.semiBold, fontSize: 13.5, letterSpacing: -0.2,
+  },
+  sparkHint: {
+    position: 'absolute', left: 0, right: 0,
+    alignItems: 'center', zIndex: 9,
+  },
+  sparkHintTxt: {
+    color: '#fff', fontFamily: fonts.medium, fontSize: 11.5,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    borderRadius: 12, paddingHorizontal: 12, paddingVertical: 5,
+    overflow: 'hidden',
+  },
+
+  camControls: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 44,
+  },
+  camSideBtn: {
+    width: 46, height: 46, borderRadius: 23,
+    borderWidth: 1.3, borderColor: 'rgba(255,255,255,0.55)',
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  camSideBadge: {
+    position: 'absolute', top: -5, right: -5,
+    minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4,
+    backgroundColor: colors.primary,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  camSideBadgeTxt: { color: '#fff', fontSize: 9.5, fontFamily: fonts.bold },
+
+  shutterOuter: {
+    width: SHUTTER_OUTER, height: SHUTTER_OUTER, borderRadius: SHUTTER_OUTER / 2,
+    borderWidth: 4, borderColor: 'rgba(255,255,255,0.95)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  shutterInner: {
+    width: SHUTTER_INNER, height: SHUTTER_INNER, borderRadius: SHUTTER_INNER / 2,
+    backgroundColor: colors.primary,
+    alignItems: 'center', justifyContent: 'center',
+  },
+
+  /* ── Pré-visualização ── */
+  previewActions: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 14, paddingHorizontal: 24,
+  },
+  previewRetake: {
+    paddingHorizontal: 22, paddingVertical: 13,
+    borderRadius: 26, borderWidth: 1.4, borderColor: 'rgba(255,255,255,0.75)',
+  },
+  previewRetakeTxt: { color: '#fff', fontFamily: fonts.semiBold, fontSize: 14.5 },
+  previewConfirm: {
+    flex: 1, maxWidth: 240,
+    paddingVertical: 14, borderRadius: 26,
+    backgroundColor: colors.primary,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  previewConfirmTxt: { color: '#fff', fontFamily: fonts.bold, fontSize: 14.5, letterSpacing: -0.2 },
+
+  /* ── Permissão ── */
+  permScreen: {
+    flex: 1, backgroundColor: colors.white,
+    alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 40, gap: 10,
+  },
+  permRing: {
+    width: 84, height: 84, borderRadius: 42,
+    borderWidth: 1.6, borderColor: colors.primary,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 8,
+  },
+  permEmoji: { fontSize: 34 },
+  permTitle: { fontSize: 20, fontFamily: fonts.bold, color: colors.black, letterSpacing: -0.4 },
+  permSub: { fontSize: 13.5, fontFamily: fonts.regular, color: colors.gray500, textAlign: 'center', lineHeight: 20 },
+  permBtn: {
+    marginTop: 14, backgroundColor: colors.primary,
+    paddingHorizontal: 30, paddingVertical: 13, borderRadius: 26,
+  },
+  permBtnTxt: { color: '#fff', fontFamily: fonts.bold, fontSize: 14.5 },
+  permSkip: { marginTop: 12, fontSize: 13, fontFamily: fonts.medium, color: colors.gray500 },
+
+  /* ── Cabeçalho (grelha) ── */
   header: { paddingHorizontal: GRID_PAD, backgroundColor: colors.white },
   overline: {
     fontSize: 11, fontFamily: fonts.bold, color: colors.gray400,
@@ -319,13 +613,13 @@ const s = StyleSheet.create({
   emptyTitle: { fontSize: 16, fontFamily: fonts.semiBold, color: colors.black, letterSpacing: -0.3 },
   emptySub:   { fontSize: 13, fontFamily: fonts.regular, color: colors.gray500, textAlign: 'center', lineHeight: 19 },
 
-  /* ── Obturador ── */
+  /* ── Obturador (grelha) ── */
   shutterWrap: {
     position: 'absolute', left: 0, right: 0, bottom: 0,
     alignItems: 'center', gap: 8,
   },
-  shutter: {
-    width: 68, height: 68, borderRadius: 34,
+  gridShutter: {
+    width: 64, height: 64, borderRadius: 32,
     backgroundColor: colors.primary,
     alignItems: 'center', justifyContent: 'center',
     shadowColor: colors.primary, shadowOpacity: 0.35, shadowRadius: 14, shadowOffset: { width: 0, height: 6 },

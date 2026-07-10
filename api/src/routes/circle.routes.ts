@@ -8,6 +8,7 @@ const router = Router()
 router.use(authMiddleware)
 
 router.get('/', circleController.getCurrent)
+router.post('/spark', circleController.spark)
 router.post('/captures', upload.single('media'), circleController.submitCapture)
 router.post('/captures/:id/vote', circleController.vote)
 

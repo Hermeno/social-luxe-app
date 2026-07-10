@@ -56,3 +56,9 @@ export async function voteCapture(captureId: string, match: boolean): Promise<{ 
   const res = await api.post(`/circle/captures/${captureId}/vote`, { match })
   return res.data.data
 }
+
+// Abrir a câmera avisa conexões próximas — o servidor decide quem (e nunca revela distância)
+export async function spark(lat?: number, lng?: number): Promise<{ notified: number }> {
+  const res = await api.post('/circle/spark', lat != null && lng != null ? { lat, lng } : {})
+  return res.data.data ?? { notified: 0 }
+}

@@ -52,6 +52,12 @@
       "expo-splash-screen",
       "expo-video",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "Permite ao luxee usar a câmara para o Círculo."
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "photosPermission": "Permite ao luxee aceder às tuas fotos.",
