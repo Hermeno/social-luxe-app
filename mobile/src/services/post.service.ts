@@ -6,6 +6,20 @@ export async function getFeed(page = 1): Promise<Post[]> {
   return res.data.data
 }
 
+// Álbum: várias fotos numa publicação → grelha na feed
+export async function createAlbum(uris: string[], caption?: string, deviceModel?: string): Promise<Post> {
+  const form = new FormData()
+  uris.forEach((uri, i) => {
+    form.append('media', { uri, name: `album-${i}.jpg`, type: 'image/jpeg' } as unknown as Blob)
+  })
+  if (caption)     form.append('caption', caption)
+  if (deviceModel) form.append('deviceModel', deviceModel)
+  const res = await uploadApi.post<ApiResponse<Post>>('/posts/album', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return res.data.data
+}
+
 export async function createPost(
   mediaUri: string | null,
   mediaType: 'IMAGE' | 'VIDEO' | 'TEXT',
@@ -15,10 +29,9 @@ export async function createPost(
   isAnnouncement?: boolean,
   deviceModel?: string,
   stickersEnabled?: boolean,
-  isTravelEnabled?: boolean,
 ) {
   if (mediaType === 'TEXT') {
-    const res = await api.post<ApiResponse<Post>>('/posts', { caption, bgColor, partnerUserId, isAnnouncement, deviceModel, stickersEnabled, isTravelEnabled })
+    const res = await api.post<ApiResponse<Post>>('/posts', { caption, bgColor, partnerUserId, isAnnouncement, deviceModel, stickersEnabled })
     return res.data.data
   }
 
@@ -31,7 +44,6 @@ export async function createPost(
   if (isAnnouncement)               form.append('isAnnouncement', 'true')
   if (deviceModel)                  form.append('deviceModel', deviceModel)
   if (stickersEnabled)              form.append('stickersEnabled', 'true')
-  if (isTravelEnabled)              form.append('isTravelEnabled', 'true')
   const res = await uploadApi.post<ApiResponse<Post>>('/posts', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })

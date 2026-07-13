@@ -37,48 +37,12 @@ export interface PostSticker {
   viewCount?: number
 }
 
-// ── Travel Posts ──────────────────────────────────────────────────────────────
-export interface TravelNode {
-  id:                 string
-  countryCode:        string
-  countryName:        string
-  views:              number
-  likes:              number
-  comments:           number
-  objectsAdded:       number
-  firstInteractionAt: string
-  lastInteractionAt:  string
-}
-
-export interface TravelObject {
-  id:          string
-  type:        'emoji' | 'sticker' | 'caption'
-  value:       string
-  countryCode: string
-  createdAt:   string
-  user:        Pick<User, 'id' | 'name' | 'avatar'>
-}
-
-export interface TravelStats {
-  totalCountries:    number
-  totalViews:        number
-  totalLikes:        number
-  totalComments:     number
-  totalObjects:      number
-  lastCountry:       { code: string; name: string } | null
-  mostActiveCountry: { code: string; name: string } | null
-}
-
-export interface TravelData {
-  nodes:   TravelNode[]
-  objects: TravelObject[]
-  stats:   TravelStats
-}
-
 export interface Post {
   id: string
   userId: string
   mediaUrl: string | null
+  mediaUrls?: string[]        // álbum: 2+ fotos mostradas em grelha
+  albumOverlays?: { emoji: string; x: number; y: number }[][]   // emojis por foto do álbum
   thumbnailUrl: string
   mediaType: 'IMAGE' | 'VIDEO' | 'TEXT'
   caption: string | null
@@ -92,7 +56,6 @@ export interface Post {
   partnerUser?: { id: string; name: string; avatar: string | null } | null
   isAnnouncement?: boolean
   stickersEnabled?: boolean
-  isTravelEnabled?: boolean
   user: Pick<User, 'id' | 'name' | 'avatar' | 'viewsPublic' | 'showDevice' | 'statusLabel' | 'lastSeen'>
   _count: { likes: number; comments: number; shares: number; views: number }
   recentCommenters?: Array<{ id: string; name: string; avatar: string | null }>

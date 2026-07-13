@@ -40,6 +40,10 @@ export async function checkPhone(phone: string): Promise<{ exists: boolean }> {
   return res.data.data ?? res.data
 }
 
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  await api.put('/auth/change-password', { currentPassword, newPassword })
+}
+
 export async function logout() {
   await clearToken()
 }

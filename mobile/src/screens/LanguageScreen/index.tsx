@@ -1,6 +1,6 @@
-import React, { useState } from 'react'
+import React from 'react'
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -20,19 +20,10 @@ const CARD_BD = '#EDEDF1'
 
 interface LangItem { code: string; label: string; native: string; emoji: string }
 
-const SUGGESTED: LangItem[] = [
+// Só os idiomas que a app realmente fala — nada de opções que não funcionam
+const LANGS: LangItem[] = [
   { code: 'pt', label: 'Português', native: 'Português', emoji: '🇲🇿' },
   { code: 'en', label: 'Inglês',    native: 'English',   emoji: '🇬🇧' },
-]
-const ALL_LANGS: LangItem[] = [
-  { code: 'fr', label: 'Francês',  native: 'Français',   emoji: '🇫🇷' },
-  { code: 'es', label: 'Espanhol', native: 'Español',    emoji: '🇪🇸' },
-  { code: 'zu', label: 'Zulu',     native: 'isiZulu',    emoji: '🇿🇦' },
-  { code: 'ar', label: 'Árabe',    native: 'العربية',    emoji: '🇸🇦' },
-  { code: 'zh', label: 'Chinês',   native: '中文',        emoji: '🇨🇳' },
-  { code: 'hi', label: 'Hindi',    native: 'हिन्दी',     emoji: '🇮🇳' },
-  { code: 'sw', label: 'Suaíli',   native: 'Kiswahili',  emoji: '🇰🇪' },
-  { code: 'de', label: 'Alemão',   native: 'Deutsch',    emoji: '🇩🇪' },
 ]
 
 export default function LanguageScreen() {
@@ -40,21 +31,6 @@ export default function LanguageScreen() {
   const { top, bottom } = useSafeAreaInsets()
   const t = useT()
   const { lang, setLang } = useI18n()
-  const [query, setQuery] = useState('')
-
-  const q = query.toLowerCase()
-  const filteredSuggested = SUGGESTED.filter(l =>
-    l.label.toLowerCase().includes(q) || l.native.toLowerCase().includes(q)
-  )
-  const filteredAll = ALL_LANGS.filter(l =>
-    l.label.toLowerCase().includes(q) || l.native.toLowerCase().includes(q)
-  )
-
-  async function selectLanguage(code: string) {
-    if (code === 'pt' || code === 'en') {
-      await setLang(code)
-    }
-  }
 
   return (
     <View style={s.screen}>
@@ -65,64 +41,18 @@ export default function LanguageScreen() {
         <Text style={s.headerTitle}>{t.ln_title}</Text>
       </View>
 
-      <View style={[s.searchWrap, { marginHorizontal: 16 }]}>
-        <Ionicons name="search-outline" size={17} color={M} />
-        <TextInput
-          style={s.searchInput}
-          value={query}
-          onChangeText={setQuery}
-          placeholder={t.ln_search}
-          placeholderTextColor={M}
-          returnKeyType="search"
-        />
-        {query.length > 0 && (
-          <TouchableOpacity onPress={() => setQuery('')} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-            <Ionicons name="close-circle" size={17} color={M} />
-          </TouchableOpacity>
-        )}
-      </View>
-
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[s.content, { paddingBottom: bottom + 32 }]}>
-        {filteredSuggested.length > 0 && (
-          <>
-            <Text style={s.sectionLabel}>{t.ln_suggested}</Text>
-            <View style={s.card}>
-              {filteredSuggested.map((item, i) => (
-                <LangRow
-                  key={item.code}
-                  item={item}
-                  selected={lang === item.code}
-                  onPress={() => selectLanguage(item.code)}
-                  isLast={i === filteredSuggested.length - 1}
-                />
-              ))}
-            </View>
-          </>
-        )}
-
-        {filteredAll.length > 0 && (
-          <>
-            <Text style={[s.sectionLabel, { marginTop: 16 }]}>{t.ln_all}</Text>
-            <View style={s.card}>
-              {filteredAll.map((item, i) => (
-                <LangRow
-                  key={item.code}
-                  item={item}
-                  selected={lang === item.code}
-                  onPress={() => selectLanguage(item.code)}
-                  isLast={i === filteredAll.length - 1}
-                />
-              ))}
-            </View>
-          </>
-        )}
-
-        {filteredSuggested.length === 0 && filteredAll.length === 0 && (
-          <View style={s.empty}>
-            <Text style={s.emptyTxt}>{t.ln_noResults} "{query}"</Text>
-          </View>
-        )}
-
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[s.content, { paddingBottom: bottom + 32, paddingTop: 8 }]}>
+        <View style={s.card}>
+          {LANGS.map((item, i) => (
+            <LangRow
+              key={item.code}
+              item={item}
+              selected={lang === item.code}
+              onPress={() => setLang(item.code as 'pt' | 'en')}
+              isLast={i === LANGS.length - 1}
+            />
+          ))}
+        </View>
         <Text style={s.note}>{t.ln_note}</Text>
       </ScrollView>
     </View>

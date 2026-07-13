@@ -53,7 +53,7 @@ export async function getCurrent(userId: string) {
     }),
     prisma.circleCapture.findFirst({
       where:  { targetId: target.id, userId },
-      select: { id: true, mediaUrl: true, status: true, approvals: true, rejections: true },
+      select: { id: true, mediaUrl: true, overlays: true, status: true, approvals: true, rejections: true },
     }),
     // Verificação estilo captcha: capturas pendentes de outros, ainda não votadas por mim
     prisma.circleCapture.findMany({
@@ -73,7 +73,9 @@ export async function getCurrent(userId: string) {
   return { target, captures, myCapture, toVerify, liveCount }
 }
 
-export async function submitCapture(userId: string, targetId: string, mediaUrl: string) {
+type Overlay = { emoji: string; x: number; y: number }
+
+export async function submitCapture(userId: string, targetId: string, mediaUrl: string, overlays: Overlay[] = []) {
   const target = await prisma.circleTarget.findUnique({ where: { id: targetId } })
   if (!target || target.endsAt <= new Date()) throw new Error('Este círculo já fechou')
 
@@ -86,7 +88,7 @@ export async function submitCapture(userId: string, targetId: string, mediaUrl: 
   const status = total < COLD_START_LIVE ? 'LIVE' as const : 'PENDING' as const
 
   return prisma.circleCapture.create({
-    data:    { targetId, userId, mediaUrl, status },
+    data:    { targetId, userId, mediaUrl, status, overlays: overlays.length > 0 ? overlays : undefined },
     include: { user: { select: { id: true, name: true, avatar: true } } },
   })
 }

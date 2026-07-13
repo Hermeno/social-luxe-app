@@ -37,7 +37,7 @@ function Row({ iconName, title, subtitle, value, onToggle, isLast }: {
 }) {
   return (
     <View style={[r.row, !isLast && r.sep]}>
-      <View style={r.iconWrap}><Ionicons name={iconName as any} size={17} color={B} /></View>
+      <View style={r.iconWrap}><Ionicons name={iconName as any} size={17} color="#555" /></View>
       <View style={{ flex: 1 }}>
         <Text style={r.title}>{title}</Text>
         {!!subtitle && <Text style={r.sub}>{subtitle}</Text>}
@@ -49,7 +49,7 @@ function Row({ iconName, title, subtitle, value, onToggle, isLast }: {
 const r = StyleSheet.create({
   row:     { flexDirection: 'row', alignItems: 'center', gap: 13, padding: 13, paddingHorizontal: 14 },
   sep:     { borderBottomWidth: 1, borderBottomColor: SEP },
-  iconWrap:{ width: 32, height: 32, borderRadius: 9, backgroundColor: 'rgba(76,140,228,0.12)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  iconWrap:{ width: 32, height: 32, borderRadius: 9, backgroundColor: '#F2F2F5', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   title:   { fontFamily: fonts.semiBold, fontSize: 15, color: T_C },
   sub:     { fontFamily: fonts.medium, fontSize: 12, color: M, marginTop: 1 },
 })
@@ -122,7 +122,7 @@ const s = StyleSheet.create({
   content: { paddingHorizontal: 16, gap: 8, paddingTop: 4 },
 
   pauseCard:    { flexDirection: 'row', alignItems: 'center', gap: 13, padding: 16, borderRadius: 18, backgroundColor: BG, borderWidth: 1, borderColor: CARD_BD },
-  pauseCardOn:  { backgroundColor: 'rgba(76,140,228,0.08)', borderColor: 'rgba(76,140,228,0.28)' },
+  pauseCardOn:  { backgroundColor: 'rgba(202,40,81,0.06)', borderColor: 'rgba(202,40,81,0.22)' },
   pauseTitle:   { fontFamily: fonts.bold, fontSize: 15, color: T_C },
   pauseTitleOn: { color: B },
   pauseSub:     { fontFamily: fonts.medium, fontSize: 12, color: M, marginTop: 2 },

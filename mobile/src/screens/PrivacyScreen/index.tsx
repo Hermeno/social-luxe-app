@@ -38,7 +38,7 @@ function Row({ iconName, title, subtitle, toggle, onToggle, onPress, isLast }: {
 }) {
   return (
     <TouchableOpacity style={[r.row, !isLast && r.sep]} onPress={toggle !== undefined ? onToggle : onPress} activeOpacity={0.75}>
-      <View style={r.icon}><Ionicons name={iconName as any} size={17} color={B} /></View>
+      <View style={r.icon}><Ionicons name={iconName as any} size={17} color="#555" /></View>
       <View style={{ flex: 1 }}>
         <Text style={r.title}>{title}</Text>
         {!!subtitle && <Text style={r.sub}>{subtitle}</Text>}
@@ -53,7 +53,7 @@ function Row({ iconName, title, subtitle, toggle, onToggle, onPress, isLast }: {
 const r = StyleSheet.create({
   row:  { flexDirection: 'row', alignItems: 'center', gap: 13, padding: 13, paddingHorizontal: 14 },
   sep:  { borderBottomWidth: 1, borderBottomColor: SEP },
-  icon: { width: 32, height: 32, borderRadius: 9, backgroundColor: 'rgba(76,140,228,0.12)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  icon: { width: 32, height: 32, borderRadius: 9, backgroundColor: '#F2F2F5', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   title:{ fontFamily: fonts.semiBold, fontSize: 15, color: T_C },
   sub:  { fontFamily: fonts.medium, fontSize: 12, color: M, marginTop: 1 },
 })
@@ -94,7 +94,6 @@ export default function PrivacyScreen() {
         <View style={s.card}>
           <Row iconName="lock-closed-outline" title={t.pv_private} subtitle={t.pv_privateSub}
             toggle={privateAcc} onToggle={() => toggle(KEYS.privateAcc, !privateAcc, setPrivateAcc)} />
-          <Row iconName="eye-outline" title={t.pv_whoSees} />
           <Row iconName="radio-outline" title={t.pv_online} subtitle={t.pv_onlineSub}
             toggle={onlineStatus} onToggle={() => toggle(KEYS.onlineStatus, !onlineStatus, setOnlineStatus)} isLast />
         </View>
@@ -103,14 +102,14 @@ export default function PrivacyScreen() {
         <View style={s.card}>
           <Row iconName="shield-outline" title={t.pv_2fa}
             toggle={twoFA} onToggle={() => toggle(KEYS.twoFA, !twoFA, setTwoFA)} />
-          <Row iconName="key-outline" title={t.pv_password} />
-          <Row iconName="phone-portrait-outline" title={t.pv_sessions} isLast />
+          <Row iconName="key-outline" title={t.pv_password}
+            onPress={() => nav.navigate('ChangePassword' as never)} isLast />
         </View>
 
         <Text style={s.sectionLabel}>{t.pv_data}</Text>
         <View style={s.card}>
-          <Row iconName="ban-outline" title={t.pv_blocked} />
-          <Row iconName="download-outline" title={t.pv_download} isLast />
+          <Row iconName="ban-outline" title={t.pv_blocked}
+            onPress={() => nav.navigate('BlockedUsers' as never)} isLast />
         </View>
       </ScrollView>
     </View>

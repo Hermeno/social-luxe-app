@@ -11,6 +11,7 @@ import {
   InteractionManager,
   Alert,
   PanResponder,
+  Keyboard,
 } from 'react-native'
 import { Image } from 'expo-image'
 import { setStatusBarStyle } from 'expo-status-bar'
@@ -32,9 +33,9 @@ import { getOrDownload, prefetchMedia } from '../../db/mediaCache'
 import { colors, fonts } from '../../theme'
 import ActionBar from './ActionBar'
 import PostInfo from './PostInfo'
-import Travel from '../../components/Travel'
 import CommentSheet from '../../components/CommentSheet'
 import FeedHeader, { FeedUserGroup as UserGroup } from './FeedHeader'
+import PostAlbumGrid from './PostAlbumGrid'
 import StickerLayer from './StickerLayer'
 import StickerPicker, { StickerChoice } from './StickerPicker'
 import { PostSticker } from '../../types'
@@ -334,7 +335,7 @@ export default function FeedScreen() {
   jumpToUserRef.current = jumpToUser
 
   const handleSearchOpen   = useCallback(() => setSearchMode(true), [])
-  const handleSearchClose  = useCallback(() => { setSearchMode(false); setSearchQuery('') }, [])
+  const handleSearchClose  = useCallback(() => { Keyboard.dismiss(); setSearchMode(false); setSearchQuery('') }, [])
   const handleSearchChange = useCallback((q: string) => setSearchQuery(q), [])
   const handleBubblePress  = useCallback((group: UserGroup) => {
     jumpToUserRef.current(group)
@@ -473,15 +474,40 @@ export default function FeedScreen() {
         setVideoFit(matchRatio < 0.65 ? 'contain' : 'cover')
       }
 
+      // Arm the progress bar with the REAL video length. expo-video sometimes
+      // reports duration a beat after 'readyToPlay', so we retry briefly and
+      // fall back to a default if it never lands — the video plays either way.
+      let durTries = 0
+      function armProgress() {
+        if (cancelled || !started) return
+        const raw = player.duration
+        if (raw && raw > 0) {
+          const dur = Math.round(raw * 1000)
+          videoDurRef.current = dur
+          startProgress(dur)
+        } else if (durTries++ < 8) {
+          setTimeout(armProgress, 120)
+        } else {
+          videoDurRef.current = IMAGE_DURATION
+          startProgress(IMAGE_DURATION)
+        }
+      }
+
       function beginPlayback() {
+        // NOTE: do NOT gate on duration here — 'readyToPlay' can arrive before
+        // duration is known, and gating on it was the cause of videos that
+        // "sometimes don't play". Play immediately; arm progress once we can.
         if (started || cancelled) return
         started = true
         updateVideoFit()
-        const dur = Math.round(player.duration * 1000)
-        videoDurRef.current = dur
         safePlayer(() => { player.currentTime = 0; player.play() })
         revealMedia()   // ← fade out the thumbnail overlay to reveal the video
-        startProgress(dur)
+        armProgress()
+      }
+
+      function tryBegin() {
+        if (started || cancelled) return
+        try { if (player.status === 'readyToPlay') beginPlayback() } catch {}
       }
 
       const remoteUrl = resolveMedia(post.mediaUrl ?? '')
@@ -491,20 +517,25 @@ export default function FeedScreen() {
         const localPath = await getOrDownload(remoteUrl)
         if (cancelled) return
         safePlayer(() => player.replace({ uri: localPath ?? remoteUrl }))
-        // Revisiting a post whose video is already loaded (e.g. swiping back
-        // to it after it played once) — replace() can be a no-op on an
-        // identical source, so `statusChange` never fires again. Catch that
-        // case right here instead of waiting for an event that won't come.
-        if (player.status === 'readyToPlay' && player.duration > 0) beginPlayback()
+        // Revisiting a post whose video is already loaded (replace() is a no-op
+        // on an identical source, so 'statusChange' never fires) — catch it here.
+        tryBegin()
       }, 60)
 
       const sub = (player as any).addListener('statusChange', ({ status }: { status: string }) => {
-        if (status === 'readyToPlay' && player.duration > 0) beginPlayback()
+        if (status === 'readyToPlay') beginPlayback()
       })
+
+      // Safety net: poll readiness for a few seconds so a missed/late event
+      // never leaves the post frozen on its thumbnail.
+      const poll     = setInterval(tryBegin, 200)
+      const pollStop = setTimeout(() => clearInterval(poll), 5000)
 
       return () => {
         cancelled = true
         clearTimeout(mountDelay)
+        clearInterval(poll)
+        clearTimeout(pollStop)
         sub?.remove?.()
         progressRef.current?.stop()
         safePlayer(() => player.pause())
@@ -686,6 +717,12 @@ export default function FeedScreen() {
                   </View>
                 </Animated.View>
               </>
+            ) : (post.mediaUrls && post.mediaUrls.length > 1) ? (
+              <PostAlbumGrid
+                urls={post.mediaUrls}
+                overlays={post.albumOverlays}
+                onOpen={(i) => nav.navigate('PostViewer', { posts: [post], startIndex: 0 })}
+              />
             ) : (
               <Image key={post.id} source={{ uri: resolveMedia(post.mediaUrl ?? '') }} style={s.absLayer} contentFit="contain" cachePolicy="disk" recyclingKey={post.id} transition={150} />
             )}
@@ -768,17 +805,21 @@ export default function FeedScreen() {
             />
           )}
 
-          {/* Travel path + caption + objects — lazy-loads when post becomes active */}
-          <Travel post={post} isActive />
-
           <ActionBar
             post={post}
-            onCommentPress={() => setCommentPost(post)}
+            onCommentPress={() => {
+              // Fecha a pesquisa (e o seu teclado) antes de abrir o comentário —
+              // senão o teclado da pesquisa e o Modal do comentário lutam e a tela pisca
+              if (searchMode) { Keyboard.dismiss(); setSearchMode(false); setSearchQuery('') }
+              setCommentPost(post)
+            }}
             onStickerPress={() => {
                 if ((localStickers[post.id] ?? post.stickers ?? []).length >= STICKER_LIMIT) {
                   Alert.alert('Limite atingido', 'Este post já tem 50 stickers.')
                   return
                 }
+                // Fecha a pesquisa (e o teclado) antes do Modal do sticker — mesmo motivo do comentário
+                if (searchMode) { Keyboard.dismiss(); setSearchMode(false); setSearchQuery('') }
                 progressRef.current?.stop()
                 safePlayer(() => player.pause())
                 setStickerPickerOpen(true)

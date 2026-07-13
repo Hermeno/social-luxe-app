@@ -7,7 +7,6 @@ import { Post } from '../../types'
 import { colors, gradients } from '../../theme'
 import ActionBar from './ActionBar'
 import PostInfo from './PostInfo'
-import Travel from '../../components/Travel'
 import * as postService from '../../services/post.service'
 import { API_BASE } from '../../config'
 
@@ -110,9 +109,6 @@ export default function FeedItem({ post, isActive, onCommentPress }: Props) {
         >
           <Ionicons name="heart" size={100} color="rgba(255,255,255,0.92)" />
         </Animated.View>
-
-        {/* Travel path + objects overlay — lazy, only when active */}
-        <Travel post={post} isActive={isActive} />
 
         <PostInfo post={post} isActive={isActive} />
         <ActionBar post={post} onCommentPress={() => onCommentPress(post)} liked={liked} onLikeChange={setLiked} />

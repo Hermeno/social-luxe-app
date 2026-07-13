@@ -3,7 +3,6 @@ import { MediaType } from '@prisma/client'
 import { POST_INITIAL_HOURS, POST_EXTENDED_HOURS } from '../types'
 import { sendPush } from './notification.service'
 import { withThumbnail, withThumbnails } from '../utils/cloudinary.util'
-import { interact as travelInteract, createOriginNode } from './travel.service'
 
 export async function createPost(
   userId: string,
@@ -15,13 +14,12 @@ export async function createPost(
   isAnnouncement?: boolean,
   deviceModel?: string,
   stickersEnabled?: boolean,
-  isTravelEnabled?: boolean,
 ) {
   const expiresAt = isAnnouncement
     ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
     : new Date(Date.now() + POST_INITIAL_HOURS * 60 * 60 * 1000)
   const post = await prisma.post.create({
-    data: { userId, mediaUrl, mediaType, caption, bgColor, expiresAt, partnerUserId: partnerUserId ?? null, isAnnouncement: isAnnouncement ?? false, deviceModel: deviceModel ?? null, stickersEnabled: stickersEnabled ?? false, isTravelEnabled: isTravelEnabled ?? false },
+    data: { userId, mediaUrl, mediaType, caption, bgColor, expiresAt, partnerUserId: partnerUserId ?? null, isAnnouncement: isAnnouncement ?? false, deviceModel: deviceModel ?? null, stickersEnabled: stickersEnabled ?? false },
     include: {
       user:        { select: { id: true, name: true, avatar: true, viewsPublic: true, showDevice: true, statusLabel: true } },
       partnerUser: { select: { id: true, name: true, avatar: true } },
@@ -29,12 +27,40 @@ export async function createPost(
     },
   })
 
-  // Seed the travel path with the creator's country before returning,
-  // so the client sees the origin node the moment the post appears in the feed.
-  if (isTravelEnabled !== false) {
-    await createOriginNode(post.id, userId).catch(() => {})
-  }
+  return withThumbnail(post)
+}
 
+// Álbum: várias fotos numa só publicação, mostradas em grelha na feed.
+// mediaUrl = 1ª foto (thumbnail/compat); mediaUrls = todas.
+type Overlay = { emoji: string; x: number; y: number }
+
+export async function createAlbumPost(
+  userId: string,
+  mediaUrls: string[],
+  caption?: string,
+  deviceModel?: string,
+  albumOverlays?: Overlay[][],   // paralelo a mediaUrls; emojis de cada foto
+) {
+  const hasOverlays = albumOverlays?.some((a) => a.length > 0)
+  const expiresAt = new Date(Date.now() + POST_INITIAL_HOURS * 60 * 60 * 1000)
+  const post = await prisma.post.create({
+    data: {
+      userId,
+      mediaUrl:  mediaUrls[0] ?? null,
+      mediaUrls,
+      albumOverlays: hasOverlays ? albumOverlays : undefined,
+      mediaType: MediaType.IMAGE,
+      caption:   caption ?? null,
+      bgColor:   null,
+      expiresAt,
+      deviceModel: deviceModel ?? null,
+    },
+    include: {
+      user:        { select: { id: true, name: true, avatar: true, viewsPublic: true, showDevice: true, statusLabel: true } },
+      partnerUser: { select: { id: true, name: true, avatar: true } },
+      _count:      { select: { likes: true, comments: true, shares: true, views: true } },
+    },
+  })
   return withThumbnail(post)
 }
 
@@ -326,7 +352,6 @@ export async function likePost(userId: string, postId: string) {
   }
   await prisma.like.create({ data: { userId, postId } })
   extendLife(postId, 10).catch(() => {})
-  travelInteract(postId, userId, 'like').catch(() => {})  // fire-and-forget
   return { liked: true }
 }
 
@@ -339,7 +364,6 @@ export async function addView(userId: string, postId: string) {
     update: {},
     create: { userId, postId },
   })
-  travelInteract(postId, userId, 'view').catch(() => {})  // fire-and-forget
 }
 
 export async function deletePost(userId: string, postId: string) {

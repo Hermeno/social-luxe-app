@@ -77,11 +77,11 @@ export default memo(function FeedHeader({
       <View style={[s.wrapper, { paddingTop: top + 8 }]}>
         <View style={s.searchRow}>
           <View style={s.searchField}>
-            <Search size={14} strokeWidth={2} color="rgba(255,255,255,0.5)" />
+            <Search size={14} strokeWidth={2} color="rgba(0,0,0,0.40)" />
             <TextInput
               autoFocus
               placeholder={t.feed_search_ph}
-              placeholderTextColor="rgba(255,255,255,0.35)"
+              placeholderTextColor="rgba(0,0,0,0.35)"
               value={searchQuery}
               onChangeText={onSearchChange}
               style={s.searchInput}
@@ -90,7 +90,7 @@ export default memo(function FeedHeader({
             />
             {searchQuery.length > 0 && (
               <TouchableOpacity onPress={() => onSearchChange('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Ionicons name="close-circle" size={17} color="rgba(255,255,255,0.45)" />
+                <Ionicons name="close-circle" size={17} color="rgba(0,0,0,0.30)" />
               </TouchableOpacity>
             )}
           </View>
@@ -322,15 +322,15 @@ const s = StyleSheet.create({
   },
   searchField: {
     flex: 1, flexDirection: 'row', alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.11)',
-    borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    borderRadius: 12, borderWidth: 1, borderColor: 'rgba(0,0,0,0.10)',
     paddingHorizontal: 12, paddingVertical: 9, gap: 8,
   },
   searchInput: {
-    flex: 1, fontFamily: fonts.regular, fontSize: 15, color: '#fff', padding: 0,
+    flex: 1, fontFamily: fonts.regular, fontSize: 15, color: colors.black, padding: 0,
   },
   cancelText: {
-    fontFamily: fonts.semiBold, fontSize: 15, color: 'rgba(255,255,255,0.88)',
+    fontFamily: fonts.semiBold, fontSize: 15, color: colors.black,
   },
 
   /* ── Bubbles row (search mode) ─────────────────────────────────────────────── */
@@ -343,12 +343,12 @@ const s = StyleSheet.create({
   },
   bubbleRingActive: { borderWidth: 2.2 },
   bubbleName: {
-    color: 'rgba(255,255,255,0.82)', fontFamily: fonts.medium,
+    color: 'rgba(0,0,0,0.75)', fontFamily: fonts.medium,
     fontSize: 11, textAlign: 'center', maxWidth: BUBBLE_SIZE + 12,
   },
   emptyWrap: {
     paddingVertical: 18, paddingHorizontal: 12,
     alignItems: 'center', justifyContent: 'center', width: 280,
   },
-  emptyTxt: { color: 'rgba(255,255,255,0.38)', fontFamily: fonts.regular, fontSize: 13 },
+  emptyTxt: { color: 'rgba(0,0,0,0.40)', fontFamily: fonts.regular, fontSize: 13 },
 })

@@ -61,6 +61,15 @@ export default React.memo(function ActionBar({
   const [hearts,    setHearts]    = useState<HeartP[]>([])
   const heartIdRef = useRef(0)
 
+  // Slide-up para o action sheet dos 3 pontos
+  const menuSlide = useRef(new Animated.Value(340)).current
+  useEffect(() => {
+    if (showMenu) {
+      menuSlide.setValue(340)
+      Animated.spring(menuSlide, { toValue: 0, useNativeDriver: true, damping: 24, stiffness: 240 }).start()
+    }
+  }, [showMenu])
+
   function burstHearts() {
     const newHearts: HeartP[] = []
     for (let i = 0; i < 10; i++) {
@@ -244,18 +253,32 @@ export default React.memo(function ActionBar({
       )}
 
       <Modal visible={showMenu} transparent animationType="fade" onRequestClose={() => setShowMenu(false)}>
-        <TouchableOpacity style={s.overlay} activeOpacity={1} onPress={() => setShowMenu(false)}>
-          <View style={s.menu}>
-            <TouchableOpacity style={s.menuItem} onPress={() => { setShowMenu(false); setEditText(post.caption ?? ''); setEditMode(true) }}>
-              <Pencil size={20} strokeWidth={2} color={colors.gray800} />
-              <Text style={s.menuItemText}>{t.feed_edit_caption}</Text>
+        <TouchableOpacity style={s.sheetBackdrop} activeOpacity={1} onPress={() => setShowMenu(false)}>
+          <Animated.View
+            style={[s.sheetWrap, { paddingBottom: Math.max(safeBottom, 12), transform: [{ translateY: menuSlide }] }]}
+          >
+            {/* Grupo de ações */}
+            <View style={s.sheetGroup}>
+              <TouchableOpacity
+                style={s.sheetItem}
+                activeOpacity={0.6}
+                onPress={() => { setShowMenu(false); setEditText(post.caption ?? ''); setEditMode(true) }}
+              >
+                <Text style={s.sheetItemText}>{t.feed_edit_caption}</Text>
+                <Pencil size={19} strokeWidth={2} color={colors.gray800} />
+              </TouchableOpacity>
+              <View style={s.sheetHairline} />
+              <TouchableOpacity style={s.sheetItem} activeOpacity={0.6} onPress={handleDelete}>
+                <Text style={[s.sheetItemText, s.sheetItemDanger]}>{t.feed_delete_title}</Text>
+                <Trash2 size={19} strokeWidth={2} color="#FF3B30" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Cancelar — cartão separado */}
+            <TouchableOpacity style={s.sheetCancel} activeOpacity={0.6} onPress={() => setShowMenu(false)}>
+              <Text style={s.sheetCancelText}>{t.cancel}</Text>
             </TouchableOpacity>
-            <View style={s.menuDivider} />
-            <TouchableOpacity style={s.menuItem} onPress={handleDelete}>
-              <Trash2 size={20} strokeWidth={2} color="#E53E3E" />
-              <Text style={[s.menuItemText, { color: '#E53E3E' }]}>{t.feed_delete_title}</Text>
-            </TouchableOpacity>
-          </View>
+          </Animated.View>
         </TouchableOpacity>
       </Modal>
 
@@ -334,12 +357,27 @@ const s = StyleSheet.create({
     textShadowRadius: 2,
   },
 
-  // ── Modais ──────────────────────────────────────────────────────────────────
-  overlay:       { flex: 1, backgroundColor: 'transparent', justifyContent: 'flex-end', paddingBottom: 48 },
-  menu:          { marginHorizontal: 16, backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden' },
-  menuItem:      { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingVertical: 16 },
-  menuItemText:  { fontSize: 16, fontFamily: fonts.regular, color: colors.gray800 },
-  menuDivider:   { height: 1, backgroundColor: '#EAEAEA', marginHorizontal: 16 },
+  // ── Action sheet (3 pontos) ─────────────────────────────────────────────────
+  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  sheetWrap:     { paddingHorizontal: 10, gap: 8 },
+  sheetGroup:    {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 24, shadowOffset: { width: 0, height: 10 },
+  },
+  sheetItem:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 17 },
+  sheetItemText: { fontSize: 16.5, fontFamily: fonts.medium, color: colors.gray800, letterSpacing: -0.2 },
+  sheetItemDanger:{ color: '#FF3B30', fontFamily: fonts.semiBold },
+  sheetHairline: { height: StyleSheet.hairlineWidth, backgroundColor: '#E8E8EA', marginLeft: 20 },
+  sheetCancel:   {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    paddingVertical: 17,
+    alignItems: 'center',
+    shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 24, shadowOffset: { width: 0, height: 10 },
+  },
+  sheetCancelText:{ fontSize: 16.5, fontFamily: fonts.bold, color: colors.gray800, letterSpacing: -0.2 },
   editOverlay:   { flex: 1, backgroundColor: 'transparent', justifyContent: 'flex-end' },
   editSheet:     { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 40, gap: 16 },
   editTitle:     { fontSize: 17, fontFamily: fonts.semiBold, color: colors.gray800 },

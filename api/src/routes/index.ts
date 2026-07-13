@@ -14,7 +14,6 @@ import momentoRoutes from './momento.routes'
 import notificationRoutes from './notification.routes'
 import friendshipRoutes from './friendship.routes'
 import donationRoutes from './donation.routes'
-import travelRoutes from './travel.routes'
 import unionRoutes from './union.routes'
 import pairingRoutes from './pairing.routes'
 import circleRoutes from './circle.routes'
@@ -36,7 +35,6 @@ router.use('/momentos', momentoRoutes)
 router.use('/notifications', notificationRoutes)
 router.use('/friendships', friendshipRoutes)
 router.use('/donations', donationRoutes)
-router.use('/travel', travelRoutes)
 router.use('/unions', unionRoutes)
 router.use('/pairings', pairingRoutes)
 router.use('/circle', circleRoutes)

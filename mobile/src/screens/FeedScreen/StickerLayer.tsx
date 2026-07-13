@@ -3,6 +3,9 @@ import {
   View, Text, StyleSheet, Animated, Dimensions,
   TouchableOpacity, Pressable, Modal,
 } from 'react-native'
+import { LinearGradient } from 'expo-linear-gradient'
+
+const AnimatedGradient = Animated.createAnimatedComponent(LinearGradient)
 
 const CARD_MAX_H = Dimensions.get('window').height * 0.78
 import { useNavigation } from '@react-navigation/native'
@@ -204,7 +207,10 @@ function MessageCard({ sticker, interaction, onUpdate, onClose }: MsgCardProps) 
   return (
     <Modal transparent animationType="none" visible onRequestClose={dismiss}>
       <Pressable style={st.msgBackdrop} onPress={dismiss}>
-        <Animated.View
+        <AnimatedGradient
+          colors={['#CA2851', '#FF6766', '#FFB173']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
           style={[st.msgCard, { opacity: opacAnim, transform: [{ scale: scaleAnim }] }]}
           onStartShouldSetResponder={() => true}
         >
@@ -243,22 +249,22 @@ function MessageCard({ sticker, interaction, onUpdate, onClose }: MsgCardProps) 
               <Ionicons
                 name={myLike ? 'heart' : 'heart-outline'}
                 size={20}
-                color={myLike ? colors.primary : '#BDBDBD'}
+                color={myLike ? '#fff' : 'rgba(255,255,255,0.75)'}
               />
               {likeCount > 0 && (
-                <Text style={[st.likeCount, myLike && { color: colors.primary }]}>
+                <Text style={st.likeCount}>
                   {likeCount}
                 </Text>
               )}
             </TouchableOpacity>
 
             <View style={st.viewBadge}>
-              <Ionicons name="eye-outline" size={18} color="#BDBDBD" />
+              <Ionicons name="eye-outline" size={18} color="rgba(255,255,255,0.75)" />
               <Text style={st.viewCountTxt}>{viewCount}</Text>
             </View>
           </View>
 
-        </Animated.View>
+        </AnimatedGradient>
       </Pressable>
     </Modal>
   )
@@ -393,15 +399,14 @@ const st = StyleSheet.create({
     paddingHorizontal: 12,
   },
   msgCard: {
-    backgroundColor: '#fff',
     borderRadius: 22,
     paddingTop: 14,
     paddingHorizontal: 16,
     paddingBottom: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.16,
-    shadowRadius: 24,
+    shadowColor: '#CA2851',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.32,
+    shadowRadius: 26,
     elevation: 18,
   },
   msgRow: {
@@ -414,31 +419,31 @@ const st = StyleSheet.create({
     flex: 1,
     fontFamily: fonts.semiBold,
     fontSize: 15,
-    color: '#111',
+    color: '#fff',
   },
   msgCloseBtn: {
     width: 26, height: 26, borderRadius: 13,
-    backgroundColor: '#F0F0F0',
+    backgroundColor: 'rgba(255,255,255,0.22)',
     alignItems: 'center', justifyContent: 'center',
   },
-  msgCloseTxt: { fontSize: 11, color: '#777', fontFamily: fonts.semiBold },
+  msgCloseTxt: { fontSize: 11, color: '#fff', fontFamily: fonts.semiBold },
   msgText: {
-    fontFamily: fonts.regular,
-    fontSize: 15,
-    color: '#333',
-    lineHeight: 22,
+    fontFamily: fonts.medium,
+    fontSize: 15.5,
+    color: '#fff',
+    lineHeight: 23,
     marginBottom: 2,
   },
   msgEmpty: {
     fontFamily: fonts.regular,
     fontSize: 13,
-    color: '#999',
+    color: 'rgba(255,255,255,0.85)',
     fontStyle: 'italic',
     marginBottom: 2,
   },
   msgDivider: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: '#EBEBEB',
+    backgroundColor: 'rgba(255,255,255,0.25)',
     marginVertical: 10,
   },
 
@@ -458,7 +463,7 @@ const st = StyleSheet.create({
   likeCount: {
     fontFamily: fonts.semiBold,
     fontSize: 14,
-    color: '#BDBDBD',
+    color: '#fff',
   },
   viewBadge: {
     flexDirection: 'row',
@@ -468,6 +473,6 @@ const st = StyleSheet.create({
   viewCountTxt: {
     fontFamily: fonts.semiBold,
     fontSize: 14,
-    color: '#BDBDBD',
+    color: 'rgba(255,255,255,0.85)',
   },
 })

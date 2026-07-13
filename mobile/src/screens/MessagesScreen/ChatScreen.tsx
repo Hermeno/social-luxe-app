@@ -890,7 +890,15 @@ export default function ChatScreen() {
   }
 
   function handleMessageLongPress(msg: Message) {
+    Keyboard.dismiss()   // fecha o teclado do input antes do menu (evita conflito de foco)
     setContextMenuMsg(msg)
+  }
+
+  // O agendador é um Modal com KeyboardAvoidingView — abri-lo com o teclado do
+  // chat ainda ativo faz os dois lutarem e a tela piscar. Fecha o teclado antes.
+  function openScheduler() {
+    Keyboard.dismiss()
+    setShowScheduler(true)
   }
 
   async function handleSend() {
@@ -1006,7 +1014,7 @@ export default function ChatScreen() {
           isOnline={isOnline}
           isTyping={isTyping}
           onBack={() => nav.goBack()}
-          onSchedule={() => setShowScheduler(true)}
+          onSchedule={openScheduler}
           onProfilePress={() => nav.navigate('Profile', { userId })}
           hasScheduled={!!scheduledMsg}
           pairing={pairing}
@@ -1093,7 +1101,7 @@ export default function ChatScreen() {
             content: replyingTo.content,
           } : null}
           onCancelReply={() => setReplyingTo(null)}
-          onSchedulePress={() => setShowScheduler(true)}
+          onSchedulePress={openScheduler}
           bottomInset={bottom}
         />
 

@@ -1,9 +1,9 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useRef, useEffect } from 'react'
 import {
   View, Text, TouchableOpacity, FlatList,
   RefreshControl, StyleSheet, Alert, Dimensions,
   ActivityIndicator, Modal, TextInput, KeyboardAvoidingView,
-  Platform, Image as RNImage,
+  Platform, Image as RNImage, Animated, Share,
 } from 'react-native'
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -22,6 +22,8 @@ import SegmentedRing from '../../components/SegmentedRing'
 import FollowersSheet from './FollowersSheet'
 import QRModal from '../../components/QRModal'
 import * as followService from '../../services/follow.service'
+import { blockUser, unblockUser, getBlockedUsers } from '../../services/block.service'
+import { createReport, REPORT_REASONS } from '../../services/report.service'
 import { API_BASE } from '../../config'
 import { getCache, setCache } from '../../db/database'
 import { isConnected } from '../../services/netinfo.service'
@@ -195,6 +197,10 @@ export default function ProfileScreen() {
   const [editLoading,     setEditLoading]     = useState(false)
   const [pendingAvatarUri, setPendingAvatarUri] = useState<string | null>(null)
   const [savingAvatar,     setSavingAvatar]     = useState(false)
+  const [isBlocked,        setIsBlocked]        = useState(false)
+  const [blockBusy,        setBlockBusy]        = useState(false)
+  const [showUserMenu,     setShowUserMenu]     = useState(false)
+  const userMenuSlide = useRef(new Animated.Value(300)).current
 
   type ProfileCache = {
     user: User; followerCount: number; followingCount: number
@@ -237,6 +243,9 @@ export default function ProfileScreen() {
         setProfile(p)
         setPosts(freshPosts)
         setCache(`profile_posts:${targetId}`, freshPosts).catch(() => {})
+        if (!isOwn) {
+          getBlockedUsers().then((list) => { if (!cancelled) setIsBlocked(list.some((u) => u.id === targetId)) }).catch(() => {})
+        }
         if (!isOwn && followStatus) {
           setTheyFollowMe(followStatus.followsMe)
           // Reconcile store with the API's definitive answer (handles expiry edge cases)
@@ -350,6 +359,51 @@ export default function ProfileScreen() {
       toast.error(t.follow_err)
     }
     setFollowLoading(false)
+  }
+
+  // ── Menu do utilizador (bloquear / denunciar / partilhar) ──────────────────
+  useEffect(() => {
+    if (showUserMenu) {
+      userMenuSlide.setValue(300)
+      Animated.spring(userMenuSlide, { toValue: 0, useNativeDriver: true, damping: 24, stiffness: 240 }).start()
+    }
+  }, [showUserMenu])
+
+  async function handleToggleBlock() {
+    if (!profile || blockBusy) return
+    setShowUserMenu(false)
+    const wasBlocked = isBlocked
+    setBlockBusy(true)
+    setIsBlocked(!wasBlocked)
+    try {
+      if (wasBlocked) { await unblockUser(profile.id); toast.success(t.blk_okTitle, '') }
+      else            { await blockUser(profile.id);   toast.success(t.pf_blocked_ok, '') }
+    } catch {
+      setIsBlocked(wasBlocked)
+      toast.error(t.error, t.blk_fail)
+    }
+    setBlockBusy(false)
+  }
+
+  function handleReport() {
+    if (!profile) return
+    setShowUserMenu(false)
+    Alert.alert(t.pf_report_title, t.pf_report_msg, [
+      ...REPORT_REASONS.map((reason) => ({
+        text: reason,
+        onPress: () => {
+          createReport(profile.id, 'USER', reason).catch(() => {})
+          toast.success(t.pf_report_done, '')
+        },
+      })),
+      { text: t.cancel, style: 'cancel' as const },
+    ])
+  }
+
+  async function handleShareProfile() {
+    if (!profile) return
+    setShowUserMenu(false)
+    try { await Share.share({ message: `${profile.name} — luxee` }) } catch {}
   }
 
   async function handleUnionInviteResponse(id: string, accept: boolean) {
@@ -642,9 +696,39 @@ export default function ProfileScreen() {
             >
               <Text style={m.outlineBtnTxt}>{t.profile_message}</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={m.iconBtn} onPress={() => setShowUserMenu(true)} activeOpacity={0.85}>
+              <Ionicons name="ellipsis-horizontal" size={18} color={colors.dark} />
+            </TouchableOpacity>
           </View>
         )}
       </View>
+
+      {/* ── Action sheet do utilizador (bloquear / denunciar / partilhar) ── */}
+      <Modal visible={showUserMenu} transparent animationType="fade" onRequestClose={() => setShowUserMenu(false)}>
+        <TouchableOpacity style={um.backdrop} activeOpacity={1} onPress={() => setShowUserMenu(false)}>
+          <Animated.View style={[um.wrap, { paddingBottom: Math.max(bottom, 12), transform: [{ translateY: userMenuSlide }] }]}>
+            <View style={um.group}>
+              <TouchableOpacity style={um.item} activeOpacity={0.6} onPress={handleShareProfile}>
+                <Text style={um.itemText}>{t.pf_share}</Text>
+                <Ionicons name="share-outline" size={20} color={colors.gray800} />
+              </TouchableOpacity>
+              <View style={um.hairline} />
+              <TouchableOpacity style={um.item} activeOpacity={0.6} onPress={handleReport}>
+                <Text style={um.itemText}>{t.pf_report}</Text>
+                <Ionicons name="flag-outline" size={20} color={colors.gray800} />
+              </TouchableOpacity>
+              <View style={um.hairline} />
+              <TouchableOpacity style={um.item} activeOpacity={0.6} onPress={handleToggleBlock}>
+                <Text style={[um.itemText, um.itemDanger]}>{isBlocked ? t.pf_unblock : t.pf_block}</Text>
+                <Ionicons name="ban-outline" size={20} color="#FF3B30" />
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={um.cancel} activeOpacity={0.6} onPress={() => setShowUserMenu(false)}>
+              <Text style={um.cancelText}>{t.cancel}</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* ── Union invites ── */}
       {isOwn && unionInvites.length > 0 && (
@@ -957,4 +1041,23 @@ const g = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.52)', borderRadius: 10,
     paddingHorizontal: 5, paddingVertical: 3,
   },
+})
+
+// ── User action sheet (bloquear / denunciar / partilhar) ──────────────────────
+const um = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  wrap:     { paddingHorizontal: 10, gap: 8 },
+  group:    {
+    backgroundColor: '#FFFFFF', borderRadius: 20, overflow: 'hidden',
+    shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 24, shadowOffset: { width: 0, height: 10 },
+  },
+  item:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 17 },
+  itemText: { fontSize: 16.5, fontFamily: fonts.medium, color: colors.gray800, letterSpacing: -0.2 },
+  itemDanger:{ color: '#FF3B30', fontFamily: fonts.semiBold },
+  hairline: { height: StyleSheet.hairlineWidth, backgroundColor: '#E8E8EA', marginLeft: 20 },
+  cancel:   {
+    backgroundColor: '#FFFFFF', borderRadius: 20, paddingVertical: 17, alignItems: 'center',
+    shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 24, shadowOffset: { width: 0, height: 10 },
+  },
+  cancelText:{ fontSize: 16.5, fontFamily: fonts.bold, color: colors.gray800, letterSpacing: -0.2 },
 })

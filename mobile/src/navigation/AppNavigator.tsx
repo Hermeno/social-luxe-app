@@ -22,6 +22,8 @@ import AboutScreen from '../screens/AboutScreen'
 import VerifiedScreen from '../screens/VerifiedScreen'
 import SettingsScreen from '../screens/SettingsScreen'
 import PrivacyScreen from '../screens/PrivacyScreen'
+import ChangePasswordScreen from '../screens/ChangePasswordScreen'
+import BlockedUsersScreen from '../screens/BlockedUsersScreen'
 import NotifSettingsScreen from '../screens/NotifSettingsScreen'
 import AppearanceScreen from '../screens/AppearanceScreen'
 import LanguageScreen from '../screens/LanguageScreen'
@@ -58,6 +60,8 @@ export type AppStackParams = {
   EditProfile: undefined
   Settings: undefined
   Privacy: undefined
+  ChangePassword: undefined
+  BlockedUsers: undefined
   NotifSettings: undefined
   Appearance: undefined
   Language: undefined
@@ -137,6 +141,8 @@ export default function AppNavigator({ defaultTab }: { defaultTab: 'Feed' | 'Mes
       <Stack.Screen name="Verified" component={VerifiedScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="Privacy" component={PrivacyScreen} />
+      <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
+      <Stack.Screen name="BlockedUsers" component={BlockedUsersScreen} />
       <Stack.Screen name="NotifSettings" component={NotifSettingsScreen} />
       <Stack.Screen name="Appearance" component={AppearanceScreen} />
       <Stack.Screen name="Language" component={LanguageScreen} />

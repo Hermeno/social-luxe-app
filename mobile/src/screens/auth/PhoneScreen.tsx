@@ -2,7 +2,7 @@ import React, { useState, useRef, useMemo } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, Animated, ActivityIndicator,
-  Modal, FlatList, SafeAreaView,
+  Modal, FlatList, SafeAreaView, Keyboard,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
@@ -225,7 +225,7 @@ export default function PhoneScreen() {
           <TouchableOpacity
             style={s.countryBtn}
             activeOpacity={0.75}
-            onPress={() => setPickerOpen(true)}
+            onPress={() => { Keyboard.dismiss(); setPickerOpen(true) }}
           >
             <Text style={s.countryFlag}>{selected.flag}</Text>
             <Text style={s.countryCode}>{selected.code}</Text>

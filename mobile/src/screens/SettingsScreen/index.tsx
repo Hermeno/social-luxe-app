@@ -119,29 +119,27 @@ export default function SettingsScreen() {
 
         <Text style={s.sectionLabel}>{t.account}</Text>
         <View style={s.card}>
-          <Row iconBg="rgba(76,140,228,0.12)" iconColor={B} iconName="person-outline" title={t.editProfile} onPress={() => nav.navigate('EditProfile')} />
-          <Row iconBg="rgba(76,140,228,0.12)" iconColor={B} iconName="shield-checkmark-outline" title={t.verified}
-            badge={{ text: t.pending, color: '#B47800', bg: 'rgba(245,166,35,0.16)' }}
+          <Row iconBg="#F2F2F5" iconColor="#555" iconName="person-outline" title={t.editProfile} onPress={() => nav.navigate('EditProfile')} />
+          <Row iconBg="#F2F2F5" iconColor="#555" iconName="shield-checkmark-outline" title={t.verified}
+            badge={{ text: t.pending, color: '#8E8E93', bg: '#F0F0F3' }}
             onPress={() => nav.navigate('Verified')} />
-          <Row iconBg="rgba(76,140,228,0.12)" iconColor={B} iconName="lock-closed-outline" title={t.privacy} isLast
+          <Row iconBg="#F2F2F5" iconColor="#555" iconName="lock-closed-outline" title={t.privacy} isLast
             onPress={() => nav.navigate('Privacy')} />
         </View>
 
         <Text style={s.sectionLabel}>{t.preferences}</Text>
         <View style={s.card}>
-          <Row iconBg="rgba(76,140,228,0.12)" iconColor={B} iconName="notifications-outline" title={t.notifications} toggle={true}
+          <Row iconBg="#F2F2F5" iconColor="#555" iconName="notifications-outline" title={t.notifications}
             onPress={() => nav.navigate('NotifSettings')} />
-          <Row iconBg="rgba(76,140,228,0.12)" iconColor={B} iconName="moon-outline" title={t.appearance} value={t.automatic}
-            onPress={() => nav.navigate('Appearance')} />
-          <Row iconBg="rgba(76,140,228,0.12)" iconColor={B} iconName="globe-outline" title={t.language} value={currentLangLabel} isLast
+          <Row iconBg="#F2F2F5" iconColor="#555" iconName="globe-outline" title={t.language} value={currentLangLabel} isLast
             onPress={() => nav.navigate('Language')} />
         </View>
 
         <Text style={s.sectionLabel}>{t.support}</Text>
         <View style={s.card}>
-          <Row iconBg="rgba(76,140,228,0.12)" iconColor={B} iconName="help-circle-outline" title={t.help}
+          <Row iconBg="#F2F2F5" iconColor="#555" iconName="help-circle-outline" title={t.help}
             onPress={() => nav.navigate('Help')} />
-          <Row iconBg="rgba(76,140,228,0.12)" iconColor={B} iconName="information-circle-outline" title={t.about} isLast
+          <Row iconBg="#F2F2F5" iconColor="#555" iconName="information-circle-outline" title={t.about} isLast
             onPress={() => nav.navigate('About')} />
         </View>
 

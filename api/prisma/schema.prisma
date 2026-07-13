@@ -114,6 +114,8 @@ model User {
   pairingsAsB      Pairing[]      @relation("PairingUserB")
   circleCaptures   CircleCapture[]
   circleVotes      CircleVote[]
+  circleSessionsHosted CircleSession[]       @relation("CircleHost")
+  circleMemberships    CircleSessionMember[] @relation("CircleMember")
 }
 
 // ─── Post ────────────────────────────────────────────────────────────────────
@@ -122,6 +124,8 @@ model Post {
   id              String    @id @default(cuid())
   userId          String
   mediaUrl        String?
+  mediaUrls       String[]  @default([])   // álbum: 2+ fotos mostradas em grelha (mediaUrl = 1ª, p/ thumbnail)
+  albumOverlays   Json?                     // emojis por foto do álbum, paralelo a mediaUrls: [[{emoji,x,y}], ...]
   mediaType       MediaType
   caption         String?
   bgColor         String?
@@ -749,6 +753,7 @@ model CircleCapture {
   targetId   String
   userId     String
   mediaUrl   String
+  overlays   Json?               // camadas de emoji: [{ emoji, x, y }] com x/y em fração 0..1
   status     CircleCaptureStatus @default(PENDING)
   approvals  Int                 @default(0)
   rejections Int                 @default(0)
@@ -773,6 +778,49 @@ model CircleVote {
   voter   User          @relation(fields: [voterId], references: [id], onDelete: Cascade)
 
   @@unique([captureId, voterId])
+}
+
+// ─── Círculo — sessão de foto em grupo, ao vivo com pessoas próximas ─────────
+
+enum CircleSessionStatus {
+  OPEN
+  PUBLISHED
+  CLOSED
+}
+
+enum CircleMemberStatus {
+  INVITED
+  JOINED
+}
+
+model CircleSession {
+  id        String              @id @default(cuid())
+  hostId    String
+  status    CircleSessionStatus @default(OPEN)
+  lat       Float?
+  lng       Float?
+  createdAt DateTime            @default(now())
+
+  host    User                  @relation("CircleHost", fields: [hostId], references: [id], onDelete: Cascade)
+  members CircleSessionMember[]
+
+  @@index([hostId, status])
+}
+
+model CircleSessionMember {
+  id        String             @id @default(cuid())
+  sessionId String
+  userId    String
+  status    CircleMemberStatus @default(JOINED)
+  photoUrl  String?
+  overlays  Json?              // emojis colados na foto: [{ emoji, x, y }] (x/y fração 0..1)
+  createdAt DateTime           @default(now())
+
+  session CircleSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User          @relation("CircleMember", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, userId])
+  @@index([userId, status])
 }
 
 // ─── PasswordReset ────────────────────────────────────────────────────────────

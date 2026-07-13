@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
   KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Keyboard,
 } from 'react-native'
 import { Image } from 'expo-image'
@@ -10,10 +10,10 @@ import { useVideoPlayer, VideoView } from 'expo-video'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs'
 import { useNavigation } from '@react-navigation/native'
-import * as ImagePicker from 'expo-image-picker'
 import { fonts } from '../../theme'
-import { createPost } from '../../services/post.service'
-import * as travelService from '../../services/travel.service'
+import { createPost, createAlbum } from '../../services/post.service'
+import PostAlbumGrid from '../FeedScreen/PostAlbumGrid'
+import GalleryPicker, { PickedAsset } from '../../components/GalleryPicker'
 import { getMyUnions } from '../../services/union.service'
 import { Union } from '../../types'
 import { useFeedStore } from '../../store/feed.store'
@@ -21,20 +21,26 @@ import { useAuthStore } from '../../store/auth.store'
 import { toast } from '../../utils/toast'
 import { useT } from '../../i18n'
 
-// ── Background palette (7 cores da paleta oficial Luxee) ─────────────────────
-type BgKey = 'white' | 'cream' | 'gray' | 'black' | 'red' | 'coral' | 'peach'
+// ── Background palette — cores ricas onde o texto branco lê sempre bem
+// (branco e creme removidos porque tornavam os ícones do feed invisíveis)
+type BgKey =
+  | 'gray' | 'black' | 'red' | 'coral' | 'peach'
+  | 'wine' | 'ocean' | 'forest' | 'violet' | 'ember'
 
 const BG: Record<BgKey, { bg: string; fg: string }> = {
-  white: { bg: '#FFFFFF', fg: '#1A1A1A' },
-  cream: { bg: '#F7F7F7', fg: '#1A1A1A' },
-  gray:  { bg: '#333333', fg: '#FFFFFF' },
-  black: { bg: '#000000', fg: '#FFFFFF' },
-  red:   { bg: '#CA2851', fg: '#FFFFFF' },
-  coral: { bg: '#FF6766', fg: '#FFFFFF' },
-  peach: { bg: '#FFB173', fg: '#1A1A1A' },
+  gray:   { bg: '#333333', fg: '#FFFFFF' },
+  black:  { bg: '#000000', fg: '#FFFFFF' },
+  red:    { bg: '#CA2851', fg: '#FFFFFF' },
+  coral:  { bg: '#FF6766', fg: '#FFFFFF' },
+  peach:  { bg: '#FFB173', fg: '#FFFFFF' },
+  wine:   { bg: '#7A1F3D', fg: '#FFFFFF' },
+  ocean:  { bg: '#1E3A5F', fg: '#FFFFFF' },
+  forest: { bg: '#245C4C', fg: '#FFFFFF' },
+  violet: { bg: '#4C3A82', fg: '#FFFFFF' },
+  ember:  { bg: '#A34210', fg: '#FFFFFF' },
 }
 
-const BG_KEYS: BgKey[] = ['white', 'cream', 'gray', 'black', 'red', 'coral', 'peach']
+const BG_KEYS: BgKey[] = ['gray', 'black', 'red', 'coral', 'peach', 'wine', 'ocean', 'forest', 'violet', 'ember']
 
 type Media = { uri: string; type: 'image' | 'video' }
 
@@ -49,14 +55,14 @@ export default function CreateScreen() {
   const captionRef     = useRef<TextInput>(null)
 
   const [caption,          setCaption]          = useState('')
-  const [bgKey,            setBgKey]            = useState<BgKey>('white')
+  const [bgKey,            setBgKey]            = useState<BgKey>('gray')
   const [media,            setMedia]            = useState<Media | null>(null)
+  const [album,            setAlbum]            = useState<string[] | null>(null)
+  const [galleryOpen,      setGalleryOpen]      = useState(false)
   const [loading,          setLoading]          = useState(false)
   const [includePartner,   setIncludePartner]   = useState(false)
   const [isAnnouncement,   setIsAnnouncement]   = useState(false)
   const [stickersEnabled,  setStickersEnabled]  = useState(false)
-  const [isTravelEnabled,  setIsTravelEnabled]  = useState(false)
-  const [travelCaption,    setTravelCaption]    = useState('')
   const [myUnion,          setMyUnion]          = useState<Union | null>(null)
 
   useEffect(() => {
@@ -66,41 +72,47 @@ export default function CreateScreen() {
   const otherMember   = myUnion ? (myUnion.memberA.id === user?.id ? myUnion.memberB : myUnion.memberA) : null
   const hasPartner = !!otherMember
   const isAdmin    = user?.isAdmin === true
-  const canPublish = !!caption.trim() || !!media
+  const canPublish = !!caption.trim() || !!media || !!album
   const hasText    = !!caption.trim()
   const activeBg   = BG[bgKey]
+  // Modo texto: sem media → a página inteira fica com a cor selecionada e o texto é branco
+  const textMode   = !media && !album
 
   // Floating close button adapts to the current frame background
-  const isDarkFrame  = !!media || bgKey === 'black' || bgKey === 'red'
+  const isDarkFrame  = !!media || !!album || (textMode && bgKey !== 'peach')
   const closeIconClr = isDarkFrame ? '#fff' : '#1A1A1A'
   const closeBgClr   = isDarkFrame ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.07)'
 
   const videoUri = media?.type === 'video' ? media.uri : null
   const player   = useVideoPlayer(videoUri, (p) => { p.loop = true; if (videoUri) p.play() })
 
-  async function pickMedia() {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (status !== 'granted') {
-      Alert.alert('Permissão necessária', 'Permite acesso à galeria nas definições.')
-      return
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes:       ['images', 'videos'],
-      quality:          0.85,
-      videoMaxDuration: 90,
-    })
-    if (result.canceled || !result.assets[0]) return
-    const asset = result.assets[0]
-    if (asset.type === 'video' && asset.duration && asset.duration > 91_000) {
-      Alert.alert('Vídeo demasiado longo', 'O máximo é 1 minuto e 30 segundos.')
-      return
-    }
-    if (asset.fileSize && asset.fileSize > 50 * 1024 * 1024) {
-      Alert.alert('Ficheiro demasiado grande', 'O máximo é 50 MB.')
-      return
-    }
-    setMedia({ uri: asset.uri, type: asset.type === 'video' ? 'video' : 'image' })
+  // Abre a galeria própria da app (nunca o explorador de ficheiros)
+  function pickMedia() {
     Keyboard.dismiss()
+    setGalleryOpen(true)
+  }
+
+  // Resultado da galeria própria
+  function handleGalleryDone(assets: PickedAsset[]) {
+    setGalleryOpen(false)
+    if (assets.length === 0) return
+
+    // Várias fotos → álbum (grelha na feed). Vídeos não entram no álbum.
+    if (assets.length > 1) {
+      const images = assets.filter((a) => a.type !== 'video').map((a) => a.uri)
+      if (images.length < 2) {
+        Alert.alert(t.create_albumTitle, t.create_albumMin)
+        return
+      }
+      setAlbum(images.slice(0, 10))
+      setMedia(null)
+      return
+    }
+
+    // Uma só → foto ou vídeo
+    const asset = assets[0]
+    setAlbum(null)
+    setMedia({ uri: asset.uri, type: asset.type })
   }
 
   function getDeviceModel(): string {
@@ -118,7 +130,9 @@ export default function CreateScreen() {
       const deviceModel = getDeviceModel()
       const bgColor     = `${activeBg.bg}|${activeBg.bg}`
 
-      const newPost = media
+      const newPost = album
+        ? await createAlbum(album, caption.trim() || undefined, deviceModel)
+        : media
         ? await createPost(
             media.uri,
             media.type === 'video' ? 'VIDEO' : 'IMAGE',
@@ -128,7 +142,6 @@ export default function CreateScreen() {
             isAnnouncement,
             deviceModel,
             stickersEnabled,
-            isTravelEnabled,
           )
         : await createPost(
             null,
@@ -139,22 +152,17 @@ export default function CreateScreen() {
             isAnnouncement,
             deviceModel,
             stickersEnabled,
-            isTravelEnabled,
           )
 
       if (newPost) {
         setPendingPost(newPost)
-        if (isTravelEnabled && travelCaption.trim()) {
-          travelService.addObject(newPost.id, travelCaption.trim(), 'caption').catch(() => {})
-        }
       }
       setCaption('')
       setMedia(null)
-      setBgKey('white')
+      setAlbum(null)
+      setBgKey('gray')
       setIsAnnouncement(false)
       setStickersEnabled(false)
-      setIsTravelEnabled(false)
-      setTravelCaption('')
       setIncludePartner(false)
       toast.success(t.feed_published, isAnnouncement ? t.feed_announcement_sub : t.feed_published_sub)
       nav.navigate('Feed' as never)
@@ -173,7 +181,7 @@ export default function CreateScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={s.root}
+      style={[s.root, textMode && { backgroundColor: activeBg.bg }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       {/* ── Floating close ── */}
@@ -187,9 +195,28 @@ export default function CreateScreen() {
       </TouchableOpacity>
 
       {/* ── Frame — the live post preview ── */}
-      <View style={[s.frame, !media && { backgroundColor: activeBg.bg }]}>
+      <View style={[s.frame, !media && !album && { backgroundColor: activeBg.bg }]}>
 
-        {media ? (
+        {album ? (
+          <>
+            <PostAlbumGrid urls={album} />
+            {hasText && (
+              <LinearGradient colors={['transparent', 'rgba(0,0,0,0.62)']} style={s.mediaCaption}>
+                <Text style={s.mediaCaptionTxt} numberOfLines={3}>{caption}</Text>
+              </LinearGradient>
+            )}
+            <View style={[s.mediaControls, { top: insets.top + 54 }]}>
+              <TouchableOpacity style={s.clearBtn} onPress={() => setAlbum(null)} activeOpacity={0.85}>
+                <Ionicons name="close" size={15} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity style={s.changeBtn} onPress={pickMedia} activeOpacity={0.85}>
+                <Ionicons name="images-outline" size={13} color="#fff" />
+                <Text style={s.changeBtnTxt}>{album.length} {t.create_photos}</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+
+        ) : media ? (
           <>
             {media.type === 'video' ? (
               <VideoView
@@ -231,7 +258,7 @@ export default function CreateScreen() {
                 activeOpacity={0.85}
               >
                 <Ionicons name="swap-horizontal" size={13} color="#fff" />
-                <Text style={s.changeBtnTxt}>Alterar</Text>
+                <Text style={s.changeBtnTxt}>{t.create_change}</Text>
               </TouchableOpacity>
             </View>
           </>
@@ -239,31 +266,45 @@ export default function CreateScreen() {
         ) : hasText ? (
           // Text post — live preview on solid bg
           <View style={[s.textPreview, { paddingTop: insets.top + 56 }]}>
-            <Text style={[s.textPreviewTxt, { color: activeBg.fg }]} numberOfLines={10}>
+            <Text style={[s.textPreviewTxt, { color: '#fff' }]} numberOfLines={10}>
               {caption}
             </Text>
           </View>
 
         ) : (
-          // Empty state
-          <View style={[s.emptyState, { paddingTop: insets.top + 40 }]}>
-            <TouchableOpacity style={s.addMediaBtn} onPress={pickMedia} activeOpacity={0.82}>
-              <Ionicons name="add" size={26} color="#B8B8B8" />
+          // Empty state — duas escolhas grandes e óbvias
+          <View style={[s.emptyState, { paddingTop: insets.top + 30 }]}>
+            <TouchableOpacity style={s.bigAdd} onPress={pickMedia} activeOpacity={0.85}>
+              <View style={s.bigAddIcon}>
+                <Ionicons name="images" size={30} color="#fff" />
+              </View>
+              <Text style={s.bigAddTitle}>{t.create_addMedia}</Text>
+              <Text style={s.bigAddSub}>{t.create_addMediaSub}</Text>
             </TouchableOpacity>
-            <Text style={s.emptyHint}>{'Adiciona uma foto ou vídeo\nou escreve algo abaixo'}</Text>
+
+            <View style={s.orRow}>
+              <View style={s.orLine} />
+              <Text style={s.orTxt}>{t.create_or}</Text>
+              <View style={s.orLine} />
+            </View>
+
+            <TouchableOpacity style={s.writeBtn} onPress={() => captionRef.current?.focus()} activeOpacity={0.8}>
+              <Ionicons name="create-outline" size={17} color="#fff" />
+              <Text style={s.writeTxt}>{t.create_writeText}</Text>
+            </TouchableOpacity>
           </View>
         )}
       </View>
 
       {/* ── Panel ── */}
-      <View style={[s.panel, { paddingBottom: tabBarHeight + 8 }]}>
+      <View style={[s.panel, { paddingBottom: tabBarHeight + 8 }, textMode && s.panelText]}>
 
         {/* Caption input */}
         <TextInput
           ref={captionRef}
-          style={s.captionInput}
-          placeholder={media ? 'Escreve uma legenda…' : 'Escreve algo…'}
-          placeholderTextColor="#C4C4C4"
+          style={[s.captionInput, textMode && { color: '#fff' }]}
+          placeholder={media ? t.create_captionPh : t.create_writePh}
+          placeholderTextColor={textMode ? 'rgba(255,255,255,0.6)' : '#C4C4C4'}
           value={caption}
           onChangeText={setCaption}
           multiline
@@ -272,125 +313,105 @@ export default function CreateScreen() {
         />
 
         {/* Bg swatches + media link — only for text posts */}
-        {!media && (
+        {textMode && (
           <View style={s.swatchRow}>
-            {BG_KEYS.map((key) => (
-              <TouchableOpacity
-                key={key}
-                style={[s.swatchRing, bgKey === key && s.swatchRingActive]}
-                onPress={() => setBgKey(key)}
-                activeOpacity={0.8}
-              >
-                <View
-                  style={[
-                    s.swatchDot,
-                    { backgroundColor: BG[key].bg },
-                    key === 'white' && s.swatchDotBorder,
-                  ]}
-                />
-              </TouchableOpacity>
-            ))}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={s.swatchScroll}
+              contentContainerStyle={s.swatchScrollContent}
+              keyboardShouldPersistTaps="handled"
+            >
+              {BG_KEYS.map((key) => (
+                <TouchableOpacity
+                  key={key}
+                  style={[s.swatchRing, bgKey === key && s.swatchRingActiveLight]}
+                  onPress={() => setBgKey(key)}
+                  activeOpacity={0.8}
+                >
+                  <View style={[s.swatchDot, { backgroundColor: BG[key].bg }]} />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
 
-            <View style={s.swatchSep} />
+            <View style={s.swatchSepLight} />
 
             <TouchableOpacity style={s.mediaLink} onPress={pickMedia} activeOpacity={0.7}>
-              <Ionicons name="image-outline" size={16} color="#A0A0A0" />
-              <Text style={s.mediaLinkTxt}>Media</Text>
+              <Ionicons name="image-outline" size={16} color="rgba(255,255,255,0.85)" />
+              <Text style={s.mediaLinkTxtLight}>{t.create_media}</Text>
             </TouchableOpacity>
           </View>
         )}
 
         {/* Options row */}
         <View style={s.optRow}>
-          <Ionicons name="time-outline" size={13} color="#C8C8C8" />
-          <Text style={s.timerTxt}>{t.feed_visible_24h}</Text>
+          <Ionicons name="time-outline" size={13} color={textMode ? 'rgba(255,255,255,0.7)' : '#C8C8C8'} />
+          <Text style={[s.timerTxt, textMode && { color: 'rgba(255,255,255,0.7)' }]}>{t.feed_visible_24h}</Text>
 
           <View style={{ flex: 1 }} />
 
           {hasPartner && !isAnnouncement && (
             <TouchableOpacity
-              style={[s.chip, includePartner && s.chipOn]}
+              style={[s.chip, textMode && s.chipLight, includePartner && s.chipOn]}
               onPress={() => setIncludePartner((v) => !v)}
               activeOpacity={0.8}
             >
               <Ionicons
                 name={includePartner ? 'heart' : 'heart-outline'}
                 size={12}
-                color={includePartner ? '#fff' : '#CA2851'}
+                color={includePartner ? '#fff' : textMode ? '#fff' : '#CA2851'}
               />
-              <Text style={[s.chipTxt, includePartner && s.chipTxtOn]}>
+              <Text style={[s.chipTxt, textMode && s.chipTxtLight, includePartner && s.chipTxtOn]}>
                 {otherMember!.name}
               </Text>
             </TouchableOpacity>
           )}
 
           <TouchableOpacity
-            style={[s.chip, stickersEnabled && s.chipOn]}
+            style={[s.chip, textMode && s.chipLight, stickersEnabled && s.chipOn]}
             onPress={() => setStickersEnabled((v) => !v)}
             activeOpacity={0.8}
           >
-            <Text style={stickersEnabled ? s.chipStarOn : s.chipStar}>✦</Text>
-            <Text style={[s.chipTxt, stickersEnabled && s.chipTxtOn]}>Objetos</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[s.chip, isTravelEnabled && s.chipOn]}
-            onPress={() => setIsTravelEnabled((v) => !v)}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name="earth-outline"
-              size={12}
-              color={isTravelEnabled ? '#fff' : '#777'}
-            />
-            <Text style={[s.chipTxt, isTravelEnabled && s.chipTxtOn]}>Viagem</Text>
+            <Text style={stickersEnabled ? s.chipStarOn : textMode ? s.chipStarOn : s.chipStar}>✦</Text>
+            <Text style={[s.chipTxt, textMode && s.chipTxtLight, stickersEnabled && s.chipTxtOn]}>{t.create_stickers}</Text>
           </TouchableOpacity>
 
           {isAdmin && (
             <TouchableOpacity
-              style={[s.chip, isAnnouncement && s.chipAnnounce]}
+              style={[s.chip, textMode && s.chipLight, isAnnouncement && s.chipOn]}
               onPress={() => setIsAnnouncement((v) => !v)}
               activeOpacity={0.8}
             >
               <Ionicons
                 name="megaphone-outline"
                 size={12}
-                color={isAnnouncement ? '#fff' : '#F59E0B'}
+                color={isAnnouncement ? '#fff' : textMode ? '#fff' : '#777'}
               />
-              <Text style={[s.chipTxt, isAnnouncement && s.chipTxtOn]}>Anúncio</Text>
+              <Text style={[s.chipTxt, textMode && s.chipTxtLight, isAnnouncement && s.chipTxtOn]}>{t.create_announce}</Text>
             </TouchableOpacity>
           )}
         </View>
 
-        {/* Travel caption — only when travel is on */}
-        {isTravelEnabled && (
-          <View style={s.travelCaptionWrap}>
-            <Ionicons name="earth-outline" size={14} color="#777" style={{ marginTop: 1 }} />
-            <TextInput
-              style={s.travelCaptionInput}
-              placeholder="Motivo da viagem…"
-              placeholderTextColor="#C4C4C4"
-              value={travelCaption}
-              onChangeText={setTravelCaption}
-              maxLength={120}
-              returnKeyType="done"
-            />
-          </View>
-        )}
-
         {/* Publish */}
         <TouchableOpacity
-          style={[s.publishBtn, (!canPublish || loading) && s.publishBtnOff]}
+          style={[s.publishBtn, textMode && s.publishBtnLight, (!canPublish || loading) && s.publishBtnOff]}
           onPress={handlePublish}
           disabled={!canPublish || loading}
           activeOpacity={0.88}
         >
           {loading
-            ? <ActivityIndicator color="#fff" size="small" />
-            : <Text style={s.publishBtnTxt}>Publicar</Text>
+            ? <ActivityIndicator color={textMode ? '#1A1A1A' : '#fff'} size="small" />
+            : <Text style={[s.publishBtnTxt, textMode && { color: '#1A1A1A' }]}>{t.create_publish}</Text>
           }
         </TouchableOpacity>
       </View>
+
+      <GalleryPicker
+        visible={galleryOpen}
+        onClose={() => setGalleryOpen(false)}
+        onDone={handleGalleryDone}
+        maxSelection={10}
+      />
     </KeyboardAvoidingView>
   )
 }
@@ -423,21 +444,41 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     gap:            14,
   },
-  addMediaBtn: {
-    width:           64,
-    height:          64,
-    borderRadius:    32,
-    backgroundColor: '#F2F2F2',
+  // Big primary "add media" — no box, just the tappable content
+  bigAdd: {
+    alignItems:      'center',
+    gap:             4,
+    paddingVertical: 20,
+  },
+  bigAddIcon: {
+    width:           72,
+    height:          72,
+    borderRadius:    36,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth:     1.5,
+    borderColor:     'rgba(255,255,255,0.45)',
     alignItems:      'center',
     justifyContent:  'center',
+    marginBottom:    10,
   },
-  emptyHint: {
-    fontFamily: fonts.regular,
-    fontSize:   13,
-    color:      '#C4C4C4',
-    textAlign:  'center',
-    lineHeight: 20,
+  bigAddTitle: { fontFamily: fonts.bold, fontSize: 16, color: '#fff', letterSpacing: -0.3 },
+  bigAddSub:   { fontFamily: fonts.regular, fontSize: 13, color: 'rgba(255,255,255,0.7)' },
+
+  orRow:  { flexDirection: 'row', alignItems: 'center', gap: 12, width: 180, marginTop: 4 },
+  orLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.28)' },
+  orTxt:  { fontFamily: fonts.medium, fontSize: 12, color: 'rgba(255,255,255,0.65)' },
+
+  writeBtn: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               7,
+    paddingHorizontal: 18,
+    paddingVertical:   11,
+    borderRadius:      22,
+    borderWidth:       1.5,
+    borderColor:       'rgba(255,255,255,0.5)',
   },
+  writeTxt: { fontFamily: fonts.semiBold, fontSize: 14, color: '#fff' },
 
   // Text post live preview
   textPreview: {
@@ -515,6 +556,8 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     gap:               10,
   },
+  // Modo texto: painel transparente para mostrar a cor da página, sem risca no topo
+  panelText: { backgroundColor: 'transparent', borderTopColor: 'transparent' },
 
   // Caption input
   captionInput: {
@@ -534,6 +577,8 @@ const s = StyleSheet.create({
     alignItems:    'center',
     gap:           8,
   },
+  swatchScroll:        { flex: 1 },
+  swatchScrollContent: { alignItems: 'center', gap: 8, paddingRight: 4 },
   swatchRing: {
     width:        28,
     height:       28,
@@ -544,6 +589,9 @@ const s = StyleSheet.create({
   },
   swatchRingActive: {
     borderColor: '#1A1A1A',
+  },
+  swatchRingActiveLight: {
+    borderColor: '#fff',
   },
   swatchDot: {
     flex:         1,
@@ -559,6 +607,12 @@ const s = StyleSheet.create({
     backgroundColor:  '#E8E8E8',
     marginHorizontal: 2,
   },
+  swatchSepLight: {
+    width:            1,
+    height:           18,
+    backgroundColor:  'rgba(255,255,255,0.3)',
+    marginHorizontal: 2,
+  },
   mediaLink: {
     flexDirection: 'row',
     alignItems:    'center',
@@ -568,6 +622,11 @@ const s = StyleSheet.create({
     fontFamily: fonts.medium,
     fontSize:   13,
     color:      '#A0A0A0',
+  },
+  mediaLinkTxtLight: {
+    fontFamily: fonts.medium,
+    fontSize:   13,
+    color:      'rgba(255,255,255,0.85)',
   },
 
   // Options row
@@ -595,30 +654,12 @@ const s = StyleSheet.create({
     borderColor:       '#E8E8E8',
   },
   chipOn:      { backgroundColor: '#CA2851', borderColor: '#CA2851' },
-  chipAnnounce: { backgroundColor: '#F59E0B', borderColor: '#F59E0B' },
+  chipLight:   { borderColor: 'rgba(255,255,255,0.5)' },
   chipTxt:     { fontFamily: fonts.semiBold, fontSize: 12, color: '#333' },
   chipTxtOn:   { color: '#fff' },
+  chipTxtLight:{ color: '#fff' },
   chipStar:    { fontSize: 11, color: '#777' },
   chipStarOn:  { fontSize: 11, color: '#fff' },
-
-  // Travel caption field
-  travelCaptionWrap: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    gap:             8,
-    backgroundColor: '#F7F7F7',
-    borderRadius:    10,
-    paddingHorizontal: 12,
-    paddingVertical:   9,
-  },
-  travelCaptionInput: {
-    flex:          1,
-    fontFamily:    fonts.regular,
-    fontSize:      14,
-    color:         '#1A1A1A',
-    padding:       0,
-    letterSpacing: -0.1,
-  },
 
   // Publish button
   publishBtn: {
@@ -628,6 +669,7 @@ const s = StyleSheet.create({
     alignItems:      'center',
     justifyContent:  'center',
   },
+  publishBtnLight: { backgroundColor: '#fff' },
   publishBtnOff: { opacity: 0.25 },
   publishBtnTxt: {
     fontFamily:    fonts.bold,

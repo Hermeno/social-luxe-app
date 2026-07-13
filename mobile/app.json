@@ -64,6 +64,14 @@
           "cameraPermission": "Permite ao luxee usar a câmara."
         }
       ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Permite ao luxee mostrar a tua galeria para publicares fotos e vídeos.",
+          "savePhotosPermission": "Permite ao luxee guardar fotos na tua galeria.",
+          "isAccessMediaLocationEnabled": true
+        }
+      ],
       "expo-audio",
       "expo-sqlite",
       [
