@@ -24,6 +24,7 @@ import QRModal from '../../components/QRModal'
 import * as followService from '../../services/follow.service'
 import { blockUser, unblockUser, getBlockedUsers } from '../../services/block.service'
 import { createReport, REPORT_REASONS } from '../../services/report.service'
+import { confirm } from '../../components/confirm'
 import { API_BASE } from '../../config'
 import { getCache, setCache } from '../../db/database'
 import { isConnected } from '../../services/netinfo.service'
@@ -274,6 +275,17 @@ export default function ProfileScreen() {
             } as ProfileCache).catch(() => {})
           }).catch(() => {})
         }
+        // O meu próprio perfil também precisa de contar seguidores/seguindo frescos
+        if (isOwn) {
+          Promise.all([
+            followService.getUserFollowers(targetId),
+            followService.getUserFollowing(targetId),
+          ]).then(([followersRes, followingRes]) => {
+            if (cancelled) return
+            setFollowerCount(followersRes.length)
+            setFollowingCount(followingRes.length)
+          }).catch(() => {})
+        }
       } catch {}
       if (!cancelled) setRefreshing(false)
     }
@@ -335,12 +347,10 @@ export default function ProfileScreen() {
         const refreshedMe = useAuthStore.getState().user
         if (refreshedMe) setProfile(refreshedMe)
       }
-      if (!isOwn) {
-        Promise.all([
-          followService.getUserFollowers(targetId),
-          followService.getUserFollowing(targetId),
-        ]).then(([f, fo]) => { setFollowerCount(f.length); setFollowingCount(fo.length) }).catch(() => {})
-      }
+      Promise.all([
+        followService.getUserFollowers(targetId),
+        followService.getUserFollowing(targetId),
+      ]).then(([f, fo]) => { setFollowerCount(f.length); setFollowingCount(fo.length) }).catch(() => {})
     } catch {}
     setRefreshing(false)
   }
@@ -460,22 +470,19 @@ export default function ProfileScreen() {
     nav.navigate('Tabs', { screen: 'Feed' })
   }
 
-  function handleDeletePost(post: Post) {
-    Alert.alert(t.profile_del_title, t.profile_del_msg, [
-      { text: t.cancel, style: 'cancel' },
-      {
-        text: t.delete, style: 'destructive',
-        onPress: async () => {
-          setMenuPost(null)
-          setPosts((prev) => prev.filter((p) => p.id !== post.id))
-          try { await apiDeletePost(post.id) } catch {
-            setPosts((prev) => [...prev, post].sort((a, b) =>
-              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
-            Alert.alert(t.error, t.profile_del_err)
-          }
-        },
-      },
-    ])
+  async function handleDeletePost(post: Post) {
+    const ok = await confirm({
+      title: t.profile_del_title, message: t.profile_del_msg,
+      confirmText: t.delete, cancelText: t.cancel, destructive: true, icon: 'trash-outline',
+    })
+    if (!ok) return
+    setMenuPost(null)
+    setPosts((prev) => prev.filter((p) => p.id !== post.id))
+    try { await apiDeletePost(post.id) } catch {
+      setPosts((prev) => [...prev, post].sort((a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
+      toast.error(t.error, t.profile_del_err)
+    }
   }
 
   async function handleSaveEdit() {
@@ -503,16 +510,28 @@ export default function ProfileScreen() {
   const rows         = buildRows(posts)
 
   // ── Header component ─────────────────────────────────────────────────────────
+  // Esquerda: no meu perfil, o "+" ocupa o lugar do voltar; noutro perfil, o voltar.
+  const topLeft = isOwn ? (
+    <TouchableOpacity onPress={() => nav2.navigate('Tabs', { screen: 'Create' })} hitSlop={HIT} style={m.floatBtn}>
+      <Ionicons name="add" size={26} color="#fff" />
+    </TouchableOpacity>
+  ) : canGoBack ? (
+    <TouchableOpacity onPress={() => nav2.goBack()} hitSlop={HIT} style={m.floatBtn}>
+      <Ionicons name="chevron-back" size={26} color="#fff" />
+    </TouchableOpacity>
+  ) : <View style={{ width: 36 }} />
+
+  // Direita: só o menu "..." no meu perfil (logout); nada noutro perfil.
   const topRight = isOwn ? (
     <View style={{ flexDirection: 'row', gap: 8 }}>
-      <TouchableOpacity onPress={() => nav2.navigate('Tabs', { screen: 'Create' })} hitSlop={HIT} style={m.floatBtn}>
-        <Ionicons name="add" size={26} color="#fff" />
-      </TouchableOpacity>
       <TouchableOpacity
-        onPress={() => Alert.alert(t.profile_logout, t.profile_logout_confirm, [
-          { text: t.cancel },
-          { text: t.profile_logout_btn, style: 'destructive', onPress: logout },
-        ])}
+        onPress={async () => {
+          const ok = await confirm({
+            title: t.profile_logout, message: t.profile_logout_confirm,
+            confirmText: t.profile_logout_btn, cancelText: t.cancel, destructive: true, icon: 'log-out-outline',
+          })
+          if (ok) logout()
+        }}
         hitSlop={HIT}
         style={m.floatBtn}
       >
@@ -538,11 +557,7 @@ export default function ProfileScreen() {
 
         {/* Floating nav */}
         <View style={[m.floatNav, { top: top + 8 }]}>
-          {canGoBack ? (
-            <TouchableOpacity onPress={() => nav2.goBack()} hitSlop={HIT} style={m.floatBtn}>
-              <Ionicons name="chevron-back" size={26} color="#fff" />
-            </TouchableOpacity>
-          ) : <View style={{ width: 36 }} />}
+          {topLeft}
           <View style={{ flexDirection: 'row', gap: 8 }}>{topRight}</View>
         </View>
 

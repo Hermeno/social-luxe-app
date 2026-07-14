@@ -8,19 +8,21 @@ import { FriendshipDuration } from '../../types'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { colors, spacing, radius, fonts } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
+import { useT, Strings } from '../../i18n'
 
 type Nav = StackNavigationProp<AppStackParams>
 interface Props { user: UserSummary; onAdded: () => void }
 
-const DURATIONS: { label: string; value: FriendshipDuration }[] = [
-  { label: '1 dia',      value: 'ONE_DAY' },
-  { label: '7 dias',     value: 'SEVEN_DAYS' },
-  { label: '30 dias',    value: 'THIRTY_DAYS' },
-  { label: 'Permanente', value: 'PERMANENT' },
+const DURATIONS: { key: keyof Strings; value: FriendshipDuration }[] = [
+  { key: 'fr_dur_1d',   value: 'ONE_DAY' },
+  { key: 'fr_dur_7d',   value: 'SEVEN_DAYS' },
+  { key: 'fr_dur_30d',  value: 'THIRTY_DAYS' },
+  { key: 'fr_dur_perm', value: 'PERMANENT' },
 ]
 
 export default function UserCard({ user, onAdded }: Props) {
   const nav = useNavigation<Nav>()
+  const t = useT()
   const [adding, setAdding]   = useState(false)
   const [added, setAdded]     = useState(false)
   const scaleAnim = useRef(new Animated.Value(1)).current
@@ -35,8 +37,8 @@ export default function UserCard({ user, onAdded }: Props) {
   function pickDuration() {
     if (added) return
     bounce()
-    Alert.alert('Duração da amizade', 'Por quanto tempo?',
-      DURATIONS.map((d) => ({ text: d.label, onPress: () => sendRequest(d.value) }))
+    Alert.alert(t.fr_duration_title, t.fr_duration_q,
+      DURATIONS.map((d) => ({ text: t[d.key], onPress: () => sendRequest(d.value) }))
     )
   }
 
@@ -47,7 +49,7 @@ export default function UserCard({ user, onAdded }: Props) {
       setAdded(true)
       onAdded()
     } catch (e: unknown) {
-      Alert.alert('Erro', e instanceof Error ? e.message : 'Falhou')
+      Alert.alert(t.error, e instanceof Error ? e.message : t.fr_failed)
     } finally { setAdding(false) }
   }
 
@@ -74,7 +76,7 @@ export default function UserCard({ user, onAdded }: Props) {
             color={added ? colors.gray400 : colors.gray800}
           />
           <Text style={[s.addTxt, added && s.addedTxt]}>
-            {added ? 'Adicionado' : 'Adicionar'}
+            {added ? t.fr_added : t.add}
           </Text>
         </Pressable>
       </Animated.View>

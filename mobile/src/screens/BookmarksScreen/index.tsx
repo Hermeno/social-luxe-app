@@ -18,6 +18,7 @@ import { colors, fonts, spacing } from '../../theme'
 import { API_BASE } from '../../config'
 import { getCache, setCache } from '../../db/database'
 import { isConnected } from '../../services/netinfo.service'
+import { useT } from '../../i18n'
 
 const { width } = Dimensions.get('window')
 const ITEM_SIZE = (width - 3) / 2
@@ -25,6 +26,7 @@ const ITEM_SIZE = (width - 3) / 2
 export default function BookmarksScreen() {
   const nav = useNavigation()
   const { top } = useSafeAreaInsets()
+  const t = useT()
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -54,7 +56,7 @@ export default function BookmarksScreen() {
         <TouchableOpacity onPress={() => nav.goBack()} style={s.backBtn}>
           <Ionicons name="chevron-back" size={26} color={colors.gray800} />
         </TouchableOpacity>
-        <Text style={s.title}>Salvos</Text>
+        <Text style={s.title}>{t.bm_title}</Text>
         <View style={{ width: 36 }} />
       </View>
 
@@ -65,9 +67,9 @@ export default function BookmarksScreen() {
       ) : posts.length === 0 ? (
         <View style={s.center}>
           <Ionicons name="bookmark-outline" size={56} color={colors.gray200} />
-          <Text style={s.emptyText}>Nenhum post salvo</Text>
+          <Text style={s.emptyText}>{t.bm_empty}</Text>
           <Text style={s.emptySubtext}>
-            Posts que você salvar aparecerão aqui
+            {t.bm_empty_sub}
           </Text>
         </View>
       ) : (

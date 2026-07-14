@@ -14,6 +14,7 @@ import { api } from '../../services/api'
 import { useAuthStore } from '../../store/auth.store'
 import { clearAllLocalData } from '../../db/database'
 import { fonts } from '../../theme'
+import { useT, useI18n } from '../../i18n'
 
 const T  = '#1A1A1A'
 const S  = '#6E6E73'
@@ -63,6 +64,7 @@ const bg = StyleSheet.create({
 
 // ── Step 1: Photo ─────────────────────────────────────────────────────────────
 function SetPhotoStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }) {
+  const t = useT()
   const [avatarUri, setAvatarUri] = useState<string | null>(null)
   const [saving,    setSaving]    = useState(false)
   const { refreshUser }           = useAuthStore()
@@ -70,7 +72,7 @@ function SetPhotoStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => vo
 
   async function takePhoto() {
     const { status } = await ImagePicker.requestCameraPermissionsAsync()
-    if (status !== 'granted') { Alert.alert('Permissão necessária', 'Precisamos acesso à câmara.'); return }
+    if (status !== 'granted') { Alert.alert(t.ob_perm_needed, t.ob_perm_camera); return }
     const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.85 })
     if (!result.canceled && result.assets[0]) {
       setAvatarUri(result.assets[0].uri)
@@ -79,7 +81,7 @@ function SetPhotoStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => vo
 
   async function pickGallery() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (status !== 'granted') { Alert.alert('Permissão necessária', 'Precisamos acesso à galeria.'); return }
+    if (status !== 'granted') { Alert.alert(t.ob_perm_needed, t.ob_perm_gallery); return }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: 'images', allowsEditing: true, aspect: [1, 1], quality: 0.85 })
     if (!result.canceled && result.assets[0]) {
       setAvatarUri(result.assets[0].uri)
@@ -121,8 +123,8 @@ function SetPhotoStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => vo
 
         {/* Hero */}
         <View style={ps.hero}>
-          <Text style={ps.heading}>Mostra-te.</Text>
-          <Text style={ps.sub}>A tua foto ajuda as pessoas{'\n'}a reconhecer-te.</Text>
+          <Text style={ps.heading}>{t.ob_photo_heading}</Text>
+          <Text style={ps.sub}>{t.ob_photo_sub}</Text>
         </View>
 
         {/* Dashed circle picker */}
@@ -144,11 +146,11 @@ function SetPhotoStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => vo
         <View style={ps.btnPair}>
           <TouchableOpacity style={ps.btnBlue} onPress={takePhoto} disabled={saving} activeOpacity={0.88}>
             <Ionicons name="camera" size={18} color="#fff" />
-            <Text style={ps.btnBlueTxt}>Tirar foto</Text>
+            <Text style={ps.btnBlueTxt}>{t.ob_take_photo}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={ps.btnOutline} onPress={pickGallery} disabled={saving} activeOpacity={0.88}>
             <Ionicons name="images-outline" size={18} color={T} />
-            <Text style={ps.btnOutlineTxt}>Galeria</Text>
+            <Text style={ps.btnOutlineTxt}>{t.ob_gallery}</Text>
           </TouchableOpacity>
         </View>
 
@@ -157,7 +159,7 @@ function SetPhotoStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => vo
             {saving
               ? <ActivityIndicator color="#fff" size="small" />
               : <>
-                  <Text style={ps.continueTxt}>Continuar</Text>
+                  <Text style={ps.continueTxt}>{t.au_continue}</Text>
                   <Ionicons name="arrow-forward" size={18} color="#fff" />
                 </>
             }
@@ -165,7 +167,7 @@ function SetPhotoStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => vo
         )}
 
         <TouchableOpacity style={ps.skipRow} onPress={onSkip} hitSlop={{ top: 8, bottom: 8 }}>
-          <Text style={ps.skipTxt}>Ignorar por agora</Text>
+          <Text style={ps.skipTxt}>{t.ob_skip}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -238,30 +240,34 @@ const ps = StyleSheet.create({
 })
 
 // ── Step 2: Interests ─────────────────────────────────────────────────────────
-export const INTERESTS: { label: string; emoji: string }[] = [
-  { label: 'Fotografia',       emoji: '📷' }, { label: 'Música',          emoji: '🎵' },
-  { label: 'Viagens',          emoji: '✈️' }, { label: 'Culinária',        emoji: '🍳' },
-  { label: 'Moda',             emoji: '👗' }, { label: 'Arte',            emoji: '🎨' },
-  { label: 'Desporto',         emoji: '⚽️' }, { label: 'Tecnologia',      emoji: '💻' },
-  { label: 'Fitness',          emoji: '💪' }, { label: 'Cinema',          emoji: '🎬' },
-  { label: 'Natureza',         emoji: '🌿' }, { label: 'Negócios',        emoji: '💼' },
-  { label: 'Dança',            emoji: '💃' }, { label: 'Literatura',      emoji: '📚' },
-  { label: 'Jogos',            emoji: '🎮' }, { label: 'Bem-estar',       emoji: '🧘' },
-  { label: 'Animais',          emoji: '🐾' }, { label: 'Arquitectura',    emoji: '🏛️' },
-  { label: 'Automóveis',       emoji: '🚗' }, { label: 'Beleza',          emoji: '💄' },
-  { label: 'Podcast',          emoji: '🎙️' }, { label: 'Espiritualidade', emoji: '✨' },
-  { label: 'Política',         emoji: '🏛️' }, { label: 'Ciência',         emoji: '🔬' },
-  { label: 'Sustentabilidade', emoji: '🌍' }, { label: 'Voluntariado',    emoji: '🤝' },
-  { label: 'Empreendedorismo', emoji: '🚀' }, { label: 'Investimento',    emoji: '📈' },
-  { label: 'Futebol',          emoji: '🏆' }, { label: 'Basquete',        emoji: '🏀' },
-  { label: 'Surf',             emoji: '🏄' }, { label: 'Corrida',         emoji: '🏃' },
-  { label: 'Yoga',             emoji: '🧘‍♀️' }, { label: 'Meditação',      emoji: '🕊️' },
-  { label: 'Gastronomia',      emoji: '🍽️' }, { label: 'Vinho',           emoji: '🍷' },
-  { label: 'Tatuagem',         emoji: '🖋️' }, { label: 'Graffiti',        emoji: '🎨' },
-  { label: 'Teatro',           emoji: '🎭' }, { label: 'Comédia',         emoji: '😂' },
+// `id` is the stable value stored/sent to the API (never translate it); `en` is
+// the English display label. Portuguese display uses `id`.
+export const INTERESTS: { id: string; en: string; emoji: string }[] = [
+  { id: 'Fotografia',       en: 'Photography',     emoji: '📷' }, { id: 'Música',          en: 'Music',          emoji: '🎵' },
+  { id: 'Viagens',          en: 'Travel',          emoji: '✈️' }, { id: 'Culinária',        en: 'Cooking',        emoji: '🍳' },
+  { id: 'Moda',             en: 'Fashion',         emoji: '👗' }, { id: 'Arte',            en: 'Art',            emoji: '🎨' },
+  { id: 'Desporto',         en: 'Sports',          emoji: '⚽️' }, { id: 'Tecnologia',      en: 'Technology',     emoji: '💻' },
+  { id: 'Fitness',          en: 'Fitness',         emoji: '💪' }, { id: 'Cinema',          en: 'Cinema',         emoji: '🎬' },
+  { id: 'Natureza',         en: 'Nature',          emoji: '🌿' }, { id: 'Negócios',        en: 'Business',       emoji: '💼' },
+  { id: 'Dança',            en: 'Dance',           emoji: '💃' }, { id: 'Literatura',      en: 'Literature',     emoji: '📚' },
+  { id: 'Jogos',            en: 'Games',           emoji: '🎮' }, { id: 'Bem-estar',       en: 'Wellness',       emoji: '🧘' },
+  { id: 'Animais',          en: 'Animals',         emoji: '🐾' }, { id: 'Arquitectura',    en: 'Architecture',   emoji: '🏛️' },
+  { id: 'Automóveis',       en: 'Cars',            emoji: '🚗' }, { id: 'Beleza',          en: 'Beauty',         emoji: '💄' },
+  { id: 'Podcast',          en: 'Podcast',         emoji: '🎙️' }, { id: 'Espiritualidade', en: 'Spirituality',   emoji: '✨' },
+  { id: 'Política',         en: 'Politics',        emoji: '🏛️' }, { id: 'Ciência',         en: 'Science',        emoji: '🔬' },
+  { id: 'Sustentabilidade', en: 'Sustainability',  emoji: '🌍' }, { id: 'Voluntariado',    en: 'Volunteering',   emoji: '🤝' },
+  { id: 'Empreendedorismo', en: 'Entrepreneurship', emoji: '🚀' }, { id: 'Investimento',   en: 'Investing',      emoji: '📈' },
+  { id: 'Futebol',          en: 'Football',        emoji: '🏆' }, { id: 'Basquete',        en: 'Basketball',     emoji: '🏀' },
+  { id: 'Surf',             en: 'Surfing',         emoji: '🏄' }, { id: 'Corrida',         en: 'Running',        emoji: '🏃' },
+  { id: 'Yoga',             en: 'Yoga',            emoji: '🧘‍♀️' }, { id: 'Meditação',      en: 'Meditation',     emoji: '🕊️' },
+  { id: 'Gastronomia',      en: 'Gastronomy',      emoji: '🍽️' }, { id: 'Vinho',           en: 'Wine',           emoji: '🍷' },
+  { id: 'Tatuagem',         en: 'Tattoo',          emoji: '🖋️' }, { id: 'Graffiti',        en: 'Graffiti',       emoji: '🎨' },
+  { id: 'Teatro',           en: 'Theatre',         emoji: '🎭' }, { id: 'Comédia',         en: 'Comedy',         emoji: '😂' },
 ]
 
 function InterestsStep({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
+  const t = useT()
+  const { lang } = useI18n()
   const [selected,  setSelected]  = useState<Set<string>>(new Set())
   const [finishing, setFinishing] = useState(false)
   const { top, bottom } = useSafeAreaInsets()
@@ -306,28 +312,28 @@ function InterestsStep({ onDone, onBack }: { onDone: () => void; onBack: () => v
           ))}
         </View>
 
-        <Text style={is.stepLabel}>Passo 3 de 3</Text>
+        <Text style={is.stepLabel}>{t.ob_step_3of3}</Text>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={is.scrollContent}>
         <View style={is.hero}>
-          <Text style={is.heading}>O que te{'\n'}interessa?</Text>
-          <Text style={is.sub}>Escolhe pelo menos 3 temas para personalizarmos o teu feed.</Text>
+          <Text style={is.heading}>{t.ob_interests_heading}</Text>
+          <Text style={is.sub}>{t.ob_interests_sub}</Text>
         </View>
 
         {/* Tags */}
         <View style={is.tagsWrap}>
-          {INTERESTS.map(({ label, emoji }) => {
-            const on = selected.has(label)
+          {INTERESTS.map(({ id, en, emoji }) => {
+            const on = selected.has(id)
             return (
               <TouchableOpacity
-                key={label}
+                key={id}
                 style={[is.tag, on && is.tagOn]}
-                onPress={() => toggle(label)}
+                onPress={() => toggle(id)}
                 activeOpacity={0.7}
               >
                 <Text style={is.tagEmoji}>{emoji}</Text>
-                <Text style={[is.tagTxt, on && is.tagTxtOn]}>{label}</Text>
+                <Text style={[is.tagTxt, on && is.tagTxtOn]}>{lang === 'en' ? en : id}</Text>
                 {on && (
                   <View style={is.tagCheck}>
                     <Ionicons name="checkmark" size={11} color={B} />
@@ -345,7 +351,7 @@ function InterestsStep({ onDone, onBack }: { onDone: () => void; onBack: () => v
       <View style={[is.footer, { paddingBottom: bottom + 16 }]}>
         {selected.size > 0 && (
           <Text style={is.countTxt}>
-            {selected.size} selecionado{selected.size !== 1 ? 's' : ''}
+            {selected.size} {selected.size !== 1 ? t.ob_selected_many : t.ob_selected_one}
           </Text>
         )}
         <Animated.View style={{ transform: [{ scale }] }}>
@@ -357,7 +363,7 @@ function InterestsStep({ onDone, onBack }: { onDone: () => void; onBack: () => v
           >
             {finishing
               ? <ActivityIndicator color="#fff" size="small" />
-              : <Text style={is.ctaTxt}>Começar a explorar</Text>
+              : <Text style={is.ctaTxt}>{t.ob_start}</Text>
             }
           </TouchableOpacity>
         </Animated.View>

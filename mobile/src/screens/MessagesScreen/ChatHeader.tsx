@@ -41,8 +41,7 @@ export default function ChatHeader({
     if (!pairing) {
       return (
         <TouchableOpacity onPress={onInvitePairing} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={s.chip}>
-          <Ionicons name="heart-outline" size={13} color="#0A0A0A" />
-          <Text style={s.chipTxt}>Formar par</Text>
+          <Text style={s.chipTxt}>{t.pair_form}</Text>
         </TouchableOpacity>
       )
     }
@@ -52,7 +51,7 @@ export default function ChatHeader({
         return (
           <TouchableOpacity onPress={onEndPairing} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={s.chip}>
             <View style={s.pendingDot} />
-            <Text style={s.chipTxt}>Convite enviado</Text>
+            <Text style={s.chipTxt}>{t.pair_sent}</Text>
           </TouchableOpacity>
         )
       }
@@ -62,8 +61,7 @@ export default function ChatHeader({
             <Ionicons name="close" size={14} color="#0A0A0A" />
           </TouchableOpacity>
           <TouchableOpacity onPress={onAcceptPairing} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={s.chip}>
-            <Ionicons name="heart" size={13} color="#0A0A0A" />
-            <Text style={s.chipTxt}>Aceitar</Text>
+            <Text style={s.chipTxt}>{t.pair_accept}</Text>
           </TouchableOpacity>
         </View>
       )
@@ -158,9 +156,9 @@ const s = StyleSheet.create({
     backgroundColor: 'transparent',
     borderWidth:    1.3,
     borderColor:    '#0A0A0A',
-    paddingHorizontal: 12,
-    paddingVertical:  6,
-    borderRadius:    20,
+    paddingHorizontal: 13,
+    paddingVertical:  7,
+    borderRadius:    11,
   },
   liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#22C55E' },
   pendingDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#FFB173' },

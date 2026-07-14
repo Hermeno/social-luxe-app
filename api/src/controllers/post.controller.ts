@@ -163,6 +163,15 @@ export async function getFeed(req: AuthRequest, res: Response) {
   } catch (err) { return handleError(res, err) }
 }
 
+export async function searchPosts(req: AuthRequest, res: Response) {
+  try {
+    const query = String(req.query.q ?? '').trim()
+    if (!query) return badRequest(res, 'Query required')
+    const posts = await postService.searchPosts(query, req.user!.userId)
+    return ok(res, posts)
+  } catch (err) { return handleError(res, err) }
+}
+
 export async function likePost(req: AuthRequest, res: Response) {
   try {
     const result = await postService.likePost(req.user!.userId, req.params.id)

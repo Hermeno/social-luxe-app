@@ -6,7 +6,9 @@ import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import { fonts } from '../../theme'
-import { useT } from '../../i18n'
+import { useT, useI18n } from '../../i18n'
+import { PT } from '../../i18n/pt'
+import { EN } from '../../i18n/en'
 
 const T  = '#1A1A1A'
 const S  = '#6E6E73'
@@ -19,7 +21,8 @@ const SEP = '#F0F0F3'
 const CARD_BD = '#EDEDF1'
 
 function openLink(url: string) {
-  Linking.openURL(url).catch(() => Alert.alert('Erro', 'Não foi possível abrir.'))
+  const tr = useI18n.getState().lang === 'en' ? EN : PT
+  Linking.openURL(url).catch(() => Alert.alert(tr.error, tr.help_open_fail))
 }
 
 const FAQ_ITEMS_KEYS = [

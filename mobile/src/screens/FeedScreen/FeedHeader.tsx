@@ -108,7 +108,7 @@ export default memo(function FeedHeader({
         >
           {filteredGroups.length === 0 ? (
             <View style={s.emptyWrap}>
-              <Text style={s.emptyTxt}>Nenhum utilizador encontrado</Text>
+              <Text style={s.emptyTxt}>{t.feed_no_users}</Text>
             </View>
           ) : (
             filteredGroups.map((g) => {

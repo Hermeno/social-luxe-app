@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import {
   Modal, View, Text, StyleSheet, TouchableOpacity, FlatList,
-  Pressable, ActivityIndicator, Dimensions, Platform,
+  Pressable, ActivityIndicator, Dimensions, Platform, ScrollView,
 } from 'react-native'
 import { Image } from 'expo-image'
 import * as MediaLibrary from 'expo-media-library'
@@ -44,6 +44,8 @@ export default function GalleryPicker({ visible, onClose, onDone, maxSelection =
   const [loading,  setLoading]  = useState(false)
   const [selected, setSelected] = useState<string[]>([])   // ids, por ordem de escolha
   const [resolving, setResolving] = useState(false)
+  const [albums,   setAlbums]   = useState<MediaLibrary.Album[]>([])
+  const [albumId,  setAlbumId]  = useState<string | null>(null)   // null = Recentes (tudo)
 
   const load = useCallback(async (reset = false) => {
     if (loading) return
@@ -53,6 +55,7 @@ export default function GalleryPicker({ visible, onClose, onDone, maxSelection =
       const page = await MediaLibrary.getAssetsAsync({
         first:     PAGE,
         after:     reset ? undefined : cursor,
+        album:     albumId ?? undefined,
         mediaType: [MediaLibrary.MediaType.photo, MediaLibrary.MediaType.video],
         sortBy:    [MediaLibrary.SortBy.creationTime],
       })
@@ -61,23 +64,31 @@ export default function GalleryPicker({ visible, onClose, onDone, maxSelection =
       setHasMore(page.hasNextPage)
     } catch {}
     setLoading(false)
-  }, [loading, hasMore, cursor])
+  }, [loading, hasMore, cursor, albumId])
 
-  // Pede permissão e carrega ao abrir
+  // Pede permissão ao abrir
   useEffect(() => {
-    if (!visible) return
-    ;(async () => {
-      let status = perm?.status
-      if (status !== 'granted') {
-        const res = await requestPerm()
-        status = res.status
-      }
-      if (status === 'granted') { setAssets([]); setCursor(undefined); setHasMore(true); load(true) }
-    })()
+    if (!visible || perm?.status === 'granted') return
+    requestPerm()
   }, [visible])
 
+  // Carrega as pastas (álbuns) do telemóvel, ordenadas por quantidade
   useEffect(() => {
-    if (!visible) { setSelected([]) }
+    if (!visible || perm?.status !== 'granted') return
+    MediaLibrary.getAlbumsAsync({ includeSmartAlbums: true })
+      .then((list) => setAlbums(list.filter((a) => a.assetCount > 0).sort((a, b) => b.assetCount - a.assetCount)))
+      .catch(() => {})
+  }, [visible, perm?.status])
+
+  // (Re)carrega os itens quando abre ou quando muda de pasta
+  useEffect(() => {
+    if (!visible || perm?.status !== 'granted') return
+    setAssets([]); setCursor(undefined); setHasMore(true)
+    load(true)
+  }, [visible, perm?.status, albumId])
+
+  useEffect(() => {
+    if (!visible) { setSelected([]); setAlbumId(null) }
   }, [visible])
 
   function toggle(asset: MediaLibrary.Asset) {
@@ -135,6 +146,39 @@ export default function GalleryPicker({ visible, onClose, onDone, maxSelection =
           </Text>
           <View style={{ width: 64 }} />
         </View>
+
+        {/* ── Pastas (álbuns) — filtra a grelha por pasta ── */}
+        {granted && (
+          <View style={s.albumBarWrap}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={s.albumBar}
+              keyboardShouldPersistTaps="handled"
+            >
+              <TouchableOpacity
+                style={[s.albumChip, albumId === null && s.albumChipOn]}
+                onPress={() => setAlbumId(null)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="time-outline" size={13} color={albumId === null ? '#fff' : colors.gray600} />
+                <Text style={[s.albumTxt, albumId === null && s.albumTxtOn]}>{t.gal_recent}</Text>
+              </TouchableOpacity>
+              {albums.map((a) => (
+                <TouchableOpacity
+                  key={a.id}
+                  style={[s.albumChip, albumId === a.id && s.albumChipOn]}
+                  onPress={() => setAlbumId(a.id)}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="folder-outline" size={13} color={albumId === a.id ? '#fff' : colors.gray600} />
+                  <Text style={[s.albumTxt, albumId === a.id && s.albumTxtOn]} numberOfLines={1}>{a.title}</Text>
+                  <Text style={[s.albumCount, albumId === a.id && s.albumTxtOn]}>{a.assetCount}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         {!granted ? (
           <View style={s.permWrap}>
@@ -208,6 +252,18 @@ const s = StyleSheet.create({
   },
   cancel: { fontFamily: fonts.medium, fontSize: 15, color: colors.gray600, width: 64 },
   title:  { fontFamily: fonts.bold, fontSize: 16, color: colors.black, letterSpacing: -0.3 },
+
+  albumBarWrap: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(0,0,0,0.06)' },
+  albumBar:     { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingVertical: 10 },
+  albumChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18,
+    backgroundColor: '#F2F2F5', maxWidth: 180,
+  },
+  albumChipOn: { backgroundColor: colors.primary },
+  albumTxt:    { fontFamily: fonts.semiBold, fontSize: 13, color: colors.gray600, flexShrink: 1 },
+  albumTxtOn:  { color: '#fff' },
+  albumCount:  { fontFamily: fonts.medium, fontSize: 11, color: colors.gray400 },
 
   cameraTile: {
     width: CELL, height: CELL, backgroundColor: '#1A1A1A',

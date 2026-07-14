@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { colors, fonts } from '../theme'
 import { FollowDuration } from '../services/follow.service'
+import { useT } from '../i18n'
 
 const GRAD: [string, string, string] = ['#CA2851', '#FF6766', '#FFB173']
 
@@ -19,6 +20,7 @@ interface Props {
 
 export default function FollowSplitButton({ following, loading, onFollow, theme = 'light', followBack = false }: Props) {
   const isDark = theme === 'dark'
+  const t = useT()
 
   if (following) {
     return (
@@ -33,7 +35,7 @@ export default function FollowSplitButton({ following, loading, onFollow, theme 
           : (
             <View style={s.followingRow}>
               <Ionicons name="checkmark" size={13} color={isDark ? '#fff' : colors.gray800} />
-              <Text style={[s.label, isDark ? s.labelDarkFollowing : s.labelLightFollowing]}>Seguindo</Text>
+              <Text style={[s.label, isDark ? s.labelDarkFollowing : s.labelLightFollowing]}>{t.following}</Text>
             </View>
           )
         }
@@ -43,7 +45,7 @@ export default function FollowSplitButton({ following, loading, onFollow, theme 
 
   const content = loading
     ? <ActivityIndicator size="small" color={colors.white} />
-    : <Text style={s.labelFollow}>{followBack ? 'Seguir de volta' : 'Seguir'}</Text>
+    : <Text style={s.labelFollow}>{followBack ? t.profile_follow_back : t.follow}</Text>
 
   if (isDark) {
     return (

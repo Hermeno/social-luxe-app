@@ -19,7 +19,8 @@ import Toast from 'react-native-toast-message'
 import * as msgService from '../../services/message.service'
 import * as unionService from '../../services/union.service'
 import { getConnections, FollowDuration } from '../../services/follow.service'
-import { Connection, Union, UnionMessage, TogetherLivePayload, Pairing } from '../../types'
+import { Connection, Union, UnionMessage, TogetherLivePayload, Pairing, Post } from '../../types'
+import { searchPosts as searchPostsApi } from '../../services/post.service'
 import * as pairingService from '../../services/pairing.service'
 import { useUnionStore } from '../../store/union.store'
 import {
@@ -320,9 +321,10 @@ function UnionConvoRow({ item, myUnion, liveUnions, onPress }: {
   liveUnions: Set<string>
   onPress: () => void
 }) {
+  const t        = useT()
   const isLive   = liveUnions.has(myUnion?.id ?? '') || liveUnions.has(item.fromUnionId) || liveUnions.has(item.toUnionId)
   const unread   = useUnionStore.getState().unreadCounts[`${item.fromUnionId}|${item.toUnionId}`] ?? 0
-  const dispName = item.fromUnion?.name ?? 'União'
+  const dispName = item.fromUnion?.name ?? t.un_union
   const memberA  = (item.fromUnion as any)?.memberA
   const memberB  = (item.fromUnion as any)?.memberB
 
@@ -338,12 +340,12 @@ function UnionConvoRow({ item, myUnion, liveUnions, onPress }: {
         <View style={s.topRow}>
           <Text style={[s.name, unread > 0 && s.nameBold]} numberOfLines={1}>💑 {dispName}</Text>
           {isLive
-            ? <View style={s.livePill}><Text style={s.livePillTxt}>● juntos</Text></View>
-            : <Text style={[s.time, unread > 0 && s.timeActive]}>{timeAgo(item.createdAt)}</Text>
+            ? <View style={s.livePill}><Text style={s.livePillTxt}>{t.msg_live_together}</Text></View>
+            : <Text style={[s.time, unread > 0 && s.timeActive]}>{timeAgo(item.createdAt, t.time_now)}</Text>
           }
         </View>
         <Text style={[s.preview, unread > 0 && s.previewBold]} numberOfLines={1}>
-          {item.content ?? '📎 Mídia'}
+          {item.content ?? t.msg_media}
         </Text>
       </View>
 
@@ -357,6 +359,7 @@ function UnionConvoRow({ item, myUnion, liveUnions, onPress }: {
 // ── Suggested user row — a single, quiet suggestion woven into the list ──────
 
 function SuggestedUserRow({ user, onPress }: { user: UserResult; onPress: () => void }) {
+  const t = useT()
   const followed = useFollowStore((s) => s.followingIds.has(user.id))
   const [loading, setLoading] = useState(false)
 
@@ -366,7 +369,7 @@ function SuggestedUserRow({ user, onPress }: { user: UserResult; onPress: () => 
     try {
       await useFollowStore.getState().toggle(user.id, duration, { name: user.name, avatar: user.avatar })
     } catch {
-      Toast.show({ type: 'error', text1: 'Erro', text2: 'Não foi possível seguir.', visibilityTime: 2500 })
+      Toast.show({ type: 'error', text1: t.error, text2: t.msg_follow_err, visibilityTime: 2500 })
     }
     setLoading(false)
   }
@@ -378,7 +381,7 @@ function SuggestedUserRow({ user, onPress }: { user: UserResult; onPress: () => 
         <Text style={s.name} numberOfLines={1}>{user.name}</Text>
         <View style={sg.tag}>
           <Ionicons name="sparkles" size={10} color={colors.primary} />
-          <Text style={sg.tagTxt}>Sugestão para ti</Text>
+          <Text style={sg.tagTxt}>{t.msg_suggestion_one}</Text>
         </View>
       </View>
       <FollowSplitButton following={followed} loading={loading} onFollow={handleFollow} theme="light" />
@@ -432,11 +435,14 @@ export default function MessagesScreen() {
   const [isSearchMode,   setIsSearchMode]   = useState(false)
   const [suggested,      setSuggested]      = useState<UserResult[]>([])
   const [searchResults,  setSearchResults]  = useState<UserResult[]>([])
+  const [postResults,    setPostResults]    = useState<Post[]>([])
   const [searchLoading,  setSearchLoading]  = useState(false)
   const [suggestLoading, setSuggestLoading] = useState(false)
   const followingIds     = useFollowStore((s) => s.followingIds)
   const [followers,      setFollowers]      = useState<Set<string>>(new Set())
   const [followPending,  setFollowPending]  = useState<Set<string>>(new Set())
+  // userId → timestamp em que segui agora, para aparecer no topo da lista
+  const [justFollowed,   setJustFollowed]   = useState<Record<string, number>>({})
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -490,7 +496,7 @@ export default function MessagesScreen() {
         unionService.getUnionConversations().then(setUnionConvos).catch(() => {})
       }
     } catch {
-      Toast.show({ type: 'error', text1: 'Erro', text2: 'Não foi possível responder ao convite', visibilityTime: 2500 })
+      Toast.show({ type: 'error', text1: t.error, text2: t.msg_invite_reply_err, visibilityTime: 2500 })
     } finally {
       setRespondingId(null)
     }
@@ -695,13 +701,15 @@ export default function MessagesScreen() {
   useEffect(() => {
     if (!isSearchMode) return
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    if (!query.trim()) { setSearchResults([]); return }
+    if (!query.trim()) { setSearchResults([]); setPostResults([]); return }
     debounceRef.current = setTimeout(async () => {
       setSearchLoading(true)
-      try {
-        const res = await api.get(`/users/search?q=${encodeURIComponent(query)}`)
-        setSearchResults(res.data.data ?? [])
-      } catch { setSearchResults([]) }
+      const [users, posts] = await Promise.allSettled([
+        api.get(`/users/search?q=${encodeURIComponent(query)}`),
+        searchPostsApi(query),
+      ])
+      setSearchResults(users.status === 'fulfilled' ? (users.value.data.data ?? []) : [])
+      setPostResults(posts.status === 'fulfilled' ? posts.value : [])
       setSearchLoading(false)
     }, 300)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
@@ -729,6 +737,7 @@ export default function MessagesScreen() {
 
   // ── Search mode ───────────────────────────────────────────────────────────
   function enterSearch() {
+    LayoutAnimation.configureNext(LayoutAnimation.create(260, LayoutAnimation.Types.easeInEaseOut, LayoutAnimation.Properties.opacity))
     setIsSearchMode(true)
     loadSuggested()
     loadFollowersState()
@@ -736,9 +745,11 @@ export default function MessagesScreen() {
 
   function exitSearch() {
     Keyboard.dismiss()
+    LayoutAnimation.configureNext(LayoutAnimation.create(260, LayoutAnimation.Types.easeInEaseOut, LayoutAnimation.Properties.opacity))
     setIsSearchMode(false)
     setQuery('')
     setSearchResults([])
+    setPostResults([])
   }
 
   // ── Follow / unfollow ─────────────────────────────────────────────────────
@@ -757,6 +768,7 @@ export default function MessagesScreen() {
 
       if (nowFollowing) {
         if (followedUser) {
+          setJustFollowed((prev) => ({ ...prev, [userId]: Date.now() }))
           const newConn: Connection = {
             user:        { id: followedUser.id, name: followedUser.name, avatar: followedUser.avatar ?? null },
             lastMessage: null,
@@ -855,7 +867,8 @@ export default function MessagesScreen() {
   const allMsgItems: { item: Exclude<FeedItem, { kind: 'discovery' } | { kind: 'suggestion'; user: UserResult }>; ts: number }[] = [
     ...connections.map((c, i) => ({
       item: { kind: 'personal' as const, c, idx: i },
-      ts:   c.lastMessage ? new Date(c.lastMessage.createdAt).getTime() : 0,
+      // Sem mensagens: se acabei de seguir, sobe ao topo; senão fica em baixo
+      ts:   c.lastMessage ? new Date(c.lastMessage.createdAt).getTime() : (justFollowed[c.user.id] ?? 0),
     })),
     ...(!unionConvoLoad ? unionConvos : []).map((m) => ({
       item: { kind: 'union' as const, m },
@@ -895,58 +908,56 @@ export default function MessagesScreen() {
         keyboardVerticalOffset={0}
       >
 
-        {/* ── Nav bar: ← | avatar | search field ──────────────── */}
-        <View style={[s.navbar, { paddingTop: top + 12 }]}>
-          <TouchableOpacity
-            onPress={() => isSearchMode ? exitSearch() : nav.goBack()}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            style={s.navBackBtn}
-            activeOpacity={0.6}
-          >
-            <Ionicons name="chevron-back" size={24} color="#0A0A0A" />
-          </TouchableOpacity>
-
-          {/* Avatar + ring if user has posts */}
-          <TouchableOpacity
-            onPress={() => nav.navigate('Profile', { userId: user?.id })}
-            activeOpacity={0.75}
-          >
-            <View style={s.navAvatarOuter}>
-              {myHasPosts && (
-                <SegmentedRing count={1} size={40} strokeWidth={1.5} />
-              )}
-              <View style={s.navAvatarInner}>
-                <View style={s.navAvatarCircle}>
-                  <AvatarImage uri={user?.avatar ?? null} name={user?.name} size={32} borderWidth={0} borderColor="transparent" />
-                </View>
-              </View>
-            </View>
-          </TouchableOpacity>
-
-          <View style={[s.searchBar, isSearchMode && s.searchBarActive]}>
-            <Ionicons
-              name="search-outline"
-              size={16}
-              color={isSearchMode ? colors.primary : '#8E8E93'}
-            />
-            <TextInput
-              ref={inputRef}
-              style={s.searchInput}
-              placeholder={t.msg_search_ph}
-              placeholderTextColor="#ABABAB"
-              value={query}
-              onChangeText={setQuery}
-              onFocus={enterSearch}
-              autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="search"
-            />
-            {query.length > 0 && (
+        {/* ── Header ─────────────────────────────────────────────── */}
+        <View style={[s.navbar, { paddingTop: top + 14 }]}>
+          {/* Large title + compose — hidden in search mode for focus */}
+          {!isSearchMode && (
+            <View style={s.titleRow}>
+              <Text style={s.bigTitle}>{t.msg_title}</Text>
               <TouchableOpacity
-                onPress={() => { setQuery(''); inputRef.current?.focus() }}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                onPress={() => inputRef.current?.focus()}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                activeOpacity={0.6}
               >
-                <Ionicons name="close-circle" size={16} color="#ABABAB" />
+                <Ionicons name="create-outline" size={25} color="#0A0A0C" />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Search field */}
+          <View style={s.searchRow}>
+            <View style={[s.searchBar, isSearchMode && s.searchBarActive]}>
+              <Ionicons
+                name="search"
+                size={17}
+                color={isSearchMode ? '#6E6E73' : '#9A9AA0'}
+              />
+              <TextInput
+                ref={inputRef}
+                style={s.searchInput}
+                placeholder={t.msg_search_ph}
+                placeholderTextColor="#A0A0A5"
+                value={query}
+                onChangeText={setQuery}
+                onFocus={enterSearch}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="search"
+              />
+              {query.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => { setQuery(''); inputRef.current?.focus() }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons name="close-circle" size={17} color="#C0C0C5" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Cancelar — sai do modo pesquisa */}
+            {isSearchMode && (
+              <TouchableOpacity onPress={exitSearch} hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }} activeOpacity={0.6}>
+                <Text style={s.searchCancel}>{t.cancel}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -975,7 +986,7 @@ export default function MessagesScreen() {
               </View>
             )}
 
-            {!isCardLoading && displayCards.length === 0 && query.trim().length > 0 && (
+            {!isCardLoading && displayCards.length === 0 && postResults.length === 0 && query.trim().length > 0 && (
               <View style={s.emptySearch}>
                 <View style={s.emptyIcon}>
                   <Ionicons name="search-outline" size={28} color={colors.gray400} />
@@ -985,13 +996,13 @@ export default function MessagesScreen() {
               </View>
             )}
 
-            {!isCardLoading && displayCards.length > 0 && (
+            {!isCardLoading && (displayCards.length > 0 || postResults.length > 0) && (
               <FlatList
                 key="search-grid"
                 data={displayCards}
                 keyExtractor={(u) => u.id}
                 numColumns={2}
-                columnWrapperStyle={s.cardRow}
+                columnWrapperStyle={displayCards.length > 0 ? s.cardRow : undefined}
                 contentContainerStyle={s.cardGrid}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
@@ -1005,6 +1016,43 @@ export default function MessagesScreen() {
                     onPress={() => { exitSearch(); nav.navigate('Profile', { userId: item.id }) }}
                   />
                 )}
+                ListFooterComponent={
+                  query.trim().length > 0 && postResults.length > 0 ? (
+                    <View style={s.postsSection}>
+                      <View style={s.sectionRow}>
+                        <Text style={s.sectionLabel}>{t.msg_posts_section}</Text>
+                        <View style={s.countPill}>
+                          <Text style={s.countPillTxt}>{postResults.length}</Text>
+                        </View>
+                      </View>
+                      {postResults.map((p, i) => (
+                        <TouchableOpacity
+                          key={p.id}
+                          style={s.postRow}
+                          activeOpacity={0.7}
+                          onPress={() => { exitSearch(); nav.navigate('PostViewer', { posts: postResults, startIndex: i }) }}
+                        >
+                          {p.mediaUrl ? (
+                            <Image source={{ uri: p.mediaUrl }} style={s.postThumb} contentFit="cover" />
+                          ) : (
+                            <View style={[s.postThumb, { backgroundColor: p.bgColor || '#111114', alignItems: 'center', justifyContent: 'center' }]}>
+                              <Ionicons name="text" size={18} color="#fff" />
+                            </View>
+                          )}
+                          <View style={s.postRowBody}>
+                            <Text style={s.postCaption} numberOfLines={2}>
+                              {p.caption?.trim() || t.msg_post_no_caption}
+                            </Text>
+                            <Text style={s.postAuthor} numberOfLines={1}>{p.user.name}</Text>
+                          </View>
+                          {p.mediaType === 'VIDEO' && (
+                            <Ionicons name="play-circle" size={18} color={colors.gray400} />
+                          )}
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  ) : null
+                }
               />
             )}
           </>
@@ -1016,7 +1064,7 @@ export default function MessagesScreen() {
             {connsLoading && connections.length === 0 && unionConvos.length === 0 && (
               <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 }}>
                 <ActivityIndicator color={colors.primary} size="large" />
-                <Text style={{ fontFamily: fonts.regular, fontSize: 14, color: colors.gray500 }}>A carregar conversas…</Text>
+                <Text style={{ fontFamily: fonts.regular, fontSize: 14, color: colors.gray500 }}>{t.msg_loading}</Text>
               </View>
             )}
             {connsError && connections.length === 0 && unionConvos.length === 0 && (
@@ -1024,14 +1072,14 @@ export default function MessagesScreen() {
                 <View style={s.emptyCircle}>
                   <Ionicons name="wifi-outline" size={36} color="#C0C0C8" />
                 </View>
-                <Text style={s.emptyTitle}>Ligação lenta</Text>
-                <Text style={s.emptySub}>O servidor demorou demasiado. Toca para tentar de novo.</Text>
+                <Text style={s.emptyTitle}>{t.msg_slow_conn}</Text>
+                <Text style={s.emptySub}>{t.msg_slow_conn_sub}</Text>
                 <TouchableOpacity
                   style={{ marginTop: 16, backgroundColor: colors.primary, paddingHorizontal: 24, paddingVertical: 10, borderRadius: 20 }}
                   onPress={() => syncConnectionsRef.current?.().catch(() => {})}
                   activeOpacity={0.8}
                 >
-                  <Text style={{ fontFamily: fonts.semiBold, fontSize: 14, color: colors.white }}>Tentar de novo</Text>
+                  <Text style={{ fontFamily: fonts.semiBold, fontSize: 14, color: colors.white }}>{t.msg_try_again}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -1045,12 +1093,12 @@ export default function MessagesScreen() {
                 >
                   <Ionicons name="chatbubbles" size={28} color="#fff" />
                 </LinearGradient>
-                <Text style={s.emptyTitle}>Comece uma conversa</Text>
-                <Text style={s.emptySub}>Segue alguém para poderes falar com essa pessoa aqui</Text>
+                <Text style={s.emptyTitle}>{t.msg_start_convo}</Text>
+                <Text style={s.emptySub}>{t.msg_empty_follow}</Text>
 
                 {suggested.length > 0 && (
                   <>
-                    <Text style={s.chatEmptySuggestLabel}>Sugestões para ti</Text>
+                    <Text style={s.chatEmptySuggestLabel}>{t.msg_suggestions_title}</Text>
                     <FlatList
                       data={suggested.slice(0, 10)}
                       keyExtractor={(u) => u.id}
@@ -1203,7 +1251,7 @@ export default function MessagesScreen() {
                         onPress={() => nav.navigate('UnionChat', {
                           unionId:      myUnion?.id ?? item.m.toUnionId,
                           otherUnionId: item.m.fromUnionId === myUnion?.id ? item.m.toUnionId : item.m.fromUnionId,
-                          unionName:    item.m.fromUnion?.name ?? 'União',
+                          unionName:    item.m.fromUnion?.name ?? t.un_union,
                         })}
                       />
                     )
@@ -1255,46 +1303,58 @@ const RING_OFFSET = 16 + RING + 14
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.white },
 
-  /* ── Nav bar ── */
+  /* ── Header ── */
   navbar: {
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    backgroundColor: colors.white,
+  },
+  titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingBottom: 14,
-    gap: 10,
-    backgroundColor: colors.white,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#EDEDF0',
+    justifyContent: 'space-between',
+    marginBottom: 14,
   },
-  navBackBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+  bigTitle: {
+    fontFamily: fonts.extraBold,
+    fontSize: 32,
+    lineHeight: 37,
+    letterSpacing: -0.9,
+    color: '#0A0A0C',
+  },
+  searchRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 10,
   },
-  // Mesma linguagem do form de pesquisa da feed: cantos 12, fundo suave, borda hairline
+  // Campo de pesquisa limpo — foco discreto (branco + anel carmim + sombra suave)
   searchBar: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    gap: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.10)',
+    backgroundColor: '#F1F1F4',
+    borderRadius: 13,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+    gap: 9,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
   },
   searchBarActive: {
-    borderColor: `${colors.primary}45`,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E2E2E6',
   },
   searchInput: {
     flex: 1,
-    fontSize: 15,
-    fontFamily: fonts.regular,
+    fontSize: 15.5,
+    fontFamily: fonts.medium,
     color: colors.black,
     padding: 0,
+  },
+  searchCancel: {
+    fontFamily: fonts.semiBold,
+    fontSize: 15,
+    color: colors.primary,
   },
   /* ── Nav avatar + ring ── */
   navAvatarOuter: {
@@ -1398,6 +1458,25 @@ const s = StyleSheet.create({
   /* ── Card grid (search) ── */
   cardGrid: { paddingHorizontal: CARD_H_PAD, paddingBottom: 40, paddingTop: 4 },
   cardRow:  { gap: CARD_GAP, marginBottom: CARD_GAP },
+
+  /* ── Post results ── */
+  postsSection: { paddingBottom: 40 },
+  postRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 9,
+  },
+  postThumb: {
+    width: 46,
+    height: 46,
+    borderRadius: 10,
+    backgroundColor: colors.gray100,
+  },
+  postRowBody: { flex: 1, gap: 2 },
+  postCaption: { fontSize: 14, fontFamily: fonts.medium, color: colors.gray800, lineHeight: 18 },
+  postAuthor:  { fontSize: 12.5, fontFamily: fonts.regular, color: colors.gray400 },
 
   /* ── Tab selector ── */
   tabRow: {

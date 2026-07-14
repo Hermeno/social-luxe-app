@@ -15,6 +15,7 @@ export async function uploadToCloudinary(
 ): Promise<string> {
   const isVideo = file.mimetype.startsWith('video')
   const isAudio = file.mimetype.startsWith('audio')
+  const isImage = file.mimetype.startsWith('image')
 
   const options = isVideo
     ? {
@@ -29,10 +30,19 @@ export async function uploadToCloudinary(
         folder,
         resource_type: 'video' as const,  // Cloudinary uses 'video' for audio too
       }
-    : {
+    : isImage
+    ? {
         folder,
         resource_type: 'image' as const,
         quality: 'auto:best',
+      }
+    : {
+        // Documentos (pdf, doc, xls, zip…) → 'raw', para ficarem descarregáveis
+        // tal como foram enviados, mantendo a extensão no URL.
+        folder,
+        resource_type: 'raw' as const,
+        use_filename:   true,
+        unique_filename: true,
       }
 
   try {

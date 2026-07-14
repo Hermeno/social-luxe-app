@@ -15,12 +15,14 @@ import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
 import { createStory } from '../../services/story.service'
 import { colors, fonts, spacing, radius } from '../../theme'
+import { useT } from '../../i18n'
 
 const { width, height } = Dimensions.get('window')
 
 export default function CreateStoryScreen() {
   const nav = useNavigation()
   const { top, bottom } = useSafeAreaInsets()
+  const t = useT()
   const [mediaUri, setMediaUri] = useState<string | null>(null)
   const [mediaType, setMediaType] = useState<'image' | 'video'>('image')
   const [loading, setLoading] = useState(false)
@@ -28,7 +30,7 @@ export default function CreateStoryScreen() {
   async function pickMedia() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (status !== 'granted') {
-      Alert.alert('Permissão necessária', 'Precisamos de acesso à galeria.')
+      Alert.alert(t.ob_perm_needed, t.ob_perm_gallery)
       return
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -49,7 +51,7 @@ export default function CreateStoryScreen() {
       await createStory(mediaUri, mediaType)
       nav.goBack()
     } catch {
-      Alert.alert('Erro', 'Não foi possível publicar o story.')
+      Alert.alert(t.error, t.cs_publish_fail)
     } finally {
       setLoading(false)
     }
@@ -76,7 +78,7 @@ export default function CreateStoryScreen() {
       ) : (
         <TouchableOpacity style={s.pickArea} onPress={pickMedia} activeOpacity={0.8}>
           <Ionicons name="images-outline" size={64} color="rgba(255,255,255,0.3)" />
-          <Text style={s.pickText}>Toque para escolher foto ou vídeo</Text>
+          <Text style={s.pickText}>{t.cs_pick}</Text>
         </TouchableOpacity>
       )}
 
@@ -90,7 +92,7 @@ export default function CreateStoryScreen() {
           {loading ? (
             <ActivityIndicator color={colors.white} />
           ) : (
-            <Text style={s.publishText}>Publicar Story</Text>
+            <Text style={s.publishText}>{t.cs_publish}</Text>
           )}
         </TouchableOpacity>
       </View>

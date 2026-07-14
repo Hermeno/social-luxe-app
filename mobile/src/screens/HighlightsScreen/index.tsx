@@ -20,6 +20,7 @@ import { colors, fonts, spacing, radius } from '../../theme'
 import { API_BASE } from '../../config'
 import { getCache, setCache } from '../../db/database'
 import { isConnected } from '../../services/netinfo.service'
+import { useT } from '../../i18n'
 
 type Route = RouteProp<AppStackParams, 'Highlights'>
 
@@ -36,6 +37,7 @@ export default function HighlightsScreen() {
   const { userId } = route.params
   const { user } = useAuthStore()
   const { top } = useSafeAreaInsets()
+  const t = useT()
   const [highlights, setHighlights] = useState<Highlight[]>([])
   const [loading, setLoading] = useState(true)
   const [viewerVisible, setViewerVisible] = useState(false)
@@ -72,7 +74,7 @@ export default function HighlightsScreen() {
         <TouchableOpacity onPress={() => nav.goBack()} style={s.backBtn}>
           <Ionicons name="chevron-back" size={26} color={colors.gray800} />
         </TouchableOpacity>
-        <Text style={s.title}>Destaques</Text>
+        <Text style={s.title}>{t.hl_title}</Text>
         <View style={{ width: 36 }} />
       </View>
 
@@ -91,14 +93,14 @@ export default function HighlightsScreen() {
           ListEmptyComponent={
             <View style={s.center}>
               <Ionicons name="images-outline" size={56} color={colors.gray200} />
-              <Text style={s.emptyText}>Nenhum destaque</Text>
+              <Text style={s.emptyText}>{t.hl_empty}</Text>
             </View>
           }
           ListFooterComponent={
             isOwn ? (
               <TouchableOpacity style={s.createBtn} activeOpacity={0.8}>
                 <Ionicons name="add-circle-outline" size={28} color={colors.primary} />
-                <Text style={s.createText}>Novo Destaque</Text>
+                <Text style={s.createText}>{t.hl_new}</Text>
               </TouchableOpacity>
             ) : null
           }

@@ -8,7 +8,9 @@ import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { fonts } from '../../theme'
-import { useT } from '../../i18n'
+import { useT, useI18n } from '../../i18n'
+import { PT } from '../../i18n/pt'
+import { EN } from '../../i18n/en'
 
 type Nav = StackNavigationProp<AppStackParams>
 
@@ -23,7 +25,8 @@ const SEP = '#F0F0F3'
 const CARD_BD = '#EDEDF1'
 
 function openLink(url: string) {
-  Linking.openURL(url).catch(() => Alert.alert('Erro', 'Não foi possível abrir o link.'))
+  const tr = useI18n.getState().lang === 'en' ? EN : PT
+  Linking.openURL(url).catch(() => Alert.alert(tr.error, tr.about_link_fail))
 }
 
 function LinkRow({ iconBg, iconColor, iconName, title, action, onPress, isLast }: {

@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { Comment } from '../../types'
 import { colors, spacing } from '../../theme'
+import { useT } from '../../i18n'
 import AvatarImage from '../AvatarImage'
 
 interface Props {
@@ -19,6 +20,7 @@ function timeAgo(date: string) {
 }
 
 export default function CommentItem({ comment, onReply }: Props) {
+  const t = useT()
   return (
     <View style={s.container}>
       <AvatarImage uri={comment.user.avatar} name={comment.user.name} size={36} />
@@ -28,7 +30,7 @@ export default function CommentItem({ comment, onReply }: Props) {
         <View style={s.meta}>
           <Text style={s.time}>{timeAgo(comment.createdAt)}</Text>
           <TouchableOpacity onPress={() => onReply?.(comment)}>
-            <Text style={s.reply}>Responder</Text>
+            <Text style={s.reply}>{t.chat_reply}</Text>
           </TouchableOpacity>
         </View>
         {comment.replies?.map((r) => (

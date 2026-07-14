@@ -2,6 +2,7 @@ import React, { useEffect } from 'react'
 import { AppState, AppStateStatus, Platform, Text, StyleSheet, View } from 'react-native'
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native'
 import Toast, { BaseToastProps } from 'react-native-toast-message'
+import { ConfirmHost } from '../components/confirm'
 import { Ionicons } from '@expo/vector-icons'
 import * as Notifications from 'expo-notifications'
 import Constants from 'expo-constants'
@@ -220,6 +221,7 @@ export default function RootNavigator({ onboardingDone, setOnboardingDone, defau
           : <AppNavigator defaultTab={defaultTab} />
       }
       <Toast config={toastConfig} position="bottom" bottomOffset={110} />
+      <ConfirmHost />
     </NavigationContainer>
   )
 }

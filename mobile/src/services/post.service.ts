@@ -6,6 +6,12 @@ export async function getFeed(page = 1): Promise<Post[]> {
   return res.data.data
 }
 
+// Pesquisa de publicações por legenda (caption)
+export async function searchPosts(query: string): Promise<Post[]> {
+  const res = await api.get<ApiResponse<Post[]>>(`/posts/search?q=${encodeURIComponent(query)}`)
+  return res.data.data
+}
+
 // Álbum: várias fotos numa publicação → grelha na feed
 export async function createAlbum(uris: string[], caption?: string, deviceModel?: string): Promise<Post> {
   const form = new FormData()

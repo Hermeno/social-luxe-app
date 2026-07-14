@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-nativ
 import { Ionicons } from '@expo/vector-icons'
 import { Comment } from '../../types'
 import { colors, spacing, radius } from '../../theme'
+import { useT } from '../../i18n'
 
 interface Props {
   text: string; onChange: (t: string) => void; onSend: () => void
@@ -11,11 +12,12 @@ interface Props {
 }
 
 export default function CommentInputArea({ text, onChange, onSend, sending, replyTo, onCancelReply, bottomInset = 0 }: Props) {
+  const t = useT()
   return (
     <>
       {replyTo && (
         <View style={s.replyBanner}>
-          <Text style={s.replyText}>Respondendo a {replyTo.user.name}</Text>
+          <Text style={s.replyText}>{t.comment_reply_to} {replyTo.user.name}</Text>
           <TouchableOpacity onPress={onCancelReply}>
             <Ionicons name="close-circle" size={18} color={colors.gray400} />
           </TouchableOpacity>
@@ -26,7 +28,7 @@ export default function CommentInputArea({ text, onChange, onSend, sending, repl
         <TouchableOpacity style={s.iconBtn}><Text style={s.emoji}>@</Text></TouchableOpacity>
         <TextInput
           style={s.input}
-          placeholder="Escreva um comentário..."
+          placeholder={t.comment_ph}
           placeholderTextColor={colors.gray400}
           value={text}
           onChangeText={onChange}

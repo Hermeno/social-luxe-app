@@ -1,6 +1,7 @@
 import React from 'react'
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native'
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native'
 import { Image } from 'expo-image'
+import { confirm } from '../../components/confirm'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
@@ -85,11 +86,13 @@ export default function SettingsScreen() {
     ? (user.avatar.startsWith('http') ? user.avatar : `${API_BASE}${user.avatar}`)
     : null
 
-  function handleLogout() {
-    Alert.alert(t.logout_title, t.logout_msg, [
-      { text: t.cancel, style: 'cancel' },
-      { text: t.logout_ok, style: 'destructive', onPress: () => logout() },
-    ])
+  async function handleLogout() {
+    const ok = await confirm({
+      title: t.logout_title, message: t.logout_msg,
+      confirmText: t.logout_ok, cancelText: t.cancel,
+      destructive: true, icon: 'log-out-outline',
+    })
+    if (ok) logout()
   }
 
   return (

@@ -284,9 +284,9 @@ export default function PostInfo({ post, isActive, commentCount: commentCountPro
             <Text style={s.commentersLabel}>
               {(() => {
                 const total = commentCountProp ?? post._count.comments
-                return total > 1
-                  ? `+${total - 1} comentário${total > 2 ? 's' : ''}`
-                  : 'comentou'
+                if (total <= 1) return t.comment_ed
+                const others = total - 1
+                return `+${others} ${others === 1 ? t.comment_one : t.comment_many}`
               })()}
             </Text>
           </View>

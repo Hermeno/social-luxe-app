@@ -2,6 +2,13 @@ import React from 'react'
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import { colors, spacing, radius, fonts } from '../../theme'
 import AvatarSection from './AvatarSection'
+import { useT } from '../../i18n'
+
+const AVAIL_KEY: Record<string, 'eps_avail_available' | 'eps_avail_busy' | 'eps_avail_away'> = {
+  'Disponível': 'eps_avail_available',
+  'Ocupado':    'eps_avail_busy',
+  'Ausente':    'eps_avail_away',
+}
 
 interface Props {
   avatarUri: string | null
@@ -20,6 +27,10 @@ export default function ProfileTop({
   avatarUri, bio, postsCount, followerCount, followingCount,
   availability, onPickAvatar, onEdit, onShowFollowers, onShowFollowing,
 }: Props) {
+  const t = useT()
+  const availText = availability
+    ? (AVAIL_KEY[availability] ? t[AVAIL_KEY[availability]] : availability)
+    : null
   return (
     <View style={s.wrap}>
       {/* Avatar */}
@@ -34,24 +45,24 @@ export default function ProfileTop({
         <View style={s.divider} />
         <TouchableOpacity style={s.stat} onPress={onShowFollowers} activeOpacity={0.7}>
           <Text style={s.statNum}>{followerCount}</Text>
-          <Text style={s.statLabel}>Seguidores</Text>
+          <Text style={s.statLabel}>{t.followers}</Text>
         </TouchableOpacity>
         <View style={s.divider} />
         <TouchableOpacity style={s.stat} onPress={onShowFollowing} activeOpacity={0.7}>
           <Text style={s.statNum}>{followingCount}</Text>
-          <Text style={s.statLabel}>Seguindo</Text>
+          <Text style={s.statLabel}>{t.following}</Text>
         </TouchableOpacity>
       </View>
 
       {/* Bio & availability */}
       {bio ? <Text style={s.bio}>{bio}</Text> : null}
-      {availability ? (
-        <Text style={s.avail}>● {availability}</Text>
+      {availText ? (
+        <Text style={s.avail}>● {availText}</Text>
       ) : null}
 
       {/* Edit button */}
       <TouchableOpacity style={s.editBtn} onPress={onEdit} activeOpacity={0.8}>
-        <Text style={s.editText}>Editar perfil</Text>
+        <Text style={s.editText}>{t.editProfile}</Text>
       </TouchableOpacity>
     </View>
   )

@@ -18,12 +18,12 @@ const SX  = '#F9F9FB'
 const SEP = '#F0F0F3'
 const CARD_BD = '#EDEDF1'
 
-interface LangItem { code: string; label: string; native: string; emoji: string }
+interface LangItem { code: string; labelPt: string; labelEn: string; native: string; emoji: string }
 
 // Só os idiomas que a app realmente fala — nada de opções que não funcionam
 const LANGS: LangItem[] = [
-  { code: 'pt', label: 'Português', native: 'Português', emoji: '🇲🇿' },
-  { code: 'en', label: 'Inglês',    native: 'English',   emoji: '🇬🇧' },
+  { code: 'pt', labelPt: 'Português', labelEn: 'Portuguese', native: 'Português', emoji: '🇲🇿' },
+  { code: 'en', labelPt: 'Inglês',    labelEn: 'English',    native: 'English',   emoji: '🇬🇧' },
 ]
 
 export default function LanguageScreen() {
@@ -47,6 +47,7 @@ export default function LanguageScreen() {
             <LangRow
               key={item.code}
               item={item}
+              label={lang === 'en' ? item.labelEn : item.labelPt}
               selected={lang === item.code}
               onPress={() => setLang(item.code as 'pt' | 'en')}
               isLast={i === LANGS.length - 1}
@@ -59,14 +60,14 @@ export default function LanguageScreen() {
   )
 }
 
-function LangRow({ item, selected, onPress, isLast }: {
-  item: LangItem; selected: boolean; onPress: () => void; isLast?: boolean
+function LangRow({ item, label, selected, onPress, isLast }: {
+  item: LangItem; label: string; selected: boolean; onPress: () => void; isLast?: boolean
 }) {
   return (
     <TouchableOpacity style={[lr.row, !isLast && lr.sep]} onPress={onPress} activeOpacity={0.75}>
       <Text style={lr.emoji}>{item.emoji}</Text>
       <View style={{ flex: 1 }}>
-        <Text style={lr.label}>{item.label}</Text>
+        <Text style={lr.label}>{label}</Text>
         <Text style={lr.native}>{item.native}</Text>
       </View>
       {selected && (

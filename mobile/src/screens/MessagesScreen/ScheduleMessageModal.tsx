@@ -238,7 +238,7 @@ export default function ScheduleMessageModal({
           <Ionicons
             name={isPast ? 'alert-circle-outline' : 'checkmark-circle-outline'}
             size={13}
-            color={isPast ? '#FF3B30' : colors.secondary}
+            color={isPast ? '#FF3B30' : colors.gray500}
           />
           <Text style={[m.statusTxt, isPast && m.statusTxtWarn]}>
             {isPast ? t.sched_past_time : `${chosen.label} · ${hStr}:${mStr}`}
@@ -266,16 +266,18 @@ export default function ScheduleMessageModal({
   )
 }
 
+const FIELD = '#F4F4F6'
+
 const m = StyleSheet.create({
   flex:     { flex: 1 },
-  backdrop: { flex: 1, backgroundColor: 'transparent' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.28)' },
 
   sheet: {
     backgroundColor: colors.white,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
     paddingHorizontal: 20,
-    paddingTop: 12,
+    paddingTop: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.1,
@@ -284,22 +286,22 @@ const m = StyleSheet.create({
   },
   handle: {
     width: 38, height: 4,
-    backgroundColor: colors.gray300,
+    backgroundColor: '#E0E0E4',
     borderRadius: 2,
     alignSelf: 'center',
-    marginBottom: 18,
+    marginBottom: 16,
   },
 
   /* Header */
-  headerRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  headerRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   titleGroup: { flexDirection: 'row', alignItems: 'center', gap: 9 },
   iconBadge: {
-    width: 32, height: 32, borderRadius: 10,
-    backgroundColor: `${colors.primary}15`,
+    width: 30, height: 30, borderRadius: 10,
+    backgroundColor: `${colors.primary}12`,
     alignItems: 'center', justifyContent: 'center',
   },
   title:    { fontSize: 17, fontFamily: fonts.bold, color: colors.gray800, letterSpacing: -0.3 },
-  closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.gray100, alignItems: 'center', justifyContent: 'center' },
+  closeBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: FIELD, alignItems: 'center', justifyContent: 'center' },
 
   /* Receiver */
   toLine: { fontSize: 13, fontFamily: fonts.regular, color: colors.gray500, marginBottom: 14 },
@@ -307,28 +309,25 @@ const m = StyleSheet.create({
 
   /* View mode */
   previewBox: {
-    backgroundColor: colors.gray100,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: colors.gray200,
+    backgroundColor: FIELD,
+    borderRadius: 16,
     padding: 14,
-    marginBottom: 16,
-    minHeight: 60,
+    marginBottom: 14,
+    minHeight: 56,
   },
   previewMsg: { fontSize: 15, fontFamily: fonts.regular, color: colors.gray800, lineHeight: 22 },
   scheduleInfo: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: `${colors.primary}10`,
-    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10,
-    marginBottom: 20,
+    backgroundColor: FIELD,
+    borderRadius: 14, paddingHorizontal: 14, paddingVertical: 11,
+    marginBottom: 16,
   },
-  scheduleInfoTxt: { fontSize: 14, fontFamily: fonts.semiBold, color: colors.primary },
-  divider: { height: 1, backgroundColor: colors.gray200, marginBottom: 16 },
+  scheduleInfoTxt: { fontSize: 14, fontFamily: fonts.semiBold, color: colors.gray800 },
+  divider: { height: StyleSheet.hairlineWidth, backgroundColor: '#E8E8EA', marginBottom: 14 },
   cancelCta: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    borderWidth: 1.5, borderColor: '#FF3B30', borderRadius: 16,
-    paddingVertical: 14, marginBottom: 14,
-    backgroundColor: 'rgba(224,92,92,0.06)',
+    borderRadius: 25, paddingVertical: 15, marginBottom: 12,
+    backgroundColor: 'rgba(255,59,48,0.08)',
   },
   cancelCtaTxt: { fontSize: 15, fontFamily: fonts.semiBold, color: '#FF3B30' },
   premiumTeaser: {
@@ -339,51 +338,47 @@ const m = StyleSheet.create({
 
   /* Input */
   inputBox: {
-    backgroundColor: colors.gray100,
-    borderRadius: 16, borderWidth: 1.5, borderColor: colors.gray200,
-    marginBottom: 20, minHeight: 90, padding: 14,
+    backgroundColor: FIELD,
+    borderRadius: 18,
+    marginBottom: 16, minHeight: 84, padding: 14,
   },
   input: {
-    fontSize: 15, fontFamily: fonts.regular, color: colors.gray800,
-    lineHeight: 22, minHeight: 66, padding: 0,
+    fontSize: 15.5, fontFamily: fonts.regular, color: colors.gray800,
+    lineHeight: 22, minHeight: 60, padding: 0,
   },
   charCount: { fontSize: 11, fontFamily: fonts.regular, color: colors.gray400, alignSelf: 'flex-end', marginTop: 6 },
 
   /* Section label */
-  sectionLabel: { fontSize: 13, fontFamily: fonts.semiBold, color: colors.gray600, marginBottom: 10 },
+  sectionLabel: { fontSize: 12, fontFamily: fonts.bold, color: colors.gray400, letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 9 },
 
   /* Date chips */
-  chips:      { gap: 8, paddingRight: 4, marginBottom: 20 },
-  chip:       { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 22, backgroundColor: colors.gray100, borderWidth: 1.5, borderColor: colors.gray200 },
-  chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  chips:      { gap: 8, paddingRight: 4, marginBottom: 16 },
+  chip:       { paddingHorizontal: 15, paddingVertical: 9, borderRadius: 20, backgroundColor: FIELD },
+  chipActive: { backgroundColor: colors.primary },
   chipTxt:    { fontSize: 13, fontFamily: fonts.semiBold, color: colors.gray600 },
   chipTxtActive: { color: colors.white },
 
   /* Time block */
-  timeBlock: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 22 },
+  timeBlock: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 18 },
   wheel: {
-    alignItems: 'center', gap: 2,
-    backgroundColor: colors.gray100, borderRadius: 16,
-    paddingVertical: 6, paddingHorizontal: 14,
-    borderWidth: 1.5, borderColor: colors.gray200, minWidth: 62,
+    alignItems: 'center', gap: 0,
+    backgroundColor: FIELD, borderRadius: 16,
+    paddingVertical: 4, paddingHorizontal: 14, minWidth: 60,
   },
-  arrowBtn:  { padding: 2 },
-  wheelNum:  { fontSize: 26, fontFamily: fonts.bold, color: colors.gray800, letterSpacing: -0.5, lineHeight: 34 },
-  colon:     { fontSize: 28, fontFamily: fonts.bold, color: colors.gray400, marginBottom: 4 },
-  statusTag: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: `${colors.secondary}12`, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
-  statusTagWarn: { backgroundColor: 'rgba(224,92,92,0.10)' },
-  statusTxt:     { fontSize: 12, fontFamily: fonts.semiBold, color: colors.secondary, flexShrink: 1 },
+  arrowBtn:  { padding: 3 },
+  wheelNum:  { fontSize: 25, fontFamily: fonts.bold, color: colors.gray800, letterSpacing: -0.5, lineHeight: 32 },
+  colon:     { fontSize: 26, fontFamily: fonts.bold, color: colors.gray300, marginBottom: 2 },
+  statusTag: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: FIELD, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9 },
+  statusTagWarn: { backgroundColor: 'rgba(255,59,48,0.08)' },
+  statusTxt:     { fontSize: 12.5, fontFamily: fonts.semiBold, color: colors.gray600, flexShrink: 1 },
   statusTxtWarn: { color: '#FF3B30' },
 
   /* CTA */
   cta: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: colors.primary, borderRadius: 18,
+    backgroundColor: colors.primary, borderRadius: 26,
     paddingVertical: 16, paddingHorizontal: 20,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 10, elevation: 4,
   },
-  ctaOff: { backgroundColor: colors.gray300, shadowOpacity: 0 },
+  ctaOff: { backgroundColor: '#D8D8DC' },
   ctaTxt: { fontSize: 15, fontFamily: fonts.bold, color: colors.white, letterSpacing: -0.2 },
 })

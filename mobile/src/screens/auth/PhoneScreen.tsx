@@ -11,6 +11,7 @@ import { StackNavigationProp } from '@react-navigation/stack'
 import { AuthStackParams } from '../../navigation/AuthNavigator'
 import * as authService from '../../services/auth.service'
 import { fonts } from '../../theme'
+import { useI18n, useT } from '../../i18n'
 
 const COUNTRIES = [
   { code: '+244', flag: '🇦🇴', name: 'Angola',              iso: 'AO' },
@@ -97,6 +98,7 @@ function CountryPickerModal({
   onSelect: (c: Country) => void
   onClose:  () => void
 }) {
+  const t = useT()
   const [query, setQuery] = useState('')
 
   const filtered = useMemo(() => {
@@ -117,7 +119,7 @@ function CountryPickerModal({
       <SafeAreaView style={pm.container}>
         {/* Header */}
         <View style={pm.header}>
-          <Text style={pm.title}>Indicativo</Text>
+          <Text style={pm.title}>{t.au_indicative}</Text>
           <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <Ionicons name="close" size={24} color="#333" />
           </TouchableOpacity>
@@ -128,7 +130,7 @@ function CountryPickerModal({
           <Ionicons name="search" size={17} color="#ABABAB" style={pm.searchIcon} />
           <TextInput
             style={pm.searchInput}
-            placeholder="Pesquisar país ou indicativo..."
+            placeholder={t.au_search_country}
             placeholderTextColor="#ABABAB"
             value={query}
             onChangeText={setQuery}
@@ -170,6 +172,8 @@ type Nav = StackNavigationProp<AuthStackParams>
 export default function PhoneScreen() {
   const nav     = useNavigation<Nav>()
   const { top, bottom } = useSafeAreaInsets()
+  const { lang, setLang } = useI18n()
+  const t = useT()
 
   const [selected, setSelected] = useState<Country>(detectCountryEntry)
   const [phone,    setPhone]    = useState('')
@@ -206,17 +210,27 @@ export default function PhoneScreen() {
     <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={[s.inner, { paddingTop: top + 18, paddingBottom: bottom + 14 }]}>
 
+        {/* Language toggle */}
+        <View style={s.langToggle}>
+          <TouchableOpacity onPress={() => setLang('en')} style={[s.langOpt, lang === 'en' && s.langOptOn]} activeOpacity={0.8}>
+            <Text style={[s.langTxt, lang === 'en' && s.langTxtOn]}>EN</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setLang('pt')} style={[s.langOpt, lang === 'pt' && s.langOptOn]} activeOpacity={0.8}>
+            <Text style={[s.langTxt, lang === 'pt' && s.langTxtOn]}>PT</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Brand + tagline */}
         <View style={s.brandRow}>
           <Text style={s.brand}>luxee</Text>
           <View style={s.brandDot} />
-          <Text style={s.tagline}>histórias que desaparecem</Text>
+          <Text style={s.tagline}>{t.au_tagline}</Text>
         </View>
 
         {/* Heading */}
         <View style={s.hero}>
-          <Text style={s.heading}>Qual é o teu{'\n'}número?</Text>
-          <Text style={s.sub}>Vamos enviar-te um código por SMS para confirmar que és mesmo tu.</Text>
+          <Text style={s.heading}>{t.au_phone_heading}</Text>
+          <Text style={s.sub}>{t.au_phone_sub}</Text>
         </View>
 
         {/* Phone inputs */}
@@ -263,7 +277,7 @@ export default function PhoneScreen() {
             {loading
               ? <ActivityIndicator color="#fff" size="small" />
               : <>
-                  <Text style={s.ctaTxt}>Continuar</Text>
+                  <Text style={s.ctaTxt}>{t.au_continue}</Text>
                   <Ionicons name="arrow-forward" size={19} color="#fff" />
                 </>
             }
@@ -301,6 +315,12 @@ const SX = '#F9F9FB'
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: BG },
   inner:  { flex: 1, paddingHorizontal: 24 },
+
+  langToggle: { flexDirection: 'row', alignSelf: 'flex-end', backgroundColor: '#F2F2F5', borderRadius: 14, padding: 3, marginBottom: 6 },
+  langOpt:    { paddingHorizontal: 13, paddingVertical: 5, borderRadius: 11 },
+  langOptOn:  { backgroundColor: '#fff', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 4, shadowOffset: { width: 0, height: 1 } },
+  langTxt:    { fontFamily: fonts.bold, fontSize: 12.5, color: '#8E8E93', letterSpacing: 0.3 },
+  langTxtOn:  { color: '#1A1A1A' },
 
   brandRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 7, marginBottom: 0 },
   brand:    { fontFamily: fonts.bold, fontSize: 22, color: T, letterSpacing: -0.6 },

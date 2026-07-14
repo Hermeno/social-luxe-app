@@ -9,6 +9,7 @@ import {
 } from 'react-native'
 import { reactToPost, ReactionType } from '../services/reaction.service'
 import { colors, fonts, radius, spacing } from '../theme'
+import { useT } from '../i18n'
 
 interface Props {
   postId: string
@@ -26,6 +27,7 @@ const REACTIONS: { type: ReactionType; emoji: string; label: string }[] = [
 ]
 
 export default function ReactionPicker({ postId, onClose, currentReaction }: Props) {
+  const t = useT()
   const scaleAnim = useRef(new Animated.Value(0.5)).current
   const opacityAnim = useRef(new Animated.Value(0)).current
   const [anonymous, setAnonymous] = useState(false)
@@ -85,7 +87,7 @@ export default function ReactionPicker({ postId, onClose, currentReaction }: Pro
               <View style={[s.checkbox, anonymous && s.checkboxActive]}>
                 {anonymous && <Text style={s.checkmark}>✓</Text>}
               </View>
-              <Text style={s.anonText}>Reagir anonimamente 👻</Text>
+              <Text style={s.anonText}>{t.react_anon}</Text>
             </TouchableOpacity>
           </Animated.View>
         </TouchableWithoutFeedback>

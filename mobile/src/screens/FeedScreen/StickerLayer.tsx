@@ -208,9 +208,9 @@ function MessageCard({ sticker, interaction, onUpdate, onClose }: MsgCardProps) 
     <Modal transparent animationType="none" visible onRequestClose={dismiss}>
       <Pressable style={st.msgBackdrop} onPress={dismiss}>
         <AnimatedGradient
-          colors={['#CA2851', '#FF6766', '#FFB173']}
+          colors={['#2A2A2E', '#0A0A0C']}
           start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+          end={{ x: 0, y: 1 }}
           style={[st.msgCard, { opacity: opacAnim, transform: [{ scale: scaleAnim }] }]}
           onStartShouldSetResponder={() => true}
         >
@@ -403,9 +403,9 @@ const st = StyleSheet.create({
     paddingTop: 14,
     paddingHorizontal: 16,
     paddingBottom: 14,
-    shadowColor: '#CA2851',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.32,
+    shadowOpacity: 0.4,
     shadowRadius: 26,
     elevation: 18,
   },

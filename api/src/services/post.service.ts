@@ -336,6 +336,37 @@ export async function getFeed(userId: string, page = 1, limit = 10) {
   return attachRecentCommenters(withThumbnails(posts), userId)
 }
 
+// Search posts by caption (case-insensitive), excluding blocked users, deleted
+// and expired posts. Same shape as the feed so the client can reuse Post cards.
+export async function searchPosts(query: string, userId: string) {
+  const now = new Date()
+  const [blocksGiven, blocksReceived] = await Promise.all([
+    prisma.block.findMany({ where: { blockerId: userId }, select: { blockedId: true } }),
+    prisma.block.findMany({ where: { blockedId: userId }, select: { blockerId: true } }),
+  ])
+  const blockedIds = [
+    ...blocksGiven.map((b) => b.blockedId),
+    ...blocksReceived.map((b) => b.blockerId),
+  ]
+
+  const posts = await prisma.post.findMany({
+    where: {
+      deletedAt: null,
+      expiresAt: { gt: now },
+      userId: { notIn: blockedIds },
+      caption: { contains: query, mode: 'insensitive' },
+    },
+    include: {
+      user:        { select: { id: true, name: true, avatar: true, viewsPublic: true, isAdmin: true, showDevice: true, statusLabel: true, lastSeen: true } },
+      partnerUser: { select: { id: true, name: true, avatar: true } },
+      _count:      { select: { likes: true, comments: true, shares: true, views: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 30,
+  })
+  return attachRecentCommenters(withThumbnails(posts), userId)
+}
+
 // Extend a post's expiry by `minutes`. Announcements are never touched.
 async function extendLife(postId: string, minutes: number) {
   const post = await prisma.post.findUnique({ where: { id: postId }, select: { expiresAt: true, isAnnouncement: true } })

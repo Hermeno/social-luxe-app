@@ -2,6 +2,11 @@ import { useReducer, useRef, useCallback, useEffect } from 'react'
 import { Alert } from 'react-native'
 import { useAudioRecorder, AudioModule, RecordingPresets } from 'expo-audio'
 import { VoiceState, VoiceAction, VOICE_INITIAL } from './types'
+import { useI18n } from '../../i18n'
+import { PT } from '../../i18n/pt'
+import { EN } from '../../i18n/en'
+
+const tr = () => (useI18n.getState().lang === 'en' ? EN : PT)
 
 // ── Reducer ───────────────────────────────────────────────────────────────────
 function reducer(s: VoiceState, a: VoiceAction): VoiceState {
@@ -92,7 +97,7 @@ export function useVoiceRecorder(): VoiceRecorderControls {
   const start = useCallback(async () => {
     const perm = await AudioModule.requestRecordingPermissionsAsync()
     if (!perm.granted) {
-      Alert.alert('Microfone bloqueado', 'Activa o microfone nas definições da app para enviar mensagens de voz.')
+      Alert.alert(tr().vr_mic_needed, tr().vr_mic_settings)
       return
     }
     try {
@@ -101,7 +106,7 @@ export function useVoiceRecorder(): VoiceRecorderControls {
       dispatch({ type: 'START' })
       startTick()
     } catch {
-      Alert.alert('Erro', 'Não foi possível iniciar a gravação. Tenta novamente.')
+      Alert.alert(tr().error, tr().vr_rec_fail)
     }
   }, [recorder])
 
@@ -133,12 +138,12 @@ export function useVoiceRecorder(): VoiceRecorderControls {
 
   const deleteRec = useCallback((onConfirmed?: () => void) => {
     Alert.alert(
-      'Apagar gravação',
-      'Tens a certeza que queres apagar esta mensagem de voz?',
+      tr().vr_delete_title,
+      tr().vr_delete_msg,
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: tr().cancel, style: 'cancel' },
         {
-          text: 'Apagar', style: 'destructive',
+          text: tr().vr_delete, style: 'destructive',
           onPress: async () => {
             resetTick()
             try { if (recorder.isRecording) await recorder.stop() } catch {}

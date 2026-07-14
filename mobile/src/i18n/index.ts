@@ -12,19 +12,15 @@ interface I18nStore {
 }
 
 export const useI18n = create<I18nStore>((set) => ({
-  lang: 'pt',
+  lang: 'en',                       // English is always the default
   setLang: async (l) => {
     await AsyncStorage.setItem('@language', l)
     set({ lang: l })
   },
   init: async () => {
+    // Only a preference the user explicitly saved can override English.
     const saved = await AsyncStorage.getItem('@language')
-    if (saved === 'pt' || saved === 'en') { set({ lang: saved as Lang }); return }
-    // No saved preference — detect device locale
-    try {
-      const locale = Intl.DateTimeFormat().resolvedOptions().locale ?? ''
-      if (locale.toLowerCase().startsWith('en')) set({ lang: 'en' })
-    } catch {}
+    if (saved === 'pt' || saved === 'en') set({ lang: saved as Lang })
   },
 }))
 

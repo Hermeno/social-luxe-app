@@ -36,6 +36,7 @@ import {
   setSyncMeta,
 } from '../../db/database'
 import { isConnected } from '../../services/netinfo.service'
+import { openDocument, saveMediaToGallery } from '../../utils/download'
 import { useT } from '../../i18n'
 import AvatarImage from '../../components/AvatarImage'
 
@@ -47,14 +48,14 @@ const MINE_COLOR     = '#CA2851'
 const THEIRS_COLOR   = '#F0F2F5'
 const REACTION_EMOJIS = ['❤️', '😂', '😮', '😢', '🔥', '👏']
 
-const PAIRING_TYPE_OPTIONS: { type: PairingType; emoji: string; label: string }[] = [
-  { type: 'AMIGOS',    emoji: '🤝', label: 'Amigos' },
-  { type: 'AMORES',    emoji: '💕', label: 'Amores' },
-  { type: 'IRMAOS',    emoji: '👯', label: 'Irmãos' },
-  { type: 'BESTS',     emoji: '✨', label: 'Bests' },
-  { type: 'BONITONAS', emoji: '💅', label: 'Bonitonas' },
-  { type: 'GEMEAS',    emoji: '🫂', label: 'Gémeas' },
-  { type: 'OUTRO',     emoji: '✍️', label: 'Outro...' },
+const PAIRING_TYPE_OPTIONS: { type: PairingType; emoji: string }[] = [
+  { type: 'AMIGOS',    emoji: '🤝' },
+  { type: 'AMORES',    emoji: '💕' },
+  { type: 'IRMAOS',    emoji: '👯' },
+  { type: 'BESTS',     emoji: '✨' },
+  { type: 'BONITONAS', emoji: '💅' },
+  { type: 'GEMEAS',    emoji: '🫂' },
+  { type: 'OUTRO',     emoji: '✍️' },
 ]
 
 function formatTime(dateStr: string) {
@@ -118,10 +119,16 @@ function EmojiPicker({ onPick, onClose }: { onPick: (e: string) => void; onClose
 }
 
 // ── File card (documents, PDFs, etc.) ────────────────────────────────────────
-function FileCard({ fileName, mine }: { fileName: string; mine: boolean }) {
+function FileCard({ fileName, mine, url }: { fileName: string; mine: boolean; url?: string | null }) {
   const ext = fileName.split('.').pop()?.toUpperCase() ?? 'FILE'
+  const canOpen = !!url && url.startsWith('http')
   return (
-    <View style={[fc.wrap, mine ? fc.wrapMine : fc.wrapTheirs]}>
+    <TouchableOpacity
+      style={[fc.wrap, mine ? fc.wrapMine : fc.wrapTheirs]}
+      activeOpacity={0.7}
+      disabled={!canOpen}
+      onPress={() => { if (canOpen) openDocument(url!) }}
+    >
       <View style={fc.iconWrap}>
         <Ionicons name="document-text-outline" size={22} color={mine ? 'rgba(255,255,255,0.9)' : colors.primary} />
       </View>
@@ -129,7 +136,8 @@ function FileCard({ fileName, mine }: { fileName: string; mine: boolean }) {
         <Text style={[fc.name, mine && fc.nameMine]} numberOfLines={2}>{fileName}</Text>
         <Text style={[fc.ext, mine && fc.extMine]}>{ext}</Text>
       </View>
-    </View>
+      {canOpen && <Ionicons name="download-outline" size={18} color={mine ? 'rgba(255,255,255,0.85)' : colors.gray500} />}
+    </TouchableOpacity>
   )
 }
 
@@ -260,6 +268,16 @@ interface BubbleProps {
   onReply: (msg: Message) => void
 }
 
+// Poster (1ª frame) de um vídeo do Cloudinary, para mostrar na bolha
+function videoPoster(url: string): string {
+  if (url.includes('/video/upload/')) {
+    return url
+      .replace('/video/upload/', '/video/upload/so_0,w_600,h_600,c_fill/')
+      .replace(/\.(mp4|mov|webm|m4v)(\?.*)?$/i, '.jpg')
+  }
+  return url
+}
+
 function MessageBubble({ msg, mine, isFirst, isLast, myUserId, partnerAvatar, partnerName, myAvatar, myName, onLongPress, onReply }: BubbleProps) {
   const mediaUri = msg.mediaUrl
     ? (msg.mediaUrl.startsWith('http') || msg.mediaUrl.startsWith('file://')
@@ -268,9 +286,16 @@ function MessageBubble({ msg, mine, isFirst, isLast, myUserId, partnerAvatar, pa
     : null
 
   const allReactions = msg.reactions ?? []
-  const isAudio = !!msg.content?.match(/\.(m4a|mp3|aac|wav|ogg)$/i)
-  const isFile  = !isAudio && !mediaUri && !!msg.content && !!msg.content.match(/\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|zip|rar)$/i)
-  const isText  = !!msg.content && !isFile && !isAudio
+  const lowerUrl = (mediaUri ?? '').toLowerCase()
+  const isAudio = !!msg.content?.match(/\.(m4a|mp3|aac|wav|ogg)$/i) || /\.(m4a|mp3|aac|wav|ogg)(\?|$)/.test(lowerUrl)
+  const isVideo = !!mediaUri && !isAudio && /\.(mp4|mov|webm|m4v)(\?|$)/.test(lowerUrl)
+  // Documento: por URL (confirmado) ou por nome no content (pendente/local)
+  const isFile  = !isAudio && !isVideo && (
+    (!!mediaUri && /\.(pdf|docx?|xlsx?|pptx?|txt|csv|zip|rar)(\?|$)/.test(lowerUrl)) ||
+    (!mediaUri && !!msg.content && !!msg.content.match(/\.(pdf|docx?|xlsx?|pptx?|txt|csv|zip|rar)$/i))
+  )
+  const isImage = !!mediaUri && !isAudio && !isVideo && !isFile
+  const isText  = !!msg.content && !isFile && !isAudio && !isImage && !isVideo
 
   return (
     // FIX: row must be flex:1 so that maxWidth:'80%' on bubbleOuter
@@ -300,15 +325,33 @@ function MessageBubble({ msg, mine, isFirst, isLast, myUserId, partnerAvatar, pa
 
             {msg.replyTo && <ReplyQuote replyTo={msg.replyTo} mine={mine} />}
 
-            {mediaUri && !isAudio && (
-              <Image
-                source={{ uri: mediaUri }}
-                style={t.mediaBubble}
-                contentFit="cover"
-                cachePolicy="disk"
-                recyclingKey={mediaUri}
-                transition={100}
-              />
+            {isImage && (
+              <TouchableOpacity activeOpacity={0.9} onLongPress={() => onLongPress(msg)} delayLongPress={350} onPress={() => saveMediaToGallery(mediaUri!)}>
+                <Image
+                  source={{ uri: mediaUri! }}
+                  style={t.mediaBubble}
+                  contentFit="cover"
+                  cachePolicy="disk"
+                  recyclingKey={mediaUri!}
+                  transition={100}
+                />
+                <View style={t.mediaDownload}><Ionicons name="download-outline" size={15} color="#fff" /></View>
+              </TouchableOpacity>
+            )}
+
+            {isVideo && (
+              <TouchableOpacity style={t.videoBubble} activeOpacity={0.9} onPress={() => openDocument(mediaUri!)} onLongPress={() => saveMediaToGallery(mediaUri!)} delayLongPress={350}>
+                <Image
+                  source={{ uri: videoPoster(mediaUri!) }}
+                  style={StyleSheet.absoluteFill}
+                  contentFit="cover"
+                  cachePolicy="disk"
+                  recyclingKey={`vp-${mediaUri!}`}
+                  transition={100}
+                />
+                <View style={t.videoPlay}><Ionicons name="play" size={24} color="#fff" /></View>
+                <View style={t.mediaDownload}><Ionicons name="download-outline" size={15} color="#fff" /></View>
+              </TouchableOpacity>
             )}
 
             {isAudio && (
@@ -320,7 +363,7 @@ function MessageBubble({ msg, mine, isFirst, isLast, myUserId, partnerAvatar, pa
               />
             )}
 
-            {isFile && <FileCard fileName={msg.content!} mine={mine} />}
+            {isFile && <FileCard fileName={msg.content ?? mediaUri!.split('/').pop()?.split('?')[0] ?? 'file'} mine={mine} url={mediaUri} />}
 
             {isText && (
               <Text style={[t.msgText, mine ? t.msgMine : t.msgTheirs]}>
@@ -755,7 +798,7 @@ export default function ChatScreen() {
       const p = await pairingService.invitePairing(userId, type, customLabel)
       setPairing(p)
     } catch (e: any) {
-      Alert.alert('Não foi possível', e.message ?? 'Tenta novamente.')
+      Alert.alert(tr.chat_cant, e.message ?? tr.chat_retry)
     }
   }
 
@@ -765,7 +808,7 @@ export default function ChatScreen() {
       const p = await pairingService.respondPairing(pairing.id, true)
       setPairing(p)
     } catch (e: any) {
-      Alert.alert('Não foi possível', e.message ?? 'Tenta novamente.')
+      Alert.alert(tr.chat_cant, e.message ?? tr.chat_retry)
     }
   }
 
@@ -775,7 +818,7 @@ export default function ChatScreen() {
       await pairingService.respondPairing(pairing.id, false)
       setPairing(null)
     } catch (e: any) {
-      Alert.alert('Não foi possível', e.message ?? 'Tenta novamente.')
+      Alert.alert(tr.chat_cant, e.message ?? tr.chat_retry)
     }
   }
 
@@ -783,18 +826,18 @@ export default function ChatScreen() {
     if (!pairing) return
     const isPending = pairing.status === 'PENDING'
     Alert.alert(
-      isPending ? 'Cancelar convite?' : 'Desfazer par?',
-      isPending ? 'O convite deixa de estar pendente.' : 'Isto termina o vínculo entre vocês.',
+      isPending ? tr.chat_cancel_invite_q : tr.chat_undo_pair_q,
+      isPending ? tr.chat_invite_no_pending : tr.chat_ends_bond,
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: tr.cancel, style: 'cancel' },
         {
-          text: isPending ? 'Cancelar convite' : 'Desfazer', style: 'destructive',
+          text: isPending ? tr.chat_cancel_invite : tr.chat_undo, style: 'destructive',
           onPress: async () => {
             try {
               await pairingService.endPairing(pairing.id)
               setPairing(null)
             } catch (e: any) {
-              Alert.alert('Não foi possível', e.message ?? 'Tenta novamente.')
+              Alert.alert(tr.chat_cant, e.message ?? tr.chat_retry)
             }
           },
         },
@@ -862,7 +905,7 @@ export default function ChatScreen() {
 
     setMessages((prev) => [...prev, optimistic])
     upsertCachedMessage(userId, optimistic as unknown as Message).catch(() => {})
-    pushToInbox(tempId, '🎤 Áudio', optimistic.createdAt)
+    pushToInbox(tempId, tr.chat_audio_label, optimistic.createdAt)
     listRef.current?.scrollToOffset({ offset: 0, animated: true })
 
     try {
@@ -885,7 +928,7 @@ export default function ChatScreen() {
       await msgService.deleteMessage(messageId)
       setMessages((prev) => prev.filter((m) => m.id !== messageId))
     } catch {
-      Toast.show({ type: 'error', text1: 'Falha ao excluir mensagem', visibilityTime: 2500 })
+      Toast.show({ type: 'error', text1: tr.chat_delete_fail, visibilityTime: 2500 })
     }
   }
 
@@ -913,7 +956,7 @@ export default function ChatScreen() {
         const updated = await msgService.editMessage(msgId, content)
         setMessages((prev) => prev.map((m) => m.id === msgId ? { ...m, content: updated.content } : m))
       } catch {
-        Toast.show({ type: 'error', text1: 'Falha ao editar mensagem', visibilityTime: 2500 })
+        Toast.show({ type: 'error', text1: tr.chat_edit_fail, visibilityTime: 2500 })
       }
       return
     }
@@ -1030,7 +1073,7 @@ export default function ChatScreen() {
           <View style={t.pairingBanner}>
             <View style={t.pairingBannerDot} />
             <Text style={t.pairingBannerTxt} numberOfLines={1}>
-              {userName.split(' ')[0]} e {user?.name?.split(' ')[0] ?? 'tu'} são {pairingService.pairingLabel(pairing)}
+              {userName.split(' ')[0]} {tr.chat_pair_and} {user?.name?.split(' ')[0] ?? tr.chat_you} {tr.chat_pair_are} {pairingService.pairingLabel(pairing)}
             </Text>
             <TouchableOpacity onPress={handleEndPairing} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Text style={t.pairingBannerAction}>Desfazer</Text>
@@ -1115,7 +1158,7 @@ export default function ChatScreen() {
                   setContextMenuMsg(null)
                 }}>
                   <Ionicons name="happy-outline" size={20} color={colors.gray600} />
-                  <Text style={t.ctxLabel}>Reagir</Text>
+                  <Text style={t.ctxLabel}>{tr.chat_react}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={t.ctxItem} onPress={() => {
@@ -1123,7 +1166,7 @@ export default function ChatScreen() {
                   setContextMenuMsg(null)
                 }}>
                   <Ionicons name="arrow-undo-outline" size={20} color={colors.gray600} />
-                  <Text style={t.ctxLabel}>Responder</Text>
+                  <Text style={t.ctxLabel}>{tr.chat_reply}</Text>
                 </TouchableOpacity>
 
                 {contextMenuMsg.senderId === user?.id && contextMenuMsg.content && (
@@ -1133,7 +1176,7 @@ export default function ChatScreen() {
                     setContextMenuMsg(null)
                   }}>
                     <Ionicons name="pencil-outline" size={20} color={colors.gray600} />
-                    <Text style={t.ctxLabel}>Editar</Text>
+                    <Text style={t.ctxLabel}>{tr.edit}</Text>
                   </TouchableOpacity>
                 )}
 
@@ -1143,7 +1186,7 @@ export default function ChatScreen() {
                     setContextMenuMsg(null)
                   }}>
                     <Ionicons name="trash-outline" size={20} color="#FF3B30" />
-                    <Text style={[t.ctxLabel, t.ctxLabelDanger]}>Excluir</Text>
+                    <Text style={[t.ctxLabel, t.ctxLabelDanger]}>{tr.delete}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -1175,8 +1218,8 @@ export default function ChatScreen() {
         >
           <Pressable style={t.pickerOverlay} onPress={() => setPairingPickerOpen(false)}>
             <Pressable style={t.pickerCard} onPress={() => {}}>
-              <Text style={t.pickerTitle}>Formar par com {userName.split(' ')[0]}</Text>
-              <Text style={t.pickerSub}>{userName.split(' ')[0]} vai precisar de aceitar o convite.</Text>
+              <Text style={t.pickerTitle}>{tr.chat_pair_form_with} {userName.split(' ')[0]}</Text>
+              <Text style={t.pickerSub}>{userName.split(' ')[0]} {tr.chat_pair_need_accept}</Text>
 
               {PAIRING_TYPE_OPTIONS.map((opt) => (
                 <TouchableOpacity
@@ -1185,7 +1228,7 @@ export default function ChatScreen() {
                   onPress={() => opt.type === 'OUTRO' ? setCustomizingPairing(true) : handleSelectPairingType(opt.type)}
                 >
                   <Text style={t.pickerOptionEmoji}>{opt.emoji}</Text>
-                  <Text style={t.pickerOptionTxt}>{opt.label}</Text>
+                  <Text style={t.pickerOptionTxt}>{opt.type === 'OUTRO' ? tr.chat_pair_other : pairingService.pairingTypeLabel(opt.type)}</Text>
                 </TouchableOpacity>
               ))}
 
@@ -1193,7 +1236,7 @@ export default function ChatScreen() {
                 <View style={t.pickerCustomRow}>
                   <TextInput
                     style={t.pickerCustomInput}
-                    placeholder="Escreve o vínculo..."
+                    placeholder={tr.chat_bond_ph}
                     placeholderTextColor={colors.gray400}
                     value={customPairingLabel}
                     onChangeText={setCustomPairingLabel}
@@ -1204,7 +1247,7 @@ export default function ChatScreen() {
                     disabled={!customPairingLabel.trim()}
                     onPress={() => handleSelectPairingType('OUTRO', customPairingLabel.trim())}
                   >
-                    <Text style={[t.pickerCustomSend, !customPairingLabel.trim() && { opacity: 0.35 }]}>Enviar</Text>
+                    <Text style={[t.pickerCustomSend, !customPairingLabel.trim() && { opacity: 0.35 }]}>{tr.send}</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -1279,6 +1322,9 @@ const t = StyleSheet.create({
   bubblePending:     { opacity: 0.55 },
 
   mediaBubble: { width: 220, height: 220, borderRadius: R - 4, marginBottom: 5 },
+  videoBubble: { width: 220, height: 220, borderRadius: R - 4, marginBottom: 5, overflow: 'hidden', backgroundColor: '#111', alignItems: 'center', justifyContent: 'center' },
+  videoPlay:   { width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
+  mediaDownload: { position: 'absolute', top: 8, right: 8, width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
 
   // ── Audio player ─────────────────────────────────────────────────────────
   audio: {

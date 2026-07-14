@@ -557,6 +557,17 @@ export default function FeedScreen() {
     }
   }, [!!commentPost])
 
+  // ── Pause while the post menu / edit overlay is open ─────────────────────
+  const [actionBlocking, setActionBlocking] = useState(false)
+  useEffect(() => {
+    if (actionBlocking) {
+      progressRef.current?.stop()
+      safePlayer(() => player.pause())
+    } else if (!commentPost) {
+      resumeFromCurrent()
+    }
+  }, [actionBlocking])
+
   // ── Refresh and reset on screen focus ────────────────────────────────────
   // Use a ref so useFocusEffect always calls the latest refresh (no stale closure)
   const refreshRef = useRef(refresh)
@@ -617,7 +628,7 @@ export default function FeedScreen() {
     if (stickerCount >= STICKER_LIMIT) {
       setPendingSticker(null)
       resumeFromCurrent()
-      Alert.alert('Limite atingido', 'Este post já tem 50 stickers.')
+      Alert.alert(t.feed_limit_reached, t.feed_sticker_limit)
       return
     }
     setPendingSticker(null)
@@ -766,7 +777,7 @@ export default function FeedScreen() {
               {!stickerDragging && (
                 <View style={s.stickerDragHintWrap} pointerEvents="none">
                   <Text style={s.stickerDragHintEmoji}>{pendingSticker.type === 'message' ? '💌' : pendingSticker.emoji}</Text>
-                  <Text style={s.stickerDragHintText}>Arraste ou toque onde deseja colocar</Text>
+                  <Text style={s.stickerDragHintText}>{t.feed_sticker_hint}</Text>
                 </View>
               )}
               {stickerDragging && (
@@ -778,7 +789,7 @@ export default function FeedScreen() {
                 </Animated.View>
               )}
               <Pressable style={s.stickerPlacementCancel} onPress={() => { setStickerDragging(false); setPendingSticker(null); resumeFromCurrent() }}>
-                <Text style={s.stickerPlacementCancelTxt}>Cancelar</Text>
+                <Text style={s.stickerPlacementCancelTxt}>{t.cancel}</Text>
               </Pressable>
             </View>
           )}
@@ -815,7 +826,7 @@ export default function FeedScreen() {
             }}
             onStickerPress={() => {
                 if ((localStickers[post.id] ?? post.stickers ?? []).length >= STICKER_LIMIT) {
-                  Alert.alert('Limite atingido', 'Este post já tem 50 stickers.')
+                  Alert.alert(t.feed_limit_reached, t.feed_sticker_limit)
                   return
                 }
                 // Fecha a pesquisa (e o teclado) antes do Modal do sticker — mesmo motivo do comentário
@@ -836,6 +847,7 @@ export default function FeedScreen() {
             commentCount={(post._count?.comments ?? 0) + (commentDeltas[post.id] ?? 0)}
             onDeleted={(id) => { removePost(id); navigateTo(Math.max(0, currentIndex - 1)) }}
             onEdited={(id, caption) => updatePost(id, caption)}
+            onBlockingChange={setActionBlocking}
           />
         </View>
       ) : (

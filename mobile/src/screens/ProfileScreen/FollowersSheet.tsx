@@ -9,6 +9,7 @@ import { colors, spacing, fonts } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
 import * as followService from '../../services/follow.service'
 import { FollowUser } from '../../services/follow.service'
+import { useT } from '../../i18n'
 
 interface Props {
   visible: boolean
@@ -21,6 +22,7 @@ type Nav = StackNavigationProp<AppStackParams>
 
 export default function FollowersSheet({ visible, mode, userId, onClose }: Props) {
   const nav = useNavigation<Nav>()
+  const t = useT()
   const [users, setUsers] = useState<FollowUser[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -50,7 +52,7 @@ export default function FollowersSheet({ visible, mode, userId, onClose }: Props
     <Modal visible={visible} animationType="slide" onRequestClose={onClose} presentationStyle="pageSheet">
       <SafeAreaView style={s.container}>
         <View style={s.header}>
-          <Text style={s.title}>{mode === 'followers' ? 'Seguidores' : 'Seguindo'}</Text>
+          <Text style={s.title}>{mode === 'followers' ? t.profile_followers : t.profile_following}</Text>
           <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}>
             <Ionicons name="close" size={22} color={colors.gray600} />
           </TouchableOpacity>

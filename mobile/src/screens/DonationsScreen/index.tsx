@@ -13,15 +13,16 @@ import { colors, fonts } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
 import { getNearbyDonations, getMyDonations, Donation, DonationStatus } from '../../services/donation.service'
 import { AppStackParams } from '../../navigation/AppNavigator'
+import { useT, Strings } from '../../i18n'
 
 type Nav = StackNavigationProp<AppStackParams>
 type Tab = 'nearby' | 'mine'
 
-const STATUS_LABEL: Record<DonationStatus, string> = {
-  AVAILABLE: 'Disponível',
-  RESERVED:  'Reservada',
-  DELIVERED: 'Entregue',
-  EXPIRED:   'Expirada',
+const STATUS_KEY: Record<DonationStatus, keyof Strings> = {
+  AVAILABLE: 'dn_status_available',
+  RESERVED:  'dn_status_reserved',
+  DELIVERED: 'dn_status_delivered',
+  EXPIRED:   'dn_status_expired',
 }
 const STATUS_COLOR: Record<DonationStatus, string> = {
   AVAILABLE: colors.primary,
@@ -31,6 +32,7 @@ const STATUS_COLOR: Record<DonationStatus, string> = {
 }
 
 function DonationCard({ item, mine, onPress }: { item: Donation; mine: boolean; onPress: () => void }) {
+  const t = useT()
   const photo = item.photos?.[0] ?? null
   return (
     <TouchableOpacity style={s.card} onPress={onPress} activeOpacity={0.85}>
@@ -47,7 +49,7 @@ function DonationCard({ item, mine, onPress }: { item: Donation; mine: boolean; 
           <Text style={s.cardTitle} numberOfLines={1}>{item.title}</Text>
           <View style={[s.statusPill, { backgroundColor: `${STATUS_COLOR[item.status]}18` }]}>
             <View style={[s.statusDot, { backgroundColor: STATUS_COLOR[item.status] }]} />
-            <Text style={[s.statusTxt, { color: STATUS_COLOR[item.status] }]}>{STATUS_LABEL[item.status]}</Text>
+            <Text style={[s.statusTxt, { color: STATUS_COLOR[item.status] }]}>{t[STATUS_KEY[item.status]]}</Text>
           </View>
         </View>
 
@@ -60,10 +62,10 @@ function DonationCard({ item, mine, onPress }: { item: Donation; mine: boolean; 
             item.requester ? (
               <View style={s.footerRow}>
                 <AvatarImage uri={item.requester.avatar} name={item.requester.name} size={16} />
-                <Text style={s.footerTxt} numberOfLines={1}>{item.requester.name} pediu</Text>
+                <Text style={s.footerTxt} numberOfLines={1}>{item.requester.name} {t.dn_requested}</Text>
               </View>
             ) : (
-              <Text style={s.footerTxt}>Ainda ninguém pediu</Text>
+              <Text style={s.footerTxt}>{t.dn_no_requests}</Text>
             )
           ) : (
             <View style={s.footerRow}>
@@ -83,6 +85,7 @@ function DonationCard({ item, mine, onPress }: { item: Donation; mine: boolean; 
 export default function DonationsScreen() {
   const { top, bottom } = useSafeAreaInsets()
   const nav = useNavigation<Nav>()
+  const t = useT()
   const canGoBack = nav.canGoBack()
 
   const [tab,         setTab]         = useState<Tab>('nearby')
@@ -126,10 +129,10 @@ export default function DonationsScreen() {
       return (
         <View style={s.empty}>
           <Ionicons name="location-outline" size={36} color={colors.gray300} />
-          <Text style={s.emptyTitle}>Precisamos da tua localização</Text>
-          <Text style={s.emptySub}>Para mostrar doações perto de ti, ativa a permissão de localização.</Text>
+          <Text style={s.emptyTitle}>{t.dn_need_location}</Text>
+          <Text style={s.emptySub}>{t.dn_need_location_sub}</Text>
           <TouchableOpacity style={s.emptyBtn} onPress={() => load('nearby')} activeOpacity={0.85}>
-            <Text style={s.emptyBtnTxt}>Tentar novamente</Text>
+            <Text style={s.emptyBtnTxt}>{t.dn_try_again}</Text>
           </TouchableOpacity>
         </View>
       )
@@ -138,10 +141,10 @@ export default function DonationsScreen() {
       return (
         <View style={s.empty}>
           <Ionicons name="wifi-outline" size={36} color={colors.gray300} />
-          <Text style={s.emptyTitle}>Não foi possível carregar</Text>
-          <Text style={s.emptySub}>Verifica a tua ligação e tenta de novo.</Text>
+          <Text style={s.emptyTitle}>{t.dn_load_fail}</Text>
+          <Text style={s.emptySub}>{t.dn_load_fail_sub}</Text>
           <TouchableOpacity style={s.emptyBtn} onPress={() => load(tab)} activeOpacity={0.85}>
-            <Text style={s.emptyBtnTxt}>Tentar novamente</Text>
+            <Text style={s.emptyBtnTxt}>{t.dn_try_again}</Text>
           </TouchableOpacity>
         </View>
       )
@@ -152,15 +155,13 @@ export default function DonationsScreen() {
           <Feather name="heart" size={30} color="#fff" />
         </LinearGradient>
         <Text style={s.emptyTitle}>
-          {tab === 'mine' ? 'Ainda não publicaste nada' : 'Nenhuma doação por perto'}
+          {tab === 'mine' ? t.dn_empty_mine : t.dn_empty_nearby}
         </Text>
         <Text style={s.emptySub}>
-          {tab === 'mine'
-            ? 'Publica algo que já não precisas — item ou ajuda financeira.'
-            : 'Sê o primeiro a partilhar algo com quem está perto de ti.'}
+          {tab === 'mine' ? t.dn_empty_mine_sub : t.dn_empty_nearby_sub}
         </Text>
         <TouchableOpacity style={s.emptyBtn} onPress={() => nav.navigate('CreateDonation')} activeOpacity={0.85}>
-          <Text style={s.emptyBtnTxt}>Publicar doação</Text>
+          <Text style={s.emptyBtnTxt}>{t.dn_post}</Text>
         </TouchableOpacity>
       </View>
     )
@@ -176,7 +177,7 @@ export default function DonationsScreen() {
             </TouchableOpacity>
           : <View style={{ width: 26 }} />
         }
-        <Text style={s.headerTitle}>Piedade</Text>
+        <Text style={s.headerTitle}>{t.dn_title}</Text>
         <TouchableOpacity onPress={() => nav.navigate('CreateDonation')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Ionicons name="add-circle" size={27} color={colors.primary} />
         </TouchableOpacity>
@@ -185,10 +186,10 @@ export default function DonationsScreen() {
       {/* Tabs */}
       <View style={s.tabRow}>
         <TouchableOpacity style={[s.tabBtn, tab === 'nearby' && s.tabBtnActive]} onPress={() => setTab('nearby')} activeOpacity={0.8}>
-          <Text style={[s.tabTxt, tab === 'nearby' && s.tabTxtActive]}>Perto de ti</Text>
+          <Text style={[s.tabTxt, tab === 'nearby' && s.tabTxtActive]}>{t.dn_tab_nearby}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[s.tabBtn, tab === 'mine' && s.tabBtnActive]} onPress={() => setTab('mine')} activeOpacity={0.8}>
-          <Text style={[s.tabTxt, tab === 'mine' && s.tabTxtActive]}>Minhas doações</Text>
+          <Text style={[s.tabTxt, tab === 'mine' && s.tabTxtActive]}>{t.dn_tab_mine}</Text>
         </TouchableOpacity>
       </View>
 

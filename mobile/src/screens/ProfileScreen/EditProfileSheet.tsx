@@ -4,12 +4,19 @@ import { Ionicons } from '@expo/vector-icons'
 import { useAuthStore } from '../../store/auth.store'
 import { api } from '../../services/api'
 import { colors, spacing, radius, fonts } from '../../theme'
+import { useT, Strings } from '../../i18n'
 
-const AVAILABILITY = ['Disponível', 'Ocupado', 'Ausente']
+// `value` is the stored availability (never translate); `key` maps to its label.
+const AVAILABILITY: { value: string; key: keyof Strings }[] = [
+  { value: 'Disponível', key: 'eps_avail_available' },
+  { value: 'Ocupado',    key: 'eps_avail_busy' },
+  { value: 'Ausente',    key: 'eps_avail_away' },
+]
 interface Props { visible: boolean; onClose: () => void }
 
 export default function EditProfileSheet({ visible, onClose }: Props) {
   const { user, refreshUser } = useAuthStore()
+  const t = useT()
   const [name,        setName]        = useState(user?.name ?? '')
   const [bio,         setBio]         = useState(user?.bio ?? '')
   const [avail,       setAvail]       = useState(user?.availability ?? 'Disponível')
@@ -39,16 +46,16 @@ export default function EditProfileSheet({ visible, onClose }: Props) {
           contentContainerStyle={s.sheet}
         >
           <View style={s.handle} />
-          <Text style={s.title}>Editar Perfil</Text>
+          <Text style={s.title}>{t.eps_title}</Text>
 
-          <TextInput style={s.input} value={name} onChangeText={setName} placeholder="Nome" placeholderTextColor={colors.gray400} returnKeyType="next" />
-          <TextInput style={[s.input, s.bioInput]} value={bio} onChangeText={setBio} placeholder="Bio" placeholderTextColor={colors.gray400} multiline returnKeyType="done" />
+          <TextInput style={s.input} value={name} onChangeText={setName} placeholder={t.ep_name} placeholderTextColor={colors.gray400} returnKeyType="next" />
+          <TextInput style={[s.input, s.bioInput]} value={bio} onChangeText={setBio} placeholder={t.un_field_bio} placeholderTextColor={colors.gray400} multiline returnKeyType="done" />
 
-          <Text style={s.label}>Disponibilidade</Text>
+          <Text style={s.label}>{t.eps_availability}</Text>
           <View style={s.availRow}>
             {AVAILABILITY.map((a) => (
-              <Pressable key={a} style={[s.availBtn, avail === a && s.availActive]} onPress={() => setAvail(a)}>
-                <Text style={[s.availTxt, avail === a && s.availTxtActive]}>{a}</Text>
+              <Pressable key={a.value} style={[s.availBtn, avail === a.value && s.availActive]} onPress={() => setAvail(a.value)}>
+                <Text style={[s.availTxt, avail === a.value && s.availTxtActive]}>{t[a.key]}</Text>
               </Pressable>
             ))}
           </View>
@@ -58,11 +65,9 @@ export default function EditProfileSheet({ visible, onClose }: Props) {
             <View style={s.toggleLeft}>
               <Ionicons name="eye-outline" size={18} color={colors.gray600} />
               <View style={s.toggleText}>
-                <Text style={s.toggleLabel}>Visualizações públicas</Text>
+                <Text style={s.toggleLabel}>{t.eps_public_views}</Text>
                 <Text style={s.toggleSub}>
-                  {viewsPublic
-                    ? 'Todos podem ver o total de views'
-                    : 'Apenas tu vês o total de views'}
+                  {viewsPublic ? t.eps_public_views_on : t.eps_public_views_off}
                 </Text>
               </View>
             </View>
@@ -75,7 +80,7 @@ export default function EditProfileSheet({ visible, onClose }: Props) {
           </View>
 
           <TouchableOpacity style={[s.saveBtn, saving && s.saveOff]} onPress={save} disabled={saving}>
-            <Text style={s.saveTxt}>{saving ? 'Salvando...' : 'Salvar'}</Text>
+            <Text style={s.saveTxt}>{saving ? t.eps_saving : t.eps_save}</Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>

@@ -2,19 +2,21 @@ import React from 'react'
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { colors, spacing, radius, fonts } from '../../theme'
+import { useT } from '../../i18n'
 
 interface Props { onPickImage: () => void; onPickVideo: () => void }
 
 export default function PickButtons({ onPickImage, onPickVideo }: Props) {
+  const t = useT()
   return (
     <View style={s.row}>
       <TouchableOpacity style={s.btn} onPress={onPickImage} activeOpacity={0.8}>
         <Ionicons name="image-outline" size={38} color={colors.primary} />
-        <Text style={s.label}>Foto</Text>
+        <Text style={s.label}>{t.cr_photo}</Text>
       </TouchableOpacity>
       <TouchableOpacity style={s.btn} onPress={onPickVideo} activeOpacity={0.8}>
         <Ionicons name="videocam-outline" size={38} color={colors.primary} />
-        <Text style={s.label}>Vídeo</Text>
+        <Text style={s.label}>{t.cr_video}</Text>
       </TouchableOpacity>
     </View>
   )

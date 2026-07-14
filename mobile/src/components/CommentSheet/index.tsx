@@ -10,11 +10,13 @@ import { useComments } from '../../hooks/useComments'
 import CommentItem from './CommentItem'
 import CommentInputArea from './CommentInputArea'
 import { colors, spacing } from '../../theme'
+import { useT } from '../../i18n'
 
 const { height } = Dimensions.get('window')
 interface Props { post: Post; onClose: () => void; onCommentAdded?: () => void }
 
 export default function CommentSheet({ post, onClose, onCommentAdded }: Props) {
+  const t = useT()
   const { comments, loading, sending, load, send } = useComments(post.id)
   const [text, setText] = useState('')
   const [replyTo, setReplyTo] = useState<Comment | null>(null)
@@ -57,7 +59,7 @@ export default function CommentSheet({ post, onClose, onCommentAdded }: Props) {
         <TouchableOpacity style={s.backdrop} onPress={handleClose} activeOpacity={1} />
         <Animated.View style={[s.sheet, { transform: [{ translateY: slideAnim }] }]}>
           <View style={s.header}>
-            <Text style={s.title}><Text style={s.count}>{fmt(post._count.comments)}</Text> Comentários</Text>
+            <Text style={s.title}><Text style={s.count}>{fmt(post._count.comments)}</Text> {t.comments_title}</Text>
             <TouchableOpacity onPress={handleClose}>
               <Ionicons name="close" size={22} color={colors.gray800} />
             </TouchableOpacity>

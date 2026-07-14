@@ -10,13 +10,14 @@ import * as Location from 'expo-location'
 import { colors, fonts } from '../../theme'
 import { DonationType, createDonation } from '../../services/donation.service'
 import Toast from 'react-native-toast-message'
+import { useT, Strings } from '../../i18n'
 
-const EXPIRE_OPTS = [
-  { label: '3 dias',  value: 3 },
-  { label: '7 dias',  value: 7 },
-  { label: '15 dias', value: 15 },
-  { label: '30 dias', value: 30 },
-  { label: 'Sem limite', value: 0 },
+const EXPIRE_OPTS: { key: keyof Strings; value: number }[] = [
+  { key: 'dn_expire_3',    value: 3 },
+  { key: 'dn_expire_7',    value: 7 },
+  { key: 'dn_expire_15',   value: 15 },
+  { key: 'dn_expire_30',   value: 30 },
+  { key: 'dn_expire_none', value: 0 },
 ]
 
 const RADIUS_OPTS = [5, 10, 20, 50]
@@ -24,6 +25,7 @@ const RADIUS_OPTS = [5, 10, 20, 50]
 export default function CreateDonationScreen() {
   const { top } = useSafeAreaInsets()
   const nav = useNavigation()
+  const t = useT()
 
   const [title,       setTitle]       = useState('')
   const [description, setDescription] = useState('')
@@ -34,14 +36,14 @@ export default function CreateDonationScreen() {
 
   async function handleCreate() {
     if (!title.trim()) {
-      Alert.alert('Campo obrigatório', 'O título é obrigatório.')
+      Alert.alert(t.dn_required_field, t.dn_required_title)
       return
     }
     setLoading(true)
     try {
       const { status } = await Location.requestForegroundPermissionsAsync()
       if (status !== 'granted') {
-        Alert.alert('Localização necessária', 'Precisamos da tua localização para publicar a doação.')
+        Alert.alert(t.dn_loc_required, t.dn_loc_required_sub)
         setLoading(false)
         return
       }
@@ -58,10 +60,10 @@ export default function CreateDonationScreen() {
         expiresInDays: expOpt.value > 0 ? expOpt.value : undefined,
       })
 
-      Toast.show({ type: 'success', text1: 'Doação publicada!', text2: 'Utilizadores perto de ti vão poder pedir.', visibilityTime: 3000 })
+      Toast.show({ type: 'success', text1: t.dn_published, text2: t.dn_published_sub, visibilityTime: 3000 })
       nav.goBack()
     } catch {
-      Toast.show({ type: 'error', text1: 'Erro', text2: 'Não foi possível publicar a doação.', visibilityTime: 2500 })
+      Toast.show({ type: 'error', text1: t.error, text2: t.dn_publish_fail, visibilityTime: 2500 })
     } finally {
       setLoading(false)
     }
@@ -74,39 +76,39 @@ export default function CreateDonationScreen() {
         <TouchableOpacity onPress={() => nav.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Ionicons name="chevron-back" size={26} color="#1A1A1A" />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>Nova doação</Text>
+        <Text style={s.headerTitle}>{t.dn_new}</Text>
         <View style={{ width: 26 }} />
       </View>
 
       <ScrollView style={s.scroll} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
 
         {/* Type selector */}
-        <Text style={s.label}>Tipo de doação</Text>
+        <Text style={s.label}>{t.dn_type_label}</Text>
         <View style={s.typeRow}>
-          {(['ITEM', 'FINANCIAL'] as DonationType[]).map((t) => (
+          {(['ITEM', 'FINANCIAL'] as DonationType[]).map((dt) => (
             <TouchableOpacity
-              key={t}
-              style={[s.typePill, type === t && s.typePillActive]}
-              onPress={() => setType(t)}
+              key={dt}
+              style={[s.typePill, type === dt && s.typePillActive]}
+              onPress={() => setType(dt)}
               activeOpacity={0.75}
             >
               <Ionicons
-                name={t === 'ITEM' ? 'gift-outline' : 'cash-outline'}
+                name={dt === 'ITEM' ? 'gift-outline' : 'cash-outline'}
                 size={16}
-                color={type === t ? '#fff' : colors.gray500}
+                color={type === dt ? '#fff' : colors.gray500}
               />
-              <Text style={[s.typePillTxt, type === t && s.typePillTxtActive]}>
-                {t === 'ITEM' ? 'Item' : 'Ajuda financeira'}
+              <Text style={[s.typePillTxt, type === dt && s.typePillTxtActive]}>
+                {dt === 'ITEM' ? t.dn_type_item : t.dn_type_financial}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
 
         {/* Title */}
-        <Text style={s.label}>Título *</Text>
+        <Text style={s.label}>{t.dn_title_label}</Text>
         <TextInput
           style={s.input}
-          placeholder="Ex: Roupas de criança, livros escolares..."
+          placeholder={t.dn_title_ph}
           placeholderTextColor={colors.gray400}
           value={title}
           onChangeText={setTitle}
@@ -114,10 +116,10 @@ export default function CreateDonationScreen() {
         />
 
         {/* Description */}
-        <Text style={s.label}>Descrição</Text>
+        <Text style={s.label}>{t.dn_desc_label}</Text>
         <TextInput
           style={[s.input, s.inputMulti]}
-          placeholder="Descreve o estado do item, quem pode pedir, etc."
+          placeholder={t.dn_desc_ph}
           placeholderTextColor={colors.gray400}
           value={description}
           onChangeText={setDescription}
@@ -128,7 +130,7 @@ export default function CreateDonationScreen() {
         />
 
         {/* Radius */}
-        <Text style={s.label}>Raio de visibilidade</Text>
+        <Text style={s.label}>{t.dn_radius_label}</Text>
         <View style={s.pillRow}>
           {RADIUS_OPTS.map((r) => (
             <TouchableOpacity
@@ -142,7 +144,7 @@ export default function CreateDonationScreen() {
         </View>
 
         {/* Expires */}
-        <Text style={s.label}>Expirar em</Text>
+        <Text style={s.label}>{t.dn_expire_label}</Text>
         <View style={s.pillRow}>
           {EXPIRE_OPTS.map((opt, i) => (
             <TouchableOpacity
@@ -150,7 +152,7 @@ export default function CreateDonationScreen() {
               style={[s.smallPill, expiresIdx === i && s.smallPillActive]}
               onPress={() => setExpiresIdx(i)}
             >
-              <Text style={[s.smallPillTxt, expiresIdx === i && s.smallPillTxtActive]}>{opt.label}</Text>
+              <Text style={[s.smallPillTxt, expiresIdx === i && s.smallPillTxtActive]}>{t[opt.key]}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -158,7 +160,7 @@ export default function CreateDonationScreen() {
         {/* Location note */}
         <View style={s.locNote}>
           <Ionicons name="location-outline" size={14} color={colors.primary} />
-          <Text style={s.locNoteTxt}>A tua localização GPS atual será usada — não é partilhada publicamente.</Text>
+          <Text style={s.locNoteTxt}>{t.dn_loc_note}</Text>
         </View>
 
         {/* Submit */}
@@ -170,7 +172,7 @@ export default function CreateDonationScreen() {
         >
           {loading
             ? <ActivityIndicator color="#fff" />
-            : <Text style={s.submitTxt}>Publicar doação</Text>
+            : <Text style={s.submitTxt}>{t.dn_post}</Text>
           }
         </TouchableOpacity>
 

@@ -22,21 +22,24 @@ import {
 import { useAuthStore } from '../../store/auth.store'
 import { colors, fonts, spacing, radius } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
+import { useT, useI18n } from '../../i18n'
 
 function timeLeft(expiresAt: string) {
+  const en = useI18n.getState().lang === 'en'
   const diff = new Date(expiresAt).getTime() - Date.now()
-  if (diff <= 0) return 'Expirado'
+  if (diff <= 0) return en ? 'Expired' : 'Expirado'
+  const prefix = en ? 'Expires in' : 'Expira em'
   const m = Math.floor(diff / 60000)
-  if (m < 60) return `Expira em ${m}m`
-  return `Expira em ${Math.floor(m / 60)}h`
+  if (m < 60) return `${prefix} ${m}m`
+  return `${prefix} ${Math.floor(m / 60)}h`
 }
 
 function timeAgo(date: string) {
+  const en = useI18n.getState().lang === 'en'
   const diff = Date.now() - new Date(date).getTime()
   const m = Math.floor(diff / 60000)
-  if (m < 60) return `há ${m}m`
-  if (m < 1440) return `há ${Math.floor(m / 60)}h`
-  return `há ${Math.floor(m / 1440)}d`
+  const unit = m < 60 ? `${m}m` : m < 1440 ? `${Math.floor(m / 60)}h` : `${Math.floor(m / 1440)}d`
+  return en ? `${unit} ago` : `há ${unit}`
 }
 
 function calcDistance(
@@ -60,6 +63,7 @@ export default function MomentoScreen() {
   const nav = useNavigation()
   const { top, bottom } = useSafeAreaInsets()
   const { user } = useAuthStore()
+  const t = useT()
   const [momentos, setMomentos] = useState<Momento[]>([])
   const [loading, setLoading] = useState(true)
   const [label, setLabel] = useState('')
@@ -86,7 +90,7 @@ export default function MomentoScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync()
       if (status !== 'granted') {
-        Alert.alert('Permissão necessária', 'Precisamos de acesso à localização.')
+        Alert.alert(t.ob_perm_needed, t.mo_perm_loc)
         setSharing(false)
         return
       }
@@ -97,7 +101,7 @@ export default function MomentoScreen() {
       setLabel('')
       setShowForm(false)
     } catch {
-      Alert.alert('Erro', 'Não foi possível compartilhar o momento.')
+      Alert.alert(t.error, t.mo_share_fail)
     } finally {
       setSharing(false)
     }
@@ -116,7 +120,7 @@ export default function MomentoScreen() {
         <TouchableOpacity onPress={() => nav.goBack()} style={s.backBtn}>
           <Ionicons name="chevron-back" size={26} color={colors.gray800} />
         </TouchableOpacity>
-        <Text style={s.title}>Momentos</Text>
+        <Text style={s.title}>{t.mo_title}</Text>
         <TouchableOpacity onPress={() => setShowForm((v) => !v)}>
           <Ionicons name={showForm ? 'close' : 'add-circle-outline'} size={26} color={colors.primary} />
         </TouchableOpacity>
@@ -126,7 +130,7 @@ export default function MomentoScreen() {
         <View style={s.form}>
           <TextInput
             style={s.labelInput}
-            placeholder="Label (ex: Balada, Trabalho...)"
+            placeholder={t.mo_label_ph}
             placeholderTextColor={colors.gray400}
             value={label}
             onChangeText={setLabel}
@@ -142,7 +146,7 @@ export default function MomentoScreen() {
             ) : (
               <>
                 <Ionicons name="location" size={16} color={colors.white} />
-                <Text style={s.shareBtnText}>Compartilhar Momento</Text>
+                <Text style={s.shareBtnText}>{t.mo_share}</Text>
               </>
             )}
           </TouchableOpacity>
@@ -162,9 +166,9 @@ export default function MomentoScreen() {
           ListEmptyComponent={
             <View style={s.center}>
               <Ionicons name="location-outline" size={56} color="rgba(255,255,255,0.15)" />
-              <Text style={s.emptyText}>Nenhum momento ativo</Text>
+              <Text style={s.emptyText}>{t.mo_empty}</Text>
               <Text style={s.emptySubtext}>
-                Compartilhe sua localização com amigos por tempo limitado
+                {t.mo_empty_sub}
               </Text>
             </View>
           }

@@ -10,9 +10,21 @@ const storage = multer.diskStorage({ destination: os.tmpdir() })
 
 function fileFilter(_req: Request, file: Express.Multer.File, cb: FileFilterCallback) {
   const allowed = [
-    'image/jpeg', 'image/png', 'image/webp',
-    'video/mp4', 'video/quicktime',
-    'audio/m4a', 'audio/mp4', 'audio/mpeg', 'audio/aac', 'audio/ogg',
+    'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic',
+    'video/mp4', 'video/quicktime', 'video/webm',
+    'audio/m4a', 'audio/mp4', 'audio/mpeg', 'audio/aac', 'audio/ogg', 'audio/wav',
+    // Documentos partilhados no chat
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'text/plain', 'text/csv',
+    'application/zip', 'application/x-zip-compressed',
+    'application/x-rar-compressed', 'application/vnd.rar',
+    'application/octet-stream',
   ]
   if (allowed.includes(file.mimetype)) {
     cb(null, true)

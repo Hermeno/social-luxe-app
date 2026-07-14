@@ -5,6 +5,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { colors, fonts } from '../theme'
+import { useT } from '../i18n'
 import { useVoiceRecorder } from './VoiceMessage/useVoiceRecorder'
 import { VoicePhase } from './VoiceMessage/types'
 
@@ -154,6 +155,7 @@ interface Props {
 }
 
 export default function VoiceRecorder({ onSend, onCancel }: Props) {
+  const t = useT()
   const { state, dispatch, start, pauseRec, resumeRec, stopRec, deleteRec, sendRec } =
     useVoiceRecorder()
 
@@ -223,7 +225,7 @@ export default function VoiceRecorder({ onSend, onCancel }: Props) {
     return (
       <View style={s.row}>
         <ActivityIndicator size="small" color={PRIMARY} />
-        <Text style={s.uploadTxt}>Enviando áudio…</Text>
+        <Text style={s.uploadTxt}>{t.vr_uploading}</Text>
       </View>
     )
   }
@@ -234,10 +236,10 @@ export default function VoiceRecorder({ onSend, onCancel }: Props) {
       <View style={s.row}>
         <Ionicons name="alert-circle" size={18} color="#FF3B30" />
         <Text style={[s.uploadTxt, { color: '#FF3B30', flex: 1 }]} numberOfLines={1}>
-          {state.error ?? 'Falha no envio'}
+          {state.error ?? t.vr_send_fail}
         </Text>
         <TouchableOpacity onPress={handleRetry} style={s.retryBtn} activeOpacity={0.75}>
-          <Text style={s.retryTxt}>Tentar novamente</Text>
+          <Text style={s.retryTxt}>{t.dn_try_again}</Text>
         </TouchableOpacity>
         <IconBtn name="trash-outline" size={18} color="#FF3B30" onPress={handleDelete} />
       </View>

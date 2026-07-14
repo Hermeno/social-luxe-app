@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import { colors, fonts } from '../../theme'
+import { useT, Strings } from '../../i18n'
 
 export interface StickerChoice {
   emoji:    string
@@ -16,21 +17,21 @@ export interface StickerChoice {
 }
 
 // ─── Emoji data ───────────────────────────────────────────────────────────────
-const EMOJIS: { section: string; items: string[] }[] = [
+const EMOJIS: { sectionKey: keyof Strings; items: string[] }[] = [
   {
-    section: 'Popular',
+    sectionKey: 'sticker_sec_popular',
     items: ['❤️','🔥','😍','🥰','😂','🤣','😭','🤩','💯','👑','💎','✨','🚀','🎉','🥳','😎','🤯','😱','🥹','🫶','💋','🤗','🎯','⭐','🌟'],
   },
   {
-    section: 'Mood',
+    sectionKey: 'sticker_sec_mood',
     items: ['😀','😅','😊','🥲','😔','😤','😡','🤔','😴','🥱','🤑','😈','👿','💀','🤡','🐸','🦄','🐵','🧠','👁'],
   },
   {
-    section: 'Celebração',
+    sectionKey: 'sticker_sec_celebration',
     items: ['🎊','🍾','🎂','🎈','🎆','🎇','🌠','🎁','🏆','🥇','🥈','🥉','🏅','🎖','🎗'],
   },
   {
-    section: 'Vida',
+    sectionKey: 'sticker_sec_life',
     items: ['💪','🧘','🏃','🚴','🏋','⚽','🏀','🎮','🎨','🎵','🎬','📸','✈️','🌍','🌴'],
   },
 ]
@@ -49,6 +50,7 @@ const { height: SCREEN_H } = Dimensions.get('window')
 
 export default function StickerPicker({ visible, onClose, onSelect }: Props) {
   const { bottom } = useSafeAreaInsets()
+  const t = useT()
   const [tab,    setTab]    = useState<Tab>('emoji')
   const [msgText, setMsgText] = useState('')
 
@@ -119,7 +121,7 @@ export default function StickerPicker({ visible, onClose, onSelect }: Props) {
 
         {/* Header */}
         <View style={s.header}>
-          <Text style={s.headerTitle}>Adicionar ao post</Text>
+          <Text style={s.headerTitle}>{t.sticker_add_post}</Text>
           <TouchableOpacity onPress={close} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <View style={s.closeBtn}>
               <Ionicons name="close" size={16} color="#666" />
@@ -129,17 +131,17 @@ export default function StickerPicker({ visible, onClose, onSelect }: Props) {
 
         {/* Tab bar */}
         <View style={s.tabs}>
-          <TabPill label="Emoji"     icon="😊" active={tab === 'emoji'}   onPress={() => setTab('emoji')} />
-          <TabPill label="Presente"  icon="🎁" active={tab === 'gift'}    onPress={() => setTab('gift')}  gift />
-          <TabPill label="Mensagem"  icon="💌" active={tab === 'message'} onPress={() => setTab('message')} />
+          <TabPill label={t.sticker_tab_emoji} icon="😊" active={tab === 'emoji'}   onPress={() => setTab('emoji')} />
+          <TabPill label={t.sticker_tab_gift}  icon="🎁" active={tab === 'gift'}    onPress={() => setTab('gift')}  gift />
+          <TabPill label={t.sticker_tab_msg}   icon="💌" active={tab === 'message'} onPress={() => setTab('message')} />
         </View>
 
         {/* ── Emoji grid ── */}
         {tab === 'emoji' && (
           <ScrollView showsVerticalScrollIndicator={false} style={s.gridScroll} contentContainerStyle={s.gridContent}>
             {EMOJIS.map(section => (
-              <View key={section.section}>
-                <Text style={s.sectionLabel}>{section.section}</Text>
+              <View key={section.sectionKey}>
+                <Text style={s.sectionLabel}>{t[section.sectionKey]}</Text>
                 <View style={s.grid}>
                   {section.items.map((emoji, i) => (
                     <TouchableOpacity
@@ -161,7 +163,7 @@ export default function StickerPicker({ visible, onClose, onSelect }: Props) {
         {tab === 'gift' && (
           <View>
             <View style={s.giftBanner}>
-              <Text style={s.giftBannerTxt}>🎆 Explode em animação quando alguém tocar!</Text>
+              <Text style={s.giftBannerTxt}>{t.sticker_gift_banner}</Text>
             </View>
             <ScrollView showsVerticalScrollIndicator={false} style={s.gridScroll} contentContainerStyle={s.gridContent}>
               <View style={s.grid}>
@@ -192,7 +194,7 @@ export default function StickerPicker({ visible, onClose, onSelect }: Props) {
               </View>
               <TextInput
                 style={s.msgInput}
-                placeholder="Escreve algo bonito..."
+                placeholder={t.sticker_msg_ph}
                 placeholderTextColor={colors.gray400}
                 value={msgText}
                 onChangeText={setMsgText}
@@ -213,7 +215,7 @@ export default function StickerPicker({ visible, onClose, onSelect }: Props) {
                   disabled={!msgText.trim()}
                   activeOpacity={0.8}
                 >
-                  <Text style={s.sendBtnTxt}>Adicionar mensagem 💌</Text>
+                  <Text style={s.sendBtnTxt}>{t.sticker_add_msg}</Text>
                 </TouchableOpacity>
               </LinearGradient>
             </View>

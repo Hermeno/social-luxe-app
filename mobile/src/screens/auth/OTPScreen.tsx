@@ -10,6 +10,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { AuthStackParams } from '../../navigation/AuthNavigator'
 import { fonts } from '../../theme'
+import { useT } from '../../i18n'
 
 type Nav   = StackNavigationProp<AuthStackParams>
 type Route = RouteProp<AuthStackParams, 'OTP'>
@@ -36,6 +37,7 @@ function maskPhone(phone: string): string {
 export default function OTPScreen() {
   const nav   = useNavigation<Nav>()
   const route = useRoute<Route>()
+  const t     = useT()
   const { top, bottom } = useSafeAreaInsets()
   const { phone } = route.params
 
@@ -105,9 +107,9 @@ export default function OTPScreen() {
 
         {/* Hero */}
         <View style={s.hero}>
-          <Text style={s.heading}>Confirma{'\n'}o código.</Text>
+          <Text style={s.heading}>{t.au_otp_heading}</Text>
           <Text style={s.sub}>
-            Enviámos um código de 6 dígitos para{'\n'}
+            {t.au_otp_sub}{'\n'}
             <Text style={s.phoneHighlight}>{maskPhone(phone)}</Text>
           </Text>
         </View>
@@ -132,15 +134,15 @@ export default function OTPScreen() {
           ))}
         </View>
 
-        {error && <Text style={s.errorTxt}>Código incorreto. Tenta novamente.</Text>}
+        {error && <Text style={s.errorTxt}>{t.au_otp_wrong}</Text>}
 
         {/* Resend */}
         <TouchableOpacity style={s.resendRow} onPress={handleResend} disabled={resend > 0} activeOpacity={0.6}>
           <Ionicons name="time-outline" size={14} color={resend > 0 ? M : B} />
           {resend > 0 ? (
-            <Text style={s.resendWait}>Reenviar código em <Text style={s.resendTimer}>{resend}s</Text></Text>
+            <Text style={s.resendWait}>{t.au_otp_resend_in} <Text style={s.resendTimer}>{resend}s</Text></Text>
           ) : (
-            <Text style={s.resendActive}>Reenviar código</Text>
+            <Text style={s.resendActive}>{t.au_otp_resend}</Text>
           )}
         </TouchableOpacity>
 
@@ -156,14 +158,14 @@ export default function OTPScreen() {
           >
             {loading
               ? <ActivityIndicator color="#fff" size="small" />
-              : <Text style={s.ctaTxt}>Verificar</Text>
+              : <Text style={s.ctaTxt}>{t.au_otp_verify}</Text>
             }
           </TouchableOpacity>
         </Animated.View>
 
         {/* Call me link */}
         <TouchableOpacity style={s.callRow} activeOpacity={0.6}>
-          <Text style={s.callTxt}>Não recebeste nada? <Text style={s.callLink}>Liga-me</Text></Text>
+          <Text style={s.callTxt}>{t.au_otp_not_received} <Text style={s.callLink}>{t.au_otp_call}</Text></Text>
         </TouchableOpacity>
 
       </View>

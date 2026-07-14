@@ -9,6 +9,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { AuthStackParams } from '../../navigation/AuthNavigator'
 import { fonts } from '../../theme'
+import { useT, Strings } from '../../i18n'
 
 type Nav   = StackNavigationProp<AuthStackParams>
 type Route = RouteProp<AuthStackParams, 'CreatePassword'>
@@ -37,16 +38,17 @@ const SEG_COLOR: Record<number, string> = {
   0: BD, 1: E, 2: '#FF9500', 3: '#FFCC00', 4: G,
 }
 
-interface CheckItem { label: string; test: (p: string) => boolean }
+interface CheckItem { key: keyof Strings; test: (p: string) => boolean }
 const CHECKS: CheckItem[] = [
-  { label: 'Mínimo 8 caracteres',     test: (p) => p.length >= 8 },
-  { label: 'Pelo menos 1 número',     test: (p) => /[0-9]/.test(p) },
-  { label: 'Pelo menos 1 maiúscula',  test: (p) => /[A-Z]/.test(p) },
+  { key: 'au_pass_check_len',   test: (p) => p.length >= 8 },
+  { key: 'au_pass_check_num',   test: (p) => /[0-9]/.test(p) },
+  { key: 'au_pass_check_upper', test: (p) => /[A-Z]/.test(p) },
 ]
 
 export default function CreatePasswordScreen() {
   const nav   = useNavigation<Nav>()
   const route = useRoute<Route>()
+  const t     = useT()
   const { top, bottom } = useSafeAreaInsets()
   const { phone, countryCode } = route.params
 
@@ -67,7 +69,7 @@ export default function CreatePasswordScreen() {
   }
 
   function handleNext() {
-    if (!canNext) return Alert.alert('', 'A senha não cumpre todos os requisitos')
+    if (!canNext) return Alert.alert('', t.au_pass_req_fail)
     bounce(() => nav.navigate('SetName', { phone, countryCode, password }))
   }
 
@@ -84,15 +86,15 @@ export default function CreatePasswordScreen() {
 
         {/* Hero */}
         <View style={s.hero}>
-          <Text style={s.heading}>Cria{'\n'}uma senha.</Text>
-          <Text style={s.sub}>Vais usá-la para entrar de futuro. Escolhe algo forte e fácil de lembrar.</Text>
+          <Text style={s.heading}>{t.au_pass_heading}</Text>
+          <Text style={s.sub}>{t.au_pass_sub}</Text>
         </View>
 
         {/* Password input */}
         <View style={[s.inputWrap, focused && s.inputFocused]}>
           <TextInput
             style={s.input}
-            placeholder="Cria uma senha"
+            placeholder={t.au_pass_ph}
             placeholderTextColor={M}
             value={password}
             onChangeText={setPassword}
@@ -122,11 +124,11 @@ export default function CreatePasswordScreen() {
           {CHECKS.map((c) => {
             const ok = c.test(password)
             return (
-              <View key={c.label} style={s.checkItem}>
+              <View key={c.key} style={s.checkItem}>
                 <View style={[s.checkCircle, ok && s.checkCircleOk]}>
                   <Ionicons name="checkmark" size={12} color={ok ? '#fff' : BD} />
                 </View>
-                <Text style={[s.checkLabel, ok && s.checkLabelOk]}>{c.label}</Text>
+                <Text style={[s.checkLabel, ok && s.checkLabelOk]}>{t[c.key]}</Text>
               </View>
             )
           })}
@@ -142,7 +144,7 @@ export default function CreatePasswordScreen() {
             disabled={!canNext}
             activeOpacity={0.88}
           >
-            <Text style={s.ctaTxt}>Criar conta</Text>
+            <Text style={s.ctaTxt}>{t.au_pass_create}</Text>
             <Ionicons name="arrow-forward" size={19} color="#fff" />
           </TouchableOpacity>
         </Animated.View>

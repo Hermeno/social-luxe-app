@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react'
 import {
   View, Text, TouchableOpacity, StyleSheet, Share, Modal, Alert, TextInput,
-  Animated,
+  Animated, Pressable, KeyboardAvoidingView, Platform,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { LinearGradient } from 'expo-linear-gradient'
 import { Heart, MessageCircle, Send, Eye, MoreVertical, Pencil, Trash2, Tag } from 'lucide-react-native'
+import { confirm } from '../../components/confirm'
 
 import { Post } from '../../types'
 import { colors, fonts } from '../../theme'
@@ -22,6 +24,7 @@ interface Props {
   onLikeChange?: (liked: boolean) => void
   onDeleted?: (id: string) => void
   onEdited?: (id: string, caption: string) => void
+  onBlockingChange?: (open: boolean) => void
   newPostsCount?: number
   commentCount?: number
 }
@@ -42,7 +45,7 @@ function fmt(n: number) {
 
 export default React.memo(function ActionBar({
   post, onCommentPress, onStickerPress, liked: likedProp = false,
-  onLikeChange, onDeleted, onEdited, newPostsCount = 0,
+  onLikeChange, onDeleted, onEdited, onBlockingChange, newPostsCount = 0,
   commentCount: commentCountProp,
 }: Props) {
   const { bottom: safeBottom } = useSafeAreaInsets()
@@ -61,14 +64,21 @@ export default React.memo(function ActionBar({
   const [hearts,    setHearts]    = useState<HeartP[]>([])
   const heartIdRef = useRef(0)
 
-  // Slide-up para o action sheet dos 3 pontos
-  const menuSlide = useRef(new Animated.Value(340)).current
+  // Pop-in dos dois ícones do menu (escala + opacidade)
+  const menuScale = useRef(new Animated.Value(0.8)).current
+  const menuOp    = useRef(new Animated.Value(0)).current
   useEffect(() => {
     if (showMenu) {
-      menuSlide.setValue(340)
-      Animated.spring(menuSlide, { toValue: 0, useNativeDriver: true, damping: 24, stiffness: 240 }).start()
+      menuScale.setValue(0.8); menuOp.setValue(0)
+      Animated.parallel([
+        Animated.spring(menuScale, { toValue: 1, useNativeDriver: true, damping: 15, stiffness: 260 }),
+        Animated.timing(menuOp,    { toValue: 1, duration: 130, useNativeDriver: true }),
+      ]).start()
     }
   }, [showMenu])
+
+  // Pausar o post enquanto o menu ou a edição estão abertos
+  useEffect(() => { onBlockingChange?.(showMenu || editMode) }, [showMenu, editMode])
 
   function burstHearts() {
     const newHearts: HeartP[] = []
@@ -142,12 +152,14 @@ export default React.memo(function ActionBar({
     } catch {}
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     setShowMenu(false)
-    Alert.alert(t.feed_delete_title, t.feed_delete_msg, [
-      { text: t.cancel, style: 'cancel' },
-      { text: t.delete, style: 'destructive', onPress: () => onDeleted?.(post.id) },
-    ])
+    const ok = await confirm({
+      title: t.feed_delete_title, message: t.feed_delete_msg,
+      confirmText: t.delete, cancelText: t.cancel,
+      destructive: true, icon: 'trash-outline',
+    })
+    if (ok) onDeleted?.(post.id)
   }
 
   function handleSaveEdit() {
@@ -253,59 +265,48 @@ export default React.memo(function ActionBar({
       )}
 
       <Modal visible={showMenu} transparent animationType="fade" onRequestClose={() => setShowMenu(false)}>
-        <TouchableOpacity style={s.sheetBackdrop} activeOpacity={1} onPress={() => setShowMenu(false)}>
-          <Animated.View
-            style={[s.sheetWrap, { paddingBottom: Math.max(safeBottom, 12), transform: [{ translateY: menuSlide }] }]}
-          >
-            {/* Grupo de ações */}
-            <View style={s.sheetGroup}>
-              <TouchableOpacity
-                style={s.sheetItem}
-                activeOpacity={0.6}
-                onPress={() => { setShowMenu(false); setEditText(post.caption ?? ''); setEditMode(true) }}
-              >
-                <Text style={s.sheetItemText}>{t.feed_edit_caption}</Text>
-                <Pencil size={19} strokeWidth={2} color={colors.gray800} />
-              </TouchableOpacity>
-              <View style={s.sheetHairline} />
-              <TouchableOpacity style={s.sheetItem} activeOpacity={0.6} onPress={handleDelete}>
-                <Text style={[s.sheetItemText, s.sheetItemDanger]}>{t.feed_delete_title}</Text>
-                <Trash2 size={19} strokeWidth={2} color="#FF3B30" />
-              </TouchableOpacity>
-            </View>
+        <Pressable style={s.iconMenuBackdrop} onPress={() => setShowMenu(false)}>
+          <Animated.View style={[s.iconMenuRow, { opacity: menuOp, transform: [{ scale: menuScale }] }]}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => { setShowMenu(false); setEditText(post.caption ?? ''); setEditMode(true) }}
+            >
+              <LinearGradient colors={['#3A3A3E', '#151517']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={s.iconCircle}>
+                <Pencil size={26} strokeWidth={2} color="#fff" />
+              </LinearGradient>
+            </TouchableOpacity>
 
-            {/* Cancelar — cartão separado */}
-            <TouchableOpacity style={s.sheetCancel} activeOpacity={0.6} onPress={() => setShowMenu(false)}>
-              <Text style={s.sheetCancelText}>{t.cancel}</Text>
+            <TouchableOpacity activeOpacity={0.85} onPress={handleDelete}>
+              <LinearGradient colors={['#FF5A52', '#D22C22']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={s.iconCircle}>
+                <Trash2 size={26} strokeWidth={2} color="#fff" />
+              </LinearGradient>
             </TouchableOpacity>
           </Animated.View>
-        </TouchableOpacity>
+        </Pressable>
       </Modal>
 
       <Modal visible={editMode} transparent animationType="slide" onRequestClose={() => setEditMode(false)}>
-        <View style={s.editOverlay}>
-          <View style={s.editSheet}>
-            <Text style={s.editTitle}>{t.feed_edit_caption}</Text>
-            <TextInput
-              style={s.editInput}
-              value={editText}
-              onChangeText={setEditText}
-              multiline
-              maxLength={200}
-              autoFocus
-              placeholder={t.feed_caption_ph}
-              placeholderTextColor={colors.gray400}
-            />
-            <View style={s.editActions}>
-              <TouchableOpacity style={s.editCancel} onPress={() => setEditMode(false)}>
-                <Text style={s.editCancelText}>{t.cancel}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={s.editSave} onPress={handleSaveEdit}>
-                <Text style={s.editSaveText}>{t.save}</Text>
+        <KeyboardAvoidingView style={s.editOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <Pressable style={s.editBackdrop} onPress={() => setEditMode(false)} />
+          <View style={[s.editSheet, { paddingBottom: Math.max(safeBottom, 14) }]}>
+            <View style={s.editGrabber} />
+            <View style={s.editRow}>
+              <TextInput
+                style={s.editInput}
+                value={editText}
+                onChangeText={setEditText}
+                multiline
+                maxLength={200}
+                autoFocus
+                placeholder={t.feed_caption_ph}
+                placeholderTextColor={colors.gray400}
+              />
+              <TouchableOpacity style={s.editSubmit} onPress={handleSaveEdit} activeOpacity={0.85}>
+                <Send size={19} strokeWidth={2.2} color="#fff" />
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </>
   )
@@ -357,34 +358,21 @@ const s = StyleSheet.create({
     textShadowRadius: 2,
   },
 
-  // ── Action sheet (3 pontos) ─────────────────────────────────────────────────
-  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-  sheetWrap:     { paddingHorizontal: 10, gap: 8 },
-  sheetGroup:    {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    overflow: 'hidden',
-    shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 24, shadowOffset: { width: 0, height: 10 },
+  // ── Menu dos 3 pontos: dois ícones em gradiente ─────────────────────────────
+  iconMenuBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
+  iconMenuRow:      { flexDirection: 'row', gap: 22 },
+  iconCircle: {
+    width: 64, height: 64, borderRadius: 32,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOpacity: 0.28, shadowRadius: 16, shadowOffset: { width: 0, height: 8 }, elevation: 10,
   },
-  sheetItem:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 17 },
-  sheetItemText: { fontSize: 16.5, fontFamily: fonts.medium, color: colors.gray800, letterSpacing: -0.2 },
-  sheetItemDanger:{ color: '#FF3B30', fontFamily: fonts.semiBold },
-  sheetHairline: { height: StyleSheet.hairlineWidth, backgroundColor: '#E8E8EA', marginLeft: 20 },
-  sheetCancel:   {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    paddingVertical: 17,
-    alignItems: 'center',
-    shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 24, shadowOffset: { width: 0, height: 10 },
-  },
-  sheetCancelText:{ fontSize: 16.5, fontFamily: fonts.bold, color: colors.gray800, letterSpacing: -0.2 },
-  editOverlay:   { flex: 1, backgroundColor: 'transparent', justifyContent: 'flex-end' },
-  editSheet:     { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 40, gap: 16 },
-  editTitle:     { fontSize: 17, fontFamily: fonts.semiBold, color: colors.gray800 },
-  editInput:     { backgroundColor: '#F5F5F7', borderRadius: 12, padding: 14, minHeight: 90, fontSize: 15, fontFamily: fonts.regular, color: colors.gray800, textAlignVertical: 'top' },
-  editActions:   { flexDirection: 'row', gap: 10 },
-  editCancel:    { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#EAEAEA', alignItems: 'center' },
-  editCancelText:{ fontSize: 15, fontFamily: fonts.semiBold, color: colors.gray600 },
-  editSave:      { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: colors.primary, alignItems: 'center' },
-  editSaveText:  { fontSize: 15, fontFamily: fonts.semiBold, color: '#fff' },
+
+  // ── Edição: campo + ícone de submeter ───────────────────────────────────────
+  editBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)' },
+  editGrabber:  { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: '#E0E0E4', marginBottom: 14 },
+  editRow:      { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
+  editSubmit:   { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  editOverlay:   { flex: 1, justifyContent: 'flex-end' },
+  editSheet:     { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 12, paddingHorizontal: 16 },
+  editInput:     { flex: 1, backgroundColor: '#F2F2F5', borderRadius: 18, paddingHorizontal: 16, paddingVertical: 12, minHeight: 44, maxHeight: 120, fontSize: 15.5, fontFamily: fonts.medium, color: colors.gray800, textAlignVertical: 'center' },
 })

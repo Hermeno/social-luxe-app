@@ -10,11 +10,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { colors, fonts } from '../../theme'
+import { confirm } from '../../components/confirm'
+import { toast } from '../../utils/toast'
 import * as unionService from '../../services/union.service'
 import { useUnionStore } from '../../store/union.store'
 import { useAuthStore } from '../../store/auth.store'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { Union } from '../../types'
+import { useT } from '../../i18n'
 
 type Nav   = StackNavigationProp<AppStackParams>
 type Route = RouteProp<AppStackParams, 'UnionProfile'>
@@ -36,6 +39,7 @@ export default function UnionProfileScreen() {
   const nav    = useNavigation<Nav>()
   const route  = useRoute<Route>()
   const insets = useSafeAreaInsets()
+  const t      = useT()
   const me     = useAuthStore((s) => s.user)
   const { updateUnion, removeUnion } = useUnionStore()
 
@@ -53,7 +57,7 @@ export default function UnionProfileScreen() {
   useEffect(() => {
     unionService.getUnion(route.params.unionId)
       .then((u) => { setUnion(u); setEditName(u.name); setEditBio(u.bio ?? '') })
-      .catch(() => Alert.alert('Erro', 'Não foi possível carregar a união'))
+      .catch(() => Alert.alert(t.error, t.un_load_fail))
       .finally(() => setLoading(false))
   }, [route.params.unionId])
 
@@ -66,31 +70,25 @@ export default function UnionProfileScreen() {
       updateUnion(updated)
       setEditModal(false)
     } catch (e: any) {
-      Alert.alert('Erro', e?.response?.data?.message ?? 'Não foi possível guardar')
+      Alert.alert(t.error, e?.response?.data?.message ?? t.un_save_fail)
     } finally { setSaving(false) }
   }
 
   async function handleDissolve() {
     if (!union) return
-    Alert.alert(
-      'Dissolver União',
-      'Tens a certeza? Todas as conversas desta união serão apagadas permanentemente.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Dissolver', style: 'destructive',
-          onPress: async () => {
-            try {
-              await unionService.dissolveUnion(union.id)
-              removeUnion(union.id)
-              nav.goBack()
-            } catch (e: any) {
-              Alert.alert('Erro', e?.response?.data?.message ?? 'Não foi possível dissolver')
-            }
-          },
-        },
-      ],
-    )
+    const ok = await confirm({
+      title: t.un_dissolve,
+      message: t.un_dissolve_confirm,
+      confirmText: t.un_dissolve_action, cancelText: t.cancel, destructive: true, icon: 'heart-dislike-outline',
+    })
+    if (!ok) return
+    try {
+      await unionService.dissolveUnion(union.id)
+      removeUnion(union.id)
+      nav.goBack()
+    } catch (e: any) {
+      toast.error(t.error, e?.response?.data?.message ?? t.un_dissolve_fail)
+    }
   }
 
   if (loading) {
@@ -104,7 +102,7 @@ export default function UnionProfileScreen() {
   if (!union) {
     return (
       <View style={[s.root, { alignItems: 'center', justifyContent: 'center' }]}>
-        <Text style={{ fontFamily: fonts.medium, color: colors.gray500 }}>União não encontrada</Text>
+        <Text style={{ fontFamily: fonts.medium, color: colors.gray500 }}>{t.un_not_found}</Text>
       </View>
     )
   }
@@ -116,7 +114,7 @@ export default function UnionProfileScreen() {
         <TouchableOpacity style={s.backBtn} onPress={() => nav.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Ionicons name="chevron-back" size={22} color={colors.black} />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>União</Text>
+        <Text style={s.headerTitle}>{t.un_union}</Text>
         {isMember
           ? <TouchableOpacity style={s.editBtn} onPress={() => setEditModal(true)}>
               <Ionicons name="pencil-outline" size={18} color={colors.black} />
@@ -153,7 +151,7 @@ export default function UnionProfileScreen() {
 
         {/* Members */}
         <View style={s.section}>
-          <Text style={s.sectionTitle}>Membros</Text>
+          <Text style={s.sectionTitle}>{t.un_members}</Text>
           <View style={s.membersRow}>
             <MemberChip name={union.memberA.name} avatar={union.memberA.avatar} />
             <View style={s.membersDivider}><Text style={s.membersDividerTxt}>&</Text></View>
@@ -169,14 +167,14 @@ export default function UnionProfileScreen() {
             activeOpacity={0.85}
           >
             <Ionicons name="chatbubble-ellipses-outline" size={20} color={colors.black} />
-            <Text style={s.actionBtnTxt}>Ver conversas</Text>
+            <Text style={s.actionBtnTxt}>{t.un_view_convos}</Text>
             <Ionicons name="chevron-forward" size={16} color={colors.gray400} style={{ marginLeft: 'auto' }} />
           </TouchableOpacity>
 
           {isMember && (
             <TouchableOpacity style={[s.actionBtn, s.actionBtnDanger]} onPress={handleDissolve} activeOpacity={0.85}>
               <Ionicons name="trash-outline" size={20} color="#E53935" />
-              <Text style={[s.actionBtnTxt, { color: '#E53935' }]}>Dissolver União</Text>
+              <Text style={[s.actionBtnTxt, { color: '#E53935' }]}>{t.un_dissolve}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -187,20 +185,20 @@ export default function UnionProfileScreen() {
         <View style={[s.modalRoot, { paddingTop: 20 }]}>
           <View style={s.modalHeader}>
             <TouchableOpacity onPress={() => setEditModal(false)}>
-              <Text style={s.modalCancel}>Cancelar</Text>
+              <Text style={s.modalCancel}>{t.cancel}</Text>
             </TouchableOpacity>
-            <Text style={s.modalTitle}>Editar União</Text>
+            <Text style={s.modalTitle}>{t.un_edit}</Text>
             <TouchableOpacity onPress={handleSave} disabled={saving}>
-              {saving ? <ActivityIndicator size="small" color={colors.primary} /> : <Text style={s.modalSave}>Guardar</Text>}
+              {saving ? <ActivityIndicator size="small" color={colors.primary} /> : <Text style={s.modalSave}>{t.save}</Text>}
             </TouchableOpacity>
           </View>
           <ScrollView contentContainerStyle={{ padding: 20, gap: 16 }}>
             <View>
-              <Text style={s.fieldLabel}>Nome</Text>
+              <Text style={s.fieldLabel}>{t.un_field_name}</Text>
               <TextInput style={s.fieldInput} value={editName} onChangeText={setEditName} maxLength={40} />
             </View>
             <View>
-              <Text style={s.fieldLabel}>Bio</Text>
+              <Text style={s.fieldLabel}>{t.un_field_bio}</Text>
               <TextInput style={[s.fieldInput, { minHeight: 80 }]} value={editBio} onChangeText={setEditBio} maxLength={160} multiline />
             </View>
           </ScrollView>

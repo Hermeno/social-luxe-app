@@ -17,6 +17,7 @@ import { useAuthStore } from '../../store/auth.store'
 import { getSocket } from '../../socket'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { Union, UnionMessage, TogetherStatus } from '../../types'
+import { useT } from '../../i18n'
 
 type Nav   = StackNavigationProp<AppStackParams>
 type Route = RouteProp<AppStackParams, 'UnionChat'>
@@ -131,6 +132,7 @@ function JuntosBanner({
   onToggleConsent: (val: boolean) => void
   onToggleVisibility: (val: 'private' | 'public') => void
 }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
   const iConsented     = together.memberConsents[myId] ?? false
   const otherMemberId  = myUnion.memberA.id === myId ? myUnion.memberB.id : myUnion.memberA.id
@@ -148,9 +150,9 @@ function JuntosBanner({
           avatarB={myUnion.memberB.avatar} nameB={myUnion.memberB.name}
         />
         <View style={{ flex: 1 }}>
-          <Text style={j.pillTitle}>💑 Estão juntos agora</Text>
+          <Text style={j.pillTitle}>{t.un_together_now}</Text>
           <Text style={j.pillSub}>
-            {bothConsented && isPublic ? '🌍 Visível a todos' : '🔒 Só vós dois'}
+            {bothConsented && isPublic ? t.un_visible_all_emoji : t.un_only_two_emoji}
           </Text>
         </View>
         <Ionicons name="chevron-up" size={14} color={colors.primary} />
@@ -167,7 +169,7 @@ function JuntosBanner({
               avatarB={myUnion.memberB.avatar} nameB={myUnion.memberB.name}
             />
             <View style={{ flex: 1 }}>
-              <Text style={j.sheetTitle}>Modo Juntos</Text>
+              <Text style={j.sheetTitle}>{t.un_together_mode}</Text>
               <Text style={j.sheetSub}>{myUnion.name} {myUnion.label ? `· ${myUnion.label}` : ''}</Text>
             </View>
             <TouchableOpacity onPress={() => setOpen(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -178,9 +180,9 @@ function JuntosBanner({
           {/* Consent row */}
           <View style={j.row}>
             <View style={{ flex: 1 }}>
-              <Text style={j.rowLabel}>Ativar para mim</Text>
+              <Text style={j.rowLabel}>{t.un_enable_me}</Text>
               <Text style={j.rowSub}>
-                {partnerConsent ? `✓ ${partnerName} já ativou` : `Aguarda que ${partnerName} ative também`}
+                {partnerConsent ? `✓ ${partnerName} ${t.un_partner_enabled}` : `${t.un_wait_partner_a} ${partnerName} ${t.un_wait_partner_b}`}
               </Text>
             </View>
             <Switch
@@ -208,7 +210,7 @@ function JuntosBanner({
                 activeOpacity={0.8}
               >
                 <Ionicons name="lock-closed" size={16} color={!isPublic ? '#fff' : colors.gray500} />
-                <Text style={[j.visBtnTxt, !isPublic && j.visBtnTxtActive]}>Só nós</Text>
+                <Text style={[j.visBtnTxt, !isPublic && j.visBtnTxtActive]}>{t.un_only_us}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[j.visBtn, isPublic && j.visBtnActive, { backgroundColor: isPublic ? colors.primary : undefined }]}
@@ -216,13 +218,13 @@ function JuntosBanner({
                 activeOpacity={0.8}
               >
                 <Ionicons name="earth" size={16} color={isPublic ? '#fff' : colors.gray500} />
-                <Text style={[j.visBtnTxt, isPublic && j.visBtnTxtActive]}>Visível a todos</Text>
+                <Text style={[j.visBtnTxt, isPublic && j.visBtnTxtActive]}>{t.un_visible_all}</Text>
               </TouchableOpacity>
             </View>
           )}
 
           {!bothConsented && (
-            <Text style={j.hint}>Os dois precisam de ativar para escolher a visibilidade.</Text>
+            <Text style={j.hint}>{t.un_both_enable_hint}</Text>
           )}
         </View>
       </Modal>
@@ -235,6 +237,7 @@ export default function UnionChatScreen() {
   const nav    = useNavigation<Nav>()
   const route  = useRoute<Route>()
   const insets = useSafeAreaInsets()
+  const t      = useT()
   const me     = useAuthStore((s) => s.user)
   const { myUnions, clearUnread } = useUnionStore()
 
@@ -357,7 +360,7 @@ export default function UnionChatScreen() {
       setMessages((prev) => prev.map((m) => m.id === temp.id ? saved : m))
     } catch {
       setMessages((prev) => prev.filter((m) => m.id !== temp.id))
-      Alert.alert('Erro', 'Não foi possível enviar a mensagem')
+      Alert.alert(t.error, t.un_send_fail)
     } finally { setSending(false) }
   }
 
@@ -394,7 +397,7 @@ export default function UnionChatScreen() {
   }
 
   // ─── Render ────────────────────────────────────────────────────────────────
-  const displayName = otherUnion?.name ?? route.params.unionName ?? 'União'
+  const displayName = otherUnion?.name ?? route.params.unionName ?? t.un_union
 
   return (
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -411,7 +414,7 @@ export default function UnionChatScreen() {
           }
           <View>
             <Text style={s.headerName} numberOfLines={1}>{displayName}</Text>
-            {isTyping && <Text style={s.typingLabel}>a escrever…</Text>}
+            {isTyping && <Text style={s.typingLabel}>{t.un_typing}</Text>}
           </View>
         </View>
 
@@ -480,7 +483,7 @@ export default function UnionChatScreen() {
         <View style={s.inputWrap}>
           <TextInput
             style={s.input}
-            placeholder="Mensagem…"
+            placeholder={t.chat_input_ph}
             placeholderTextColor={colors.gray400}
             value={text}
             onChangeText={handleTextChange}

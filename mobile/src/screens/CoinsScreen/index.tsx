@@ -21,6 +21,7 @@ import { api } from '../../services/api'
 import { ApiResponse } from '../../types'
 import { colors, fonts, spacing, radius } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
+import { useT, useI18n } from '../../i18n'
 
 interface UserResult {
   id: string
@@ -29,17 +30,21 @@ interface UserResult {
 }
 
 function timeAgo(date: string) {
+  const tr = useI18n.getState().lang === 'en'
+    ? { m: 'm ago', h: 'h ago', d: 'd ago' }
+    : { m: 'm atrás', h: 'h atrás', d: 'd atrás' }
   const diff = Date.now() - new Date(date).getTime()
   const m = Math.floor(diff / 60000)
-  if (m < 60) return `${m}m atrás`
-  if (m < 1440) return `${Math.floor(m / 60)}h atrás`
-  return `${Math.floor(m / 1440)}d atrás`
+  if (m < 60) return `${m}${tr.m}`
+  if (m < 1440) return `${Math.floor(m / 60)}${tr.h}`
+  return `${Math.floor(m / 1440)}${tr.d}`
 }
 
 export default function CoinsScreen() {
   const nav = useNavigation()
   const { top, bottom } = useSafeAreaInsets()
   const { user } = useAuthStore()
+  const t = useT()
   const [balance, setBalance] = useState(0)
   const [history, setHistory] = useState<CoinTransaction[]>([])
   const [loading, setLoading] = useState(true)
@@ -71,10 +76,10 @@ export default function CoinsScreen() {
   }
 
   async function handleSend() {
-    if (!selectedUser) return Alert.alert('Selecione um usuário')
+    if (!selectedUser) return Alert.alert(t.cn_select_user)
     const amt = parseInt(amount, 10)
-    if (isNaN(amt) || amt <= 0) return Alert.alert('Valor inválido')
-    if (amt > balance) return Alert.alert('Saldo insuficiente')
+    if (isNaN(amt) || amt <= 0) return Alert.alert(t.cn_invalid_amount)
+    if (amt > balance) return Alert.alert(t.cn_insufficient)
     setSending(true)
     try {
       await sendCoins(selectedUser.id, amt, undefined, message || undefined)
@@ -84,10 +89,10 @@ export default function CoinsScreen() {
       setAmount('')
       setMessage('')
       setUserSearch('')
-      Alert.alert('Sucesso', `${amt} Luxe Coins enviados para ${selectedUser.name}!`)
+      Alert.alert(t.success, `${amt} ${t.cn_sent_mid} ${selectedUser.name}!`)
       getCoinHistory().then(setHistory).catch(() => {})
     } catch {
-      Alert.alert('Erro', 'Não foi possível enviar coins.')
+      Alert.alert(t.error, t.cn_send_fail)
     } finally {
       setSending(false)
     }
@@ -99,7 +104,7 @@ export default function CoinsScreen() {
         <TouchableOpacity onPress={() => nav.goBack()} style={s.backBtn}>
           <Ionicons name="chevron-back" size={26} color={colors.gray800} />
         </TouchableOpacity>
-        <Text style={s.title}>Luxe Coins</Text>
+        <Text style={s.title}>{t.cn_title}</Text>
         <View style={{ width: 36 }} />
       </View>
 
@@ -110,7 +115,7 @@ export default function CoinsScreen() {
       ) : (
         <>
           <View style={s.balanceCard}>
-            <Text style={s.balanceLabel}>Seu saldo</Text>
+            <Text style={s.balanceLabel}>{t.cn_balance}</Text>
             <Text style={s.balanceAmount}>💎 {balance.toLocaleString()}</Text>
             <Text style={s.balanceSub}>Luxe Coins</Text>
             <TouchableOpacity
@@ -119,11 +124,11 @@ export default function CoinsScreen() {
               activeOpacity={0.85}
             >
               <Ionicons name="paper-plane-outline" size={18} color={colors.white} />
-              <Text style={s.sendBtnText}>Enviar Coins</Text>
+              <Text style={s.sendBtnText}>{t.cn_send}</Text>
             </TouchableOpacity>
           </View>
 
-          <Text style={s.sectionLabel}>Histórico</Text>
+          <Text style={s.sectionLabel}>{t.cn_history}</Text>
 
           <FlatList
             data={history}
@@ -132,7 +137,7 @@ export default function CoinsScreen() {
             contentContainerStyle={s.list}
             ListEmptyComponent={
               <View style={s.emptyWrap}>
-                <Text style={s.emptyText}>Nenhuma transação ainda</Text>
+                <Text style={s.emptyText}>{t.cn_empty}</Text>
               </View>
             }
             renderItem={({ item }: { item: CoinTransaction }) => {
@@ -164,7 +169,7 @@ export default function CoinsScreen() {
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <View style={s.modalHeader}>
-            <Text style={s.modalTitle}>Enviar Coins</Text>
+            <Text style={s.modalTitle}>{t.cn_send}</Text>
             <TouchableOpacity onPress={() => setSendModalVisible(false)}>
               <Ionicons name="close" size={26} color={colors.gray800} />
             </TouchableOpacity>
@@ -182,7 +187,7 @@ export default function CoinsScreen() {
             <>
               <TextInput
                 style={s.searchInput}
-                placeholder="Buscar usuário..."
+                placeholder={t.cn_search_user}
                 placeholderTextColor={colors.gray400}
                 value={userSearch}
                 onChangeText={searchUsers}
@@ -202,7 +207,7 @@ export default function CoinsScreen() {
 
           <TextInput
             style={s.amountInput}
-            placeholder="Quantidade de coins"
+            placeholder={t.cn_amount_ph}
             placeholderTextColor={colors.gray400}
             value={amount}
             onChangeText={setAmount}
@@ -210,7 +215,7 @@ export default function CoinsScreen() {
           />
           <TextInput
             style={s.messageInput}
-            placeholder="Mensagem (opcional)"
+            placeholder={t.cn_message_ph}
             placeholderTextColor={colors.gray400}
             value={message}
             onChangeText={setMessage}
@@ -225,7 +230,7 @@ export default function CoinsScreen() {
             {sending ? (
               <ActivityIndicator color={colors.white} />
             ) : (
-              <Text style={s.confirmText}>Confirmar Envio</Text>
+              <Text style={s.confirmText}>{t.cn_confirm_send}</Text>
             )}
           </TouchableOpacity>
         </KeyboardAvoidingView>

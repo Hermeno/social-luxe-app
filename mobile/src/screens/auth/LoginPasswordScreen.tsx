@@ -10,6 +10,7 @@ import { StackNavigationProp } from '@react-navigation/stack'
 import { useAuthStore } from '../../store/auth.store'
 import { AuthStackParams } from '../../navigation/AuthNavigator'
 import { fonts } from '../../theme'
+import { useT } from '../../i18n'
 
 type Nav   = StackNavigationProp<AuthStackParams>
 type Route = RouteProp<AuthStackParams, 'LoginPassword'>
@@ -33,6 +34,7 @@ function maskPhone(phone: string): string {
 export default function LoginPasswordScreen() {
   const nav    = useNavigation<Nav>()
   const route  = useRoute<Route>()
+  const t      = useT()
   const { top, bottom } = useSafeAreaInsets()
   const { login } = useAuthStore()
   const { phone } = route.params
@@ -97,7 +99,7 @@ export default function LoginPasswordScreen() {
             </View>
           </View>
 
-          <Text style={s.greeting}>Bem-vinda de volta,</Text>
+          <Text style={s.greeting}>{t.au_login_greeting}</Text>
           <Text style={s.phoneTxt}>{maskPhone(phone)}</Text>
         </View>
 
@@ -106,7 +108,7 @@ export default function LoginPasswordScreen() {
           <View style={[s.inputWrap, focused && s.inputFocused, error && s.inputError]}>
             <TextInput
               style={s.input}
-              placeholder="A tua senha"
+              placeholder={t.au_login_ph}
               placeholderTextColor={M}
               value={password}
               onChangeText={(v) => { setPassword(v); setError(false) }}
@@ -121,12 +123,12 @@ export default function LoginPasswordScreen() {
               <Ionicons name={secure ? 'eye-off-outline' : 'eye-outline'} size={20} color={M} />
             </TouchableOpacity>
           </View>
-          {error && <Text style={s.errorTxt}>Senha incorreta. Tenta novamente.</Text>}
+          {error && <Text style={s.errorTxt}>{t.au_login_wrong}</Text>}
         </Animated.View>
 
         {/* Forgot password — right-aligned, disabled in v1 */}
         <TouchableOpacity style={s.forgotRow} disabled activeOpacity={0.6}>
-          <Text style={s.forgotTxt}>Esqueceste a senha?</Text>
+          <Text style={s.forgotTxt}>{t.au_login_forgot}</Text>
         </TouchableOpacity>
 
         <View style={s.spacer} />
@@ -141,14 +143,14 @@ export default function LoginPasswordScreen() {
           >
             {loading
               ? <ActivityIndicator color="#fff" size="small" />
-              : <Text style={s.ctaTxt}>Entrar</Text>
+              : <Text style={s.ctaTxt}>{t.au_login_enter}</Text>
             }
           </TouchableOpacity>
         </Animated.View>
 
         {/* Switch account */}
         <TouchableOpacity style={s.switchRow} onPress={() => nav.goBack()} activeOpacity={0.6}>
-          <Text style={s.switchTxt}>Não és tu? <Text style={s.switchLink}>Trocar de conta</Text></Text>
+          <Text style={s.switchTxt}>{t.au_login_not_you} <Text style={s.switchLink}>{t.au_login_switch}</Text></Text>
         </TouchableOpacity>
 
       </View>

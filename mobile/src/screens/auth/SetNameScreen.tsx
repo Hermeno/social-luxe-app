@@ -10,6 +10,7 @@ import { StackNavigationProp } from '@react-navigation/stack'
 import { useAuthStore } from '../../store/auth.store'
 import { AuthStackParams } from '../../navigation/AuthNavigator'
 import { fonts } from '../../theme'
+import { useT } from '../../i18n'
 
 type Nav   = StackNavigationProp<AuthStackParams>
 type Route = RouteProp<AuthStackParams, 'SetName'>
@@ -26,6 +27,7 @@ const MAX = 30
 export default function SetNameScreen() {
   const nav   = useNavigation<Nav>()
   const route = useRoute<Route>()
+  const t     = useT()
   const { top, bottom } = useSafeAreaInsets()
   const { register } = useAuthStore()
   const { phone, countryCode, password } = route.params
@@ -52,7 +54,7 @@ export default function SetNameScreen() {
       try {
         await register(trimmed, phone, countryCode, password, password)
       } catch (e: unknown) {
-        Alert.alert('Erro', e instanceof Error ? e.message : 'Não foi possível criar a conta')
+        Alert.alert(t.error, e instanceof Error ? e.message : t.au_name_create_fail)
       } finally { setLoading(false) }
     })
   }
@@ -70,15 +72,15 @@ export default function SetNameScreen() {
 
         {/* Centered hero */}
         <View style={s.hero}>
-          <Text style={s.heading}>Como{'\n'}te chamas?</Text>
-          <Text style={s.sub}>O teu nome é como apareces no teu perfil.</Text>
+          <Text style={s.heading}>{t.au_name_heading}</Text>
+          <Text style={s.sub}>{t.au_name_sub}</Text>
         </View>
 
         {/* Underline input */}
         <View style={s.underlineWrap}>
           <TextInput
             style={[s.underlineInput, focused && s.underlineFocused]}
-            placeholder="O teu nome"
+            placeholder={t.au_name_ph}
             placeholderTextColor={M}
             value={name}
             onChangeText={(v) => setName(v.slice(0, MAX))}
@@ -104,7 +106,7 @@ export default function SetNameScreen() {
               </View>
             </View>
             <Text style={s.previewName}>{trimmed}</Text>
-            <Text style={s.previewSub}>Assim é como apareças no teu perfil</Text>
+            <Text style={s.previewSub}>{t.au_name_preview}</Text>
           </View>
         )}
 
@@ -121,7 +123,7 @@ export default function SetNameScreen() {
             {loading
               ? <ActivityIndicator color="#fff" size="small" />
               : <>
-                  <Text style={s.ctaTxt}>Continuar</Text>
+                  <Text style={s.ctaTxt}>{t.au_continue}</Text>
                   <Ionicons name="arrow-forward" size={19} color="#fff" />
                 </>
             }

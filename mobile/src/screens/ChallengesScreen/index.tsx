@@ -20,22 +20,26 @@ import { colors, fonts, spacing, radius } from '../../theme'
 import { API_BASE } from '../../config'
 import { getCache, setCache } from '../../db/database'
 import { isConnected } from '../../services/netinfo.service'
+import { useT, useI18n } from '../../i18n'
 
 type Nav = StackNavigationProp<AppStackParams>
 
 const { width } = Dimensions.get('window')
 
 function timeLeft(endsAt: string) {
+  const en = useI18n.getState().lang === 'en'
   const diff = new Date(endsAt).getTime() - Date.now()
-  if (diff <= 0) return 'Encerrado'
+  if (diff <= 0) return en ? 'Closed' : 'Encerrado'
+  const prefix = en ? 'Closes in' : 'Encerra em'
   const h = Math.floor(diff / 3600000)
-  if (h < 24) return `Encerra em ${h}h`
-  return `Encerra em ${Math.floor(h / 24)}d`
+  if (h < 24) return `${prefix} ${h}h`
+  return `${prefix} ${Math.floor(h / 24)}d`
 }
 
 export default function ChallengesScreen() {
   const nav = useNavigation<Nav>()
   const { top } = useSafeAreaInsets()
+  const t = useT()
   const [challenges, setChallenges] = useState<Challenge[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -65,7 +69,7 @@ export default function ChallengesScreen() {
         <TouchableOpacity onPress={() => nav.goBack()} style={s.backBtn}>
           <Ionicons name="chevron-back" size={26} color={colors.gray800} />
         </TouchableOpacity>
-        <Text style={s.title}>Desafios</Text>
+        <Text style={s.title}>{t.ch_title}</Text>
         <View style={{ width: 36 }} />
       </View>
 
@@ -82,7 +86,7 @@ export default function ChallengesScreen() {
           ListEmptyComponent={
             <View style={s.center}>
               <Ionicons name="trophy-outline" size={56} color={colors.gray200} />
-              <Text style={s.emptyText}>Nenhum desafio ativo</Text>
+              <Text style={s.emptyText}>{t.ch_empty}</Text>
             </View>
           }
           renderItem={({ item }: { item: Challenge }) => {
@@ -121,7 +125,7 @@ export default function ChallengesScreen() {
                       onPress={() => handleParticipate(item)}
                       activeOpacity={0.85}
                     >
-                      <Text style={s.participateText}>Participar</Text>
+                      <Text style={s.participateText}>{t.ch_participate}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>

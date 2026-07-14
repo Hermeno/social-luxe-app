@@ -15,7 +15,7 @@ import { AppStackParams } from '../../navigation/AppNavigator'
 import { fonts } from '../../theme'
 import { API_BASE } from '../../config'
 import { api } from '../../services/api'
-import { useT } from '../../i18n'
+import { useT, useI18n } from '../../i18n'
 import { INTERESTS } from '../OnboardingScreen'
 
 export const DEFAULT_TAB_KEY = 'default_tab'
@@ -33,24 +33,25 @@ const SX = '#F9F9FB'
 const CARD_BD = '#EDEDF1'
 const G  = '#22C55E'
 
-const STATUS_PRESETS = [
-  { label: '👑 Rico',               value: 'Rico' },
-  { label: '💼 Empresário',         value: 'Empresário' },
-  { label: '🔥 Influencer',         value: 'Influencer' },
-  { label: '🩺 Médico',             value: 'Médico' },
-  { label: '💊 Enfermeiro',         value: 'Enfermeiro' },
-  { label: '⚙️ Engenheiro',         value: 'Engenheiro' },
-  { label: '📊 Engenheiro de Dados', value: 'Engenheiro de Dados' },
-  { label: '🎨 Designer',           value: 'Designer' },
-  { label: '📸 Fotógrafo',          value: 'Fotógrafo' },
-  { label: '⚖️ Advogado',           value: 'Advogado' },
-  { label: '🏋️ Atleta',             value: 'Atleta' },
-  { label: '🎵 Artista',            value: 'Artista' },
-  { label: '🤪 Maluco',             value: 'Maluco' },
-  { label: '🎯 Importante',         value: 'Importante' },
-  { label: '📚 Professor',          value: 'Professor' },
-  { label: '🏗️ Arquitecto',         value: 'Arquitecto' },
-  { label: '🌍 Viajante',           value: 'Viajante' },
+// `value` is the stored badge (never translate it); `en` is the English display.
+const STATUS_PRESETS: { emoji: string; value: string; en: string }[] = [
+  { emoji: '👑', value: 'Rico',               en: 'Rich' },
+  { emoji: '💼', value: 'Empresário',         en: 'Entrepreneur' },
+  { emoji: '🔥', value: 'Influencer',         en: 'Influencer' },
+  { emoji: '🩺', value: 'Médico',             en: 'Doctor' },
+  { emoji: '💊', value: 'Enfermeiro',         en: 'Nurse' },
+  { emoji: '⚙️', value: 'Engenheiro',         en: 'Engineer' },
+  { emoji: '📊', value: 'Engenheiro de Dados', en: 'Data Engineer' },
+  { emoji: '🎨', value: 'Designer',           en: 'Designer' },
+  { emoji: '📸', value: 'Fotógrafo',          en: 'Photographer' },
+  { emoji: '⚖️', value: 'Advogado',           en: 'Lawyer' },
+  { emoji: '🏋️', value: 'Atleta',             en: 'Athlete' },
+  { emoji: '🎵', value: 'Artista',            en: 'Artist' },
+  { emoji: '🤪', value: 'Maluco',             en: 'Crazy' },
+  { emoji: '🎯', value: 'Importante',         en: 'Important' },
+  { emoji: '📚', value: 'Professor',          en: 'Teacher' },
+  { emoji: '🏗️', value: 'Arquitecto',         en: 'Architect' },
+  { emoji: '🌍', value: 'Viajante',           en: 'Traveler' },
 ]
 
 function Toggle({ value }: { value: boolean }) {
@@ -72,6 +73,7 @@ export default function EditProfileScreen() {
   const { top, bottom } = useSafeAreaInsets()
   const { user, refreshUser } = useAuthStore()
   const t = useT()
+  const { lang } = useI18n()
 
   const [name,        setName]        = useState(user?.name ?? '')
   const [bio,         setBio]         = useState(user?.bio ?? '')
@@ -245,19 +247,19 @@ export default function EditProfileScreen() {
 
         {/* Interesses */}
         <View style={s.section}>
-          <Text style={s.sectionLabel}>Interesses</Text>
+          <Text style={s.sectionLabel}>{t.ep_interests}</Text>
           <View style={s.interestsWrap}>
-            {INTERESTS.map(({ label, emoji }) => {
-              const on = interests.has(label)
+            {INTERESTS.map(({ id, en, emoji }) => {
+              const on = interests.has(id)
               return (
                 <TouchableOpacity
-                  key={label}
+                  key={id}
                   style={[s.interestTag, on && s.interestTagOn]}
-                  onPress={() => toggleInterest(label)}
+                  onPress={() => toggleInterest(id)}
                   activeOpacity={0.7}
                 >
                   <Text style={s.interestEmoji}>{emoji}</Text>
-                  <Text style={[s.interestTagTxt, on && s.interestTagTxtOn]}>{label}</Text>
+                  <Text style={[s.interestTagTxt, on && s.interestTagTxtOn]}>{lang === 'en' ? en : id}</Text>
                 </TouchableOpacity>
               )
             })}
@@ -266,7 +268,7 @@ export default function EditProfileScreen() {
 
         {/* Identidade no Post */}
         <View style={s.section}>
-          <Text style={s.sectionLabel}>Identidade no Post</Text>
+          <Text style={s.sectionLabel}>{t.ep_post_identity}</Text>
           <View style={s.card}>
             {/* Device toggle */}
             <TouchableOpacity style={s.identRow} onPress={() => setShowDevice((v) => !v)} activeOpacity={0.8}>
@@ -274,8 +276,8 @@ export default function EditProfileScreen() {
                 <Ionicons name="phone-portrait-outline" size={16} color={B} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={s.identTitle}>Mostrar dispositivo</Text>
-                <Text style={s.identSub}>{showDevice ? 'Visível nas publicações' : 'Oculto'}</Text>
+                <Text style={s.identTitle}>{t.ep_show_device}</Text>
+                <Text style={s.identSub}>{showDevice ? t.ep_visible_posts : t.ep_hidden}</Text>
               </View>
               <Toggle value={showDevice} />
             </TouchableOpacity>
@@ -286,8 +288,8 @@ export default function EditProfileScreen() {
                 <Ionicons name="ribbon-outline" size={16} color="#B8860B" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={s.identTitle}>Badge de status</Text>
-                <Text style={s.identSub} numberOfLines={1}>{statusLabel || 'Nenhum'}</Text>
+                <Text style={s.identTitle}>{t.ep_status_badge}</Text>
+                <Text style={s.identSub} numberOfLines={1}>{statusLabel || t.ep_none}</Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={M} />
             </TouchableOpacity>
@@ -296,7 +298,7 @@ export default function EditProfileScreen() {
 
         {/* Ecrã inicial */}
         <View style={s.section}>
-          <Text style={s.sectionLabel}>Ecrã inicial</Text>
+          <Text style={s.sectionLabel}>{t.ep_home_screen}</Text>
           <View style={s.tabPickerRow}>
             <TouchableOpacity
               style={[s.tabCard, defaultTab === 'Feed' && s.tabCardActive]}
@@ -307,7 +309,7 @@ export default function EditProfileScreen() {
                 <Ionicons name="home-outline" size={22} color={defaultTab === 'Feed' ? BG : S} />
               </View>
               <Text style={[s.tabCardLabel, defaultTab === 'Feed' && s.tabCardLabelActive]}>Feed</Text>
-              <Text style={s.tabCardSub}>Publicações</Text>
+              <Text style={s.tabCardSub}>{t.ep_posts}</Text>
               {defaultTab === 'Feed' && (
                 <View style={s.tabCardCheck}>
                   <Ionicons name="checkmark" size={11} color={BG} />
@@ -324,7 +326,7 @@ export default function EditProfileScreen() {
                 <Ionicons name="chatbubble-outline" size={22} color={defaultTab === 'Messages' ? BG : S} />
               </View>
               <Text style={[s.tabCardLabel, defaultTab === 'Messages' && s.tabCardLabelActive]}>Chat</Text>
-              <Text style={s.tabCardSub}>Mensagens</Text>
+              <Text style={s.tabCardSub}>{t.ep_messages}</Text>
               {defaultTab === 'Messages' && (
                 <View style={s.tabCardCheck}>
                   <Ionicons name="checkmark" size={11} color={BG} />
@@ -332,7 +334,7 @@ export default function EditProfileScreen() {
               )}
             </TouchableOpacity>
           </View>
-          <Text style={s.tabPickerHint}>Aplica-se na próxima abertura do app</Text>
+          <Text style={s.tabPickerHint}>{t.ep_applies_next}</Text>
         </View>
 
         {/* Phone (read-only) */}
@@ -360,12 +362,12 @@ export default function EditProfileScreen() {
         <TouchableOpacity style={sm.overlay} activeOpacity={1} onPress={() => setStatusModal(false)} />
         <View style={[sm.sheet, { paddingBottom: bottom + 20 }]}>
           <View style={sm.handle} />
-          <Text style={sm.title}>Escolhe um badge de status</Text>
+          <Text style={sm.title}>{t.ep_status_badge_title}</Text>
 
           <View style={sm.customRow}>
             <TextInput
               style={sm.customInput}
-              placeholder="Escreve o teu próprio..."
+              placeholder={t.ep_custom_ph}
               placeholderTextColor={M}
               value={customInput}
               onChangeText={setCustomInput}
@@ -386,7 +388,7 @@ export default function EditProfileScreen() {
           </View>
 
           <FlatList
-            data={[{ label: '❌ Remover badge', value: '' }, ...STATUS_PRESETS]}
+            data={[{ emoji: '❌', value: '', en: 'Remove badge' }, ...STATUS_PRESETS]}
             keyExtractor={(item) => item.value}
             numColumns={2}
             columnWrapperStyle={{ gap: 8 }}
@@ -394,6 +396,7 @@ export default function EditProfileScreen() {
             showsVerticalScrollIndicator={false}
             renderItem={({ item }) => {
               const selected = statusLabel === item.value && item.value !== ''
+              const text = item.value === '' ? t.ep_remove_badge : (lang === 'en' ? item.en : item.value)
               return (
                 <TouchableOpacity
                   style={[sm.chip, selected && sm.chipSelected, item.value === '' && sm.chipRemove]}
@@ -404,7 +407,7 @@ export default function EditProfileScreen() {
                   activeOpacity={0.75}
                 >
                   <Text style={[sm.chipTxt, selected && sm.chipTxtSelected, item.value === '' && sm.chipTxtRemove]}>
-                    {item.label}
+                    {item.emoji} {text}
                   </Text>
                 </TouchableOpacity>
               )

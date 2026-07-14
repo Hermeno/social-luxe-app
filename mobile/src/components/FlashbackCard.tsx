@@ -9,6 +9,7 @@ import {
 } from 'react-native'
 import { Post } from '../types'
 import { colors, fonts, spacing, radius } from '../theme'
+import { useT } from '../i18n'
 import { API_BASE } from '../config'
 
 interface Props {
@@ -18,6 +19,7 @@ interface Props {
 
 
 export default function FlashbackCard({ post, onDismiss }: Props) {
+  const t = useT()
   const fadeAnim = useRef(new Animated.Value(0)).current
 
   useEffect(() => {
@@ -39,7 +41,7 @@ export default function FlashbackCard({ post, onDismiss }: Props) {
     <Animated.View style={[s.card, { opacity: fadeAnim }]}>
       <View style={s.header}>
         <Text style={s.emoji}>📅</Text>
-        <Text style={s.headerText}>Neste dia, 1 ano atrás</Text>
+        <Text style={s.headerText}>{t.fb_title}</Text>
       </View>
 
       <View style={s.body}>
@@ -51,10 +53,10 @@ export default function FlashbackCard({ post, onDismiss }: Props) {
 
       <View style={s.actions}>
         <TouchableOpacity style={s.viewBtn} activeOpacity={0.8}>
-          <Text style={s.viewText}>Ver</Text>
+          <Text style={s.viewText}>{t.fb_view}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={s.closeBtn} onPress={onDismiss} activeOpacity={0.8}>
-          <Text style={s.closeText}>✕ Fechar</Text>
+          <Text style={s.closeText}>{t.fb_close}</Text>
         </TouchableOpacity>
       </View>
     </Animated.View>

@@ -15,6 +15,7 @@ import { getFriends } from '../../services/friendship.service'
 import { useAuthStore } from '../../store/auth.store'
 import { Friendship } from '../../types'
 import { colors, fonts, spacing } from '../../theme'
+import { useT } from '../../i18n'
 import { API_BASE } from '../../config'
 
 const { width, height } = Dimensions.get('window')
@@ -33,6 +34,7 @@ function resolveAvatar(avatar: string | null) {
 }
 
 export default function FriendshipMapScreen() {
+  const t = useT()
   const nav = useNavigation()
   const { top } = useSafeAreaInsets()
   const { user } = useAuthStore()
@@ -65,7 +67,7 @@ export default function FriendshipMapScreen() {
         <TouchableOpacity onPress={() => nav.goBack()} style={s.backBtn}>
           <Ionicons name="chevron-back" size={26} color={colors.white} />
         </TouchableOpacity>
-        <Text style={s.title}>Sua Rede</Text>
+        <Text style={s.title}>{t.fmap_title}</Text>
         <View style={{ width: 36 }} />
       </View>
 

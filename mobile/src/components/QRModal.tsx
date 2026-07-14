@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import QRCode from 'react-native-qrcode-svg'
 import { Ionicons } from '@expo/vector-icons'
 import { colors, fonts, spacing, radius } from '../theme'
+import { useT } from '../i18n'
 
 interface Props {
   visible: boolean
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export default function QRModal({ visible, userId, userName, onClose }: Props) {
+  const t = useT()
   const value = `luxe://profile/${userId}`
 
   function handleShare() {
@@ -23,7 +25,7 @@ export default function QRModal({ visible, userId, userName, onClose }: Props) {
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <SafeAreaView style={s.container}>
         <View style={s.header}>
-          <Text style={s.title}>Meu QR Code</Text>
+          <Text style={s.title}>{t.qr_title}</Text>
           <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}>
             <Ionicons name="close" size={22} color={colors.gray600} />
           </TouchableOpacity>
@@ -34,11 +36,11 @@ export default function QRModal({ visible, userId, userName, onClose }: Props) {
             <QRCode value={value} size={220} color={colors.gray800} backgroundColor={colors.white} />
           </View>
           <Text style={s.name}>{userName}</Text>
-          <Text style={s.hint}>Mostre este código para que alguém te siga</Text>
+          <Text style={s.hint}>{t.qr_hint}</Text>
 
           <TouchableOpacity style={s.shareBtn} onPress={handleShare} activeOpacity={0.85}>
             <Ionicons name="share-outline" size={18} color={colors.white} />
-            <Text style={s.shareBtnText}>Partilhar link</Text>
+            <Text style={s.shareBtnText}>{t.qr_share}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
