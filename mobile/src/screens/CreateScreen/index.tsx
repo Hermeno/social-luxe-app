@@ -62,7 +62,7 @@ export default function CreateScreen() {
   const [loading,          setLoading]          = useState(false)
   const [includePartner,   setIncludePartner]   = useState(false)
   const [isAnnouncement,   setIsAnnouncement]   = useState(false)
-  const [stickersEnabled,  setStickersEnabled]  = useState(false)
+  const [stickersEnabled,  setStickersEnabled]  = useState(true)
   const [myUnion,          setMyUnion]          = useState<Union | null>(null)
 
   useEffect(() => {
@@ -162,7 +162,7 @@ export default function CreateScreen() {
       setAlbum(null)
       setBgKey('gray')
       setIsAnnouncement(false)
-      setStickersEnabled(false)
+      setStickersEnabled(true)
       setIncludePartner(false)
       toast.success(t.feed_published, isAnnouncement ? t.feed_announcement_sub : t.feed_published_sub)
       nav.navigate('Feed' as never)

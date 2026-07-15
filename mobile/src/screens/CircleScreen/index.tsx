@@ -618,16 +618,20 @@ const s = StyleSheet.create({
   incomingBtn: { backgroundColor: colors.primary, borderRadius: 18, paddingHorizontal: 18, paddingVertical: 9 },
   incomingBtnTxt: { color: '#fff', fontSize: 13.5, fontFamily: fonts.bold },
 
-  /* ── Painel de vizinhos (flutua sobre a câmara) ── */
+  /* ── Painel de vizinhos (só o layout, sobre a câmara — sem fundo) ── */
   nearbyPanel: {
-    position: 'absolute', left: 12, right: 12, bottom: 190, zIndex: 15,
-    backgroundColor: 'rgba(0,0,0,0.44)',
-    borderRadius: 22, paddingVertical: 14, paddingHorizontal: 12,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+    position: 'absolute', left: 12, right: 12, bottom: 200, zIndex: 15,
+    paddingVertical: 4, paddingHorizontal: 8,
   },
-  nearbyHeading: { color: '#fff', fontSize: 15, fontFamily: fonts.bold, letterSpacing: -0.3, textAlign: 'center' },
-  nearbySub: { color: 'rgba(255,255,255,0.72)', fontSize: 12.5, fontFamily: fonts.regular, textAlign: 'center', marginTop: 3, marginBottom: 4 },
-  nearbyScroll: { maxHeight: 220, marginTop: 8 },
+  nearbyHeading: {
+    color: '#fff', fontSize: 15, fontFamily: fonts.bold, letterSpacing: -0.3, textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.55)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
+  },
+  nearbySub: {
+    color: 'rgba(255,255,255,0.85)', fontSize: 12.5, fontFamily: fonts.regular, textAlign: 'center', marginTop: 3, marginBottom: 4,
+    textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
+  },
+  nearbyScroll: { maxHeight: 150, marginTop: 6 },
   nearbyWrap: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 },
   card: {
     width: 96, alignItems: 'center', gap: 6,
@@ -641,20 +645,23 @@ const s = StyleSheet.create({
   cardBtnTxt: { color: '#fff', fontSize: 12, fontFamily: fonts.bold },
   cardBtnTxtCalled: { color: 'rgba(255,255,255,0.85)' },
 
-  /* ── À procura de pessoas ── */
-  searching: { position: 'absolute', left: 0, right: 0, top: '40%', alignItems: 'center', zIndex: 5, paddingHorizontal: 24 },
+  /* ── À procura de pessoas (só o layout, sem fundo) ── */
+  searching: { position: 'absolute', left: 0, right: 0, top: '42%', alignItems: 'center', zIndex: 5, paddingHorizontal: 24 },
   searchingCard: {
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 22, paddingVertical: 16, paddingHorizontal: 20,
-    alignItems: 'center', gap: 8,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)',
+    alignItems: 'center', gap: 6,
   },
   searchingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  searchingTxt: { color: '#fff', fontSize: 15, fontFamily: fonts.bold, letterSpacing: -0.2 },
-  searchingSub: { color: 'rgba(255,255,255,0.72)', fontSize: 12.5, fontFamily: fonts.regular, textAlign: 'center' },
+  searchingTxt: {
+    color: '#fff', fontSize: 15, fontFamily: fonts.bold, letterSpacing: -0.2,
+    textShadowColor: 'rgba(0,0,0,0.55)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
+  },
+  searchingSub: {
+    color: 'rgba(255,255,255,0.85)', fontSize: 12.5, fontFamily: fonts.regular, textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
+  },
   inviteBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 6,
-    backgroundColor: colors.primary, borderRadius: 22, paddingHorizontal: 20, paddingVertical: 10,
+    flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 4,
+    backgroundColor: colors.primary, borderRadius: 22, paddingHorizontal: 18, paddingVertical: 9,
   },
   inviteBtnTxt: { color: '#fff', fontSize: 14, fontFamily: fonts.bold, letterSpacing: -0.2 },
 

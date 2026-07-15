@@ -5,7 +5,7 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Heart, MessageCircle, Send, Eye, MoreVertical, Pencil, Trash2, Tag } from 'lucide-react-native'
+import { Heart, MessageCircle, Send, Eye, MoreVertical, Pencil, Trash2, FilePlusCorner, RefreshCw } from 'lucide-react-native'
 import { confirm } from '../../components/confirm'
 
 import { Post } from '../../types'
@@ -22,6 +22,8 @@ interface Props {
   onStickerPress?: () => void
   liked?: boolean
   onLikeChange?: (liked: boolean) => void
+  reposted?: boolean
+  onRepost?: () => void
   onDeleted?: (id: string) => void
   onEdited?: (id: string, caption: string) => void
   onBlockingChange?: (open: boolean) => void
@@ -45,7 +47,8 @@ function fmt(n: number) {
 
 export default React.memo(function ActionBar({
   post, onCommentPress, onStickerPress, liked: likedProp = false,
-  onLikeChange, onDeleted, onEdited, onBlockingChange, newPostsCount = 0,
+  onLikeChange, reposted: repostedProp = false, onRepost,
+  onDeleted, onEdited, onBlockingChange, newPostsCount = 0,
   commentCount: commentCountProp,
 }: Props) {
   const { bottom: safeBottom } = useSafeAreaInsets()
@@ -55,6 +58,7 @@ export default React.memo(function ActionBar({
   const isSelf     = user?.id === post.userId
 
   const [liked,      setLiked]      = useState(likedProp)
+  const [reposted,   setReposted]   = useState(repostedProp)
   const [likeCount,  setLikeCount]  = useState(post._count?.likes ?? 0)
   const [shareCount, setShareCount] = useState(post._count?.shares ?? 0)
   const [showReactions, setShowReactions] = useState(false)
@@ -118,11 +122,18 @@ export default React.memo(function ActionBar({
 
   useEffect(() => {
     setLiked(likedProp)
+    setReposted(repostedProp)
     setLikeCount(post._count?.likes ?? 0)
     setShareCount(post._count?.shares ?? 0)
     setShowReactions(false); setShowMenu(false); setEditMode(false)
     setEditText(post.caption ?? '')
   }, [post.id])
+
+  function handleRepost() {
+    if (reposted) return     // repost uma vez
+    setReposted(true)        // feedback imediato
+    onRepost?.()             // FeedScreen faz a chamada à API
+  }
 
   async function handleLike() {
     const was = liked; const prev = likeCount
@@ -226,17 +237,22 @@ export default React.memo(function ActionBar({
         {/* Share */}
         {!isAnnouncement && (
           <TouchableOpacity style={s.btn} onPress={handleShare} activeOpacity={0.75}>
-            <Send size={25} strokeWidth={2} color="#fff" />
+            <Send size={26} strokeWidth={2} color="#fff" />
             <Text style={s.label}>{fmt(shareCount)}</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Repostar */}
+        {!isAnnouncement && (
+          <TouchableOpacity style={s.btn} onPress={handleRepost} activeOpacity={0.75}>
+            <RefreshCw size={26} strokeWidth={2} color={reposted ? '#22C55E' : '#fff'} />
           </TouchableOpacity>
         )}
 
         {/* Stickers — só aparece se o post tiver stickers habilitados */}
         {!isAnnouncement && post.stickersEnabled && (
           <TouchableOpacity style={s.btn} onPress={onStickerPress} activeOpacity={0.75}>
-            <View style={s.tagRotate}>
-              <Tag size={26} strokeWidth={2} color="#fff" />
-            </View>
+            <FilePlusCorner size={26} strokeWidth={2} color="#fff" />
           </TouchableOpacity>
         )}
 
@@ -339,7 +355,6 @@ const s = StyleSheet.create({
   },
 
   mirrorX:   { transform: [{ scaleX: -1 }] },
-  tagRotate: { transform: [{ rotate: '90deg' }] },
 
   burstHeart: {
     position: 'absolute',

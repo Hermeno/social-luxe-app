@@ -28,6 +28,7 @@ import { useAuthStore } from '../../store/auth.store'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { markPostViewed, getViewedPostIds, getCache, setCache } from '../../db/database'
 import * as postService from '../../services/post.service'
+import { toast } from '../../utils/toast'
 import { useT } from '../../i18n'
 import { getOrDownload, prefetchMedia } from '../../db/mediaCache'
 import { colors, fonts } from '../../theme'
@@ -110,6 +111,7 @@ export default function FeedScreen() {
   // Per-post comment and like deltas — persists while FeedScreen stays mounted
   const [commentDeltas, setCommentDeltas] = useState<Record<string, number>>({})
   const [likedPostIds,  setLikedPostIds]  = useState<Set<string>>(new Set())
+  const [repostedIds,   setRepostedIds]   = useState<Set<string>>(new Set())
   const [stickerPickerOpen,  setStickerPickerOpen]  = useState(false)
   const [pendingSticker, setPendingSticker] = useState<StickerChoice | null>(null)
   const [localStickers, setLocalStickers] = useState<Record<string, PostSticker[]>>({})
@@ -201,6 +203,17 @@ export default function FeedScreen() {
       return next
     })
   }, [posts])
+
+  // Repostar — republica o post na tua própria feed (servidor duplica)
+  const handleRepost = useCallback((postId: string) => {
+    setRepostedIds((prev) => new Set(prev).add(postId))
+    postService.repostPost(postId)
+      .then(() => toast.success(t.feed_reposted, t.feed_reposted_sub))
+      .catch(() => {
+        setRepostedIds((prev) => { const s = new Set(prev); s.delete(postId); return s })
+        toast.error(t.error, t.feed_repost_fail)
+      })
+  }, [t])
 
   // Overlay opacity that COVERS the video (1 = thumbnail visible, 0 = video visible).
   // Starts at 1 so the thumbnail is shown while the video loads its first frame.
@@ -844,6 +857,8 @@ export default function FeedScreen() {
                 updatePostCounts(post.id, { likes: Math.max(0, (post._count?.likes ?? 0) + (l ? 1 : -1)) })
               }
             }}
+            reposted={repostedIds.has(post.id)}
+            onRepost={() => handleRepost(post.id)}
             commentCount={(post._count?.comments ?? 0) + (commentDeltas[post.id] ?? 0)}
             onDeleted={(id) => { removePost(id); navigateTo(Math.max(0, currentIndex - 1)) }}
             onEdited={(id, caption) => updatePost(id, caption)}

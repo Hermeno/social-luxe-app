@@ -269,6 +269,13 @@ export async function sharePost(req: AuthRequest, res: Response) {
   } catch (err) { return handleError(res, err) }
 }
 
+export async function repostPost(req: AuthRequest, res: Response) {
+  try {
+    const post = await postService.repostPost(req.user!.userId, req.params.id)
+    return created(res, post)
+  } catch (err) { return handleError(res, err) }
+}
+
 export async function voteExtendPost(req: AuthRequest, res: Response) {
   try {
     const result = await postService.voteExtendPost(req.user!.userId, req.params.id)

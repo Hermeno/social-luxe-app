@@ -452,35 +452,32 @@ export default function ChatScreen() {
   const { bottom, top } = useSafeAreaInsets()
   const isOnline        = useOnlineStore((s) => s.isOnline(userId))
 
-  // ── Keyboard offset — replaces KeyboardAvoidingView to avoid stuck-padding bug ─
-  const kbAnim = useRef(new Animated.Value(0)).current
-
+  // ── Teclado: controlo manual determinístico ────────────────────────────────
+  // O KeyboardAvoidingView do RN, em edge-to-edge no Android, mede o inset da barra
+  // de navegação como se fosse teclado e deixa um resíduo (~20px) ao fechar. Aqui
+  // padamos pela altura REAL do teclado ao abrir e forçamos EXATAMENTE 0 ao fechar.
+  const kbPad = useRef(new Animated.Value(0)).current
   useEffect(() => {
-    // iOS only: the window doesn't resize, so we pad the layout by the keyboard
-    // height ourselves. On Android the window already resizes (adjustResize) —
-    // padding on top of that doubled the offset and threw the input bar to the
-    // top of the screen, leaving the keyboard alone at the bottom.
-    if (Platform.OS !== 'ios') return
-
-    const sub1 = Keyboard.addListener('keyboardWillShow', (e) => {
-      const safeHeight = Math.max(0, e.endCoordinates.height - bottom)
-      Animated.timing(kbAnim, {
-        toValue: safeHeight,
-        duration: e.duration ?? 250,
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
+    const onShow = (e: any) => {
+      Animated.timing(kbPad, {
+        toValue: e?.endCoordinates?.height ?? 0,
+        duration: e?.duration ?? 220,
         useNativeDriver: false,
       }).start()
-    })
-
-    const sub2 = Keyboard.addListener('keyboardWillHide', (e) => {
-      Animated.timing(kbAnim, {
+    }
+    const onHide = (e: any) => {
+      Animated.timing(kbPad, {
         toValue: 0,
-        duration: e.duration ?? 250,
+        duration: e?.duration ?? 180,
         useNativeDriver: false,
       }).start()
-    })
-
-    return () => { sub1.remove(); sub2.remove() }
-  }, [bottom])
+    }
+    const s1 = Keyboard.addListener(showEvt, onShow)
+    const s2 = Keyboard.addListener(hideEvt, onHide)
+    return () => { s1.remove(); s2.remove() }
+  }, [])
 
   const formatDateLabel = useCallback((dateStr: string) => {
     const d    = new Date(dateStr)
@@ -1049,7 +1046,7 @@ export default function ChatScreen() {
 
   return (
     <View style={[t.screen, { paddingTop: top }]}>
-      <Animated.View style={{ flex: 1, paddingBottom: kbAnim }}>
+      <Animated.View style={{ flex: 1, paddingBottom: kbPad }}>
         <ChatHeader
           userName={userName}
           avatarUri={userAvatar ?? null}

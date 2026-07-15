@@ -430,6 +430,35 @@ export async function sharePost(userId: string, postId: string) {
   return share
 }
 
+// Repost — republica o conteúdo do post original como uma nova publicação do
+// utilizador (aparece na feed dele). Credita também uma partilha ao original.
+export async function repostPost(userId: string, postId: string) {
+  const original = await prisma.post.findUnique({ where: { id: postId } })
+  if (!original || original.deletedAt) throw new Error('Post not found')
+
+  const expiresAt = new Date(Date.now() + POST_INITIAL_HOURS * 60 * 60 * 1000)
+  const post = await prisma.post.create({
+    data: {
+      userId,
+      mediaUrl:        original.mediaUrl,
+      mediaUrls:       original.mediaUrls ?? [],
+      albumOverlays:   (original.albumOverlays ?? undefined) as any,
+      mediaType:       original.mediaType,
+      caption:         original.caption,
+      bgColor:         original.bgColor,
+      stickersEnabled: original.stickersEnabled,
+      expiresAt,
+    },
+    include: {
+      user:        { select: { id: true, name: true, avatar: true, viewsPublic: true, showDevice: true, statusLabel: true } },
+      partnerUser: { select: { id: true, name: true, avatar: true } },
+      _count:      { select: { likes: true, comments: true, shares: true, views: true } },
+    },
+  })
+  prisma.share.create({ data: { userId, postId } }).catch(() => {})   // credita partilha ao original
+  return withThumbnail(post)
+}
+
 export async function voteExtendPost(userId: string, postId: string) {
   const post = await prisma.post.findUnique({ where: { id: postId }, select: { isAnnouncement: true, deletedAt: true } })
   if (!post || post.deletedAt) throw new Error('Post not found')

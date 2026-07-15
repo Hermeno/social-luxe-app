@@ -107,6 +107,12 @@ export async function addComment(postId: string, content: string, parentId?: str
   return res.data.data
 }
 
+// Repost — republica o post na tua própria feed (o servidor duplica o conteúdo)
+export async function repostPost(postId: string): Promise<Post> {
+  const res = await api.post<ApiResponse<Post>>(`/posts/${postId}/repost`)
+  return res.data.data
+}
+
 export async function sharePost(postId: string) {
   await api.post(`/posts/${postId}/share`)
 }
