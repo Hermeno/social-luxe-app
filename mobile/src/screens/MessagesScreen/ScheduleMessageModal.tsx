@@ -270,7 +270,7 @@ const FIELD = '#F4F4F6'
 
 const m = StyleSheet.create({
   flex:     { flex: 1 },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.28)' },
+  backdrop: { flex: 1, backgroundColor: 'transparent' },
 
   sheet: {
     backgroundColor: colors.white,

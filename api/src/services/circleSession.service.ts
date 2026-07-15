@@ -4,6 +4,16 @@ import { emitToUser } from '../socket'
 import { createAlbumPost } from './post.service'
 
 const RADIUS_KM = 3
+const INVITE_TTL_MS = 2 * 60 * 1000   // convite expira em 2 minutos
+
+// Remove convites pendentes (INVITED) com mais de 2 min — evita que alguém
+// aceite 1h depois quando quem chamou já desistiu.
+async function expireInvites(sessionId?: string) {
+  const cutoff = new Date(Date.now() - INVITE_TTL_MS)
+  await prisma.circleSessionMember.deleteMany({
+    where: { status: 'INVITED', createdAt: { lt: cutoff }, ...(sessionId ? { sessionId } : {}) },
+  }).catch(() => {})
+}
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
   const R = 6371
@@ -85,6 +95,8 @@ export async function openSession(userId: string, lat?: number, lng?: number) {
     await prisma.circleSessionMember.create({ data: { sessionId: session.id, userId, status: 'JOINED' } })
   }
 
+  await expireInvites(session.id)
+
   const [members, nearby] = await Promise.all([
     membersOf(session.id),
     nearbyMutuals(userId, lat, lng),
@@ -96,6 +108,7 @@ export async function openSession(userId: string, lat?: number, lng?: number) {
 export async function getSessionState(sessionId: string) {
   const session = await prisma.circleSession.findUnique({ where: { id: sessionId } })
   if (!session) throw new Error('Sessão não encontrada')
+  await expireInvites(sessionId)
   return { session, members: await membersOf(sessionId) }
 }
 
@@ -105,9 +118,10 @@ export async function callUser(hostId: string, sessionId: string, targetId: stri
   if (!session || session.hostId !== hostId) throw new Error('Sessão não encontrada')
   if (session.status !== 'OPEN') throw new Error('Sessão já fechou')
 
+  // (re)convite renova a janela de 2 min a partir de agora
   await prisma.circleSessionMember.upsert({
     where:  { sessionId_userId: { sessionId, userId: targetId } },
-    update: {},
+    update: { status: 'INVITED', createdAt: new Date() },
     create: { sessionId, userId: targetId, status: 'INVITED' },
   })
 
@@ -124,6 +138,13 @@ export async function joinSession(userId: string, sessionId: string) {
   const session = await prisma.circleSession.findUnique({ where: { id: sessionId } })
   if (!session) throw new Error('Sessão não encontrada')
   if (session.status !== 'OPEN') throw new Error('Sessão já fechou')
+
+  // Convite só é válido durante 2 min — depois disso expira
+  const existing = await prisma.circleSessionMember.findUnique({ where: { sessionId_userId: { sessionId, userId } } })
+  if (existing && existing.status === 'INVITED' && Date.now() - existing.createdAt.getTime() > INVITE_TTL_MS) {
+    await prisma.circleSessionMember.delete({ where: { sessionId_userId: { sessionId, userId } } }).catch(() => {})
+    throw new Error('O convite expirou')
+  }
 
   await prisma.circleSessionMember.upsert({
     where:  { sessionId_userId: { sessionId, userId } },
@@ -169,8 +190,10 @@ export async function publishSession(userId: string, sessionId: string, caption?
 
 // Uma chamada pendente para mim (para quem abre o Círculo após ser chamado)
 export async function incomingCall(userId: string) {
+  await expireInvites()
+  const cutoff = new Date(Date.now() - INVITE_TTL_MS)
   const m = await prisma.circleSessionMember.findFirst({
-    where:   { userId, status: 'INVITED', session: { status: 'OPEN' } },
+    where:   { userId, status: 'INVITED', createdAt: { gte: cutoff }, session: { status: 'OPEN' } },
     orderBy: { createdAt: 'desc' },
     include: { session: { include: { host: { select: { id: true, name: true, avatar: true } } } } },
   })

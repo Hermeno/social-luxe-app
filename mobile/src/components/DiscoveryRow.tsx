@@ -4,7 +4,6 @@ import {
   Animated, ActivityIndicator,
 } from 'react-native'
 import { Image } from 'expo-image'
-import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
@@ -17,8 +16,8 @@ import FollowSplitButton, { FollowDuration } from './FollowSplitButton'
 import { toast } from '../utils/toast'
 import { useT } from '../i18n'
 
-const CARD_W = 110
-const CARD_H = 160
+const CARD_W = 128
+const CARD_H = 158   // usado só para a altura do spinner
 
 interface SuggestedUser {
   id: string
@@ -62,28 +61,26 @@ function MiniCard({
 
   return (
     <Animated.View style={[d.card, { opacity: fadeAnim }]}>
-      <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onPress} activeOpacity={0.88} />
-      {photo
-        ? <Image source={{ uri: photo }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
-        : <View style={[StyleSheet.absoluteFill, d.photoFallback]}>
-            <Ionicons name="person" size={28} color="rgba(255,255,255,0.25)" />
-          </View>
-      }
-      <LinearGradient
-        colors={['transparent', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.88)']}
-        locations={[0.3, 0.6, 1]}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
-      <View style={d.info}>
+      {/* Avatar redondo — toca para abrir perfil */}
+      <TouchableOpacity onPress={onPress} activeOpacity={0.85}>
+        {photo
+          ? <Image source={{ uri: photo }} style={d.avatar} contentFit="cover" cachePolicy="memory-disk" />
+          : <View style={[d.avatar, d.photoFallback]}>
+              <Ionicons name="person" size={26} color={colors.gray400} />
+            </View>
+        }
+      </TouchableOpacity>
+
+      <TouchableOpacity onPress={onPress} activeOpacity={0.7} style={d.textWrap}>
         <Text style={d.name} numberOfLines={1}>{user.name.split(' ')[0]}</Text>
-        <FollowSplitButton
-          following={followed}
-          loading={loading}
-          onFollow={handleFollow}
-          theme="light"
-        />
-      </View>
+      </TouchableOpacity>
+
+      <FollowSplitButton
+        following={followed}
+        loading={loading}
+        onFollow={handleFollow}
+        theme="light"
+      />
     </Animated.View>
   )
 }
@@ -95,7 +92,9 @@ interface Props {
   onDismiss: () => void
 }
 
-export default function DiscoveryRow({ title = 'Sugestões para ti', onDismiss }: Props) {
+export default function DiscoveryRow({ title, onDismiss }: Props) {
+  const t = useT()
+  const label = title ?? t.msg_suggestions_title
   const nav = useNavigation<StackNavigationProp<AppStackParams>>()
   const [users,   setUsers]   = useState<SuggestedUser[]>([])
   const [loading, setLoading] = useState(true)
@@ -136,7 +135,7 @@ export default function DiscoveryRow({ title = 'Sugestões para ti', onDismiss }
     <Animated.View style={[d.container, { opacity: slideAnim, transform: [{ scaleY: slideAnim }] }]}>
       {/* Header */}
       <View style={d.header}>
-        <Text style={d.title}>{title}</Text>
+        <Text style={d.title}>{label}</Text>
         <TouchableOpacity onPress={dismiss} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Ionicons name="close" size={18} color="#8E8E93" />
         </TouchableOpacity>
@@ -168,11 +167,11 @@ export default function DiscoveryRow({ title = 'Sugestões para ti', onDismiss }
 
 const d = StyleSheet.create({
   container: {
-    backgroundColor: '#FAFAFA',
+    backgroundColor: colors.white,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: '#EBEBEB',
-    paddingBottom: 12,
+    paddingBottom: 14,
     transformOrigin: 'top',
   },
   header: {
@@ -193,31 +192,38 @@ const d = StyleSheet.create({
   spinner: { height: CARD_H, alignItems: 'center', justifyContent: 'center' },
   list: { paddingHorizontal: 16, gap: 10 },
 
-  // ── Mini card ──────────────────────────────────────────────────────────────
+  // ── Mini card (Instagram-style: avatar redondo, nome, botão seguir) ──────────
   card: {
     width:        CARD_W,
-    height:       CARD_H,
-    borderRadius: 14,
-    overflow:     'hidden',
-    backgroundColor: '#1A1A1A',
+    borderRadius: 16,
+    backgroundColor: '#fff',
+    borderWidth:  1,
+    borderColor:  '#ECECEF',
+    paddingVertical:   16,
+    paddingHorizontal: 10,
+    alignItems:   'center',
+  },
+  avatar: {
+    width:        68,
+    height:       68,
+    borderRadius: 34,
+    backgroundColor: colors.gray100,
   },
   photoFallback: {
-    backgroundColor: '#2A2A2A',
-    alignItems:      'center',
-    justifyContent:  'center',
+    alignItems:     'center',
+    justifyContent: 'center',
   },
-  info: {
-    position: 'absolute',
-    bottom:   0,
-    left:     0,
-    right:    0,
-    padding:  8,
-    gap:      5,
+  textWrap: {
+    marginTop:    10,
+    marginBottom: 12,
+    alignSelf:    'stretch',
+    alignItems:   'center',
   },
   name: {
-    fontSize:    12,
-    fontFamily:  fonts.bold,
-    color:       '#fff',
-    letterSpacing: -0.1,
+    fontSize:      13.5,
+    fontFamily:    fonts.semiBold,
+    color:         colors.gray800,
+    letterSpacing: -0.2,
+    textAlign:     'center',
   },
 })

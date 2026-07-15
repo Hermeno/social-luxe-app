@@ -106,48 +106,37 @@ function UserCard({
 }) {
   const t         = useT()
   const followers = user._count?.followers ?? 0
-  const posts     = user._count?.posts     ?? 0
   const photoUri  = resolveUri(user.avatar)
 
   return (
-    <TouchableOpacity style={c.cardShadow} onPress={onPress} activeOpacity={0.9}>
-      <View style={c.card}>
-        {/* Full-bleed photo */}
+    <View style={c.card}>
+      {/* Round avatar — tap opens profile */}
+      <TouchableOpacity onPress={onPress} activeOpacity={0.85}>
         {photoUri
-          ? <Image source={{ uri: photoUri }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
-          : <View style={[StyleSheet.absoluteFill, c.photoFallback]}>
-              <Ionicons name="person" size={44} color="rgba(255,255,255,0.25)" />
+          ? <Image source={{ uri: photoUri }} style={c.avatar} contentFit="cover" cachePolicy="memory-disk" />
+          : <View style={[c.avatar, c.photoFallback]}>
+              <Ionicons name="person" size={30} color={colors.gray400} />
             </View>
         }
+      </TouchableOpacity>
 
-        {/* Dark gradient — fades in from mid-card downward */}
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.88)']}
-          locations={[0.35, 0.65, 1]}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
+      <TouchableOpacity onPress={onPress} activeOpacity={0.7} style={c.textWrap}>
+        <Text style={c.cardName} numberOfLines={1}>{user.name}</Text>
+        <Text style={c.cardSub} numberOfLines={1}>
+          {fmtCount(followers)} {followers === 1 ? t.follower : t.followers}
+        </Text>
+      </TouchableOpacity>
+
+      <View style={c.followWrap}>
+        <FollowSplitButton
+          following={followed}
+          followBack={followBack}
+          loading={loadingFollow}
+          onFollow={onFollow}
+          theme="light"
         />
-
-        {/* Info + button pinned to bottom */}
-        <View style={c.info}>
-          <Text style={c.cardName} numberOfLines={1}>{user.name}</Text>
-          <View style={c.statsRow}>
-            <Text style={c.statTxt}>{fmtCount(posts)} posts</Text>
-            <View style={c.statDot} />
-            <Text style={c.statTxt}>{fmtCount(followers)} {followers === 1 ? t.follower : t.followers}</Text>
-          </View>
-          <View style={c.followWrap}>
-            <FollowSplitButton
-              following={followed}
-              followBack={followBack}
-              loading={loadingFollow}
-              onFollow={onFollow}
-              theme="light"
-            />
-          </View>
-        </View>
       </View>
-    </TouchableOpacity>
+    </View>
   )
 }
 
@@ -1588,62 +1577,50 @@ const q = StyleSheet.create({
 /* ── União tab styles injected into s ── */
 // (appended below the main StyleSheet)
 
-const CARD_H = Math.round(CARD_W * 1.45)
-
 const c = StyleSheet.create({
-  cardShadow: {
-    width:        CARD_W,
-    height:       CARD_H,
-    borderRadius: 24,
-    shadowColor:  '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.16,
-    shadowRadius: 14,
-    elevation:    5,
-  },
+  // Instagram-style: avatar redondo em cima, nome, botão seguir — card branco limpo
   card: {
-    flex:         1,
-    borderRadius: 24,
-    overflow:     'hidden',
-    backgroundColor: '#1A1A1A',
+    width:        CARD_W,
+    borderRadius: 18,
+    backgroundColor: '#fff',
+    borderWidth:  1,
+    borderColor:  '#ECECEF',
+    paddingVertical:   18,
+    paddingHorizontal: 12,
+    alignItems:   'center',
+  },
+  avatar: {
+    width:        76,
+    height:       76,
+    borderRadius: 38,
+    backgroundColor: colors.gray100,
   },
   photoFallback: {
-    backgroundColor: '#2A2A2A',
-    alignItems:      'center',
-    justifyContent:  'center',
+    alignItems:     'center',
+    justifyContent: 'center',
   },
-  info: {
-    position: 'absolute',
-    bottom:   0,
-    left:     0,
-    right:    0,
-    padding:  14,
-    gap:      5,
+  textWrap: {
+    alignItems: 'center',
+    marginTop:  12,
+    marginBottom: 12,
+    alignSelf:  'stretch',
   },
   cardName: {
-    fontSize:    15,
-    fontFamily:  fonts.bold,
-    color:       '#fff',
-    letterSpacing: -0.3,
+    fontSize:    14.5,
+    fontFamily:  fonts.semiBold,
+    color:       colors.gray800,
+    letterSpacing: -0.2,
+    textAlign:   'center',
   },
-  statsRow: {
-    flexDirection: 'row',
-    alignItems:    'center',
-    gap:           5,
-  },
-  statTxt: {
-    fontSize:   11.5,
-    fontFamily: fonts.medium,
-    color:      'rgba(255,255,255,0.7)',
-  },
-  statDot: {
-    width:        3,
-    height:       3,
-    borderRadius: 1.5,
-    backgroundColor: 'rgba(255,255,255,0.35)',
+  cardSub: {
+    fontSize:   12,
+    fontFamily: fonts.regular,
+    color:      colors.gray400,
+    marginTop:  2,
+    textAlign:  'center',
   },
   followWrap: {
-    marginTop: 8,
+    alignItems: 'center',
   },
 })
 

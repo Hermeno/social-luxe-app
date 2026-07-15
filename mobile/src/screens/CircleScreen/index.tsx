@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity, Pressable, ScrollView,
-  ActivityIndicator, Alert, Animated, PanResponder,
+  ActivityIndicator, Alert, Animated, PanResponder, Modal, Easing,
 } from 'react-native'
 import { Image } from 'expo-image'
 import { CameraView, useCameraPermissions } from 'expo-camera'
@@ -14,15 +14,40 @@ import { colors, fonts } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
 import * as circle from '../../services/circle.service'
 import { CircleMember, CircleSession, CircleUser, EmojiOverlay } from '../../services/circle.service'
+import { getMyFollowing } from '../../services/follow.service'
 import { useAuthStore } from '../../store/auth.store'
 import { useFeedStore } from '../../store/feed.store'
 import { getSocket } from '../../socket'
 import { useT } from '../../i18n'
 
-const NEARBY_REVEAL_MS = 35_000   // ao fim de ~35s sem ninguém → revela quem chamar
-
 const SHUTTER_OUTER = 78
 const SHUTTER_INNER = 62
+const INVITE_TTL_MS = 2 * 60 * 1000   // convite expira em 2 min (igual ao backend)
+
+// Três pontos a pulsar em sequência — dá vida ao estado "à procura"
+function SearchingDots({ color = '#fff' }: { color?: string }) {
+  const dots = [useRef(new Animated.Value(0.3)).current, useRef(new Animated.Value(0.3)).current, useRef(new Animated.Value(0.3)).current]
+  useEffect(() => {
+    const loops = dots.map((d, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(i * 180),
+          Animated.timing(d, { toValue: 1, duration: 420, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          Animated.timing(d, { toValue: 0.3, duration: 420, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        ]),
+      ),
+    )
+    loops.forEach((l) => l.start())
+    return () => loops.forEach((l) => l.stop())
+  }, [])
+  return (
+    <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+      {dots.map((d, i) => (
+        <Animated.View key={i} style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: color, opacity: d }} />
+      ))}
+    </View>
+  )
+}
 
 const EMOJI_SET  = ['❤️', '🔥', '😂', '😍', '⭐️', '💯', '🙌', '👀', '✨', '😎', '🎯', '🌸', '👑', '🕶️']
 const EMOJI_FRAC = 0.14
@@ -85,14 +110,19 @@ export default function CircleScreen() {
   const [previewUri, setPreviewUri] = useState<string | null>(null)
   const [placed,     setPlaced]     = useState<Placed[]>([])
   const [previewBox, setPreviewBox] = useState({ w: 0, h: 0 })
-  const [showNearby, setShowNearby] = useState(false)
+  const [initDone,   setInitDone]   = useState(false)
+  const [initError,  setInitError]  = useState(false)
   const [shooting,   setShooting]   = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [published,  setPublished]  = useState(false)
+  const [friendsSheet,  setFriendsSheet]  = useState(false)
+  const [friends,       setFriends]       = useState<CircleUser[]>([])
+  const [loadingFriends, setLoadingFriends] = useState(false)
 
   const sessionRef = useRef<CircleSession | null>(null)
   sessionRef.current = session
+  const callTimers = useRef<ReturnType<typeof setTimeout>[]>([])
 
   const shutterPress = useRef(new Animated.Value(1)).current
 
@@ -104,48 +134,60 @@ export default function CircleScreen() {
   const photoCount = members.filter((m) => m.photoUrl).length
   const iHavePhoto = members.some((m) => m.user.id === myId && m.photoUrl)
 
-  // ── Init: entra numa chamada pendente OU abre a minha sessão ────────────────
-  const init = useCallback(async () => {
-    let lat: number | undefined
-    let lng: number | undefined
+  // ── Localização (só se já permitida) ────────────────────────────────────────
+  async function getLoc(): Promise<{ lat?: number; lng?: number }> {
     try {
       const { status } = await Location.getForegroundPermissionsAsync()
       if (status === 'granted') {
         const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
-        lat = loc.coords.latitude
-        lng = loc.coords.longitude
+        return { lat: loc.coords.latitude, lng: loc.coords.longitude }
       }
     } catch {}
+    return {}
+  }
 
+  // ── Garante uma sessão: junta-se a chamada pendente OU abre a minha ──────────
+  // Devolve a sessão (ou null) e é chamada tanto na entrada como antes de qualquer ação.
+  const ensureSession = useCallback(async (): Promise<CircleSession | null> => {
+    if (sessionRef.current) { setInitDone(true); return sessionRef.current }
+    const { lat, lng } = await getLoc()
     try {
       const inc = await circle.getIncoming()
       if (inc.call) {
         const st = await circle.joinCircle(inc.call.sessionId)
-        setSession(st.session); setMembers(st.members); setNearby([])
-        return
+        setSession(st.session); setMembers(st.members); setNearby([]); setInitError(false); setInitDone(true)
+        return st.session
       }
     } catch {}
-
     try {
       const st = await circle.openCircle(lat, lng)
-      setSession(st.session); setMembers(st.members); setNearby(st.nearby)
-    } catch {}
+      setSession(st.session); setMembers(st.members); setNearby(st.nearby); setInitError(false); setInitDone(true)
+      return st.session
+    } catch {
+      setInitError(true); setInitDone(true)
+      return null
+    }
   }, [])
 
   useFocusEffect(useCallback(() => {
     setFocused(true)
     setStatusBarStyle('light')
-    setShowNearby(false)
-    init()
-
-    const revealTimer = setTimeout(() => setShowNearby(true), NEARBY_REVEAL_MS)
+    setInitDone(false); setInitError(false)
+    ensureSession()
 
     const socket = getSocket()
     const onUpdate = ({ sessionId, members: m }: { sessionId: string; members: CircleMember[] }) => {
       if (sessionRef.current?.id === sessionId) setMembers(m)
     }
     const onCalled = (p: { sessionId: string; hostName: string; hostAvatar: string | null }) => {
-      if (sessionRef.current?.id !== p.sessionId) setIncoming(p)
+      if (sessionRef.current?.id !== p.sessionId) {
+        setIncoming(p)
+        // o convite recebido expira em 2 min → o banner desaparece sozinho
+        const timer = setTimeout(() => {
+          setIncoming((cur) => (cur?.sessionId === p.sessionId ? null : cur))
+        }, INVITE_TTL_MS)
+        callTimers.current.push(timer)
+      }
     }
     const onPublished = ({ sessionId }: { sessionId: string }) => {
       if (sessionRef.current?.id === sessionId) nav.navigate('Feed')
@@ -157,23 +199,45 @@ export default function CircleScreen() {
     return () => {
       setFocused(false)
       setStatusBarStyle('dark')
-      clearTimeout(revealTimer)
       setPreviewUri(null)
+      callTimers.current.forEach(clearTimeout)
+      callTimers.current = []
       socket?.off('circle:update', onUpdate)
       socket?.off('circle:called', onCalled)
       socket?.off('circle:published', onPublished)
     }
-  }, [init]))
+  }, [ensureSession]))
 
-  // ── Chamar um vizinho ───────────────────────────────────────────────────────
+  // ── Chamar alguém (vizinho ou amigo) ────────────────────────────────────────
   async function handleCall(u: CircleUser) {
-    if (!session || calling.has(u.id)) return
+    if (calling.has(u.id)) return
+    const sess = sessionRef.current ?? await ensureSession()
+    if (!sess) { Alert.alert(t.circle_errTitle, t.circle_callFail); return }
     setCalling((prev) => new Set(prev).add(u.id))
     try {
-      await circle.callToCircle(session.id, u.id)
+      await circle.callToCircle(sess.id, u.id)
+      // convite expira em 2 min → repõe o botão para se poder chamar de novo
+      const timer = setTimeout(() => {
+        setCalling((prev) => { const n = new Set(prev); n.delete(u.id); return n })
+      }, INVITE_TTL_MS)
+      callTimers.current.push(timer)
     } catch {
       setCalling((prev) => { const n = new Set(prev); n.delete(u.id); return n })
       Alert.alert(t.circle_errTitle, t.circle_callFail)
+    }
+  }
+
+  // ── Convidar amigos (pessoas que sigo) ──────────────────────────────────────
+  async function openFriends() {
+    setFriendsSheet(true)
+    ensureSession()   // garante que dá para chamar
+    if (friends.length === 0) {
+      setLoadingFriends(true)
+      try {
+        const list = await getMyFollowing()
+        setFriends(list.map((f) => ({ id: f.id, name: f.name, avatar: f.avatar })))
+      } catch {}
+      setLoadingFriends(false)
     }
   }
 
@@ -215,11 +279,13 @@ export default function CircleScreen() {
   }
 
   async function confirmPhoto() {
-    if (!session || !previewUri || submitting) return
+    if (!previewUri || submitting) return
+    const sess = sessionRef.current ?? await ensureSession()
+    if (!sess) { Alert.alert(t.circle_errTitle, t.circle_photoFail); return }
     setSubmitting(true)
     try {
       const overlays: EmojiOverlay[] = placed.map(({ emoji, x, y }) => ({ emoji, x, y }))
-      await circle.addCirclePhoto(session.id, previewUri, overlays)
+      await circle.addCirclePhoto(sess.id, previewUri, overlays)
       setPreviewUri(null)
       setPlaced([])
     } catch {
@@ -320,11 +386,9 @@ export default function CircleScreen() {
       )}
 
       {/* ── Painel flutuante: quem chamar (cards) — só o anfitrião, sobre a câmara ── */}
-      {!previewUri && isHost && showNearby && showable.length > 0 && (
+      {!previewUri && isHost && showable.length > 0 && (
         <View style={s.nearbyPanel} pointerEvents="box-none">
-          <Text style={s.nearbyHeading}>
-            {others.length === 0 ? t.circle_nobody : t.circle_callMore}
-          </Text>
+          <Text style={s.nearbyHeading}>{t.circle_callMore}</Text>
           {others.length === 0 && (
             <Text style={s.nearbySub}>{t.circle_nobodySub}</Text>
           )}
@@ -356,13 +420,36 @@ export default function CircleScreen() {
               )
             })}
           </ScrollView>
+          <TouchableOpacity style={s.panelInvite} onPress={openFriends} activeOpacity={0.8}>
+            <Ionicons name="person-add-outline" size={14} color="#fff" />
+            <Text style={s.panelInviteTxt}>{t.circle_inviteFriends}</Text>
+          </TouchableOpacity>
         </View>
       )}
 
-      {/* dica de espera antes de revelar os vizinhos */}
-      {!previewUri && isHost && !showNearby && others.length === 0 && (
-        <View style={s.waitHint} pointerEvents="none">
-          <Text style={s.waitHintTxt}>{t.circle_waiting}</Text>
+      {/* ── À procura de pessoas / ninguém por perto — sempre visível quando sozinho ── */}
+      {!previewUri && others.length === 0 && !incoming && showable.length === 0 && (
+        <View style={s.searching} pointerEvents="box-none">
+          <View style={s.searchingCard}>
+            <View style={s.searchingRow}>
+              <Ionicons name={initDone ? 'people-outline' : 'scan-outline'} size={16} color="#fff" />
+              <Text style={s.searchingTxt}>{initDone ? t.circle_nobody : t.circle_searching}</Text>
+              {!initDone && <SearchingDots />}
+            </View>
+            <Text style={s.searchingSub}>{t.circle_searchingSub}</Text>
+            <TouchableOpacity style={s.inviteBtn} onPress={openFriends} activeOpacity={0.85}>
+              <Ionicons name="person-add" size={15} color="#fff" />
+              <Text style={s.inviteBtnTxt}>{t.circle_inviteFriends}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* chip compacto durante a pré-visualização — continua a procurar */}
+      {previewUri && others.length === 0 && (
+        <View style={[s.searchChip, { top: top + 54 }]} pointerEvents="none">
+          <Text style={s.searchChipTxt}>{initDone ? t.circle_nobody : t.circle_searching}</Text>
+          {!initDone && <SearchingDots />}
         </View>
       )}
 
@@ -424,6 +511,55 @@ export default function CircleScreen() {
           </View>
         </View>
       )}
+
+      {/* ── Sheet: convidar amigos para o círculo ── */}
+      <Modal visible={friendsSheet} transparent animationType="slide" onRequestClose={() => setFriendsSheet(false)}>
+        <View style={s.fsRoot}>
+          <TouchableOpacity style={s.fsBackdrop} activeOpacity={1} onPress={() => setFriendsSheet(false)} />
+          <View style={[s.fsSheet, { paddingBottom: bottom + 20 }]}>
+            <View style={s.fsHandle} />
+            <View style={s.fsHeader}>
+              <View>
+                <Text style={s.fsTitle}>{t.circle_friendsTitle}</Text>
+                <Text style={s.fsSub}>{t.circle_friendsSub}</Text>
+              </View>
+              <TouchableOpacity onPress={() => setFriendsSheet(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Ionicons name="close" size={22} color="rgba(255,255,255,0.7)" />
+              </TouchableOpacity>
+            </View>
+
+            {loadingFriends ? (
+              <ActivityIndicator color="#fff" style={{ marginVertical: 30 }} />
+            ) : friends.length === 0 ? (
+              <Text style={s.fsEmpty}>{t.circle_noFriends}</Text>
+            ) : (
+              <ScrollView style={{ maxHeight: 360 }} showsVerticalScrollIndicator={false}>
+                {friends.map((f) => {
+                  const called = calling.has(f.id) || memberIds.has(f.id)
+                  return (
+                    <View key={f.id} style={s.fsRow}>
+                      <View style={s.fsAvatar}>
+                        <AvatarImage uri={f.avatar} name={f.name} size={44} borderWidth={0} borderColor="transparent" />
+                      </View>
+                      <Text style={s.fsName} numberOfLines={1}>{f.name}</Text>
+                      <TouchableOpacity
+                        style={[s.fsCallBtn, called && s.fsCallBtnDone]}
+                        onPress={() => handleCall(f)}
+                        disabled={called}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={[s.fsCallTxt, called && s.fsCallTxtDone]}>
+                          {called ? t.circle_called : t.circle_call}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )
+                })}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   )
 }
@@ -505,12 +641,57 @@ const s = StyleSheet.create({
   cardBtnTxt: { color: '#fff', fontSize: 12, fontFamily: fonts.bold },
   cardBtnTxtCalled: { color: 'rgba(255,255,255,0.85)' },
 
-  /* ── Dica de espera ── */
-  waitHint: { position: 'absolute', left: 0, right: 0, top: '46%', alignItems: 'center', zIndex: 5 },
-  waitHintTxt: {
-    color: '#fff', fontSize: 13, fontFamily: fonts.medium,
-    backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 7, overflow: 'hidden',
+  /* ── À procura de pessoas ── */
+  searching: { position: 'absolute', left: 0, right: 0, top: '40%', alignItems: 'center', zIndex: 5, paddingHorizontal: 24 },
+  searchingCard: {
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 22, paddingVertical: 16, paddingHorizontal: 20,
+    alignItems: 'center', gap: 8,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)',
   },
+  searchingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  searchingTxt: { color: '#fff', fontSize: 15, fontFamily: fonts.bold, letterSpacing: -0.2 },
+  searchingSub: { color: 'rgba(255,255,255,0.72)', fontSize: 12.5, fontFamily: fonts.regular, textAlign: 'center' },
+  inviteBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 6,
+    backgroundColor: colors.primary, borderRadius: 22, paddingHorizontal: 20, paddingVertical: 10,
+  },
+  inviteBtnTxt: { color: '#fff', fontSize: 14, fontFamily: fonts.bold, letterSpacing: -0.2 },
+
+  searchChip: {
+    position: 'absolute', alignSelf: 'center', zIndex: 15,
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 8,
+  },
+  searchChipTxt: { color: '#fff', fontSize: 12.5, fontFamily: fonts.semiBold },
+
+  panelInvite: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    marginTop: 10, paddingVertical: 8, borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  panelInviteTxt: { color: '#fff', fontSize: 12.5, fontFamily: fonts.semiBold },
+
+  /* ── Sheet de amigos ── */
+  fsRoot:     { flex: 1, justifyContent: 'flex-end' },
+  fsBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
+  fsSheet: {
+    backgroundColor: '#14141A',
+    borderTopLeftRadius: 26, borderTopRightRadius: 26,
+    paddingHorizontal: 20, paddingTop: 10,
+  },
+  fsHandle: { width: 38, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginBottom: 16 },
+  fsHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 },
+  fsTitle: { color: '#fff', fontSize: 18, fontFamily: fonts.bold, letterSpacing: -0.3 },
+  fsSub: { color: 'rgba(255,255,255,0.6)', fontSize: 12.5, fontFamily: fonts.regular, marginTop: 2 },
+  fsEmpty: { color: 'rgba(255,255,255,0.6)', fontSize: 14, fontFamily: fonts.regular, textAlign: 'center', marginVertical: 30 },
+  fsRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
+  fsAvatar: { width: 44, height: 44, borderRadius: 22, overflow: 'hidden' },
+  fsName: { flex: 1, color: '#fff', fontSize: 15, fontFamily: fonts.semiBold },
+  fsCallBtn: { backgroundColor: colors.primary, borderRadius: 16, paddingHorizontal: 20, paddingVertical: 8 },
+  fsCallBtnDone: { backgroundColor: 'rgba(255,255,255,0.15)' },
+  fsCallTxt: { color: '#fff', fontSize: 13, fontFamily: fonts.bold },
+  fsCallTxtDone: { color: 'rgba(255,255,255,0.8)' },
 
   /* ── Fundo ── */
   bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'center', gap: 12, zIndex: 10 },
