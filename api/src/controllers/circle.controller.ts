@@ -50,6 +50,14 @@ export async function leave(req: AuthRequest, res: Response) {
   } catch (err) { return handleError(res, err, 'circle.leave') }
 }
 
+export async function remove(req: AuthRequest, res: Response) {
+  try {
+    const { sessionId, userId } = req.body
+    if (!sessionId || !userId) return badRequest(res, 'sessionId and userId required')
+    return ok(res, await session.removeMember(req.user!.userId, sessionId, userId))
+  } catch (err) { return handleError(res, err, 'circle.remove') }
+}
+
 type Overlay = { emoji: string; x: number; y: number }
 
 function parseOverlays(raw: unknown): Overlay[] {

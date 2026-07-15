@@ -689,6 +689,8 @@ export const EN: { [K in keyof typeof import('./pt').PT]: string } = {
   circle_calledSub: 'for a photo in the Circle',
   circle_join: 'Join',
   circle_leave: 'Leave',
+  circle_remove: 'Remove',
+  circle_removeConfirm: 'Remove from circle?',
   circle_nobody: 'No one showed up yet',
   circle_callMore: 'Call more people',
   circle_nobodySub: 'Call someone near you to take a photo together.',

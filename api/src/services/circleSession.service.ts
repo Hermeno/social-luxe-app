@@ -166,6 +166,19 @@ export async function leaveSession(userId: string, sessionId: string) {
   return { ok: true }
 }
 
+// O anfitrião remove um membro (para voltar a ficar sozinho, por ex.)
+export async function removeMember(hostId: string, sessionId: string, targetId: string) {
+  const session = await prisma.circleSession.findUnique({ where: { id: sessionId } })
+  if (!session || session.hostId !== hostId) throw new Error('Sessão não encontrada')
+  if (targetId === hostId) return { ok: true }   // não se remove a si próprio
+  await prisma.circleSessionMember.delete({
+    where: { sessionId_userId: { sessionId, userId: targetId } },
+  }).catch(() => {})
+  emitToUser(targetId, 'circle:removed', { sessionId })   // avisa o removido
+  await broadcast(sessionId)
+  return { ok: true }
+}
+
 type Overlay = { emoji: string; x: number; y: number }
 
 // Membro guarda a sua foto (com emojis) na sessão

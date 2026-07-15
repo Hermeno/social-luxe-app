@@ -195,9 +195,18 @@ export default function CircleScreen() {
     const onPublished = ({ sessionId }: { sessionId: string }) => {
       if (sessionRef.current?.id === sessionId) nav.navigate('Feed')
     }
+    // Fui removido pelo anfitrião → volto à minha própria sessão
+    const onRemoved = ({ sessionId }: { sessionId: string }) => {
+      if (sessionRef.current?.id === sessionId) {
+        sessionRef.current = null
+        setSession(null); setMembers([])
+        ensureSession()
+      }
+    }
     socket?.on('circle:update', onUpdate)
     socket?.on('circle:called', onCalled)
     socket?.on('circle:published', onPublished)
+    socket?.on('circle:removed', onRemoved)
 
     return () => {
       setFocused(false)
@@ -208,6 +217,7 @@ export default function CircleScreen() {
       socket?.off('circle:update', onUpdate)
       socket?.off('circle:called', onCalled)
       socket?.off('circle:published', onPublished)
+      socket?.off('circle:removed', onRemoved)
     }
   }, [ensureSession]))
 
@@ -258,6 +268,27 @@ export default function CircleScreen() {
 
   function declineIncoming() {
     setIncoming(null)   // recusa → fica com a minha própria sessão
+  }
+
+  // Anfitrião remove um membro (para voltar a ficar sozinho)
+  function handleRemoveMember(target: CircleMember) {
+    if (!session || target.user.id === myId) return
+    Alert.alert(
+      t.circle_removeConfirm,
+      target.user.name.split(' ')[0],
+      [
+        { text: t.cancel, style: 'cancel' },
+        {
+          text: t.circle_remove, style: 'destructive',
+          onPress: async () => {
+            const sess = sessionRef.current
+            if (!sess) return
+            setMembers((prev) => prev.filter((m) => m.user.id !== target.user.id))   // otimista
+            try { await circle.removeFromCircle(sess.id, target.user.id) } catch {}
+          },
+        },
+      ],
+    )
   }
 
   // Desfazer o "aceitar": sai do círculo do anfitrião e volta à minha sessão
@@ -365,16 +396,26 @@ export default function CircleScreen() {
       {/* ── Topo: quem está no círculo (chips) + virar câmara ── */}
       <View style={[s.top, { paddingTop: top + 10 }]} pointerEvents="box-none">
         <View style={s.memberRow}>
-          {members.filter((m) => m.status === 'JOINED').map((m) => (
-            <View key={m.user.id} style={s.memberChip}>
-              <View style={[s.memberAvatar, m.photoUrl && s.memberAvatarDone]}>
+          {members.filter((m) => m.status === 'JOINED').map((m) => {
+            const canRemove = isHost && m.user.id !== myId
+            return (
+              <TouchableOpacity
+                key={m.user.id}
+                style={s.memberChip}
+                activeOpacity={canRemove ? 0.7 : 1}
+                disabled={!canRemove}
+                onPress={() => handleRemoveMember(m)}
+              >
                 <AvatarImage uri={m.user.avatar} name={m.user.name} size={34} borderWidth={0} borderColor="transparent" />
-              </View>
-              {m.photoUrl && (
-                <View style={s.memberCheck}><Ionicons name="checkmark" size={9} color="#fff" /></View>
-              )}
-            </View>
-          ))}
+                {m.photoUrl && !canRemove && (
+                  <View style={s.memberCheck}><Ionicons name="checkmark" size={9} color="#fff" /></View>
+                )}
+                {canRemove && (
+                  <View style={s.memberRemove}><Ionicons name="close" size={9} color="#fff" /></View>
+                )}
+              </TouchableOpacity>
+            )
+          })}
           {members.filter((m) => m.status === 'JOINED').length > 0 && (
             <Text style={s.memberCount}>
               {others.length > 0 ? `${members.length} ${t.circle_inCircle}` : t.circle_onlyYou}
@@ -617,13 +658,14 @@ const s = StyleSheet.create({
   },
   memberRow: { flex: 1, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
   memberChip: {},
-  memberAvatar: {
-    width: 34, height: 34, borderRadius: 17, overflow: 'hidden',
-  },
-  memberAvatarDone: {},
   memberCheck: {
     position: 'absolute', bottom: -2, right: -2,
     width: 15, height: 15, borderRadius: 7.5, backgroundColor: colors.primary,
+    alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: colors.black,
+  },
+  memberRemove: {
+    position: 'absolute', top: -2, right: -2,
+    width: 15, height: 15, borderRadius: 7.5, backgroundColor: '#E53935',
     alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: colors.black,
   },
   memberCount: {
