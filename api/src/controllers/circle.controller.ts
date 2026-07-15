@@ -42,6 +42,14 @@ export async function join(req: AuthRequest, res: Response) {
   } catch (err) { return handleError(res, err, 'circle.join') }
 }
 
+export async function leave(req: AuthRequest, res: Response) {
+  try {
+    const { sessionId } = req.body
+    if (!sessionId) return badRequest(res, 'sessionId required')
+    return ok(res, await session.leaveSession(req.user!.userId, sessionId))
+  } catch (err) { return handleError(res, err, 'circle.leave') }
+}
+
 type Overlay = { emoji: string; x: number; y: number }
 
 function parseOverlays(raw: unknown): Overlay[] {

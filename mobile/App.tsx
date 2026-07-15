@@ -24,6 +24,7 @@ import { useNotificationStore } from './src/store/notification.store'
 import { useFriendsStore } from './src/store/friends.store'
 import { useMessageBadgeStore } from './src/store/messageBadge.store'
 import { getMyFollowerCount } from './src/services/follow.service'
+import { getIncoming as getCircleIncoming } from './src/services/circle.service'
 import { api, onTokenExpired } from './src/services/api'
 
 // Hold the native splash screen open until we explicitly release it.
@@ -89,6 +90,7 @@ function showMessageNotification(senderName: string, body: string, data: Record<
 function SocketManager() {
   const { token, isAuthenticated } = useAuthStore()
   const { addNotification } = useNotificationStore()
+  const setCircleInvite = useNotificationStore((s) => s.setCircleInvite)
   const { setTotalUnread, increment } = useMessageBadgeStore()
   const notifListener = useRef<ReturnType<typeof Notifications.addNotificationReceivedListener> | null>(null)
 
@@ -127,6 +129,12 @@ function SocketManager() {
     }
     socket.on('message:new', onNewMessage)
 
+    // Convite de círculo (alguém chamou-me) → badge na tab da câmara
+    const onCircleCalled = () => setCircleInvite(true)
+    socket.on('circle:called', onCircleCalled)
+    // Seed inicial: já havia uma chamada pendente?
+    getCircleIncoming().then((r) => { if (r.call) setCircleInvite(true) }).catch(() => {})
+
     socket.on('notification', (payload: any) => {
       addNotification({
         id: payload.id ?? String(Date.now()),
@@ -160,6 +168,7 @@ function SocketManager() {
 
     return () => {
       socket.off('message:new', onNewMessage)
+      socket.off('circle:called', onCircleCalled)
       socket.off('notification')
       if (notifListener.current) {
         notifListener.current.remove()

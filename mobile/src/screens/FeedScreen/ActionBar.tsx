@@ -5,7 +5,7 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Heart, MessageCircle, Send, Eye, MoreVertical, Pencil, Trash2, FilePlusCorner, RefreshCw } from 'lucide-react-native'
+import { Heart, MessageCircle, Send, Eye, Octagon, OctagonX, MoreVertical, Pencil, Trash2, FilePlusCorner, RefreshCw } from 'lucide-react-native'
 import { confirm } from '../../components/confirm'
 
 import { Post } from '../../types'
@@ -24,6 +24,9 @@ interface Props {
   onLikeChange?: (liked: boolean) => void
   reposted?: boolean
   onRepost?: () => void
+  stickerCount?: number
+  stickersHidden?: boolean
+  onToggleStickers?: () => void
   onDeleted?: (id: string) => void
   onEdited?: (id: string, caption: string) => void
   onBlockingChange?: (open: boolean) => void
@@ -48,6 +51,7 @@ function fmt(n: number) {
 export default React.memo(function ActionBar({
   post, onCommentPress, onStickerPress, liked: likedProp = false,
   onLikeChange, reposted: repostedProp = false, onRepost,
+  stickerCount = 0, stickersHidden = false, onToggleStickers,
   onDeleted, onEdited, onBlockingChange, newPostsCount = 0,
   commentCount: commentCountProp,
 }: Props) {
@@ -67,6 +71,8 @@ export default React.memo(function ActionBar({
   const [editText,  setEditText]  = useState(post.caption ?? '')
   const [hearts,    setHearts]    = useState<HeartP[]>([])
   const heartIdRef = useRef(0)
+  const repostSpin = useRef(new Animated.Value(0)).current
+  const repostRotate = repostSpin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] })
 
   // Pop-in dos dois ícones do menu (escala + opacidade)
   const menuScale = useRef(new Animated.Value(0.8)).current
@@ -132,6 +138,9 @@ export default React.memo(function ActionBar({
   function handleRepost() {
     if (reposted) return     // repost uma vez
     setReposted(true)        // feedback imediato
+    setShareCount((c) => c + 1)
+    repostSpin.setValue(0)   // gira 360°
+    Animated.timing(repostSpin, { toValue: 1, duration: 600, useNativeDriver: true }).start()
     onRepost?.()             // FeedScreen faz a chamada à API
   }
 
@@ -242,17 +251,33 @@ export default React.memo(function ActionBar({
           </TouchableOpacity>
         )}
 
-        {/* Repostar */}
+        {/* Repostar — gira ao repostar e mostra o ponto central (refresh-cw-dot) */}
         {!isAnnouncement && (
           <TouchableOpacity style={s.btn} onPress={handleRepost} activeOpacity={0.75}>
-            <RefreshCw size={26} strokeWidth={2} color={reposted ? '#22C55E' : '#fff'} />
+            <View style={s.repostIcon}>
+              <Animated.View style={{ transform: [{ rotate: repostRotate }] }}>
+                <RefreshCw size={26} strokeWidth={2} color="#fff" />
+              </Animated.View>
+              {reposted && <View style={s.repostDot} pointerEvents="none" />}
+            </View>
+            <Text style={s.label}>{fmt(shareCount)}</Text>
           </TouchableOpacity>
         )}
 
-        {/* Stickers — só aparece se o post tiver stickers habilitados */}
+        {/* Adicionar objetos — com contador de objetos no post */}
         {!isAnnouncement && post.stickersEnabled && (
           <TouchableOpacity style={s.btn} onPress={onStickerPress} activeOpacity={0.75}>
             <FilePlusCorner size={26} strokeWidth={2} color="#fff" />
+            <Text style={s.label}>{fmt(stickerCount)}</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Mostrar / ocultar objetos — só quando há objetos no post */}
+        {!isAnnouncement && stickerCount > 0 && (
+          <TouchableOpacity style={s.btn} onPress={onToggleStickers} activeOpacity={0.75}>
+            {stickersHidden
+              ? <OctagonX size={26} strokeWidth={2} color="#fff" />
+              : <Octagon size={26} strokeWidth={2} color="#fff" />}
           </TouchableOpacity>
         )}
 
@@ -355,6 +380,9 @@ const s = StyleSheet.create({
   },
 
   mirrorX:   { transform: [{ scaleX: -1 }] },
+
+  repostIcon: { width: 26, height: 26, alignItems: 'center', justifyContent: 'center' },
+  repostDot:  { position: 'absolute', top: 10.5, left: 10.5, width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#fff' },
 
   burstHeart: {
     position: 'absolute',

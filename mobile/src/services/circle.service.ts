@@ -59,6 +59,11 @@ export async function joinCircle(sessionId: string): Promise<CircleState> {
   return res.data.data
 }
 
+// Sair de uma sessão (desfazer o "aceitar")
+export async function leaveCircle(sessionId: string): Promise<void> {
+  await api.post('/circle/leave', { sessionId })
+}
+
 // Guardar a minha foto (com emojis) na sessão
 export async function addCirclePhoto(sessionId: string, uri: string, overlays: EmojiOverlay[] = []): Promise<void> {
   const form = new FormData()

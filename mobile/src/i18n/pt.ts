@@ -706,6 +706,7 @@ export const PT = {
   circle_calledYou: 'chamou-te',
   circle_calledSub: 'para uma foto no Círculo',
   circle_join: 'Entrar',
+  circle_leave: 'Sair',
   circle_nobody: 'Ninguém apareceu ainda',
   circle_callMore: 'Chamar mais pessoas',
   circle_nobodySub: 'Chama alguém perto de ti para tirarem uma foto juntos.',

@@ -2,14 +2,16 @@ import React, { useRef, useEffect } from 'react'
 import { View, TouchableOpacity, StyleSheet, Text, Image, Animated } from 'react-native'
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Search, Home, MessageCircle, User, Circle } from 'lucide-react-native'
+import { Search, Home, MessageCircle, User, Circle, Camera } from 'lucide-react-native'
 import { colors, fonts } from '../../theme'
 import { useFeedStore } from '../../store/feed.store'
 import { useAuthStore } from '../../store/auth.store'
+import { useMessageBadgeStore } from '../../store/messageBadge.store'
+import { useNotificationStore } from '../../store/notification.store'
 
 const SZ = 24
 
-function MessageBadge({ count, iconColor }: { count: number; iconColor: string }) {
+function MessageBadge({ count, iconColor, icon }: { count: number; iconColor: string; icon?: boolean }) {
   const scale  = useRef(new Animated.Value(0)).current
   const wobble = useRef(new Animated.Value(0)).current
   const prev   = useRef(0)
@@ -50,6 +52,11 @@ function MessageBadge({ count, iconColor }: { count: number; iconColor: string }
     >
       {/* Pill bubble */}
       <View style={s.badgePill}>
+        {icon && (
+          <View style={s.badgeIcon}>
+            <MessageCircle size={11} strokeWidth={2.6} color="#fff" fill="#fff" />
+          </View>
+        )}
         <Text style={s.badgeTxt}>{label}</Text>
       </View>
       {/* Downward-pointing triangle tip */}
@@ -61,6 +68,8 @@ function MessageBadge({ count, iconColor }: { count: number; iconColor: string }
 export default function TabBar({ state, navigation }: BottomTabBarProps) {
   const { bottom }    = useSafeAreaInsets()
   const newPostsCount = useFeedStore((s) => s.newPostsCount)
+  const totalUnread   = useMessageBadgeStore((s) => s.totalUnread)
+  const circleInvite  = useNotificationStore((s) => s.circleInvite)
   const openSearch    = useFeedStore((s) => s.openSearch)
   const setOpenSearch = useFeedStore((s) => s.setOpenSearch)
   const avatar        = useAuthStore((s) => s.user?.avatar ?? null)
@@ -112,8 +121,9 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
           />
         </TouchableOpacity>
 
-        {/* Messages */}
+        {/* Messages — badge com total de mensagens não lidas */}
         <TouchableOpacity style={s.btn} onPress={() => goTo('Messages')} activeOpacity={0.7}>
+          <MessageBadge count={totalUnread} iconColor={iconInactv} icon />
           <View style={s.mirrorX}>
             <MessageCircle
               size={SZ}
@@ -124,8 +134,16 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
           </View>
         </TouchableOpacity>
 
-        {/* Círculo */}
+        {/* Círculo — badge com câmara quando alguém me convida */}
         <TouchableOpacity style={s.btn} onPress={() => goTo('Circle')} activeOpacity={0.7}>
+          {circleInvite && (
+            <View style={s.badgeAnchor}>
+              <View style={s.badgePill}>
+                <Camera size={13} strokeWidth={2.6} color="#fff" />
+              </View>
+              <View style={s.badgeTip} />
+            </View>
+          )}
           <Circle
             size={SZ}
             strokeWidth={circActive ? 2.5 : 2}
@@ -172,6 +190,7 @@ const s = StyleSheet.create({
     overflow: 'visible',
   },
   mirrorX: { transform: [{ scaleX: -1 }] },
+  badgeIcon: { marginRight: 5, transform: [{ scaleX: -1 }] },
 
   // Badge — positioned above the icon, centered on the btn
   badgeAnchor: {
@@ -182,10 +201,11 @@ const s = StyleSheet.create({
   },
   badgePill: {
     backgroundColor: PILL_BG,
-    borderRadius: 7,
-    paddingHorizontal: 9,
+    borderRadius: 8,
+    paddingHorizontal: 11,
     paddingVertical: 3,
     minWidth: 26,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },

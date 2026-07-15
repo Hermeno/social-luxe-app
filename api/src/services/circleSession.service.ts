@@ -155,6 +155,17 @@ export async function joinSession(userId: string, sessionId: string) {
   return getSessionState(sessionId)
 }
 
+// Sair de uma sessão (desfazer o "aceitar"). O anfitrião não sai por aqui.
+export async function leaveSession(userId: string, sessionId: string) {
+  const session = await prisma.circleSession.findUnique({ where: { id: sessionId } })
+  if (session && session.hostId === userId) return { ok: true }   // anfitrião não sai da própria
+  await prisma.circleSessionMember.delete({
+    where: { sessionId_userId: { sessionId, userId } },
+  }).catch(() => {})
+  await broadcast(sessionId)
+  return { ok: true }
+}
+
 type Overlay = { emoji: string; x: number; y: number }
 
 // Membro guarda a sua foto (com emojis) na sessão

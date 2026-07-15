@@ -13,9 +13,11 @@ interface NotificationState {
   notifications: AppNotification[]
   badge: number
   unionInviteBadge: number
+  circleInvite: boolean
   addNotification: (n: AppNotification) => void
   markAllRead: () => void
   setUnionInviteBadge: (count: number) => void
+  setCircleInvite: (v: boolean) => void
   reset: () => void
 }
 
@@ -23,6 +25,7 @@ export const useNotificationStore = create<NotificationState>((set) => ({
   notifications: [],
   badge: 0,
   unionInviteBadge: 0,
+  circleInvite: false,
 
   addNotification: (n) =>
     set((state) => ({
@@ -38,5 +41,7 @@ export const useNotificationStore = create<NotificationState>((set) => ({
 
   setUnionInviteBadge: (count) => set({ unionInviteBadge: count }),
 
-  reset: () => set({ notifications: [], badge: 0, unionInviteBadge: 0 }),
+  setCircleInvite: (v) => set({ circleInvite: v }),
+
+  reset: () => set({ notifications: [], badge: 0, unionInviteBadge: 0, circleInvite: false }),
 }))

@@ -17,6 +17,7 @@ import { CircleMember, CircleSession, CircleUser, EmojiOverlay } from '../../ser
 import { getMyFollowing } from '../../services/follow.service'
 import { useAuthStore } from '../../store/auth.store'
 import { useFeedStore } from '../../store/feed.store'
+import { useNotificationStore } from '../../store/notification.store'
 import { getSocket } from '../../socket'
 import { useT } from '../../i18n'
 
@@ -151,14 +152,15 @@ export default function CircleScreen() {
   const ensureSession = useCallback(async (): Promise<CircleSession | null> => {
     if (sessionRef.current) { setInitDone(true); return sessionRef.current }
     const { lat, lng } = await getLoc()
+    // Convite pendente? mostra o banner aceitar/recusar por cima da câmara
+    // (não junta automaticamente — o utilizador decide).
     try {
       const inc = await circle.getIncoming()
       if (inc.call) {
-        const st = await circle.joinCircle(inc.call.sessionId)
-        setSession(st.session); setMembers(st.members); setNearby([]); setInitError(false); setInitDone(true)
-        return st.session
+        setIncoming({ sessionId: inc.call.sessionId, hostName: inc.call.host.name, hostAvatar: inc.call.host.avatar })
       }
     } catch {}
+    // Abre sempre a minha sessão para a câmara ficar funcional (se recusar, fico com a minha)
     try {
       const st = await circle.openCircle(lat, lng)
       setSession(st.session); setMembers(st.members); setNearby(st.nearby); setInitError(false); setInitDone(true)
@@ -172,6 +174,7 @@ export default function CircleScreen() {
   useFocusEffect(useCallback(() => {
     setFocused(true)
     setStatusBarStyle('light')
+    useNotificationStore.getState().setCircleInvite(false)   // viu o convite → limpa badge
     setInitDone(false); setInitError(false)
     ensureSession()
 
@@ -251,6 +254,23 @@ export default function CircleScreen() {
       Alert.alert(t.circle_errTitle, t.circle_sessionGone)
       setIncoming(null)
     }
+  }
+
+  function declineIncoming() {
+    setIncoming(null)   // recusa → fica com a minha própria sessão
+  }
+
+  // Desfazer o "aceitar": sai do círculo do anfitrião e volta à minha sessão
+  async function handleLeave() {
+    const sess = sessionRef.current
+    if (!sess) return
+    try { await circle.leaveCircle(sess.id) } catch {}
+    setSession(null); setMembers([])
+    const { lat, lng } = await getLoc()
+    try {
+      const st = await circle.openCircle(lat, lng)
+      setSession(st.session); setMembers(st.members); setNearby(st.nearby)
+    } catch {}
   }
 
   // ── Disparo ─────────────────────────────────────────────────────────────────
@@ -363,9 +383,18 @@ export default function CircleScreen() {
         </View>
 
         {!previewUri && (
-          <TouchableOpacity style={s.flipBtn} onPress={() => setFacing((f) => (f === 'back' ? 'front' : 'back'))} activeOpacity={0.8}>
-            <Ionicons name="camera-reverse-outline" size={20} color="#fff" />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {/* Sair — desfazer o aceitar (só quando estou no círculo de outra pessoa) */}
+            {session && !isHost && (
+              <TouchableOpacity style={s.leaveBtn} onPress={handleLeave} activeOpacity={0.85}>
+                <Ionicons name="exit-outline" size={15} color="#fff" />
+                <Text style={s.leaveTxt}>{t.circle_leave}</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={s.flipBtn} onPress={() => setFacing((f) => (f === 'back' ? 'front' : 'back'))} activeOpacity={0.8}>
+              <Ionicons name="camera-reverse-outline" size={20} color="#fff" />
+            </TouchableOpacity>
+          </View>
         )}
       </View>
 
@@ -379,6 +408,9 @@ export default function CircleScreen() {
             <Text style={s.incomingName} numberOfLines={1}>{incoming.hostName.split(' ')[0]} {t.circle_calledYou}</Text>
             <Text style={s.incomingSub}>{t.circle_calledSub}</Text>
           </View>
+          <TouchableOpacity style={s.incomingDecline} onPress={declineIncoming} activeOpacity={0.8}>
+            <Ionicons name="close" size={18} color="#fff" />
+          </TouchableOpacity>
           <TouchableOpacity style={s.incomingBtn} onPress={acceptIncoming} activeOpacity={0.85}>
             <Text style={s.incomingBtnTxt}>{t.circle_join}</Text>
           </TouchableOpacity>
@@ -483,7 +515,7 @@ export default function CircleScreen() {
           <Text style={s.shutterHint}>{iHavePhoto ? t.circle_takeAnother : t.circle_takePhoto}</Text>
         </View>
       ) : (
-        <View style={[s.previewBottom, { paddingBottom: bottom + 34 }]}>
+        <View style={[s.previewBottom, { paddingBottom: bottom + 62 }]}>
           {/* Barra de emojis — toca para adicionar, arrasta na foto para posicionar */}
           <ScrollView
             horizontal
@@ -587,9 +619,8 @@ const s = StyleSheet.create({
   memberChip: {},
   memberAvatar: {
     width: 34, height: 34, borderRadius: 17, overflow: 'hidden',
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.7)',
   },
-  memberAvatarDone: { borderColor: colors.primary },
+  memberAvatarDone: {},
   memberCheck: {
     position: 'absolute', bottom: -2, right: -2,
     width: 15, height: 15, borderRadius: 7.5, backgroundColor: colors.primary,
@@ -603,6 +634,12 @@ const s = StyleSheet.create({
     width: 38, height: 38, borderRadius: 19,
     backgroundColor: 'rgba(0,0,0,0.38)', alignItems: 'center', justifyContent: 'center',
   },
+  leaveBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    height: 34, paddingHorizontal: 13, borderRadius: 17,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  leaveTxt: { color: '#fff', fontSize: 13, fontFamily: fonts.semiBold },
 
   /* ── Chamada recebida ── */
   incoming: {
@@ -615,6 +652,11 @@ const s = StyleSheet.create({
   incomingAvatar: { width: 38, height: 38, borderRadius: 19, overflow: 'hidden' },
   incomingName: { color: '#fff', fontSize: 14, fontFamily: fonts.bold, letterSpacing: -0.2 },
   incomingSub: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontFamily: fonts.regular, marginTop: 1 },
+  incomingDecline: {
+    width: 34, height: 34, borderRadius: 17,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    alignItems: 'center', justifyContent: 'center',
+  },
   incomingBtn: { backgroundColor: colors.primary, borderRadius: 18, paddingHorizontal: 18, paddingVertical: 9 },
   incomingBtnTxt: { color: '#fff', fontSize: 13.5, fontFamily: fonts.bold },
 
@@ -631,7 +673,7 @@ const s = StyleSheet.create({
     color: 'rgba(255,255,255,0.85)', fontSize: 12.5, fontFamily: fonts.regular, textAlign: 'center', marginTop: 3, marginBottom: 4,
     textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
   },
-  nearbyScroll: { maxHeight: 150, marginTop: 6 },
+  nearbyScroll: { maxHeight: 320, marginTop: 6 },   // ~2 filas e meia de 3 cards, depois rola
   nearbyWrap: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 },
   card: {
     width: 96, alignItems: 'center', gap: 6,
@@ -674,7 +716,7 @@ const s = StyleSheet.create({
 
   panelInvite: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    marginTop: 10, paddingVertical: 8, borderRadius: 14,
+    alignSelf: 'center', marginTop: 10, paddingVertical: 8, paddingHorizontal: 18, borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.12)',
   },
   panelInviteTxt: { color: '#fff', fontSize: 12.5, fontFamily: fonts.semiBold },
@@ -733,7 +775,7 @@ const s = StyleSheet.create({
   },
   retake: { paddingHorizontal: 22, paddingVertical: 13, borderRadius: 26, borderWidth: 1.4, borderColor: 'rgba(255,255,255,0.75)' },
   retakeTxt: { color: '#fff', fontFamily: fonts.semiBold, fontSize: 14.5 },
-  usePhoto: { flex: 1, maxWidth: 260, paddingVertical: 14, borderRadius: 26, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  usePhoto: { paddingHorizontal: 28, paddingVertical: 14, borderRadius: 26, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   usePhotoTxt: { color: '#fff', fontFamily: fonts.bold, fontSize: 14.5, letterSpacing: -0.2 },
 
   /* ── Permissão ── */

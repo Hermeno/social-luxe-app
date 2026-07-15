@@ -112,6 +112,7 @@ export default function FeedScreen() {
   const [commentDeltas, setCommentDeltas] = useState<Record<string, number>>({})
   const [likedPostIds,  setLikedPostIds]  = useState<Set<string>>(new Set())
   const [repostedIds,   setRepostedIds]   = useState<Set<string>>(new Set())
+  const [stickersHidden, setStickersHidden] = useState<Set<string>>(new Set())
   const [stickerPickerOpen,  setStickerPickerOpen]  = useState(false)
   const [pendingSticker, setPendingSticker] = useState<StickerChoice | null>(null)
   const [localStickers, setLocalStickers] = useState<Record<string, PostSticker[]>>({})
@@ -204,16 +205,19 @@ export default function FeedScreen() {
     })
   }, [posts])
 
-  // Repostar — republica o post na tua própria feed (servidor duplica)
+  // Repostar — republica o post na tua feed (servidor duplica) e aparece já no topo
   const handleRepost = useCallback((postId: string) => {
     setRepostedIds((prev) => new Set(prev).add(postId))
     postService.repostPost(postId)
-      .then(() => toast.success(t.feed_reposted, t.feed_reposted_sub))
+      .then((newPost) => {
+        setPendingPost(newPost)   // prepend imediato na feed (mesmo mecanismo da Create)
+        toast.success(t.feed_reposted, t.feed_reposted_sub)
+      })
       .catch(() => {
         setRepostedIds((prev) => { const s = new Set(prev); s.delete(postId); return s })
         toast.error(t.error, t.feed_repost_fail)
       })
-  }, [t])
+  }, [t, setPendingPost])
 
   // Overlay opacity that COVERS the video (1 = thumbnail visible, 0 = video visible).
   // Starts at 1 so the thumbnail is shown while the video loads its first frame.
@@ -812,7 +816,7 @@ export default function FeedScreen() {
                 ActionBar (last)  → buttons win  ✓
                 StickerLayer      → sticker taps win over swipeView  ✓
                 mediaClip/swipe   → falls through to swipe gesture  ✓ */}
-          {post.stickersEnabled && (
+          {post.stickersEnabled && !stickersHidden.has(post.id) && (
             <StickerLayer
               postId={post.id}
               stickers={currentStickers}
@@ -859,6 +863,13 @@ export default function FeedScreen() {
             }}
             reposted={repostedIds.has(post.id)}
             onRepost={() => handleRepost(post.id)}
+            stickerCount={currentStickers.length}
+            stickersHidden={stickersHidden.has(post.id)}
+            onToggleStickers={() => setStickersHidden((prev) => {
+              const s = new Set(prev)
+              s.has(post.id) ? s.delete(post.id) : s.add(post.id)
+              return s
+            })}
             commentCount={(post._count?.comments ?? 0) + (commentDeltas[post.id] ?? 0)}
             onDeleted={(id) => { removePost(id); navigateTo(Math.max(0, currentIndex - 1)) }}
             onEdited={(id, caption) => updatePost(id, caption)}
