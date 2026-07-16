@@ -21,6 +21,10 @@ import { INTERESTS } from '../OnboardingScreen'
 export const DEFAULT_TAB_KEY = 'default_tab'
 export type DefaultTab = 'Feed' | 'Messages'
 
+// Nesta versão a feed é sempre o ecrã inicial. O seletor Feed/Chat fica escondido
+// (o código permanece para uma versão futura) — põe a true para o reativar.
+const SHOW_HOME_SCREEN_PICKER = false
+
 type Nav = StackNavigationProp<AppStackParams>
 
 const T  = '#1A1A1A'
@@ -296,7 +300,9 @@ export default function EditProfileScreen() {
           </View>
         </View>
 
-        {/* Ecrã inicial */}
+        {/* Ecrã inicial — escondido nesta versão (só a feed é a inicial).
+            Põe SHOW_HOME_SCREEN_PICKER a true para reativar no futuro. */}
+        {SHOW_HOME_SCREEN_PICKER && (
         <View style={s.section}>
           <Text style={s.sectionLabel}>{t.ep_home_screen}</Text>
           <View style={s.tabPickerRow}>
@@ -336,6 +342,7 @@ export default function EditProfileScreen() {
           </View>
           <Text style={s.tabPickerHint}>{t.ep_applies_next}</Text>
         </View>
+        )}
 
         {/* Phone (read-only) */}
         <View style={s.section}>

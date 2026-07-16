@@ -249,9 +249,10 @@ export default function App() {
   useEffect(() => { loadUser() }, [])
 
   useEffect(() => {
-    AsyncStorage.getItem('default_tab')
-      .then((v) => setDefaultTab(v === 'Messages' ? 'Messages' : 'Feed'))
-      .catch(() => setDefaultTab('Feed'))
+    // Nesta versão a feed é sempre o ecrã inicial (o seletor Feed/Chat está
+    // escondido no Editar perfil). A preferência guardada fica intacta para
+    // quando o seletor voltar — basta reler `default_tab` aqui.
+    setDefaultTab('Feed')
   }, [])
 
   useEffect(() => {

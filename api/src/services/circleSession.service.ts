@@ -10,9 +10,12 @@ const INVITE_TTL_MS = 2 * 60 * 1000   // convite expira em 2 minutos
 // aceite 1h depois quando quem chamou já desistiu.
 async function expireInvites(sessionId?: string) {
   const cutoff = new Date(Date.now() - INVITE_TTL_MS)
-  await prisma.circleSessionMember.deleteMany({
+  const res = await prisma.circleSessionMember.deleteMany({
     where: { status: 'INVITED', createdAt: { lt: cutoff }, ...(sessionId ? { sessionId } : {}) },
-  }).catch(() => {})
+  }).catch(() => null)
+  // Avisa a sessão para os clientes tirarem o convidado da lista de membros —
+  // senão ficaria escondido de "chamar mais pessoas" para sempre.
+  if (sessionId && res && res.count > 0) await broadcast(sessionId).catch(() => {})
 }
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {

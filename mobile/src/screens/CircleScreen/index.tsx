@@ -229,9 +229,11 @@ export default function CircleScreen() {
     setCalling((prev) => new Set(prev).add(u.id))
     try {
       await circle.callToCircle(sess.id, u.id)
-      // convite expira em 2 min → repõe o botão para se poder chamar de novo
+      // Convite expira em 2 min → repõe o botão e liberta-o de `members` (estava
+      // como INVITED), senão continuaria escondido da lista "chamar mais pessoas".
       const timer = setTimeout(() => {
         setCalling((prev) => { const n = new Set(prev); n.delete(u.id); return n })
+        setMembers((prev) => prev.filter((m) => !(m.user.id === u.id && m.status === 'INVITED')))
       }, INVITE_TTL_MS)
       callTimers.current.push(timer)
     } catch {
@@ -283,8 +285,18 @@ export default function CircleScreen() {
           onPress: async () => {
             const sess = sessionRef.current
             if (!sess) return
-            setMembers((prev) => prev.filter((m) => m.user.id !== target.user.id))   // otimista
-            try { await circle.removeFromCircle(sess.id, target.user.id) } catch {}
+            const targetId = target.user.id
+            setMembers((prev) => prev.filter((m) => m.user.id !== targetId))   // otimista
+            // deixa de estar "Chamado" → volta a ser chamável
+            setCalling((prev) => { const n = new Set(prev); n.delete(targetId); return n })
+            try {
+              await circle.removeFromCircle(sess.id, targetId)
+              // Refresca vizinhos: o backend tira os membros de `nearby`, por isso é
+              // preciso voltar a pedir para o removido reaparecer em "chamar mais".
+              const { lat, lng } = await getLoc()
+              const st = await circle.openCircle(lat, lng)
+              setMembers(st.members); setNearby(st.nearby)
+            } catch {}
           },
         },
       ],
