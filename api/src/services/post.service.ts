@@ -143,10 +143,12 @@ export async function addSticker(userId: string, postId: string, emoji: string, 
   if (!post?.stickersEnabled) throw new Error('Stickers not enabled for this post')
   const count = await prisma.postSticker.count({ where: { postId } })
   if (count >= STICKER_LIMIT) throw new Error('Sticker limit reached')
-  return prisma.postSticker.create({
+  const sticker = await prisma.postSticker.create({
     data:    { postId, userId, emoji, x, y, type, content: content ?? null },
     include: { user: { select: { id: true, name: true, avatar: true } } },
   })
+  recalcPostLife(postId).catch(() => {})
+  return sticker
 }
 
 export async function removeSticker(userId: string, stickerId: string) {
@@ -243,7 +245,17 @@ export async function getFeed(userId: string, page = 1, limit = 10) {
   prisma.user.update({ where: { id: userId }, data: { lastSeen: new Date() } }).catch(() => {})
 
   const now = new Date()
-  const baseWhere = { deletedAt: null, expiresAt: { gt: now } }
+  // Janela de frescura do feed: o post circula no feed só nas primeiras 48h.
+  // A vida estendida por interações (3/10/30 dias, 1 ano, para sempre) mantém o
+  // post VIVO — visível no perfil do autor, por link, com objetos e comentários —
+  // mas não volta a encher o feed dos seguidores. Anúncios ficam isentos.
+  const FEED_WINDOW_MS = 48 * 60 * 60 * 1000
+  const freshSince = new Date(now.getTime() - FEED_WINDOW_MS)
+  const baseWhere = {
+    deletedAt: null,
+    expiresAt: { gt: now },
+    AND: [{ OR: [{ createdAt: { gte: freshSince } }, { isAnnouncement: true }] }],
+  }
   const include = {
     user:        { select: { id: true, name: true, avatar: true, viewsPublic: true, isAdmin: true, showDevice: true, statusLabel: true, lastSeen: true } },
     partnerUser: { select: { id: true, name: true, avatar: true } },
@@ -375,6 +387,49 @@ async function extendLife(postId: string, minutes: number) {
   await prisma.post.update({ where: { id: postId }, data: { expiresAt: new Date(base + minutes * 60_000) } })
 }
 
+// ── Vida por interação ─────────────────────────────────────────────────────────
+// Todo post nasce com 24h. Interações somam pontos; ao atingir um nível, a vida
+// (contada a partir do createdAt) sobe: 3 dias → 10 → 30 → 1 ano → para sempre.
+// A expiração nunca encolhe — só cresce.
+const ENGAGE_WEIGHTS = { view: 1, like: 3, reaction: 3, sticker: 4, comment: 5, share: 8 }
+const DAY_MS = 24 * 60 * 60 * 1000
+const LIFE_TIERS: { minScore: number; lifeMs: number }[] = [
+  { minScore: 2000, lifeMs: 100 * 365 * DAY_MS },  // para sempre (100 anos)
+  { minScore: 600,  lifeMs: 365 * DAY_MS },        // 1 ano
+  { minScore: 150,  lifeMs: 30 * DAY_MS },         // 30 dias
+  { minScore: 50,   lifeMs: 10 * DAY_MS },         // 10 dias
+  { minScore: 15,   lifeMs: 3 * DAY_MS },          // 3 dias
+]
+
+export async function recalcPostLife(postId: string) {
+  const post = await prisma.post.findUnique({
+    where:  { id: postId },
+    select: {
+      createdAt: true, expiresAt: true, isAnnouncement: true, deletedAt: true,
+      _count: { select: { likes: true, comments: true, shares: true, views: true, stickers: true } },
+    },
+  })
+  if (!post || post.isAnnouncement || post.deletedAt) return
+
+  const reactions = await prisma.reaction.count({ where: { postId } }).catch(() => 0)
+  const c = post._count
+  const score =
+    c.views    * ENGAGE_WEIGHTS.view +
+    c.likes    * ENGAGE_WEIGHTS.like +
+    reactions  * ENGAGE_WEIGHTS.reaction +
+    c.stickers * ENGAGE_WEIGHTS.sticker +
+    c.comments * ENGAGE_WEIGHTS.comment +
+    c.shares   * ENGAGE_WEIGHTS.share
+
+  const tier = LIFE_TIERS.find((t) => score >= t.minScore)
+  if (!tier) return
+
+  const tierExpiry = new Date(post.createdAt.getTime() + tier.lifeMs)
+  if (tierExpiry.getTime() > post.expiresAt.getTime()) {
+    await prisma.post.update({ where: { id: postId }, data: { expiresAt: tierExpiry } })
+  }
+}
+
 export async function likePost(userId: string, postId: string) {
   const existing = await prisma.like.findUnique({ where: { userId_postId: { userId, postId } } })
   if (existing) {
@@ -383,6 +438,7 @@ export async function likePost(userId: string, postId: string) {
   }
   await prisma.like.create({ data: { userId, postId } })
   extendLife(postId, 10).catch(() => {})
+  recalcPostLife(postId).catch(() => {})
   return { liked: true }
 }
 
@@ -395,6 +451,7 @@ export async function addView(userId: string, postId: string) {
     update: {},
     create: { userId, postId },
   })
+  recalcPostLife(postId).catch(() => {})
 }
 
 export async function deletePost(userId: string, postId: string) {
@@ -427,6 +484,7 @@ export async function sharePost(userId: string, postId: string) {
   if (!post || post.deletedAt) throw new Error('Post not found')
   const share = await prisma.share.create({ data: { userId, postId } })
   extendLife(postId, 60).catch(() => {})   // +1h — fire-and-forget
+  recalcPostLife(postId).catch(() => {})
   return share
 }
 
@@ -455,7 +513,10 @@ export async function repostPost(userId: string, postId: string) {
       _count:      { select: { likes: true, comments: true, shares: true, views: true } },
     },
   })
-  prisma.share.create({ data: { userId, postId } }).catch(() => {})   // credita partilha ao original
+  // credita partilha ao original e recalcula a vida dele
+  prisma.share.create({ data: { userId, postId } })
+    .then(() => recalcPostLife(postId))
+    .catch(() => {})
   return withThumbnail(post)
 }
 

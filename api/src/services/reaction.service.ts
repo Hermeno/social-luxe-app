@@ -1,6 +1,7 @@
 import { prisma } from '../config/database'
 import { ReactionType } from '@prisma/client'
 import { sendPush } from './notification.service'
+import { recalcPostLife } from './post.service'
 
 export async function reactToPost(
   userId: string,
@@ -19,6 +20,7 @@ export async function reactToPost(
     update: { type, anonymous },
     create: { userId, postId, type, anonymous },
   })
+  if (isNew) recalcPostLife(postId).catch(() => {})
 
   // Send push notification to post owner if this is a new reaction and not anonymous
   if (isNew && !anonymous) {
