@@ -1,0 +1,304 @@
+/* ==========================================================================
+   luxee — sistema de design
+   Escala tipográfica, espaçamento e raios herdados da referência (verliks).
+   Monocromático por decisão: preto, branco e cinzas. A cor da marca aparece
+   uma única vez — no momento que a merece.
+   ========================================================================== */
+
+:root {
+  /* Tinta */
+  --ink:        #111111;
+  --ink-strong: #000000;
+  --secondary:  #6E6E73;
+  --muted:      #8E8E93;
+
+  /* Superfícies */
+  --background: #FFFFFF;
+  --surface:    #F7F8FA;
+  --surface-2:  #F0F1F4;
+  --border:     #E5E5EA;
+  --on-ink:     #FFFFFF;
+
+  /* Único acento — reservado */
+  --accent:     #CA2851;
+
+  /* Espaçamento */
+  --margin-mobile:   20px;
+  --margin-desktop:  64px;
+  --container-max:   1280px;
+  --gutter:          24px;
+  --section-padding: 120px;
+
+  /* Raios — pequenos, deliberados */
+  --r-xs: 2px;
+  --r-sm: 4px;
+  --r:    8px;
+  --r-lg: 12px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background-color: var(--background);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection { background: var(--ink); color: #fff; }
+img { max-width: 100%; display: block; }
+a { color: inherit; text-decoration: none; }
+
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: #f1f1f1; }
+::-webkit-scrollbar-thumb { background: #d1d1d6; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #8e8e93; }
+
+/* Ícones reais — Material Symbols, traço fino */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+  font-size: 24px;
+  line-height: 1;
+  user-select: none;
+}
+.icon-lg { font-size: 36px; }
+
+/* ── Tipografia ──────────────────────────────────────────────────────────── */
+.display {
+  font-size: 64px; line-height: 72px; letter-spacing: -0.02em; font-weight: 600;
+  margin: 0; color: var(--ink);
+}
+.headline-xl { font-size: 48px; line-height: 1.1; letter-spacing: -0.02em; font-weight: 600; margin: 0; }
+.headline-lg { font-size: 32px; line-height: 1.2; letter-spacing: -0.01em; font-weight: 600; margin: 0; }
+.headline-md { font-size: 24px; line-height: 1.3; font-weight: 500; margin: 0; }
+.body-lg { font-size: 18px; line-height: 1.6; font-weight: 400; color: var(--secondary); margin: 0; }
+.body-md { font-size: 16px; line-height: 1.5; font-weight: 400; color: var(--secondary); margin: 0; }
+.body-sm { font-size: 14px; line-height: 1.5; font-weight: 400; color: var(--secondary); margin: 0; }
+.label-md { font-size: 14px; line-height: 1; letter-spacing: 0.05em; font-weight: 600; margin: 0; }
+.label-sm { font-size: 12px; line-height: 1; font-weight: 500; margin: 0; color: var(--secondary); }
+
+.eyebrow {
+  font-size: 12px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--muted); margin: 0 0 16px;
+}
+
+/* ── Layout ──────────────────────────────────────────────────────────────── */
+.container {
+  max-width: var(--container-max);
+  margin: 0 auto;
+  padding-left: var(--margin-mobile);
+  padding-right: var(--margin-mobile);
+}
+section { padding: 80px 0; }
+/* Filete que separa — como na referência, em vez de caixas */
+.rule { border-top: 1px solid var(--border); padding-top: 72px; }
+.section-head { max-width: 720px; margin-bottom: 64px; }
+.section-head.center { margin-left: auto; margin-right: auto; text-align: center; }
+.section-head .body-lg { margin-top: 16px; }
+
+/* ── Botões — 4px, sem pills ─────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border: 0; cursor: pointer; font-family: inherit;
+  font-size: 16px; font-weight: 500; line-height: 1;
+  padding: 16px 32px; border-radius: var(--r-sm);
+  transition: opacity .3s ease, transform .2s ease, background-color .3s ease, border-color .3s ease;
+}
+.btn:active { transform: scale(0.98); }
+.btn-primary { background: var(--ink); color: var(--on-ink); }
+.btn-primary:hover { opacity: .88; }
+.btn-ghost { background: transparent; color: var(--ink); border: 1px solid var(--border); }
+.btn-ghost:hover { border-color: var(--muted); }
+.btn-sm { padding: 10px 20px; font-size: 14px; }
+.btn-inverse { background: #fff; color: var(--ink); }
+.btn-inverse:hover { opacity: .9; }
+
+/* ── Nav ─────────────────────────────────────────────────────────────────── */
+.nav {
+  position: fixed; inset: 0 0 auto 0; z-index: 50;
+  background: rgba(255,255,255,.8);
+  backdrop-filter: saturate(180%) blur(12px);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+.nav-inner {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-top: 16px; padding-bottom: 16px;
+}
+.nav-left { display: flex; align-items: center; gap: 32px; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand img { width: 28px; height: 28px; border-radius: var(--r-sm); }
+.brand span { font-size: 20px; font-weight: 600; letter-spacing: -0.03em; color: var(--ink); }
+.nav-links { display: none; align-items: center; gap: 28px; }
+.nav-links a {
+  font-size: 16px; font-weight: 400; color: var(--secondary);
+  transition: color .3s ease;
+}
+.nav-links a:hover { color: var(--ink); }
+
+/* ── Hero ────────────────────────────────────────────────────────────────── */
+.hero {
+  padding-top: 128px; padding-bottom: 80px; text-align: center;
+}
+.hero-copy { max-width: 860px; margin: 0 auto; }
+.hero .body-lg { max-width: 620px; margin: 24px auto 0; }
+.hero-actions {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  margin-top: 40px;
+}
+.hero-note { margin-top: 20px; font-size: 13px; color: var(--muted); }
+
+/* Painel do herói — o relógio da publicação, não um mockup falso */
+.panel {
+  margin-top: 72px;
+  border: 1px solid var(--border); border-radius: var(--r-lg);
+  background: var(--surface);
+  overflow: hidden; text-align: left;
+}
+.panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 20px 24px; border-bottom: 1px solid var(--border);
+  background: #fff;
+}
+.panel-head .label-sm { letter-spacing: .08em; text-transform: uppercase; }
+.panel-body { padding: 8px 24px 24px; }
+
+/* Linhas de vida */
+.tier {
+  display: grid; grid-template-columns: 104px 1fr auto;
+  align-items: center; gap: 20px;
+  padding: 18px 0; border-bottom: 1px solid var(--border);
+}
+.tier:last-child { border-bottom: 0; }
+.tier-name { font-size: 16px; font-weight: 500; color: var(--ink); }
+.tier-track { height: 2px; background: var(--surface-2); position: relative; }
+.tier-fill { position: absolute; inset: 0 auto 0 0; background: var(--ink); }
+.tier-need { font-size: 13px; color: var(--muted); white-space: nowrap; }
+/* O único momento de cor de todo o site */
+.tier.is-forever .tier-name { color: var(--accent); font-weight: 600; }
+.tier.is-forever .tier-fill { background: var(--accent); }
+
+/* ── Pilares (ícone + texto, sem caixas) ─────────────────────────────────── */
+.pillars {
+  display: grid; grid-template-columns: 1fr; gap: var(--gutter);
+  text-align: center;
+}
+.pillar { padding: 32px 16px; display: flex; flex-direction: column; align-items: center; }
+.pillar .material-symbols-outlined { color: var(--ink); margin-bottom: 24px; }
+.pillar h3 { margin: 0 0 12px; }
+.pillar p { max-width: 320px; }
+
+/* ── Funcionalidades ─────────────────────────────────────────────────────── */
+.features {
+  display: grid; grid-template-columns: 1fr;
+  border-top: 1px solid var(--border);
+}
+.feature {
+  padding: 40px 0; border-bottom: 1px solid var(--border);
+}
+.feature .material-symbols-outlined { color: var(--ink); margin-bottom: 20px; }
+.feature h3 { font-size: 20px; font-weight: 500; margin: 0 0 10px; letter-spacing: -0.01em; }
+.feature p { font-size: 16px; line-height: 1.6; color: var(--secondary); margin: 0; max-width: 380px; }
+
+/* ── Passos ──────────────────────────────────────────────────────────────── */
+.steps { display: grid; grid-template-columns: 1fr; gap: 48px; }
+.step-num {
+  font-size: 13px; font-weight: 600; letter-spacing: .08em; color: var(--muted);
+  padding-bottom: 16px; margin-bottom: 20px; border-bottom: 1px solid var(--border);
+}
+.step h3 { font-size: 20px; font-weight: 500; margin: 0 0 10px; letter-spacing: -0.01em; }
+.step p { font-size: 16px; line-height: 1.6; color: var(--secondary); margin: 0; }
+
+/* ── Tabela de pesos ─────────────────────────────────────────────────────── */
+.weights { border-top: 1px solid var(--border); margin-top: 8px; }
+.weight-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 0; border-bottom: 1px solid var(--border);
+}
+.weight-row span:first-child { font-size: 16px; color: var(--ink); }
+.weight-row span:last-child {
+  font-size: 15px; font-weight: 600; color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Descarregar ─────────────────────────────────────────────────────────── */
+.download {
+  background: var(--ink-strong); color: #fff;
+  padding: 96px 32px; text-align: center; border-radius: var(--r-lg);
+}
+.download .headline-lg { color: #fff; }
+.download .body-lg { color: rgba(255,255,255,.6); max-width: 520px; margin: 20px auto 0; }
+.download .btn { margin-top: 40px; }
+.download-meta {
+  margin-top: 24px; display: flex; flex-wrap: wrap; gap: 6px 20px; justify-content: center;
+  font-size: 13px; color: rgba(255,255,255,.45);
+}
+.download-note {
+  margin: 32px auto 0; max-width: 520px;
+  font-size: 13px; line-height: 1.6; color: rgba(255,255,255,.4);
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────────── */
+.footer { border-top: 1px solid var(--border); padding: 48px 0; }
+.footer-top {
+  display: flex; flex-direction: column; gap: 24px;
+  justify-content: space-between; align-items: flex-start;
+}
+.footer-links { display: flex; flex-wrap: wrap; gap: 12px 28px; }
+.footer-links a { font-size: 14px; color: var(--secondary); transition: color .3s ease; }
+.footer-links a:hover { color: var(--ink); }
+.footer-bottom {
+  display: flex; flex-direction: column; gap: 6px;
+  margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--border);
+  font-size: 12px; color: var(--muted);
+}
+
+/* ── Entrada ─────────────────────────────────────────────────────────────── */
+.fade-in { opacity: 0; transform: translateY(10px); }
+.fade-in.is-visible {
+  opacity: 1; transform: translateY(0);
+  transition: opacity .8s cubic-bezier(.25,.46,.45,.94), transform .8s cubic-bezier(.25,.46,.45,.94);
+}
+.delay-1 { transition-delay: .1s; }
+.delay-2 { transition-delay: .2s; }
+.delay-3 { transition-delay: .3s; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .fade-in, .fade-in.is-visible { opacity: 1; transform: none; transition: none; }
+}
+
+/* ── Responsivo ──────────────────────────────────────────────────────────── */
+@media (min-width: 768px) {
+  .container { padding-left: 40px; padding-right: 40px; }
+  section { padding: var(--section-padding) 0; }
+  .rule { padding-top: 80px; }
+  .nav-links { display: flex; }
+  .hero { padding-top: 176px; padding-bottom: 120px; }
+  .hero-actions { flex-direction: row; justify-content: center; gap: 16px; }
+  .pillars { grid-template-columns: repeat(3, 1fr); }
+  .features { grid-template-columns: repeat(2, 1fr); column-gap: 64px; }
+  .steps { grid-template-columns: repeat(3, 1fr); gap: var(--gutter); }
+  .footer-top { flex-direction: row; align-items: center; }
+  .footer-bottom { flex-direction: row; justify-content: space-between; }
+}
+
+@media (min-width: 1024px) {
+  .container { padding-left: var(--margin-desktop); padding-right: var(--margin-desktop); }
+  .features { grid-template-columns: repeat(3, 1fr); column-gap: 48px; }
+}
+
+@media (max-width: 767px) {
+  .display { font-size: 36px; line-height: 1.15; }
+  .headline-xl { font-size: 32px; }
+  .headline-lg { font-size: 26px; }
+  .hero-actions .btn { width: 100%; }
+  .panel { margin-top: 48px; }
+  .panel-body { padding: 4px 20px 20px; }
+  .tier { grid-template-columns: 92px 1fr; row-gap: 6px; padding: 16px 0; }
+  .tier-need { grid-column: 2; text-align: right; }
+  .download { padding: 64px 24px; }
+}
