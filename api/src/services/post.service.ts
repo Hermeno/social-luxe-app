@@ -162,6 +162,22 @@ export async function removeSticker(userId: string, stickerId: string) {
   await prisma.postSticker.delete({ where: { id: stickerId } })
 }
 
+// Reposicionar um objeto (arrastar). Mesmas permissões do delete: autor do
+// objeto ou dono do post. x/y em percentagem (0–100), com margem de segurança.
+export async function moveSticker(userId: string, stickerId: string, x: number, y: number) {
+  const sticker = await prisma.postSticker.findUnique({
+    where:   { id: stickerId },
+    include: { post: { select: { userId: true } } },
+  })
+  if (!sticker) throw new Error('Not found')
+  if (sticker.userId !== userId && sticker.post.userId !== userId) throw new Error('Not authorized')
+  const cx = Math.max(3, Math.min(97, Number(x)))
+  const cy = Math.max(3, Math.min(97, Number(y)))
+  if (!Number.isFinite(cx) || !Number.isFinite(cy)) throw new Error('Invalid position')
+  await prisma.postSticker.update({ where: { id: stickerId }, data: { x: cx, y: cy } })
+  return { ok: true }
+}
+
 // ─── Feed meta helpers ────────────────────────────────────────────────────────
 
 // Fetch up to 4 unique non-author commenters, stickers, and the caller's vote

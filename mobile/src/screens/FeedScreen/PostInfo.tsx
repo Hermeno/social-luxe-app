@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect, useMemo } from 'react'
 import {
   Animated, View, Text, TouchableOpacity, StyleSheet, Image,
 } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
@@ -19,6 +18,7 @@ import * as pairingService from '../../services/pairing.service'
 import { API_BASE } from '../../config'
 import AvatarImage from '../../components/AvatarImage'
 import FollowSplitButton, { FollowDuration } from '../../components/FollowSplitButton'
+import PostOptionsMenu from './PostOptionsMenu'
 import { AppStackParams } from '../../navigation/AppNavigator'
 
 const MAX_COMMENTERS = 4
@@ -57,14 +57,15 @@ interface Props {
   isActive: boolean
   commentCount?: number
   onExpired?: () => void
+  onDeleted?: (id: string) => void
+  onEdited?: (id: string, caption: string) => void
+  onBlockingChange?: (open: boolean) => void
 }
 
-// Height of tab bar above the device safe-area bottom (paddingTop + icon row)
-const TAB_BAR_ABOVE_SAFE = 42
-
-export default function PostInfo({ post, isActive, commentCount: commentCountProp, onExpired }: Props) {
-  const { bottom: safeBottom } = useSafeAreaInsets()
-  const tabOffset = TAB_BAR_ABOVE_SAFE + Math.max(safeBottom, 8)
+export default function PostInfo({
+  post, isActive, commentCount: commentCountProp, onExpired,
+  onDeleted, onEdited, onBlockingChange,
+}: Props) {
   const { user }    = useAuthStore()
   const nav         = useNavigation<Nav>()
   const t           = useT()
@@ -194,10 +195,13 @@ export default function PostInfo({ post, isActive, commentCount: commentCountPro
   }
 
   return (
-    <View style={[s.container, { bottom: 16 + tabOffset }]}>
+    <View style={s.container}>
 
-        {/* Avatar(s) + Name + follow */}
-        <View style={s.userRow}>
+      {/* Linha de topo — autor à esquerda, ações à direita */}
+      <View style={s.topRow}>
+
+        {/* ── Esquerda: avatar + nome + meta ─────────────────────────────────── */}
+        <View style={s.identity}>
           <View style={s.avatarStack}>
             <TouchableOpacity onPress={() => nav.navigate('Profile', { userId: post.user.id })} activeOpacity={0.8}>
               <View style={s.avatarRing}>
@@ -214,123 +218,145 @@ export default function PostInfo({ post, isActive, commentCount: commentCountPro
               </TouchableOpacity>
             )}
           </View>
-          <View style={s.nameGroup}>
-            {post.extended && (
-              <View style={s.extBadge}>
-                <Text style={s.extBadgeText}>+24h</Text>
-              </View>
-            )}
 
-            {post.user.statusLabel ? (
-              <TouchableOpacity onPress={() => nav.navigate('Profile', { userId: post.user.id })} activeOpacity={0.8}>
-                <LinearGradient
-                  colors={['rgba(8,8,40,0.10)', 'rgba(16,16,64,0.12)']}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                  style={s.statusBadge}
-                >
-                  <Text style={s.statusText} numberOfLines={1}>{post.user.statusLabel}</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity onPress={() => nav.navigate('Profile', { userId: post.user.id })} activeOpacity={0.8}>
-                <Text style={s.username} numberOfLines={1}>
-                  {post.user.name}{post.partnerUser && post.partnerAccepted ? ` & ${post.partnerUser.name}` : ''}
+          <View style={s.nameCol}>
+            {/* Nome (ou estado) + selo de vida prolongada */}
+            <View style={s.nameLine}>
+              {post.user.statusLabel ? (
+                <TouchableOpacity onPress={() => nav.navigate('Profile', { userId: post.user.id })} activeOpacity={0.8}>
+                  <LinearGradient
+                    colors={['rgba(8,8,40,0.10)', 'rgba(16,16,64,0.12)']}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                    style={s.statusBadge}
+                  >
+                    <Text style={s.statusText} numberOfLines={1}>{post.user.statusLabel}</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity onPress={() => nav.navigate('Profile', { userId: post.user.id })} activeOpacity={0.8}>
+                  <Text style={s.username} numberOfLines={1}>
+                    {post.user.name}{post.partnerUser && post.partnerAccepted ? ` & ${post.partnerUser.name}` : ''}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {post.extended && (
+                <View style={s.extBadge}>
+                  <Text style={s.extBadgeText}>+24h</Text>
+                </View>
+              )}
+            </View>
+
+            {/* Meta — hora · postado por · anúncio */}
+            <View style={s.metaLine}>
+              {post.isAnnouncement ? (
+                <View style={s.announceBadge}>
+                  <Ionicons name="megaphone-outline" size={10} color="#fff" />
+                  <Text style={s.announceTxt}>{t.feed_announcement}</Text>
+                </View>
+              ) : (
+                <Animated.View style={{ opacity: isDying ? pulseAnim : 1 }}>
+                  <Text style={[s.timer, isDying && s.timerDying]}>{timeLeft()}</Text>
+                </Animated.View>
+              )}
+
+              {post.user.showDevice && !post.isAnnouncement && (
+                <>
+                  <Text style={s.metaSep}>·</Text>
+                  <Ionicons name="phone-portrait-outline" size={9.5} color="rgba(255,255,255,0.62)" />
+                  <Text style={s.metaTxt} numberOfLines={1}>
+                    {t.feed_posted_by} {post.deviceModel ?? 'Mobile'}
+                  </Text>
+                </>
+              )}
+            </View>
+
+            {/* Pareamento do autor */}
+            {authorPairing?.status === 'ACTIVE' && (
+              <TouchableOpacity
+                onPress={() => nav.navigate('Profile', { userId: pairingService.pairingPartner(authorPairing, post.user.id).id })}
+                activeOpacity={0.8}
+                style={s.pairingRow}
+              >
+                <View style={s.pairingDot} />
+                <Text style={s.pairingRowTxt} numberOfLines={1}>
+                  {pairingService.pairingLabel(authorPairing)} · {pairingService.pairingPartner(authorPairing, post.user.id).name}
                 </Text>
               </TouchableOpacity>
-            )}
-
-            {!isSelf && (
-              <FollowSplitButton
-                following={following}
-                loading={loadingFollow}
-                onFollow={handleFollow}
-                theme="dark"
-              />
             )}
           </View>
         </View>
 
-        {/* Pairing badge */}
-        {authorPairing?.status === 'ACTIVE' && (
-          <TouchableOpacity
-            onPress={() => nav.navigate('Profile', { userId: pairingService.pairingPartner(authorPairing, post.user.id).id })}
-            activeOpacity={0.8}
-            style={s.pairingRow}
-          >
-            <View style={s.pairingDot} />
-            <Text style={s.pairingRowTxt} numberOfLines={1}>
-              {pairingService.pairingLabel(authorPairing)} · {pairingService.pairingPartner(authorPairing, post.user.id).name}
-            </Text>
-          </TouchableOpacity>
-        )}
+        {/* ── Direita: seguir + opções ───────────────────────────────────────── */}
+        <View style={s.actions}>
+          {!isSelf && (
+            <FollowSplitButton
+              following={following}
+              loading={loadingFollow}
+              onFollow={handleFollow}
+              theme="dark"
+            />
+          )}
+          {isSelf && (
+            <PostOptionsMenu
+              post={post}
+              onDeleted={onDeleted}
+              onEdited={onEdited}
+              onBlockingChange={onBlockingChange}
+            />
+          )}
+        </View>
+      </View>
 
-        {/* Avatares dos comentadores */}
-        {commenters.length > 0 && (
-          <View style={s.commentersRow}>
-            {commenters.map((c, i) => {
-              const uri = resolveAvatar(c.avatar)
-              return (
-                <View key={c.id} style={[s.commenterAvatar, { marginLeft: i === 0 ? 0 : -9, zIndex: MAX_COMMENTERS - i }]}>
-                  {uri ? (
-                    <Image source={{ uri }} style={s.commenterImg} />
-                  ) : (
-                    <View style={[s.commenterImg, s.commenterFallback]}>
-                      <Text style={s.commenterInitial}>{c.name?.[0]?.toUpperCase() ?? '?'}</Text>
-                    </View>
-                  )}
-                </View>
-              )
-            })}
-            <Text style={s.commentersLabel}>
-              {(() => {
-                const total = commentCountProp ?? post._count.comments
-                if (total <= 1) return t.comment_ed
-                const others = total - 1
-                return `+${others} ${others === 1 ? t.comment_one : t.comment_many}`
-              })()}
-            </Text>
-          </View>
-        )}
+      {/* Legenda — expande para baixo ao toque */}
+      {caption.length > 0 && post.mediaType !== 'TEXT' && (
+        <TouchableOpacity onPress={() => setExpanded((e) => !e)} activeOpacity={0.8} style={s.captionWrap}>
+          <Text style={s.caption}>
+            {displayed}
+            {isLong && !expanded && <Text style={s.seeMore}> {t.see_more}</Text>}
+          </Text>
+        </TouchableOpacity>
+      )}
 
-        {/* Caption */}
-        {caption.length > 0 && post.mediaType !== 'TEXT' && (
-          <TouchableOpacity onPress={() => setExpanded((e) => !e)} activeOpacity={0.8}>
-            <Text style={s.caption}>
-              {displayed}
-              {isLong && !expanded && <Text style={s.seeMore}> {t.see_more}</Text>}
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        {/* Timer + device badge */}
-        {!post.isAnnouncement && (
-          <View style={s.timerRow}>
-            <Animated.View style={{ opacity: isDying ? pulseAnim : 1 }}>
-              <Text style={[s.timer, isDying && s.timerDying]}>{timeLeft()}</Text>
-            </Animated.View>
-
-            {post.user.showDevice && (
-              <LinearGradient
-                colors={['rgba(8,8,40,0.10)', 'rgba(16,16,64,0.12)']}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                style={s.deviceBadge}
-              >
-                <Ionicons name="phone-portrait-outline" size={10} color="rgba(255,255,255,0.75)" />
-                <Text style={s.deviceText}>{t.feed_posted_by} {post.deviceModel ?? 'Mobile'}</Text>
-              </LinearGradient>
-            )}
-          </View>
-        )}
-
+      {/* Avatares dos comentadores */}
+      {commenters.length > 0 && (
+        <View style={s.commentersRow}>
+          {commenters.map((c, i) => {
+            const uri = resolveAvatar(c.avatar)
+            return (
+              <View key={c.id} style={[s.commenterAvatar, { marginLeft: i === 0 ? 0 : -9, zIndex: MAX_COMMENTERS - i }]}>
+                {uri ? (
+                  <Image source={{ uri }} style={s.commenterImg} />
+                ) : (
+                  <View style={[s.commenterImg, s.commenterFallback]}>
+                    <Text style={s.commenterInitial}>{c.name?.[0]?.toUpperCase() ?? '?'}</Text>
+                  </View>
+                )}
+              </View>
+            )
+          })}
+          <Text style={s.commentersLabel}>
+            {(() => {
+              const total = commentCountProp ?? post._count.comments
+              if (total <= 1) return t.comment_ed
+              const others = total - 1
+              return `+${others} ${others === 1 ? t.comment_one : t.comment_many}`
+            })()}
+          </Text>
+        </View>
+      )}
 
     </View>
   )
 }
 
 const s = StyleSheet.create({
-  container: { position: 'absolute', left: 16, right: 80, gap: 6, zIndex: 30 },
+  // Cabeçalho do post — ancorado ao topo, largura toda para a legenda respirar
+  container: { position: 'absolute', top: 12, left: 16, right: 14, gap: 8, zIndex: 30 },
 
-  userRow:     { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  topRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+
+  identity:    { flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   avatarStack: { flexDirection: 'row', alignItems: 'flex-start' },
   avatarRing: {
     width: 38, height: 38, borderRadius: 19,
@@ -339,7 +365,9 @@ const s = StyleSheet.create({
   },
   partnerAvatarOverlap: { marginLeft: -14, marginTop: 9, zIndex: 1 },
 
-  nameGroup: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
+  // Coluna nome → meta → pareamento, alinhada ao centro óptico do avatar
+  nameCol:  { flex: 1, gap: 2, paddingTop: 2 },
+  nameLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   username: {
     color: colors.white, fontFamily: fonts.semiBold, fontSize: 13,
     letterSpacing: -0.2, flexShrink: 1,
@@ -348,7 +376,24 @@ const s = StyleSheet.create({
     textShadowRadius: 3,
   },
 
-  pairingRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: -2 },
+  metaLine: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  metaSep:  { color: 'rgba(255,255,255,0.40)', fontFamily: fonts.medium, fontSize: 11 },
+  metaTxt: {
+    color: 'rgba(255,255,255,0.62)', fontFamily: fonts.medium, fontSize: 10.5,
+    letterSpacing: 0.1, flexShrink: 1,
+  },
+
+  announceBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: 'rgba(245,158,11,0.88)',
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20,
+  },
+  announceTxt: { color: '#fff', fontFamily: fonts.semiBold, fontSize: 10, letterSpacing: 0.2 },
+
+  // Seguir + 3 pontinhos, à direita e no topo
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingTop: 3 },
+
+  pairingRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   pairingDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: colors.primary },
   pairingRowTxt: {
     color: 'rgba(255,255,255,0.75)', fontFamily: fonts.medium, fontSize: 11.5, letterSpacing: -0.1,
@@ -366,25 +411,19 @@ const s = StyleSheet.create({
     color: 'rgba(255,255,255,0.88)', fontFamily: fonts.medium, fontSize: 11, letterSpacing: 0.1,
   },
 
-  deviceBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: 7, paddingVertical: 2, borderRadius: 20,
-    marginLeft: 8,
-  },
-  deviceText: { color: 'rgba(255,255,255,0.75)', fontFamily: fonts.medium, fontSize: 10, letterSpacing: 0.3 },
+  // Legenda alinhada ao avatar; expande para baixo sem empurrar o cabeçalho
+  captionWrap: { marginLeft: 46, marginRight: 6 },
+  caption:     { color: 'rgba(255,255,255,0.88)', fontFamily: fonts.regular, fontSize: 13, lineHeight: 19 },
+  seeMore:     { color: 'rgba(255,255,255,0.50)', fontFamily: fonts.medium },
 
-  caption:    { color: 'rgba(255,255,255,0.88)', fontFamily: fonts.regular, fontSize: 13, lineHeight: 19 },
-  seeMore:    { color: 'rgba(255,255,255,0.50)', fontFamily: fonts.medium },
-
-  timerRow:     { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  timer:        { color: 'rgba(255,255,255,0.65)', fontFamily: fonts.medium, fontSize: 12, letterSpacing: 0.1 },
-  timerDying:   { color: '#FF3B30' },
+  timer:      { color: 'rgba(255,255,255,0.65)', fontFamily: fonts.medium, fontSize: 11, letterSpacing: 0.1 },
+  timerDying: { color: '#FF3B30' },
 
   // ── Commenter avatars ────────────────────────────────────────────────────────
   commentersRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: -2,
+    marginLeft: 46,
   },
   commenterAvatar: {
     width: 22, height: 22, borderRadius: 11,

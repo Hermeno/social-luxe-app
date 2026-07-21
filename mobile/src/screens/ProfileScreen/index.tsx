@@ -22,6 +22,7 @@ import SegmentedRing from '../../components/SegmentedRing'
 import FollowersSheet from './FollowersSheet'
 import QRModal from '../../components/QRModal'
 import * as followService from '../../services/follow.service'
+import type { MutualConnections } from '../../services/follow.service'
 import { blockUser, unblockUser, getBlockedUsers } from '../../services/block.service'
 import { createReport, REPORT_REASONS } from '../../services/report.service'
 import { confirm } from '../../components/confirm'
@@ -32,6 +33,7 @@ import { useFeedStore } from '../../store/feed.store'
 import { useFollowStore } from '../../store/follow.store'
 import { deletePost as apiDeletePost, updatePost as apiUpdatePost } from '../../services/post.service'
 import { toast } from '../../utils/toast'
+import { lifeTier, lifeLabel, isEliteTier } from '../../utils/postLife'
 import { getMyUnions, getPendingInvites, respondToInvite } from '../../services/union.service'
 import { Union, UnionInvite, Pairing } from '../../types'
 import * as pairingService from '../../services/pairing.service'
@@ -92,13 +94,20 @@ function buildRows(posts: Post[]): GridRow[] {
 
 // ── PostThumb ──────────────────────────────────────────────────────────────────
 function PostThumb({
-  post, width, height, isOwn,
+  post, width, height, isOwn, yearLabel,
   onPress, onMenu,
 }: {
-  post: Post; width: number; height: number; isOwn: boolean
+  post: Post; width: number; height: number; isOwn: boolean; yearLabel: string
   onPress: () => void; onMenu: () => void
 }) {
   const thumb = resolveUrl(post.thumbnailUrl ?? post.mediaUrl)
+
+  // Vida conquistada — visível para toda a gente. A grelha deixa de ser "o que
+  // ele publicou" e passa a ser "o que dele sobreviveu".
+  const tier  = lifeTier(post)
+  const life  = lifeLabel(tier, yearLabel)
+  const elite = isEliteTier(tier)
+
   return (
     <TouchableOpacity
       activeOpacity={0.88}
@@ -128,22 +137,47 @@ function PostThumb({
           <Ionicons name="ellipsis-horizontal" size={13} color="#fff" />
         </TouchableOpacity>
       )}
+      {/* Views — só o autor vê, no seu próprio perfil */}
+      {isOwn && (
+        <View style={g.viewsBadge} pointerEvents="none">
+          <Ionicons name="eye-outline" size={11} color="#fff" />
+          <Text style={g.viewsBadgeTxt}>{post._count?.views ?? 0}</Text>
+        </View>
+      )}
+
+      {/* Escalão de vida — neutro nos primeiros, cor da marca só no 1 ano / para sempre */}
+      {life && (
+        elite ? (
+          <LinearGradient
+            colors={['#CA2851', '#FF6766']}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+            style={g.lifeBadge}
+            pointerEvents="none"
+          >
+            <Text style={g.lifeBadgeTxt}>{life}</Text>
+          </LinearGradient>
+        ) : (
+          <View style={[g.lifeBadge, g.lifeBadgeQuiet]} pointerEvents="none">
+            <Text style={g.lifeBadgeTxt}>{life}</Text>
+          </View>
+        )
+      )}
     </TouchableOpacity>
   )
 }
 
 // ── Grid rows ──────────────────────────────────────────────────────────────────
-function FeaturedRowComp({ row, isOwn, onPress, onMenu }: {
-  row: FeaturedRow; isOwn: boolean
+function FeaturedRowComp({ row, isOwn, yearLabel, onPress, onMenu }: {
+  row: FeaturedRow; isOwn: boolean; yearLabel: string
   onPress: (p: Post) => void; onMenu: (p: Post) => void
 }) {
   return (
     <View style={{ flexDirection: 'row', gap: GAP, marginBottom: GAP }}>
-      <PostThumb post={row.main} width={FEAT_W} height={FEAT_H} isOwn={isOwn} onPress={() => onPress(row.main)} onMenu={() => onMenu(row.main)} />
+      <PostThumb post={row.main} width={FEAT_W} height={FEAT_H} isOwn={isOwn} yearLabel={yearLabel} onPress={() => onPress(row.main)} onMenu={() => onMenu(row.main)} />
       <View style={{ gap: GAP }}>
         {row.side.map((p, i) =>
           p ? (
-            <PostThumb key={p.id} post={p} width={SMALL_W} height={SMALL_H} isOwn={isOwn} onPress={() => onPress(p)} onMenu={() => onMenu(p)} />
+            <PostThumb key={p.id} post={p} width={SMALL_W} height={SMALL_H} isOwn={isOwn} yearLabel={yearLabel} onPress={() => onPress(p)} onMenu={() => onMenu(p)} />
           ) : (
             <View key={i} style={{ width: SMALL_W, height: SMALL_H, backgroundColor: colors.gray100 }} />
           )
@@ -153,14 +187,14 @@ function FeaturedRowComp({ row, isOwn, onPress, onMenu }: {
   )
 }
 
-function RegularRowComp({ row, isOwn, onPress, onMenu }: {
-  row: RegularRow; isOwn: boolean
+function RegularRowComp({ row, isOwn, yearLabel, onPress, onMenu }: {
+  row: RegularRow; isOwn: boolean; yearLabel: string
   onPress: (p: Post) => void; onMenu: (p: Post) => void
 }) {
   return (
     <View style={{ flexDirection: 'row', gap: GAP, marginBottom: GAP }}>
       {row.items.map((p) => (
-        <PostThumb key={p.id} post={p} width={SMALL_W} height={SMALL_H} isOwn={isOwn} onPress={() => onPress(p)} onMenu={() => onMenu(p)} />
+        <PostThumb key={p.id} post={p} width={SMALL_W} height={SMALL_H} isOwn={isOwn} yearLabel={yearLabel} onPress={() => onPress(p)} onMenu={() => onMenu(p)} />
       ))}
     </View>
   )
@@ -200,6 +234,7 @@ export default function ProfileScreen() {
   const [savingAvatar,     setSavingAvatar]     = useState(false)
   const [isBlocked,        setIsBlocked]        = useState(false)
   const [blockBusy,        setBlockBusy]        = useState(false)
+  const [mutuals,          setMutuals]          = useState<MutualConnections | null>(null)
   const [showUserMenu,     setShowUserMenu]     = useState(false)
   const userMenuSlide = useRef(new Animated.Value(300)).current
 
@@ -246,6 +281,10 @@ export default function ProfileScreen() {
         setCache(`profile_posts:${targetId}`, freshPosts).catch(() => {})
         if (!isOwn) {
           getBlockedUsers().then((list) => { if (!cancelled) setIsBlocked(list.some((u) => u.id === targetId)) }).catch(() => {})
+          // Conexões em comum — acessório, nunca deve travar o perfil
+          followService.getMutualConnections(targetId)
+            .then((res) => { if (!cancelled) setMutuals(res) })
+            .catch(() => {})
         }
         if (!isOwn && followStatus) {
           setTheyFollowMe(followStatus.followsMe)
@@ -646,6 +685,31 @@ export default function ProfileScreen() {
         </View>
       )}
 
+      {/* ── Conexões em comum — o sinal de confiança num perfil desconhecido ── */}
+      {!isOwn && mutuals && mutuals.total > 0 && (
+        <View style={m.mutualRow}>
+          <View style={m.mutualAvatars}>
+            {mutuals.users.map((u, i) => (
+              <View key={u.id} style={[m.mutualAvatarWrap, { marginLeft: i === 0 ? 0 : -8, zIndex: 3 - i }]}>
+                <AvatarImage uri={u.avatar} name={u.name} size={22} borderWidth={1.5} borderColor="#FFFFFF" />
+              </View>
+            ))}
+          </View>
+          <Text style={m.mutualTxt} numberOfLines={2}>
+            {(() => {
+              const names  = mutuals.users.map((u) => u.name.split(' ')[0])
+              const hidden = mutuals.total - names.length
+              const label  = mutuals.total === 1 ? t.pf_mutual_one : t.pf_mutual_many
+              if (hidden <= 0) return `${names.join(', ')} · ${label}`
+              const others = hidden === 1
+                ? t.pf_mutual_others_one
+                : t.pf_mutual_others_many.replace('{n}', String(hidden))
+              return `${names.join(', ')} ${t.pf_mutual_and} ${others} · ${label}`
+            })()}
+          </Text>
+        </View>
+      )}
+
       {/* ── Interests ── */}
       {!!profile?.interests?.length && (
         <View style={m.interestsWrap}>
@@ -786,6 +850,7 @@ export default function ProfileScreen() {
         <FeaturedRowComp
           row={item}
           isOwn={isOwn}
+          yearLabel={t.pf_life_year}
           onPress={openPost}
           onMenu={(p) => { setMenuPost(p); setEditEditing(false) }}
         />
@@ -795,6 +860,7 @@ export default function ProfileScreen() {
       <RegularRowComp
         row={item}
         isOwn={isOwn}
+        yearLabel={t.pf_life_year}
         onPress={openPost}
         onMenu={(p) => { setMenuPost(p); setEditEditing(false) }}
       />
@@ -963,6 +1029,18 @@ const m = StyleSheet.create({
   pairingPillTxt: { fontSize: 12, fontFamily: fonts.semiBold, color: '#0A0A0A' },
 
   // ── Interests ──────────────────────────────────────────────────────────────
+  // Conexões em comum — linha discreta, sem cartão: é contexto, não conteúdo
+  mutualRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 9,
+    marginHorizontal: 16, marginBottom: 14,
+  },
+  mutualAvatars:    { flexDirection: 'row', alignItems: 'center' },
+  mutualAvatarWrap: { borderRadius: 13 },
+  mutualTxt: {
+    flex: 1, fontSize: 12.5, fontFamily: fonts.regular,
+    color: colors.gray500, lineHeight: 17,
+  },
+
   interestsWrap: {
     flexDirection: 'row', flexWrap: 'wrap', gap: 8,
     marginHorizontal: 16, marginBottom: 16,
@@ -1056,6 +1134,21 @@ const g = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.52)', borderRadius: 10,
     paddingHorizontal: 5, paddingVertical: 3,
   },
+  viewsBadge: {
+    position: 'absolute', bottom: 5, left: 5,
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: 'rgba(0,0,0,0.52)', borderRadius: 10,
+    paddingHorizontal: 6, paddingVertical: 3,
+  },
+  viewsBadgeTxt: { color: '#fff', fontSize: 10, fontFamily: fonts.semiBold },
+
+  lifeBadge: {
+    position: 'absolute', bottom: 5, right: 5,
+    borderRadius: 10, paddingHorizontal: 6, paddingVertical: 3,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  lifeBadgeQuiet: { backgroundColor: 'rgba(0,0,0,0.52)' },
+  lifeBadgeTxt:   { color: '#fff', fontSize: 10, fontFamily: fonts.semiBold, letterSpacing: 0.2 },
 })
 
 // ── User action sheet (bloquear / denunciar / partilhar) ──────────────────────

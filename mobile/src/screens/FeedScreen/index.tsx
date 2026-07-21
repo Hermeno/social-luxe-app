@@ -19,7 +19,6 @@ import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { useFocusEffect } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Ionicons } from '@expo/vector-icons'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { Post } from '../../types'
 import { useFeed } from '../../hooks/useFeed'
@@ -39,6 +38,7 @@ import FeedHeader, { FeedUserGroup as UserGroup } from './FeedHeader'
 import PostAlbumGrid from './PostAlbumGrid'
 import StickerLayer from './StickerLayer'
 import StickerPicker, { StickerChoice } from './StickerPicker'
+import ObjectBar from './ObjectBar'
 import { PostSticker } from '../../types'
 import { API_BASE } from '../../config'
 
@@ -637,19 +637,9 @@ export default function FeedScreen() {
   const STICKER_LIMIT = 50
 
   // ── Sticker placement ─────────────────────────────────────────────────────
-  async function handlePlaceSticker(x: number, y: number) {
-    const choice = pendingSticker
-    const p      = post
-    if (!choice || !p) return
-    const stickerCount = (localStickers[p.id] ?? p.stickers ?? []).length
-    if (stickerCount >= STICKER_LIMIT) {
-      setPendingSticker(null)
-      resumeFromCurrent()
-      Alert.alert(t.feed_limit_reached, t.feed_sticker_limit)
-      return
-    }
-    setPendingSticker(null)
-    resumeFromCurrent()
+  async function placeStickerAt(choice: StickerChoice, x: number, y: number) {
+    const p = post
+    if (!p) return
 
     const tempId = `temp-${Date.now()}`
     const tempSticker: PostSticker = {
@@ -670,6 +660,48 @@ export default function FeedScreen() {
         [p.id]: (prev[p.id] ?? []).filter((s) => s.id !== tempId),
       }))
     }
+  }
+
+  async function handlePlaceSticker(x: number, y: number) {
+    const choice = pendingSticker
+    const p      = post
+    if (!choice || !p) return
+    const stickerCount = (localStickers[p.id] ?? p.stickers ?? []).length
+    if (stickerCount >= STICKER_LIMIT) {
+      setPendingSticker(null)
+      resumeFromCurrent()
+      Alert.alert(t.feed_limit_reached, t.feed_sticker_limit)
+      return
+    }
+    setPendingSticker(null)
+    resumeFromCurrent()
+    placeStickerAt(choice, x, y)
+  }
+
+  // Toque num objeto da barra flutuante → pousa já no post (zona central,
+  // com dispersão leve para não empilhar) e fica arrastável.
+  function handleQuickPlace(emoji: string) {
+    const p = post
+    if (!p) return
+    const count = (localStickers[p.id] ?? p.stickers ?? []).length
+    if (count >= STICKER_LIMIT) {
+      Alert.alert(t.feed_limit_reached, t.feed_sticker_limit)
+      return
+    }
+    const x = 36 + Math.random() * 28   // 36–64%
+    const y = 26 + Math.random() * 26   // 26–52%
+    placeStickerAt({ type: 'emoji', emoji }, x, y)
+  }
+
+  // Arrastou um objeto → fixa a nova posição (otimista) e persiste
+  function handleMoveSticker(stickerId: string, x: number, y: number) {
+    const p = post
+    if (!p) return
+    setLocalStickers((prev) => ({
+      ...prev,
+      [p.id]: (prev[p.id] ?? p.stickers ?? []).map((s) => s.id === stickerId ? { ...s, x, y } : s),
+    }))
+    if (!stickerId.startsWith('temp-')) postService.moveSticker(stickerId, x, y).catch(() => {})
   }
 
   function handleRemoveSticker(stickerId: string) {
@@ -765,10 +797,14 @@ export default function FeedScreen() {
           </View>
 
           {post.mediaType !== 'TEXT' && (
-            <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.72)']} style={s.bottomGradient} pointerEvents="none" />
+            <>
+              {/* Véu superior — o cabeçalho do autor vive aqui e tem de ler-se sobre média clara */}
+              <LinearGradient colors={['rgba(0,0,0,0.58)', 'rgba(0,0,0,0)']} style={s.topGradient} pointerEvents="none" />
+              <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.72)']} style={s.bottomGradient} pointerEvents="none" />
+            </>
           )}
 
-          {/* User info + follow button + timer */}
+          {/* Cabeçalho do post: autor + legenda à esquerda, seguir + opções à direita */}
           <PostInfo
             key={post.id}
             post={post}
@@ -778,14 +814,10 @@ export default function FeedScreen() {
               removePost(post.id)
               navigateTo(Math.max(0, currentIndex - 1))
             }}
+            onDeleted={(id) => { removePost(id); navigateTo(Math.max(0, currentIndex - 1)) }}
+            onEdited={(id, caption) => updatePost(id, caption)}
+            onBlockingChange={setActionBlocking}
           />
-
-          {post.isAnnouncement && (
-            <View style={s.announcementBadge} pointerEvents="none">
-              <Ionicons name="megaphone-outline" size={13} color="#fff" />
-              <Text style={s.announcementBadgeText}>{t.feed_announcement}</Text>
-            </View>
-          )}
 
           {/* Sticker placement overlay — drag follows the finger, release to place; a plain tap places instantly */}
           {pendingSticker && (
@@ -823,6 +855,7 @@ export default function FeedScreen() {
               containerW={viewerW}
               containerH={viewerH}
               onLongPress={handleRemoveSticker}
+              onMove={handleMoveSticker}
               currentUserId={user?.id}
               postOwnerId={post.userId}
               onMessageOpen={() => {
@@ -830,6 +863,30 @@ export default function FeedScreen() {
                 safePlayer(() => player.pause())
               }}
               onMessageClose={() => resumeFromCurrent()}
+            />
+          )}
+
+          {/* Objetos flutuam sobre o post: toque → pousa; arrasta para posicionar */}
+          {post.stickersEnabled && !post.isAnnouncement && !pendingSticker && (
+            <ObjectBar
+              hidden={stickersHidden.has(post.id)}
+              onPick={handleQuickPlace}
+              onMore={() => {
+                if ((localStickers[post.id] ?? post.stickers ?? []).length >= STICKER_LIMIT) {
+                  Alert.alert(t.feed_limit_reached, t.feed_sticker_limit)
+                  return
+                }
+                // Fecha a pesquisa (e o teclado) antes do Modal — evita luta de foco
+                if (searchMode) { Keyboard.dismiss(); setSearchMode(false); setSearchQuery('') }
+                progressRef.current?.stop()
+                safePlayer(() => player.pause())
+                setStickerPickerOpen(true)
+              }}
+              onToggleHidden={() => setStickersHidden((prev) => {
+                const s = new Set(prev)
+                s.has(post.id) ? s.delete(post.id) : s.add(post.id)
+                return s
+              })}
             />
           )}
 
@@ -841,17 +898,6 @@ export default function FeedScreen() {
               if (searchMode) { Keyboard.dismiss(); setSearchMode(false); setSearchQuery('') }
               setCommentPost(post)
             }}
-            onStickerPress={() => {
-                if ((localStickers[post.id] ?? post.stickers ?? []).length >= STICKER_LIMIT) {
-                  Alert.alert(t.feed_limit_reached, t.feed_sticker_limit)
-                  return
-                }
-                // Fecha a pesquisa (e o teclado) antes do Modal do sticker — mesmo motivo do comentário
-                if (searchMode) { Keyboard.dismiss(); setSearchMode(false); setSearchQuery('') }
-                progressRef.current?.stop()
-                safePlayer(() => player.pause())
-                setStickerPickerOpen(true)
-              }}
             newPostsCount={newPostsCount}
             liked={likedPostIds.has(post.id)}
             onLikeChange={(l) => {
@@ -863,17 +909,7 @@ export default function FeedScreen() {
             }}
             reposted={repostedIds.has(post.id)}
             onRepost={() => handleRepost(post.id)}
-            stickerCount={currentStickers.length}
-            stickersHidden={stickersHidden.has(post.id)}
-            onToggleStickers={() => setStickersHidden((prev) => {
-              const s = new Set(prev)
-              s.has(post.id) ? s.delete(post.id) : s.add(post.id)
-              return s
-            })}
             commentCount={(post._count?.comments ?? 0) + (commentDeltas[post.id] ?? 0)}
-            onDeleted={(id) => { removePost(id); navigateTo(Math.max(0, currentIndex - 1)) }}
-            onEdited={(id, caption) => updatePost(id, caption)}
-            onBlockingChange={setActionBlocking}
           />
         </View>
       ) : (
@@ -954,9 +990,9 @@ const s = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 6,
   },
+  topGradient:    { position: 'absolute', top: 0, left: 0, right: 0, height: 190 },
   bottomGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 200 },
 
-  progressWrap:  { position: 'absolute', left: 16, right: 80, zIndex: 22 },
 
   viewerUserInfo: {
     position: 'absolute', left: 16, right: 80, bottom: 16, zIndex: 22,
@@ -985,17 +1021,6 @@ const s = StyleSheet.create({
     marginTop: 7, marginLeft: 46,
   },
 
-  announcementBadge: {
-    position: 'absolute', left: 16, top: 16, zIndex: 21,
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: 'rgba(245,158,11,0.88)',
-    paddingHorizontal: 10, paddingVertical: 5,
-    borderRadius: 20,
-  },
-  announcementBadgeText: {
-    color: '#fff', fontSize: 12,
-    fontFamily: fonts.semiBold, letterSpacing: 0.2,
-  },
   progressRow:   { flexDirection: 'row', paddingHorizontal: 10, gap: 3 },
   progressTrack: {
     flex: 1, height: 2.5,

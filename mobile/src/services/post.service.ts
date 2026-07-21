@@ -70,6 +70,11 @@ export async function removeSticker(postId: string, stickerId: string): Promise<
   await api.delete(`/posts/${postId}/stickers/${stickerId}`)
 }
 
+// Reposicionar um objeto arrastado (x/y em percentagem 0–100)
+export async function moveSticker(stickerId: string, x: number, y: number): Promise<void> {
+  await api.patch(`/posts/stickers/${stickerId}`, { x, y })
+}
+
 export async function likeSticker(stickerId: string): Promise<{ liked: boolean }> {
   const res = await api.post<ApiResponse<{ liked: boolean }>>(`/posts/stickers/${stickerId}/like`)
   return res.data.data

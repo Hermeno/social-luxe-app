@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useMemo } from 'react'
 import {
   View, Text, StyleSheet, Animated, Dimensions,
-  TouchableOpacity, Pressable, Modal,
+  TouchableOpacity, Pressable, Modal, PanResponder,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 
@@ -38,14 +38,36 @@ interface ItemProps {
   top:           number
   type:          'emoji' | 'message' | 'gift'
   canDelete:     boolean
+  canMove:       boolean
   onTap:         () => void
   onLongPress:   () => void
   onAuthorPress: () => void
+  onMoveEnd?:    (dx: number, dy: number) => void
 }
 
-function StickerItem({ sticker, left, top, type, canDelete, onTap, onLongPress, onAuthorPress }: ItemProps) {
+function StickerItem({ sticker, left, top, type, canDelete, canMove, onTap, onLongPress, onAuthorPress, onMoveEnd }: ItemProps) {
   const [particles, setParticles] = useState<Particle[]>([])
   const pidRef = useRef(0)
+
+  // ── Arrastar: o dedo agarra o objeto e leva-o; ao soltar, a posição fica ──
+  const pan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current
+  const [dragging, setDragging] = useState(false)
+  const dragResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => false,
+    // só reclama o gesto quando é claramente um arrasto (não rouba taps/long-press)
+    onMoveShouldSetPanResponder: (_, g) => canMove && (Math.abs(g.dx) > 6 || Math.abs(g.dy) > 6),
+    onPanResponderGrant: () => setDragging(true),
+    onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
+    onPanResponderRelease: (_, g) => {
+      setDragging(false)
+      onMoveEnd?.(g.dx, g.dy)   // o pai fixa a nova posição…
+      pan.setValue({ x: 0, y: 0 })  // …e o offset volta a zero no mesmo frame
+    },
+    onPanResponderTerminate: () => {
+      setDragging(false)
+      pan.setValue({ x: 0, y: 0 })
+    },
+  }), [canMove, left, top, onMoveEnd])
 
   function burst() {
     const batch: Particle[] = []
@@ -85,7 +107,14 @@ function StickerItem({ sticker, left, top, type, canDelete, onTap, onLongPress, 
   const displayEmoji = isMessage ? '💌' : sticker.emoji
 
   return (
-    <View style={[st.item, { left: left - 28, top: top - 28 }]}>
+    <Animated.View
+      style={[
+        st.item,
+        { left: left - 28, top: top - 28, transform: pan.getTranslateTransform() },
+        dragging && st.itemDragging,
+      ]}
+      {...dragResponder.panHandlers}
+    >
 
       <TouchableOpacity
         activeOpacity={0.75}
@@ -131,7 +160,7 @@ function StickerItem({ sticker, left, top, type, canDelete, onTap, onLongPress, 
         </View>
       </TouchableOpacity>
 
-    </View>
+    </Animated.View>
   )
 }
 
@@ -277,13 +306,14 @@ interface Props {
   containerW:      number
   containerH:      number
   onLongPress?:    (id: string) => void
+  onMove?:         (id: string, x: number, y: number) => void   // x/y em % (0–100)
   currentUserId?:  string
   postOwnerId?:    string
   onMessageOpen?:  () => void
   onMessageClose?: () => void
 }
 
-export default function StickerLayer({ postId, stickers, containerW, containerH, onLongPress, currentUserId, postOwnerId, onMessageOpen, onMessageClose }: Props) {
+export default function StickerLayer({ postId, stickers, containerW, containerH, onLongPress, onMove, currentUserId, postOwnerId, onMessageOpen, onMessageClose }: Props) {
   const nav = useNavigation<StackNavigationProp<AppStackParams>>()
   const [messageSticker, setMessageSticker] = useState<PostSticker | null>(null)
 
@@ -328,12 +358,18 @@ export default function StickerLayer({ postId, stickers, containerW, containerH,
             top={top}
             type={type}
             canDelete={canDelete}
+            canMove={canDelete && !!onMove}
             onTap={() => {
               const isMsg = type === 'message' || stk.emoji === '💌'
               if (isMsg) setMessageSticker(stk)
             }}
             onLongPress={() => onLongPress?.(stk.id)}
             onAuthorPress={() => nav.navigate('Profile', { userId: stk.user.id })}
+            onMoveEnd={(dx, dy) => {
+              const nx = Math.max(3, Math.min(97, ((left + dx) / containerW) * 100))
+              const ny = Math.max(3, Math.min(97, ((top + dy) / containerH) * 100))
+              onMove?.(stk.id, nx, ny)
+            }}
           />
         )
       })}
@@ -356,6 +392,10 @@ const st = StyleSheet.create({
     position: 'absolute',
     alignItems: 'center',
     zIndex: 14,
+  },
+  itemDragging: {
+    zIndex: 30,          // por cima de tudo enquanto viaja
+    opacity: 0.92,
   },
   emojiWrap: { alignItems: 'center' },
   emoji: {

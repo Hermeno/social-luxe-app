@@ -327,6 +327,14 @@ export async function removeSticker(req: AuthRequest, res: Response) {
   } catch (err) { return handleError(res, err) }
 }
 
+export async function moveSticker(req: AuthRequest, res: Response) {
+  try {
+    const { x, y } = req.body
+    if (typeof x !== 'number' || typeof y !== 'number') return badRequest(res, 'x and y required')
+    return ok(res, await postService.moveSticker(req.user!.userId, req.params.stickerId, x, y))
+  } catch (err) { return handleError(res, err) }
+}
+
 export async function getFlashback(req: AuthRequest, res: Response) {
   try {
     const post = await postService.getFlashback(req.user!.userId)

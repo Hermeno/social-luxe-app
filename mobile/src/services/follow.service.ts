@@ -22,6 +22,17 @@ export async function getFollowStatus(userId: string): Promise<{ following: bool
   return res.data.data ?? res.data
 }
 
+export interface MutualConnections {
+  total: number
+  users: { id: string; name: string; avatar: string | null }[]
+}
+
+// Conexões em comum com outro perfil — o sinal de confiança num desconhecido.
+export async function getMutualConnections(userId: string): Promise<MutualConnections> {
+  const res = await api.get(`/users/${userId}/mutuals`)
+  return res.data.data ?? res.data
+}
+
 export async function getConnections(): Promise<Connection[]> {
   const res = await api.get<ApiResponse<Connection[]>>('/users/connections', { timeout: 60000 })
   return res.data.data

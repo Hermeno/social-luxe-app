@@ -80,6 +80,13 @@ export async function getUserPosts(req: AuthRequest, res: Response) {
   } catch (err) { return handleError(res, err) }
 }
 
+export async function getMutualConnections(req: AuthRequest, res: Response) {
+  try {
+    const result = await userService.getMutualConnections(req.user!.userId, req.params.id)
+    return ok(res, result)
+  } catch (err) { return handleError(res, err) }
+}
+
 export async function getConnections(req: AuthRequest, res: Response) {
   try {
     const userId = req.user!.userId

@@ -687,6 +687,17 @@ export const PT = {
   pf_report_msg: 'Porque estás a denunciar este perfil?',
   pf_report_done: 'Denúncia enviada',
 
+  // ── Perfil: vida conquistada pelos posts ──
+  pf_life_year: '1a',
+  pf_life_forever_hint: 'Este post ficou para sempre',
+
+  // ── Perfil: conexões em comum ──
+  pf_mutual_one: 'conexão em comum',
+  pf_mutual_many: 'conexões em comum',
+  pf_mutual_and: 'e',
+  pf_mutual_others_one: 'mais 1',
+  pf_mutual_others_many: 'mais {n}',
+
   // ── Bloqueados ──
   blk_title: 'Bloqueados',
   blk_emptyTitle: 'Ninguém bloqueado',

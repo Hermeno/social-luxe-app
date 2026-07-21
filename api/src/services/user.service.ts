@@ -82,6 +82,58 @@ export async function getUserPosts(userId: string) {
   return withThumbnails(posts)
 }
 
+// ─── Conexões em comum ────────────────────────────────────────────────────────
+// "5 pessoas que conheces também o conhecem." Num perfil de desconhecido este é
+// o único sinal de confiança que a página dá — sem ele a decisão de seguir é às
+// cegas. Conexão = qualquer direção do follow, a mesma definição que o feed e a
+// caixa de mensagens já usam, para o vocabulário da app não se contradizer.
+export async function getMutualConnections(viewerId: string, targetId: string, limit = 3) {
+  if (viewerId === targetId) return { total: 0, users: [] }
+
+  const [mine, theirs, blocksGiven, blocksReceived] = await Promise.all([
+    prisma.follow.findMany({
+      where:  { OR: [{ followerId: viewerId }, { followingId: viewerId }] },
+      select: { followerId: true, followingId: true },
+    }),
+    prisma.follow.findMany({
+      where:  { OR: [{ followerId: targetId }, { followingId: targetId }] },
+      select: { followerId: true, followingId: true },
+    }),
+    prisma.block.findMany({ where: { blockerId: viewerId }, select: { blockedId: true } }),
+    prisma.block.findMany({ where: { blockedId: viewerId }, select: { blockerId: true } }),
+  ])
+
+  const peersOf = (rows: { followerId: string; followingId: string }[], self: string) => {
+    const set = new Set<string>()
+    for (const r of rows) {
+      if (r.followerId  !== self) set.add(r.followerId)
+      if (r.followingId !== self) set.add(r.followingId)
+    }
+    return set
+  }
+
+  const blocked = new Set([
+    ...blocksGiven.map((b) => b.blockedId),
+    ...blocksReceived.map((b) => b.blockerId),
+  ])
+
+  const a = peersOf(mine, viewerId)
+  const b = peersOf(theirs, targetId)
+
+  const ids = [...a].filter(
+    (id) => b.has(id) && id !== viewerId && id !== targetId && !blocked.has(id),
+  )
+  if (ids.length === 0) return { total: 0, users: [] }
+
+  // Só os primeiros são precisos para os avatares; `total` carrega a contagem.
+  const users = await prisma.user.findMany({
+    where:  { id: { in: ids.slice(0, limit) } },
+    select: { id: true, name: true, avatar: true },
+  })
+
+  return { total: ids.length, users }
+}
+
 export async function toggleGhostMode(userId: string, ghostMode: boolean) {
   return prisma.user.update({
     where: { id: userId },

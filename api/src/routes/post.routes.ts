@@ -32,6 +32,7 @@ router.get('/:id/reactions', reactionController.getReactions)
 router.get('/:id/stickers', postController.getStickers)
 router.post('/:id/stickers', postController.addSticker)
 router.delete('/:id/stickers/:stickerId', postController.removeSticker)
+router.patch('/stickers/:stickerId', postController.moveSticker)
 router.post('/stickers/:stickerId/like', postController.likeSticker)
 router.post('/stickers/:stickerId/view', postController.viewStickerMessage)
 

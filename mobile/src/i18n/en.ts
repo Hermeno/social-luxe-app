@@ -669,6 +669,17 @@ export const EN: { [K in keyof typeof import('./pt').PT]: string } = {
   pf_report_msg: 'Why are you reporting this profile?',
   pf_report_done: 'Report sent',
 
+  // ── Profile: life earned by posts ──
+  pf_life_year: '1y',
+  pf_life_forever_hint: 'This post is here forever',
+
+  // ── Profile: mutual connections ──
+  pf_mutual_one: 'connection in common',
+  pf_mutual_many: 'connections in common',
+  pf_mutual_and: 'and',
+  pf_mutual_others_one: '1 other',
+  pf_mutual_others_many: '{n} others',
+
   // ── Blocked ──
   blk_title: 'Blocked',
   blk_emptyTitle: 'No one blocked',
