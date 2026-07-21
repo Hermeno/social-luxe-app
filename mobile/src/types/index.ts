@@ -29,6 +29,7 @@ export interface User {
   businessHours?: unknown          // 7 entradas; normalizeHours() dá-lhe forma
   whatsapp?: string | null
   profileActions?: string[]
+  socialLinks?: unknown            // normalizeSocials() dá-lhe forma
 }
 
 export interface PostSticker {
@@ -80,6 +81,9 @@ export interface Comment {
   createdAt: string
   user: Pick<User, 'id' | 'name' | 'avatar'>
   replies?: Comment[]
+  likeCount?: number
+  likedByMe?: boolean
+  editedAt?: string | null
 }
 
 export interface MessageReaction {

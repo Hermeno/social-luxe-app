@@ -3,8 +3,7 @@ import {
   View, Text, TouchableOpacity, StyleSheet, Share, Modal, Animated,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Heart, RefreshCw, Forward } from 'lucide-react-native'
-import { ChatIcon } from '../../components/icons'
+import { Heart, RefreshCw, Forward, MessageCircle } from 'lucide-react-native'
 
 import { Post } from '../../types'
 import { fonts } from '../../theme'
@@ -187,7 +186,11 @@ export default React.memo(function ActionBar({
         {/* Comment — ícone da pasta icins (cauda à direita, sem espelhar) */}
         {!isAnnouncement && (
           <TouchableOpacity style={s.btn} onPress={onCommentPress} activeOpacity={0.75}>
-            <ChatIcon size={24} color="#fff" />
+            {/* No lucide a cauda nasce à esquerda; espelhamos para ficar em baixo
+                à direita, como no ícone de mensagens da navegação */}
+            <View style={s.mirrorX}>
+              <MessageCircle size={26} strokeWidth={2} color="#fff" />
+            </View>
             <Text style={s.label}>{fmt(commentCountProp ?? post._count?.comments ?? 0)}</Text>
           </TouchableOpacity>
         )}
@@ -244,6 +247,7 @@ const s = StyleSheet.create({
     gap: 5,
   },
 
+  mirrorX:    { transform: [{ scaleX: -1 }] },
   repostIcon: { width: 26, height: 26, alignItems: 'center', justifyContent: 'center' },
   repostDot:  { position: 'absolute', top: 10.5, left: 10.5, width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#fff' },
 

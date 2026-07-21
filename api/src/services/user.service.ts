@@ -39,6 +39,7 @@ const PROFILE_SELECT = {
   isAdmin: true, createdAt: true,
   accountType: true, businessCategory: true, businessAddress: true,
   businessHours: true, whatsapp: true, profileActions: true,
+  socialLinks: true,
 } as const
 
 export async function updateProfile(userId: string, data: {
@@ -63,6 +64,7 @@ export async function updateProfile(userId: string, data: {
   businessHours?: unknown
   whatsapp?: string | null
   profileActions?: string[]
+  socialLinks?: unknown
 }) {
   return prisma.user.update({
     where: { id: userId },

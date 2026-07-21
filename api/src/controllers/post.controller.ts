@@ -201,8 +201,31 @@ export async function addView(req: AuthRequest, res: Response) {
 
 export async function getComments(req: AuthRequest, res: Response) {
   try {
-    const comments = await commentService.getComments(req.params.id)
+    const comments = await commentService.getComments(req.params.id, req.user!.userId)
     return ok(res, comments)
+  } catch (err) { return handleError(res, err) }
+}
+
+export async function editComment(req: AuthRequest, res: Response) {
+  try {
+    const { content } = req.body
+    if (!content || !String(content).trim()) return badRequest(res, 'Content required')
+    const comment = await commentService.editComment(req.user!.userId, req.params.commentId, String(content).trim())
+    return ok(res, comment)
+  } catch (err) { return handleError(res, err) }
+}
+
+export async function deleteComment(req: AuthRequest, res: Response) {
+  try {
+    const result = await commentService.deleteComment(req.user!.userId, req.params.commentId)
+    return ok(res, result)
+  } catch (err) { return handleError(res, err) }
+}
+
+export async function toggleCommentLike(req: AuthRequest, res: Response) {
+  try {
+    const result = await commentService.toggleCommentLike(req.user!.userId, req.params.commentId)
+    return ok(res, result)
   } catch (err) { return handleError(res, err) }
 }
 

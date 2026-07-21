@@ -721,6 +721,18 @@ export const PT = {
   bp_no_address: 'Adiciona a morada primeiro',
   bp_bad_time: 'Há uma hora incompleta no horário. Usa o formato 09:00.',
   bp_open_fail: 'Não foi possível abrir essa aplicação',
+
+  // ── Comentários ──
+  cmt_edited: 'editado',
+  cmt_del_title: 'Eliminar comentário',
+  cmt_del_msg: 'Esta ação não pode ser desfeita.',
+
+  // ── Redes sociais ──
+  sl_title: 'Redes',
+  sl_handle_ph: 'nome de utilizador',
+  sl_hint: 'Deixa em branco o que não quiseres mostrar. Podes colar o link inteiro — guardamos só o nome.',
+  sl_following_title: 'Segues',
+  sl_see_all: 'Ver todos',
   bp_sun: 'Domingo',
   bp_mon: 'Segunda',
   bp_tue: 'Terça',

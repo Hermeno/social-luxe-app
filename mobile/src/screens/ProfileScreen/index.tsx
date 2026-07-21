@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import {
-  View, Text, TouchableOpacity, FlatList,
+  View, Text, TouchableOpacity, FlatList, ScrollView,
   RefreshControl, StyleSheet, Alert, Dimensions,
   ActivityIndicator, Modal, TextInput, KeyboardAvoidingView,
   Platform, Image as RNImage, Animated, Share,
@@ -21,6 +21,7 @@ import AvatarImage from '../../components/AvatarImage'
 import SegmentedRing from '../../components/SegmentedRing'
 import FollowersSheet from './FollowersSheet'
 import BusinessBlock from './BusinessBlock'
+import SocialRow from './SocialRow'
 import QRModal from '../../components/QRModal'
 import * as followService from '../../services/follow.service'
 import type { MutualConnections } from '../../services/follow.service'
@@ -236,6 +237,7 @@ export default function ProfileScreen() {
   const [isBlocked,        setIsBlocked]        = useState(false)
   const [blockBusy,        setBlockBusy]        = useState(false)
   const [mutuals,          setMutuals]          = useState<MutualConnections | null>(null)
+  const [followingList,    setFollowingList]    = useState<followService.FollowUser[]>([])
   const [showUserMenu,     setShowUserMenu]     = useState(false)
   const userMenuSlide = useRef(new Animated.Value(300)).current
 
@@ -247,9 +249,11 @@ export default function ProfileScreen() {
   useFocusEffect(useCallback(() => {
     let cancelled = false
     async function run() {
-      const [cachedMeta, cachedPosts] = await Promise.all([
+      const [cachedMeta, cachedPosts, cachedMutuals, cachedFollowing] = await Promise.all([
         !isOwn ? getCache<ProfileCache>(`profile:${targetId}`) : null,
         getCache<Post[]>(`profile_posts:${targetId}`),
+        !isOwn ? getCache<MutualConnections>(`mutuals:${targetId}`) : null,
+        isOwn ? getCache<followService.FollowUser[]>(`following:${targetId}`) : null,
       ])
       const latestMe = useAuthStore.getState().user
       if (!cancelled) {
@@ -259,7 +263,9 @@ export default function ProfileScreen() {
           setFollowingCount(cachedMeta.followingCount)
           setTheyFollowMe(cachedMeta.theyFollowMe ?? false)
         }
-        if (cachedPosts) setPosts(cachedPosts)
+        if (cachedPosts)     setPosts(cachedPosts)
+        if (cachedMutuals)   setMutuals(cachedMutuals)
+        if (cachedFollowing) setFollowingList(cachedFollowing)
         if (isOwn && latestMe) setProfile(latestMe)
       }
       if (!isConnected()) { setRefreshing(false); return }
@@ -284,7 +290,11 @@ export default function ProfileScreen() {
           getBlockedUsers().then((list) => { if (!cancelled) setIsBlocked(list.some((u) => u.id === targetId)) }).catch(() => {})
           // Conexões em comum — acessório, nunca deve travar o perfil
           followService.getMutualConnections(targetId)
-            .then((res) => { if (!cancelled) setMutuals(res) })
+            .then((res) => {
+              if (cancelled) return
+              setMutuals(res)
+              setCache(`mutuals:${targetId}`, res).catch(() => {})
+            })
             .catch(() => {})
         }
         if (!isOwn && followStatus) {
@@ -324,6 +334,8 @@ export default function ProfileScreen() {
             if (cancelled) return
             setFollowerCount(followersRes.length)
             setFollowingCount(followingRes.length)
+            setFollowingList(followingRes)
+            setCache(`following:${targetId}`, followingRes).catch(() => {})
           }).catch(() => {})
         }
       } catch {}
@@ -695,6 +707,41 @@ export default function ProfileScreen() {
         />
       )}
 
+      {/* ── Redes sociais — cores das marcas, rola na horizontal ── */}
+      <SocialRow socialLinks={profile?.socialLinks} />
+
+      {/* ── Quem sigo — só no meu próprio perfil ── */}
+      {isOwn && followingList.length > 0 && (
+        <View style={m.followingBlock}>
+          <View style={m.followingHead}>
+            <Text style={m.followingTitle}>{t.sl_following_title}</Text>
+            <TouchableOpacity
+              onPress={() => { setFollowSheetMode('following'); setShowFollowSheet(true) }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={m.followingAll}>{t.sl_see_all}</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={m.followingRow}
+          >
+            {followingList.slice(0, 20).map((u) => (
+              <TouchableOpacity
+                key={u.id}
+                style={m.followingItem}
+                onPress={() => nav.push('Profile', { userId: u.id })}
+                activeOpacity={0.75}
+              >
+                <AvatarImage uri={u.avatar} name={u.name} size={52} />
+                <Text style={m.followingName} numberOfLines={1}>{u.name.split(' ')[0]}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
       {/* ── Conexões em comum — o sinal de confiança num perfil desconhecido ── */}
       {!isOwn && mutuals && mutuals.total > 0 && (
         <View style={m.mutualRow}>
@@ -1039,6 +1086,21 @@ const m = StyleSheet.create({
   pairingPillTxt: { fontSize: 12, fontFamily: fonts.semiBold, color: '#0A0A0A' },
 
   // ── Interests ──────────────────────────────────────────────────────────────
+  // Quem sigo — fila horizontal, só no próprio perfil
+  followingBlock: { marginBottom: 16 },
+  followingHead: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginHorizontal: 16, marginBottom: 10,
+  },
+  followingTitle: { fontFamily: fonts.semiBold, fontSize: 14, color: colors.gray800 },
+  followingAll:   { fontFamily: fonts.semiBold, fontSize: 12.5, color: colors.primary },
+  followingRow:   { paddingHorizontal: 16, gap: 14 },
+  followingItem:  { alignItems: 'center', gap: 6, width: 58 },
+  followingName: {
+    fontFamily: fonts.medium, fontSize: 11, color: colors.gray500,
+    textAlign: 'center', maxWidth: 58,
+  },
+
   // Conexões em comum — linha discreta, sem cartão: é contexto, não conteúdo
   mutualRow: {
     flexDirection: 'row', alignItems: 'center', gap: 9,

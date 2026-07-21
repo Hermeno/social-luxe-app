@@ -112,6 +112,44 @@ export async function updateBusinessProfile(req: AuthRequest, res: Response) {
   }
 }
 
+// Redes sociais. Guardamos handles, nunca URLs completos — o cliente constrói o
+// link. Assim uma colagem de "instagram.com/joao?igsh=..." não vira um link
+// partido nem um vetor para mandar alguém para onde não quer ir.
+const SOCIAL_KEYS = ['instagram', 'facebook', 'github', 'linkedin', 'tiktok', 'youtube', 'x', 'website']
+const HANDLE_RE   = /^[A-Za-z0-9._-]{1,40}$/
+
+export async function updateSocialLinks(req: AuthRequest, res: Response) {
+  try {
+    const { socialLinks } = req.body
+    if (socialLinks !== undefined && socialLinks !== null) {
+      if (typeof socialLinks !== 'object' || Array.isArray(socialLinks)) {
+        return badRequest(res, 'socialLinks must be an object')
+      }
+      for (const [k, v] of Object.entries(socialLinks)) {
+        if (!SOCIAL_KEYS.includes(k)) return badRequest(res, `unknown social key: ${k}`)
+        if (v === '' || v === null) continue
+        if (typeof v !== 'string') return badRequest(res, `${k} must be a string`)
+        // O site é o único que aceita um domínio; os outros são handles
+        if (k === 'website') {
+          if (v.length > 120 || /\s/.test(v)) return badRequest(res, 'invalid website')
+        } else if (!HANDLE_RE.test(v)) {
+          return badRequest(res, `invalid ${k} handle`)
+        }
+      }
+    }
+    // Chaves vazias saem do objeto — um handle apagado não deve ficar guardado
+    const clean = socialLinks
+      ? Object.fromEntries(Object.entries(socialLinks).filter(([, v]) => typeof v === 'string' && v !== ''))
+      : null
+
+    const user = await userService.updateProfile(req.user!.userId, { socialLinks: clean })
+    return ok(res, user)
+  } catch (err) {
+    if (isSelfRecordNotFound(err)) return unauthorized(res, 'Sessão inválida. Inicia sessão novamente.')
+    return handleError(res, err)
+  }
+}
+
 export async function updateInterests(req: AuthRequest, res: Response) {
   try {
     const { interests } = req.body

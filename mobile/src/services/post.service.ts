@@ -112,6 +112,20 @@ export async function addComment(postId: string, content: string, parentId?: str
   return res.data.data
 }
 
+export async function editComment(commentId: string, content: string): Promise<Comment> {
+  const res = await api.put<ApiResponse<Comment>>(`/posts/comments/${commentId}`, { content })
+  return res.data.data
+}
+
+export async function deleteComment(commentId: string): Promise<void> {
+  await api.delete(`/posts/comments/${commentId}`)
+}
+
+export async function toggleCommentLike(commentId: string): Promise<{ liked: boolean; likeCount: number }> {
+  const res = await api.post<ApiResponse<{ liked: boolean; likeCount: number }>>(`/posts/comments/${commentId}/like`)
+  return res.data.data
+}
+
 // Repost — republica o post na tua própria feed (o servidor duplica o conteúdo)
 export async function repostPost(postId: string): Promise<Post> {
   const res = await api.post<ApiResponse<Post>>(`/posts/${postId}/repost`)

@@ -703,6 +703,18 @@ export const EN: { [K in keyof typeof import('./pt').PT]: string } = {
   bp_no_address: 'Add your address first',
   bp_bad_time: 'A time in your hours is incomplete. Use the 09:00 format.',
   bp_open_fail: 'Could not open that app',
+
+  // ── Comments ──
+  cmt_edited: 'edited',
+  cmt_del_title: 'Delete comment',
+  cmt_del_msg: 'This cannot be undone.',
+
+  // ── Social links ──
+  sl_title: 'Links',
+  sl_handle_ph: 'username',
+  sl_hint: 'Leave blank what you do not want to show. You can paste the full link — we keep only the name.',
+  sl_following_title: 'You follow',
+  sl_see_all: 'See all',
   bp_sun: 'Sunday',
   bp_mon: 'Monday',
   bp_tue: 'Tuesday',

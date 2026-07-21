@@ -78,6 +78,10 @@ model User {
   whatsapp         String?                        // número completo com indicativo
   profileActions   String[] @default([])          // call | whatsapp | message | directions
 
+  // Redes sociais: { instagram: "handle", github: "user", ... }. Vale para
+  // qualquer conta — um programador com GitHub não é um negócio.
+  socialLinks      Json?
+
   posts            Post[]
   friendshipsA     Friendship[]        @relation("FriendA")
   friendshipsB     Friendship[]        @relation("FriendB")
@@ -85,6 +89,7 @@ model User {
   historyB         FriendshipHistory[] @relation("HistoryB")
   likes            Like[]
   comments         Comment[]
+  commentLikes     CommentLike[]
   shares           Share[]
   views            View[]
   sentMessages     Message[]           @relation("Sender")
@@ -324,11 +329,27 @@ model Comment {
   content   String
   parentId  String?
   createdAt DateTime @default(now())
+  editedAt  DateTime?                       // marca "editado" quando o autor altera
+  deletedAt DateTime?                       // apagado leve: as respostas sobrevivem
 
   user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   post    Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
   parent  Comment?  @relation("Replies", fields: [parentId], references: [id], onDelete: Cascade)
   replies Comment[] @relation("Replies")
+  likes   CommentLike[]
+}
+
+model CommentLike {
+  id        String   @id @default(cuid())
+  userId    String
+  commentId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, commentId])
+  @@index([commentId])
 }
 
 model Share {

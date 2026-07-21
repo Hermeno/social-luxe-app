@@ -15,12 +15,16 @@ import { AppStackParams } from '../../navigation/AppNavigator'
 import { fonts } from '../../theme'
 import { API_BASE } from '../../config'
 import { api } from '../../services/api'
+import { enqueueSyncOp, cacheUser } from '../../db/database'
+import { isConnected } from '../../services/netinfo.service'
 import { useT, useI18n } from '../../i18n'
 import { INTERESTS } from '../OnboardingScreen'
 import BusinessSection from './BusinessSection'
+import SocialSection from './SocialSection'
 import {
   DayHours, ProfileAction, emptyHours, normalizeHours,
 } from '../../utils/business'
+import { SocialLinks, normalizeSocials } from '../../utils/social'
 
 export const DEFAULT_TAB_KEY = 'default_tab'
 export type DefaultTab = 'Feed' | 'Messages'
@@ -103,6 +107,7 @@ export default function EditProfileScreen() {
   const [proActions, setProActions] = useState<Set<ProfileAction>>(
     new Set((user?.profileActions ?? []) as ProfileAction[]),
   )
+  const [socials, setSocials] = useState<SocialLinks>(normalizeSocials(user?.socialLinks))
 
   // Sync from store whenever user object updates (e.g. after refreshUser)
   useEffect(() => {
@@ -118,7 +123,8 @@ export default function EditProfileScreen() {
     setWhatsapp(user?.whatsapp ?? '')
     setHours(normalizeHours(user?.businessHours) ?? emptyHours())
     setProActions(new Set((user?.profileActions ?? []) as ProfileAction[]))
-  }, [user?.accountType, user?.businessCategory, user?.businessAddress, user?.whatsapp, user?.businessHours, user?.profileActions])
+    setSocials(normalizeSocials(user?.socialLinks))
+  }, [user?.accountType, user?.businessCategory, user?.businessAddress, user?.whatsapp, user?.businessHours, user?.profileActions, user?.socialLinks])
 
   function toggleInterest(tag: string) {
     setInterests((prev) => {
@@ -156,6 +162,9 @@ export default function EditProfileScreen() {
     savedActions.some((a) => !proActions.has(a as ProfileAction)) ||
     JSON.stringify(hours) !== JSON.stringify(normalizeHours(user?.businessHours) ?? emptyHours())
 
+  const socialsDirty =
+    JSON.stringify(socials) !== JSON.stringify(normalizeSocials(user?.socialLinks))
+
   const isDirty =
     name !== (user?.name ?? '') ||
     bio  !== (user?.bio  ?? '') ||
@@ -163,7 +172,8 @@ export default function EditProfileScreen() {
     showDevice  !== (user?.showDevice  ?? false) ||
     statusLabel !== (user?.statusLabel ?? '') ||
     interestsDirty ||
-    businessDirty
+    businessDirty ||
+    socialsDirty
 
   async function pickAvatar() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
@@ -196,6 +206,41 @@ export default function EditProfileScreen() {
     }
 
     setSaving(true)
+
+    // Sem rede: guardamos na fila e no cache local. O ecrã fecha como se tivesse
+    // gravado — porque gravou; só a subida é que fica para quando houver ligação.
+    if (!isConnected()) {
+      const patch: Record<string, unknown> = {
+        name: name.trim(), bio: bio.trim(),
+        showDevice, statusLabel: statusLabel.trim(),
+      }
+      await enqueueSyncOp('profile', user?.id ?? 'me', 'update', patch).catch(() => {})
+      if (interestsDirty) await enqueueSyncOp('interests', user?.id ?? 'me', 'update', { interests: [...interests] }).catch(() => {})
+      if (businessDirty) {
+        await enqueueSyncOp('business', user?.id ?? 'me', 'update', {
+          accountType: isPro ? 'PROFESSIONAL' : 'PERSONAL',
+          businessCategory: category.trim(), businessAddress: address.trim(),
+          whatsapp: whatsapp.trim(), businessHours: hours, profileActions: [...proActions],
+        }).catch(() => {})
+      }
+      if (socialsDirty) await enqueueSyncOp('social', user?.id ?? 'me', 'update', { socialLinks: socials }).catch(() => {})
+
+      // Espelha na loja local para o perfil já mostrar o novo estado
+      const merged = {
+        ...user, name: name.trim(), bio: bio.trim(), showDevice,
+        statusLabel: statusLabel.trim(), interests: [...interests],
+        accountType: isPro ? 'PROFESSIONAL' : 'PERSONAL',
+        businessCategory: category.trim() || null, businessAddress: address.trim() || null,
+        whatsapp: whatsapp.trim() || null, businessHours: hours,
+        profileActions: [...proActions], socialLinks: socials,
+      } as any
+      useAuthStore.setState({ user: merged })
+      await cacheUser(merged).catch(() => {})
+      setSaving(false)
+      nav.goBack()
+      return
+    }
+
     try {
       const formData = new FormData()
       formData.append('name', name.trim())
@@ -222,6 +267,9 @@ export default function EditProfileScreen() {
           businessHours:    hours,
           profileActions:   [...proActions],
         })
+      }
+      if (socialsDirty) {
+        await api.put('/users/social', { socialLinks: socials })
       }
       await refreshUser()
       nav.goBack()
@@ -335,6 +383,11 @@ export default function EditProfileScreen() {
             hours={hours}           onHoursChange={setHours}
             actions={proActions}    onActionsChange={setProActions}
           />
+        </View>
+
+        {/* Redes sociais — vale para qualquer conta, não só profissional */}
+        <View style={s.section}>
+          <SocialSection links={socials} onChange={setSocials} />
         </View>
 
         {/* Identidade no Post */}

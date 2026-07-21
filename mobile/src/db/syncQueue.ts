@@ -75,6 +75,33 @@ async function flushGenericQueue(): Promise<void> {
         case 'profile:update':
           await api.put('/users/profile', op.payload)
           break
+        case 'interests:update':
+          await api.put('/users/interests', op.payload)
+          break
+        case 'business:update':
+          await api.put('/users/business', op.payload)
+          break
+        case 'social:update':
+          await api.put('/users/social', op.payload)
+          break
+        case 'comment:create':
+          await api.post(`/posts/${(op.payload as any).postId}/comments`, op.payload)
+          break
+        case 'comment:update':
+          await api.put(`/posts/comments/${op.entityId}`, op.payload)
+          break
+        case 'comment:delete':
+          await api.delete(`/posts/comments/${op.entityId}`)
+          break
+        // Gosto de comentário é alternável: reenviamos só se o estado no
+        // servidor ainda não bate certo com o que o utilizador escolheu.
+        case 'commentLike:update': {
+          const want = (op.payload as any).liked as boolean
+          const res  = await api.post(`/posts/comments/${op.entityId}/like`)
+          const got  = res.data?.data?.liked ?? res.data?.liked
+          if (got !== want) await api.post(`/posts/comments/${op.entityId}/like`)
+          break
+        }
         default:
           console.log(`[SyncQueue] Unknown op: ${op.entity}:${op.operation}`)
       }

@@ -53,9 +53,10 @@ export default function BusinessBlock({ profile, isOwn, onMessage }: Props) {
   }
 
   async function open(url: string) {
+    // Nada de canOpenURL: desde o Android 11 devolve false para tel:/whatsapp:
+    // se o esquema não estiver declarado em <queries>, e no Expo Go o manifesto
+    // é o do próprio Expo Go. Tentamos abrir e só tratamos o erro real.
     try {
-      const okToOpen = await Linking.canOpenURL(url)
-      if (!okToOpen) throw new Error('unsupported')
       await Linking.openURL(url)
     } catch {
       Alert.alert(t.error, t.bp_open_fail)
