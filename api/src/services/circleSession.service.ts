@@ -75,7 +75,10 @@ async function membersOf(sessionId: string) {
     include: { user: { select: { id: true, name: true, avatar: true } } },
     orderBy: { createdAt: 'asc' },
   })
-  return rows.map((r) => ({ user: r.user, status: r.status, photoUrl: r.photoUrl }))
+  return rows.map((r) => ({
+    user: r.user, status: r.status, photoUrl: r.photoUrl,
+    photoAt: r.photoAt ? r.photoAt.toISOString() : null,
+  }))
 }
 
 async function broadcast(sessionId: string) {
@@ -190,7 +193,7 @@ export async function addPhoto(userId: string, sessionId: string, photoUrl: stri
   if (!member) throw new Error('Não estás nesta sessão')
   await prisma.circleSessionMember.update({
     where: { sessionId_userId: { sessionId, userId } },
-    data:  { photoUrl, overlays: overlays.length > 0 ? overlays : undefined, status: 'JOINED' },
+    data:  { photoUrl, photoAt: new Date(), overlays: overlays.length > 0 ? overlays : undefined, status: 'JOINED' },
   })
   await broadcast(sessionId)
   return { ok: true }
@@ -198,9 +201,56 @@ export async function addPhoto(userId: string, sessionId: string, photoUrl: stri
 
 // Qualquer membro publica o álbum no SEU feed (fotos de todos, com os emojis de cada um).
 // A sessão fica aberta — cada pessoa pode publicar no seu próprio feed.
+// ─── Disparo sincronizado ─────────────────────────────────────────────────────
+// Todos no círculo disparam no mesmo instante. Quem carrega no botão só pede a
+// contagem; é o servidor que decide o momento, senão cada telemóvel dispararia
+// pelo seu próprio relógio e as fotos nunca coincidiriam.
+const COUNTDOWN_MS = 3000
+
+export async function startCountdown(userId: string, sessionId: string) {
+  const session = await prisma.circleSession.findUnique({ where: { id: sessionId } })
+  if (!session) throw new Error('Sessão não encontrada')
+  if (session.status !== 'OPEN') throw new Error('Sessão já fechou')
+
+  const me = await prisma.circleSessionMember.findUnique({
+    where: { sessionId_userId: { sessionId, userId } },
+  })
+  if (!me || me.status !== 'JOINED') throw new Error('Não estás nesta sessão')
+
+  const now = Date.now()
+  // Já há uma contagem a decorrer: devolvemos a mesma em vez de abrir outra,
+  // senão dois dedos rápidos dessincronizavam o círculo todo.
+  if (session.shotAt && session.shotAt.getTime() > now) {
+    return { shotAt: session.shotAt.toISOString(), inMs: session.shotAt.getTime() - now }
+  }
+
+  const shotAt = new Date(now + COUNTDOWN_MS)
+  await prisma.circleSession.update({ where: { id: sessionId }, data: { shotAt } })
+
+  const rows = await prisma.circleSessionMember.findMany({
+    where:  { sessionId, status: 'JOINED' },
+    select: { userId: true },
+  })
+  // Mandamos a duração, não só o instante: os relógios dos telemóveis estão
+  // dessincronizados entre si e com o servidor, mas a duração é sempre fiável.
+  rows.forEach((r) => emitToUser(r.userId, 'circle:countdown', {
+    sessionId, inMs: COUNTDOWN_MS, startedBy: userId,
+  }))
+
+  return { shotAt: shotAt.toISOString(), inMs: COUNTDOWN_MS }
+}
+
+// Janela para publicar depois de tirar a foto. Passado isto o momento passou —
+// o botão desaparece no cliente e a ação deixa de ser aceite aqui.
+// Mantém em sincronia com PUBLISH_WINDOW_MS em mobile/src/screens/CircleScreen.
+const PUBLISH_WINDOW_MS = 60 * 1000
+
 export async function publishSession(userId: string, sessionId: string, caption?: string) {
   const me = await prisma.circleSessionMember.findUnique({ where: { sessionId_userId: { sessionId, userId } } })
   if (!me || me.status !== 'JOINED') throw new Error('Não estás nesta sessão')
+  if (!me.photoAt || Date.now() - me.photoAt.getTime() > PUBLISH_WINDOW_MS) {
+    throw new Error('A janela para publicar esta foto já passou')
+  }
 
   const withPhotos = await prisma.circleSessionMember.findMany({
     where:   { sessionId, status: 'JOINED', photoUrl: { not: null } },

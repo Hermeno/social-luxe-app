@@ -22,6 +22,9 @@ import { getSocket } from '../../socket'
 import { useT } from '../../i18n'
 
 const SHUTTER_OUTER = 78
+// Tempo para publicar depois de a foto entrar. Mantém em sincronia com
+// PUBLISH_WINDOW_MS em api/src/services/circleSession.service.ts.
+const PUBLISH_WINDOW_MS = 60 * 1000
 const SHUTTER_INNER = 62
 const INVITE_TTL_MS = 2 * 60 * 1000   // convite expira em 2 min (igual ao backend)
 
@@ -114,6 +117,11 @@ export default function CircleScreen() {
   const [initDone,   setInitDone]   = useState(false)
   const [initError,  setInitError]  = useState(false)
   const [shooting,   setShooting]   = useState(false)
+  const [countdown,  setCountdown]  = useState<number | null>(null)
+  // Altura real da barra de baixo. O painel "chamar mais" assenta em cima dela,
+  // e ela cresce quando aparece o botão de publicar — daí ser medida, não fixa.
+  const [bottomBarH, setBottomBarH] = useState(0)
+  const countdownTimer = useRef<ReturnType<typeof setInterval> | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [published,  setPublished]  = useState(false)
@@ -134,6 +142,29 @@ export default function CircleScreen() {
   const showable   = nearby.filter((u) => !memberIds.has(u.id))
   const photoCount = members.filter((m) => m.photoUrl).length
   const iHavePhoto = members.some((m) => m.user.id === myId && m.photoUrl)
+
+  // ── Janela para publicar ────────────────────────────────────────────────────
+  // O botão não pode ficar para sempre: a foto vive um minuto e o momento passa.
+  // Contamos a partir do photoAt do servidor, não de um instante local, senão
+  // sair e voltar ao separador ressuscitava o botão.
+  const myPhotoAt = members.find((m) => m.user.id === myId)?.photoAt ?? null
+  const [nowTs, setNowTs] = useState(() => Date.now())
+  useEffect(() => {
+    if (!myPhotoAt) return
+    const end = new Date(myPhotoAt).getTime() + PUBLISH_WINDOW_MS
+    if (Date.now() >= end) { setNowTs(Date.now()); return }   // janela já fechada
+    const id = setInterval(() => {
+      const t = Date.now()
+      setNowTs(t)
+      if (t >= end) clearInterval(id)   // fechou: não vale a pena continuar a acordar
+    }, 500)
+    return () => clearInterval(id)
+  }, [myPhotoAt])
+
+  const publishLeftMs = myPhotoAt
+    ? Math.max(0, PUBLISH_WINDOW_MS - (nowTs - new Date(myPhotoAt).getTime()))
+    : 0
+  const canPublish = publishLeftMs > 0 && photoCount >= 1 && !published
 
   // ── Localização (só se já permitida) ────────────────────────────────────────
   async function getLoc(): Promise<{ lat?: number; lng?: number }> {
@@ -203,10 +234,18 @@ export default function CircleScreen() {
         ensureSession()
       }
     }
+    // Contagem decrescente: chega a TODOS no círculo, incluindo a quem carregou.
+    // Ninguém dispara pelo seu próprio botão — todos disparam por este evento.
+    const onCountdown = ({ sessionId, inMs }: { sessionId: string; inMs: number }) => {
+      if (sessionRef.current?.id !== sessionId) return
+      beginCountdown(inMs)
+    }
+
     socket?.on('circle:update', onUpdate)
     socket?.on('circle:called', onCalled)
     socket?.on('circle:published', onPublished)
     socket?.on('circle:removed', onRemoved)
+    socket?.on('circle:countdown', onCountdown)
 
     return () => {
       setFocused(false)
@@ -218,6 +257,8 @@ export default function CircleScreen() {
       socket?.off('circle:called', onCalled)
       socket?.off('circle:published', onPublished)
       socket?.off('circle:removed', onRemoved)
+      socket?.off('circle:countdown', onCountdown)
+      if (countdownTimer.current) clearInterval(countdownTimer.current)
     }
   }, [ensureSession]))
 
@@ -317,18 +358,58 @@ export default function CircleScreen() {
   }
 
   // ── Disparo ─────────────────────────────────────────────────────────────────
-  async function handleShutter() {
-    if (shooting || !camRef.current) return
+  // Captura mesmo. Só é chamada quando a contagem chega a zero (ou logo, se eu
+  // estiver sozinho) — nunca diretamente pelo botão quando há círculo.
+  async function capture() {
+    if (!camRef.current) return
     setShooting(true)
-    Animated.sequence([
-      Animated.timing(shutterPress, { toValue: 0.86, duration: 90, useNativeDriver: true }),
-      Animated.spring(shutterPress, { toValue: 1, tension: 200, friction: 6, useNativeDriver: true }),
-    ]).start()
     try {
       const pic = await camRef.current.takePictureAsync({ quality: 0.8 })
       if (pic?.uri) { setPreviewUri(pic.uri); setPlaced([]) }
     } catch {}
     setShooting(false)
+  }
+
+  // Arranca a contagem local. Usa a DURAÇÃO vinda do servidor, não um instante
+  // absoluto: os relógios dos telemóveis não estão sincronizados entre si.
+  function beginCountdown(inMs: number) {
+    if (countdownTimer.current) clearInterval(countdownTimer.current)
+    const deadline = Date.now() + inMs
+    setCountdown(Math.ceil(inMs / 1000))
+
+    countdownTimer.current = setInterval(() => {
+      const left = deadline - Date.now()
+      if (left <= 0) {
+        if (countdownTimer.current) clearInterval(countdownTimer.current)
+        countdownTimer.current = null
+        setCountdown(null)
+        capture()
+      } else {
+        setCountdown(Math.ceil(left / 1000))
+      }
+    }, 100)   // 100ms: o número muda no segundo certo, sem esperar por um tick largo
+  }
+
+  async function handleShutter() {
+    if (shooting || countdown !== null || !camRef.current) return
+    Animated.sequence([
+      Animated.timing(shutterPress, { toValue: 0.86, duration: 90, useNativeDriver: true }),
+      Animated.spring(shutterPress, { toValue: 1, tension: 200, friction: 6, useNativeDriver: true }),
+    ]).start()
+
+    const sess = sessionRef.current
+    const others = members.filter((m) => m.status === 'JOINED' && m.user.id !== user?.id).length
+
+    // Sozinho no círculo não faz sentido contar — dispara já
+    if (!sess || others === 0) { capture(); return }
+
+    try {
+      // Não disparamos aqui: o servidor avisa toda a gente, inclusive a nós, e
+      // é esse evento que faz a captura. Assim ninguém sai adiantado.
+      await circle.startCountdown(sess.id)
+    } catch {
+      capture()   // se o pedido falhar, ao menos a minha foto sai
+    }
   }
 
   function addEmoji(emoji: string) {
@@ -392,6 +473,16 @@ export default function CircleScreen() {
       {/* ── Câmara ao vivo (fundo, sempre a filmar) ── */}
       {focused && !previewUri && (
         <CameraView ref={camRef} style={StyleSheet.absoluteFill} facing={facing} />
+      )}
+
+      {/* Contagem sincronizada — todos veem o mesmo número ao mesmo tempo */}
+      {countdown !== null && !previewUri && (
+        <View style={s.countdownWrap} pointerEvents="none">
+          <View style={s.countdownRing}>
+            <Text style={s.countdownNum}>{countdown}</Text>
+          </View>
+          <Text style={s.countdownHint}>{t.circle_countdown_hint}</Text>
+        </View>
       )}
       {previewUri && (
         <View
@@ -472,7 +563,7 @@ export default function CircleScreen() {
 
       {/* ── Painel flutuante: quem chamar (cards) — só o anfitrião, sobre a câmara ── */}
       {!previewUri && isHost && showable.length > 0 && (
-        <View style={s.nearbyPanel} pointerEvents="box-none">
+        <View style={[s.nearbyPanel, { bottom: (bottomBarH || 200) + 14 }]} pointerEvents="box-none">
           <Text style={s.nearbyHeading}>{t.circle_callMore}</Text>
           {others.length === 0 && (
             <Text style={s.nearbySub}>{t.circle_nobodySub}</Text>
@@ -540,20 +631,32 @@ export default function CircleScreen() {
 
       {/* ── Fundo: publicar (anfitrião) + obturador OU confirmar preview ── */}
       {!previewUri ? (
-        <View style={[s.bottom, { paddingBottom: bottom + 78 }]} pointerEvents="box-none">
+        <View
+          style={[s.bottom, { paddingBottom: bottom + 78 }]}
+          pointerEvents="box-none"
+          onLayout={(e) => setBottomBarH(e.nativeEvent.layout.height)}
+        >
           {/* Qualquer participante publica o álbum no SEU feed */}
-          {photoCount >= 1 && (
+          {canPublish && (
             <TouchableOpacity
-              style={[s.publishBtn, published && s.publishBtnDone]}
+              style={s.publishBtn}
               onPress={handlePublish}
-              disabled={publishing || published}
+              disabled={publishing}
               activeOpacity={0.88}
             >
               {publishing
                 ? <ActivityIndicator color="#fff" size="small" />
-                : published
-                ? <Text style={s.publishTxt}>{t.circle_published}</Text>
-                : <Text style={s.publishTxt}>{t.circle_publishMy} · {photoCount} {photoCount === 1 ? t.circle_photo : t.circle_photos}</Text>}
+                : (
+                  <View style={s.publishRow}>
+                    <Text style={s.publishTxt}>
+                      {t.circle_publishMy} · {photoCount} {photoCount === 1 ? t.circle_photo : t.circle_photos}
+                    </Text>
+                    {/* Os segundos que restam — o botão diz que é passageiro */}
+                    <View style={s.publishClock}>
+                      <Text style={s.publishClockTxt}>{Math.ceil(publishLeftMs / 1000)}</Text>
+                    </View>
+                  </View>
+                )}
             </TouchableOpacity>
           )}
           <Pressable onPress={handleShutter} disabled={shooting}>
@@ -660,6 +763,27 @@ const em = StyleSheet.create({
 })
 
 const s = StyleSheet.create({
+  // ── Contagem decrescente ──
+  countdownWrap: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center', justifyContent: 'center', gap: 16,
+  },
+  countdownRing: {
+    width: 128, height: 128, borderRadius: 64,
+    borderWidth: 3, borderColor: 'rgba(255,255,255,0.9)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  countdownNum: {
+    color: '#fff', fontFamily: fonts.bold, fontSize: 64,
+    lineHeight: 74, textAlign: 'center',
+  },
+  countdownHint: {
+    color: 'rgba(255,255,255,0.9)', fontFamily: fonts.semiBold, fontSize: 14,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3,
+  },
+
   screen: { flex: 1, backgroundColor: colors.black },
 
   /* ── Topo ── */
@@ -715,8 +839,10 @@ const s = StyleSheet.create({
   incomingBtnTxt: { color: '#fff', fontSize: 13.5, fontFamily: fonts.bold },
 
   /* ── Painel de vizinhos (só o layout, sobre a câmara — sem fundo) ── */
+  // `bottom` vem do onLayout da barra de baixo — aqui fica só o valor de recurso
+  // para o primeiro render, antes da medição chegar.
   nearbyPanel: {
-    position: 'absolute', left: 12, right: 12, bottom: 200, zIndex: 15,
+    position: 'absolute', left: 12, right: 12, zIndex: 15,
     paddingVertical: 4, paddingHorizontal: 8,
   },
   nearbyHeading: {
@@ -803,6 +929,13 @@ const s = StyleSheet.create({
     shadowColor: colors.primary, shadowOpacity: 0.4, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 8,
   },
   publishBtnDone: { backgroundColor: 'rgba(255,255,255,0.2)' },
+  publishRow:   { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  publishClock: {
+    minWidth: 24, height: 24, borderRadius: 12, paddingHorizontal: 6,
+    backgroundColor: 'rgba(0,0,0,0.22)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  publishClockTxt: { color: '#fff', fontFamily: fonts.bold, fontSize: 12 },
   publishTxt: { color: '#fff', fontSize: 14.5, fontFamily: fonts.bold, letterSpacing: -0.2 },
   shutterOuter: {
     width: SHUTTER_OUTER, height: SHUTTER_OUTER, borderRadius: SHUTTER_OUTER / 2,

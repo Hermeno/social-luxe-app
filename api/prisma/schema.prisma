@@ -830,6 +830,7 @@ model CircleSession {
   status    CircleSessionStatus @default(OPEN)
   lat       Float?
   lng       Float?
+  shotAt    DateTime?           // instante do disparo sincronizado (contagem decrescente)
   createdAt DateTime            @default(now())
 
   host    User                  @relation("CircleHost", fields: [hostId], references: [id], onDelete: Cascade)
@@ -844,6 +845,7 @@ model CircleSessionMember {
   userId    String
   status    CircleMemberStatus @default(JOINED)
   photoUrl  String?
+  photoAt   DateTime?          // quando a foto entrou — abre a janela de publicação
   overlays  Json?              // emojis colados na foto: [{ emoji, x, y }] (x/y fração 0..1)
   createdAt DateTime           @default(now())
 

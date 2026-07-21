@@ -1,12 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react'
 import {
   View, Text, TouchableOpacity, FlatList, StyleSheet,
-  Animated, Dimensions, Platform, Modal, Keyboard,
+  Animated, Dimensions, Modal, useWindowDimensions,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { Post, Comment } from '../../types'
 import { useComments } from '../../hooks/useComments'
+import { useKeyboardPad } from '../../hooks/useKeyboardPad'
 import CommentItem from './CommentItem'
 import CommentInputArea from './CommentInputArea'
 import { colors, spacing } from '../../theme'
@@ -23,29 +24,18 @@ export default function CommentSheet({ post, onClose, onCommentAdded }: Props) {
   const slideAnim = useRef(new Animated.Value(height)).current
   const { bottom } = useSafeAreaInsets()
 
+  // Altura VIVA da janela. No Android ela encolhe quando o teclado abre; se a
+  // folha continuasse limitada a 78% do ecrã inteiro, ficaria mais alta do que o
+  // espaço disponível e transbordaria por cima, até ao header.
+  const { height: winH } = useWindowDimensions()
+
   useEffect(() => {
     load()
     Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, damping: 20 }).start()
   }, [])
 
-  // O KeyboardAvoidingView com behavior="height" no Android edge-to-edge
-  // redimensiona o overlay em ciclo — é isso que fazia a folha piscar depressa.
-  // Medimos o teclado à mão, tal como no ChatScreen, e forçamos 0 ao fechar.
-  const kbPad = useRef(new Animated.Value(0)).current
-  useEffect(() => {
-    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
-    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
-    const onShow = (e: any) => Animated.timing(kbPad, {
-      toValue: e?.endCoordinates?.height ?? 0,
-      duration: e?.duration ?? 220, useNativeDriver: false,
-    }).start()
-    const onHide = (e: any) => Animated.timing(kbPad, {
-      toValue: 0, duration: e?.duration ?? 180, useNativeDriver: false,
-    }).start()
-    const s1 = Keyboard.addListener(showEvt, onShow)
-    const s2 = Keyboard.addListener(hideEvt, onHide)
-    return () => { s1.remove(); s2.remove() }
-  }, [])
+  // Mesmo cálculo do chat: abrimos só o espaço que o teclado tapa de facto.
+  const kbPad = useKeyboardPad()
 
   function handleClose() {
     Animated.timing(slideAnim, { toValue: height, useNativeDriver: true, duration: 250 }).start(onClose)
@@ -60,8 +50,6 @@ export default function CommentSheet({ post, onClose, onCommentAdded }: Props) {
 
   const fmt = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(0)}K` : String(n)
 
-  // KAV wraps the OUTER overlay so it can correctly measure its own position
-  // relative to the screen (not inside a transformed Animated.View)
   return (
     <Modal
       visible
@@ -72,7 +60,7 @@ export default function CommentSheet({ post, onClose, onCommentAdded }: Props) {
     >
       <Animated.View style={[s.overlay, { paddingBottom: kbPad }]}>
         <TouchableOpacity style={s.backdrop} onPress={handleClose} activeOpacity={1} />
-        <Animated.View style={[s.sheet, { transform: [{ translateY: slideAnim }] }]}>
+        <Animated.View style={[s.sheet, { maxHeight: winH * 0.78, transform: [{ translateY: slideAnim }] }]}>
           <View style={s.header}>
             <Text style={s.title}><Text style={s.count}>{fmt(post._count.comments)}</Text> {t.comments_title}</Text>
             <TouchableOpacity onPress={handleClose}>
@@ -115,7 +103,8 @@ export default function CommentSheet({ post, onClose, onCommentAdded }: Props) {
 const s = StyleSheet.create({
   overlay:  { ...StyleSheet.absoluteFillObject, zIndex: 100, justifyContent: 'flex-end' },
   backdrop: { flex: 1, backgroundColor: 'transparent' },
-  sheet:    { backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: height * 0.78 },
+  // maxHeight é aplicado no render, a partir da altura viva da janela
+  sheet:    { backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
   handle:   { width: 40, height: 4, backgroundColor: colors.gray200, borderRadius: 2, alignSelf: 'center', marginBottom: spacing.sm },
   header:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   title:    { fontSize: 17, fontWeight: '600' as const, color: colors.gray800 },

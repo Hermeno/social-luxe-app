@@ -723,6 +723,7 @@ export const PT = {
   bp_open_fail: 'Não foi possível abrir essa aplicação',
 
   // ── Comentários ──
+  circle_countdown_hint: 'Toda a gente dispara ao mesmo tempo',
   cmt_edited: 'editado',
   cmt_del_title: 'Eliminar comentário',
   cmt_del_msg: 'Esta ação não pode ser desfeita.',

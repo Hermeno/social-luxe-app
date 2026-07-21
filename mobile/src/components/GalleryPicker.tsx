@@ -72,12 +72,40 @@ export default function GalleryPicker({ visible, onClose, onDone, maxSelection =
     requestPerm()
   }, [visible])
 
-  // Carrega as pastas (álbuns) do telemóvel, ordenadas por quantidade
+  // Carrega as pastas do telemóvel, ordenadas por quantidade.
+  // O assetCount do álbum conta TUDO — músicas, documentos, o que lá estiver —
+  // por isso pastas só com mp3 apareciam e abriam vazias. Contamos nós apenas
+  // fotos e vídeos, e a pasta só entra na lista se tiver algum.
   useEffect(() => {
     if (!visible || perm?.status !== 'granted') return
+    let cancelled = false
+
     MediaLibrary.getAlbumsAsync({ includeSmartAlbums: true })
-      .then((list) => setAlbums(list.filter((a) => a.assetCount > 0).sort((a, b) => b.assetCount - a.assetCount)))
+      .then(async (list) => {
+        const counted = await Promise.all(
+          list.map(async (a) => {
+            try {
+              const page = await MediaLibrary.getAssetsAsync({
+                album: a.id, first: 1,
+                mediaType: [MediaLibrary.MediaType.photo, MediaLibrary.MediaType.video],
+              })
+              return { album: a, count: page.totalCount }
+            } catch {
+              return { album: a, count: 0 }
+            }
+          }),
+        )
+        if (cancelled) return
+        setAlbums(
+          counted
+            .filter((c) => c.count > 0)
+            .sort((a, b) => b.count - a.count)
+            .map((c) => ({ ...c.album, assetCount: c.count })),
+        )
+      })
       .catch(() => {})
+
+    return () => { cancelled = true }
   }, [visible, perm?.status])
 
   // (Re)carrega os itens quando abre ou quando muda de pasta

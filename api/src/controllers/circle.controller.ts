@@ -83,6 +83,15 @@ export async function photo(req: AuthRequest, res: Response) {
   } catch (err) { return handleError(res, err, 'circle.photo') }
 }
 
+export async function countdown(req: AuthRequest, res: Response) {
+  try {
+    const { sessionId } = req.body
+    if (!sessionId) return badRequest(res, 'sessionId required')
+    const result = await session.startCountdown(req.user!.userId, sessionId)
+    return ok(res, result)
+  } catch (err) { return handleError(res, err, 'circle.countdown') }
+}
+
 export async function publish(req: AuthRequest, res: Response) {
   try {
     const { sessionId, caption } = req.body

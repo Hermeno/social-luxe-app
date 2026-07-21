@@ -15,6 +15,7 @@ import * as msgService from '../../services/message.service'
 import * as pairingService from '../../services/pairing.service'
 import { useAuthStore } from '../../store/auth.store'
 import { useOnlineStore } from '../../store/online.store'
+import { useKeyboardPad } from '../../hooks/useKeyboardPad'
 import { useMessageBadgeStore } from '../../store/messageBadge.store'
 import { getSocket } from '../../socket'
 import { AppStackParams } from '../../navigation/AppNavigator'
@@ -452,32 +453,9 @@ export default function ChatScreen() {
   const { bottom, top } = useSafeAreaInsets()
   const isOnline        = useOnlineStore((s) => s.isOnline(userId))
 
-  // ── Teclado: controlo manual determinístico ────────────────────────────────
-  // O KeyboardAvoidingView do RN, em edge-to-edge no Android, mede o inset da barra
-  // de navegação como se fosse teclado e deixa um resíduo (~20px) ao fechar. Aqui
-  // padamos pela altura REAL do teclado ao abrir e forçamos EXATAMENTE 0 ao fechar.
-  const kbPad = useRef(new Animated.Value(0)).current
-  useEffect(() => {
-    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
-    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
-    const onShow = (e: any) => {
-      Animated.timing(kbPad, {
-        toValue: e?.endCoordinates?.height ?? 0,
-        duration: e?.duration ?? 220,
-        useNativeDriver: false,
-      }).start()
-    }
-    const onHide = (e: any) => {
-      Animated.timing(kbPad, {
-        toValue: 0,
-        duration: e?.duration ?? 180,
-        useNativeDriver: false,
-      }).start()
-    }
-    const s1 = Keyboard.addListener(showEvt, onShow)
-    const s2 = Keyboard.addListener(hideEvt, onHide)
-    return () => { s1.remove(); s2.remove() }
-  }, [])
+  // Espaço para o teclado — a conta e o porquê vivem no hook, partilhado com a
+  // folha de comentários para as duas nunca divergirem outra vez.
+  const kbPad = useKeyboardPad()
 
   const formatDateLabel = useCallback((dateStr: string) => {
     const d    = new Date(dateStr)

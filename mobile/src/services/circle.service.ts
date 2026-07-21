@@ -17,6 +17,7 @@ export interface CircleMember {
   user: CircleUser
   status: 'INVITED' | 'JOINED'
   photoUrl: string | null
+  photoAt: string | null      // abre a janela de 60s para publicar
 }
 
 export interface CircleSession {
@@ -67,6 +68,13 @@ export async function leaveCircle(sessionId: string): Promise<void> {
 // O anfitrião remove um membro do círculo
 export async function removeFromCircle(sessionId: string, userId: string): Promise<void> {
   await api.post('/circle/remove', { sessionId, userId })
+}
+
+// Pedir a contagem decrescente. O servidor decide o instante e avisa todos os
+// membros por socket — aqui só devolvemos a duração para quem carregou.
+export async function startCountdown(sessionId: string): Promise<{ inMs: number }> {
+  const res = await api.post('/circle/countdown', { sessionId })
+  return res.data.data ?? res.data
 }
 
 // Guardar a minha foto (com emojis) na sessão

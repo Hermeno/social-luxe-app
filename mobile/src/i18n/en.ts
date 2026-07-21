@@ -705,6 +705,7 @@ export const EN: { [K in keyof typeof import('./pt').PT]: string } = {
   bp_open_fail: 'Could not open that app',
 
   // ── Comments ──
+  circle_countdown_hint: 'Everyone shoots at the same time',
   cmt_edited: 'edited',
   cmt_del_title: 'Delete comment',
   cmt_del_msg: 'This cannot be undone.',

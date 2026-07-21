@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, useCallback } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
-  KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Keyboard,
+  KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Keyboard, Pressable,
 } from 'react-native'
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useFocusEffect } from '@react-navigation/native'
 import { fonts } from '../../theme'
 import { createPost, createAlbum } from '../../services/post.service'
 import PostAlbumGrid from '../FeedScreen/PostAlbumGrid'
@@ -84,7 +84,32 @@ export default function CreateScreen() {
   const closeBgClr   = isDarkFrame ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.07)'
 
   const videoUri = media?.type === 'video' ? media.uri : null
-  const player   = useVideoPlayer(videoUri, (p) => { p.loop = true; if (videoUri) p.play() })
+  const player   = useVideoPlayer(videoUri, (p) => { p.loop = true; p.muted = false; if (videoUri) p.play() })
+
+  // Estado real do leitor — seguimos o evento em vez de guardar o nosso próprio
+  // booleano, senão o botão mente quando o vídeo acaba ou dá a volta ao loop.
+  const [playing, setPlaying] = useState(true)
+  const [muted,   setMuted]   = useState(false)
+  useEffect(() => {
+    const sub = player.addListener('playingChange', ({ isPlaying }) => setPlaying(isPlaying))
+    return () => sub.remove()
+  }, [player])
+
+  // Vídeo novo entra sempre a tocar
+  useEffect(() => { if (videoUri) setPlaying(true) }, [videoUri])
+
+  // Nunca deixar som a tocar por baixo de outro ecrã
+  useFocusEffect(useCallback(() => {
+    return () => { try { player.pause() } catch {} }
+  }, [player]))
+
+  function togglePlay() {
+    try { playing ? player.pause() : player.play() } catch {}
+  }
+
+  function toggleMute() {
+    try { player.muted = !muted; setMuted(!muted) } catch {}
+  }
 
   // Abre a galeria própria da app (nunca o explorador de ficheiros)
   function pickMedia() {
@@ -219,12 +244,35 @@ export default function CreateScreen() {
         ) : media ? (
           <>
             {media.type === 'video' ? (
-              <VideoView
-                player={player}
-                style={StyleSheet.absoluteFill}
-                contentFit="cover"
-                nativeControls={false}
-              />
+              <>
+                <VideoView
+                  player={player}
+                  style={StyleSheet.absoluteFill}
+                  contentFit="cover"
+                  nativeControls={false}
+                />
+                {/* Tocar em qualquer sítio do vídeo pausa — o alvo grande é o próprio vídeo */}
+                <Pressable style={StyleSheet.absoluteFill} onPress={togglePlay} />
+
+                {/* Símbolo central: só aparece em pausa, para não tapar o vídeo a tocar */}
+                {!playing && (
+                  <View style={s.playOverlay} pointerEvents="none">
+                    <View style={s.playCircle}>
+                      <Ionicons name="play" size={30} color="#fff" style={{ marginLeft: 3 }} />
+                    </View>
+                  </View>
+                )}
+
+                {/* Pausa e som, canto inferior direito */}
+                <View style={[s.videoCtrls, { bottom: hasText ? 96 : 20 }]}>
+                  <TouchableOpacity style={s.videoBtn} onPress={togglePlay} activeOpacity={0.8}>
+                    <Ionicons name={playing ? 'pause' : 'play'} size={17} color="#fff" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={s.videoBtn} onPress={toggleMute} activeOpacity={0.8}>
+                    <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={17} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              </>
             ) : (
               <Image
                 source={{ uri: media.uri }}
@@ -523,6 +571,27 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems:    'center',
     gap:           6,
+  },
+
+  // ── Controlos de vídeo ──
+  playOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  playCircle: {
+    width: 68, height: 68, borderRadius: 34,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.85)',
+  },
+  videoCtrls: {
+    position: 'absolute', right: 14,
+    flexDirection: 'row', gap: 8,
+  },
+  videoBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center', justifyContent: 'center',
   },
   clearBtn: {
     width:           30,
