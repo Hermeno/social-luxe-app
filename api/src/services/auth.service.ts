@@ -48,6 +48,10 @@ export async function getProfile(userId: string) {
       defaultFollowDuration: true, city: true, district: true,
       autoReply: true, showDevice: true, statusLabel: true, interests: true,
       isAdmin: true, createdAt: true,
+      // Sem estes, o próprio dono não via a sua conta profissional: o perfil
+      // dele vem do /auth/me, não do /users/:id.
+      accountType: true, businessCategory: true, businessAddress: true,
+      businessHours: true, whatsapp: true, profileActions: true,
     },
   })
   if (!user) throw new Error('User not found')

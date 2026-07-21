@@ -3,8 +3,8 @@ import {
   View, Text, TouchableOpacity, StyleSheet, Share, Modal, Animated,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Heart, RefreshCw } from 'lucide-react-native'
-import { ChatIcon, PaperPlaneIcon } from '../../components/icons'
+import { Heart, RefreshCw, Forward } from 'lucide-react-native'
+import { ChatIcon } from '../../components/icons'
 
 import { Post } from '../../types'
 import { fonts } from '../../theme'
@@ -195,7 +195,7 @@ export default React.memo(function ActionBar({
         {/* Share */}
         {!isAnnouncement && (
           <TouchableOpacity style={s.btn} onPress={handleShare} activeOpacity={0.75}>
-            <PaperPlaneIcon size={25} color="#fff" />
+            <Forward size={26} strokeWidth={2} color="#fff" />
             <Text style={s.label}>{fmt(shareCount)}</Text>
           </TouchableOpacity>
         )}
