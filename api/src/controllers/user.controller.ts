@@ -25,7 +25,7 @@ export async function searchUsers(req: AuthRequest, res: Response) {
 
 export async function getUserById(req: AuthRequest, res: Response) {
   try {
-    const user = await userService.getUserById(req.params.id)
+    const user = await userService.getUserById(req.params.id, req.user?.userId)
     return ok(res, user)
   } catch (err) { return handleError(res, err) }
 }
@@ -51,6 +51,59 @@ export async function updateProfile(req: AuthRequest, res: Response) {
       contact, defaultFollowDuration,
       city, district, autoReply,
       statusLabel: statusLabel !== undefined ? (statusLabel || null) : undefined,
+    })
+    return ok(res, user)
+  } catch (err) {
+    if (isSelfRecordNotFound(err)) return unauthorized(res, 'Sessão inválida. Inicia sessão novamente.')
+    return handleError(res, err)
+  }
+}
+
+const ACCOUNT_TYPES  = ['PERSONAL', 'PROFESSIONAL']
+const VALID_ACTIONS  = ['call', 'whatsapp', 'message', 'directions']
+const TIME_RE        = /^([01]\d|2[0-3]):[0-5]\d$/
+
+// Horário: exatamente 7 entradas, domingo→sábado. Uma entrada fechada dispensa
+// horas; uma aberta exige as duas em HH:MM. Fecho antes da abertura é válido —
+// é o negócio que atravessa a meia-noite.
+function parseHours(raw: unknown): { closed: boolean; open: string; close: string }[] | null | undefined {
+  if (raw === undefined) return undefined
+  if (raw === null) return null
+  if (!Array.isArray(raw) || raw.length !== 7) throw new Error('businessHours must have 7 entries')
+  return raw.map((d: any) => {
+    const closed = d?.closed === true
+    if (closed) return { closed: true, open: '', close: '' }
+    const open  = String(d?.open  ?? '')
+    const close = String(d?.close ?? '')
+    if (!TIME_RE.test(open) || !TIME_RE.test(close)) throw new Error('businessHours times must be HH:MM')
+    return { closed: false, open, close }
+  })
+}
+
+export async function updateBusinessProfile(req: AuthRequest, res: Response) {
+  try {
+    const { accountType, businessCategory, businessAddress, businessHours, whatsapp, profileActions } = req.body
+
+    if (accountType !== undefined && !ACCOUNT_TYPES.includes(accountType)) {
+      return badRequest(res, 'accountType must be PERSONAL or PROFESSIONAL')
+    }
+    if (profileActions !== undefined) {
+      if (!Array.isArray(profileActions) || profileActions.some((a: unknown) => !VALID_ACTIONS.includes(a as string))) {
+        return badRequest(res, `profileActions must be a subset of ${VALID_ACTIONS.join(', ')}`)
+      }
+    }
+
+    let hours
+    try { hours = parseHours(businessHours) }
+    catch (e: any) { return badRequest(res, e.message) }
+
+    const user = await userService.updateProfile(req.user!.userId, {
+      ...(accountType      !== undefined && { accountType }),
+      ...(businessCategory !== undefined && { businessCategory: businessCategory || null }),
+      ...(businessAddress  !== undefined && { businessAddress:  businessAddress  || null }),
+      ...(whatsapp         !== undefined && { whatsapp:         whatsapp         || null }),
+      ...(hours            !== undefined && { businessHours:    hours }),
+      ...(profileActions   !== undefined && { profileActions }),
     })
     return ok(res, user)
   } catch (err) {

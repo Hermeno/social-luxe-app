@@ -28,6 +28,19 @@ export async function searchUsers(query: string, currentUserId: string) {
   })
 }
 
+// Tudo o que a página de perfil precisa. Usado na escrita e na leitura para as
+// duas nunca divergirem — era por divergirem que city/district/statusLabel não
+// chegavam ao perfil de outra pessoa.
+const PROFILE_SELECT = {
+  id: true, name: true, phone: true, countryCode: true,
+  avatar: true, bio: true, availability: true, viewsPublic: true,
+  contact: true, defaultFollowDuration: true, city: true, district: true,
+  autoReply: true, showDevice: true, statusLabel: true, interests: true,
+  isAdmin: true, createdAt: true,
+  accountType: true, businessCategory: true, businessAddress: true,
+  businessHours: true, whatsapp: true, profileActions: true,
+} as const
+
 export async function updateProfile(userId: string, data: {
   name?: string
   bio?: string
@@ -44,30 +57,43 @@ export async function updateProfile(userId: string, data: {
   showDevice?: boolean
   statusLabel?: string | null
   interests?: string[]
+  accountType?: string
+  businessCategory?: string | null
+  businessAddress?: string | null
+  businessHours?: unknown
+  whatsapp?: string | null
+  profileActions?: string[]
 }) {
   return prisma.user.update({
     where: { id: userId },
-    data,
-    select: {
-      id: true, name: true, phone: true, countryCode: true,
-      avatar: true, bio: true, availability: true, viewsPublic: true,
-      contact: true, defaultFollowDuration: true, city: true, district: true,
-      autoReply: true, showDevice: true, statusLabel: true, interests: true, createdAt: true,
-    },
+    data: data as any,
+    select: PROFILE_SELECT,
   })
 }
 
-export async function getUserById(userId: string) {
+export async function getUserById(userId: string, viewerId?: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
-      id: true, name: true, avatar: true, bio: true, availability: true, createdAt: true,
-      interests: true,
+      ...PROFILE_SELECT,
       _count: { select: { friendshipsA: true, friendshipsB: true, posts: true } },
     },
   })
   if (!user) throw new Error('User not found')
-  return user
+  if (viewerId === userId) return user
+
+  // Um número de telefone não é público só porque o perfil é. Só sai daqui se o
+  // dono o publicou de propósito: conta profissional com essa ação ligada.
+  const isPro   = user.accountType === 'PROFESSIONAL'
+  const actions = user.profileActions ?? []
+  return {
+    ...user,
+    phone:       isPro && actions.includes('call')     ? user.phone     : null,
+    countryCode: isPro && actions.includes('call')     ? user.countryCode : null,
+    whatsapp:    isPro && actions.includes('whatsapp') ? user.whatsapp  : null,
+    contact:     isPro ? user.contact : null,
+    autoReply:   null,   // rascunho privado do dono, nunca de quem visita
+  }
 }
 
 export async function getUserPosts(userId: string) {

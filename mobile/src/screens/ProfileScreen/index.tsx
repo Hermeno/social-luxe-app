@@ -20,6 +20,7 @@ import { colors, fonts } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
 import SegmentedRing from '../../components/SegmentedRing'
 import FollowersSheet from './FollowersSheet'
+import BusinessBlock from './BusinessBlock'
 import QRModal from '../../components/QRModal'
 import * as followService from '../../services/follow.service'
 import type { MutualConnections } from '../../services/follow.service'
@@ -683,6 +684,15 @@ export default function ProfileScreen() {
             </View>
           )}
         </View>
+      )}
+
+      {/* ── Bloco comercial — categoria, aberto/fechado, morada, ações ── */}
+      {profile?.accountType === 'PROFESSIONAL' && (
+        <BusinessBlock
+          profile={profile}
+          isOwn={isOwn}
+          onMessage={() => nav2.navigate('Chat', { userId: profile.id, userName: profile.name, userAvatar: profile.avatar })}
+        />
       )}
 
       {/* ── Conexões em comum — o sinal de confiança num perfil desconhecido ── */}

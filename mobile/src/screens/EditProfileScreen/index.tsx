@@ -17,6 +17,10 @@ import { API_BASE } from '../../config'
 import { api } from '../../services/api'
 import { useT, useI18n } from '../../i18n'
 import { INTERESTS } from '../OnboardingScreen'
+import BusinessSection from './BusinessSection'
+import {
+  DayHours, ProfileAction, emptyHours, normalizeHours,
+} from '../../utils/business'
 
 export const DEFAULT_TAB_KEY = 'default_tab'
 export type DefaultTab = 'Feed' | 'Messages'
@@ -90,12 +94,31 @@ export default function EditProfileScreen() {
   const [defaultTab,  setDefaultTab]  = useState<DefaultTab>('Feed')
   const [interests,   setInterests]   = useState<Set<string>>(new Set(user?.interests ?? []))
 
+  // ── Conta profissional ──
+  const [isPro,      setIsPro]      = useState(user?.accountType === 'PROFESSIONAL')
+  const [category,   setCategory]   = useState(user?.businessCategory ?? '')
+  const [address,    setAddress]    = useState(user?.businessAddress ?? '')
+  const [whatsapp,   setWhatsapp]   = useState(user?.whatsapp ?? '')
+  const [hours,      setHours]      = useState<DayHours[]>(normalizeHours(user?.businessHours) ?? emptyHours())
+  const [proActions, setProActions] = useState<Set<ProfileAction>>(
+    new Set((user?.profileActions ?? []) as ProfileAction[]),
+  )
+
   // Sync from store whenever user object updates (e.g. after refreshUser)
   useEffect(() => {
     setShowDevice(user?.showDevice ?? false)
     setStatusLabel(user?.statusLabel ?? '')
     setInterests(new Set(user?.interests ?? []))
   }, [user?.showDevice, user?.statusLabel, user?.interests])
+
+  useEffect(() => {
+    setIsPro(user?.accountType === 'PROFESSIONAL')
+    setCategory(user?.businessCategory ?? '')
+    setAddress(user?.businessAddress ?? '')
+    setWhatsapp(user?.whatsapp ?? '')
+    setHours(normalizeHours(user?.businessHours) ?? emptyHours())
+    setProActions(new Set((user?.profileActions ?? []) as ProfileAction[]))
+  }, [user?.accountType, user?.businessCategory, user?.businessAddress, user?.whatsapp, user?.businessHours, user?.profileActions])
 
   function toggleInterest(tag: string) {
     setInterests((prev) => {
@@ -123,13 +146,24 @@ export default function EditProfileScreen() {
   const interestsDirty = savedInterests.length !== interests.size
     || savedInterests.some((tag) => !interests.has(tag))
 
+  const savedActions = user?.profileActions ?? []
+  const businessDirty =
+    isPro    !== (user?.accountType === 'PROFESSIONAL') ||
+    category !== (user?.businessCategory ?? '') ||
+    address  !== (user?.businessAddress  ?? '') ||
+    whatsapp !== (user?.whatsapp ?? '') ||
+    savedActions.length !== proActions.size ||
+    savedActions.some((a) => !proActions.has(a as ProfileAction)) ||
+    JSON.stringify(hours) !== JSON.stringify(normalizeHours(user?.businessHours) ?? emptyHours())
+
   const isDirty =
     name !== (user?.name ?? '') ||
     bio  !== (user?.bio  ?? '') ||
     !!avatar ||
     showDevice  !== (user?.showDevice  ?? false) ||
     statusLabel !== (user?.statusLabel ?? '') ||
-    interestsDirty
+    interestsDirty ||
+    businessDirty
 
   async function pickAvatar() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
@@ -150,6 +184,17 @@ export default function EditProfileScreen() {
 
   async function handleSave() {
     if (!name.trim()) { Alert.alert(t.error, t.ep_nameEmpty); return }
+
+    if (isPro) {
+      // A máscara deixa passar estados a meio ("9", "09:0") — só aqui é que
+      // exigimos HH:MM completo, senão a API devolve 400 e o utilizador não
+      // percebe porquê.
+      const badTime = hours.some((d) => !d.closed && (!/^([01]\d|2[0-3]):[0-5]\d$/.test(d.open) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(d.close)))
+      if (badTime)                                    { Alert.alert(t.error, t.bp_bad_time);   return }
+      if (proActions.has('whatsapp') && !whatsapp.trim()) { Alert.alert(t.error, t.bp_no_number);  return }
+      if (proActions.has('directions') && !address.trim()) { Alert.alert(t.error, t.bp_no_address); return }
+    }
+
     setSaving(true)
     try {
       const formData = new FormData()
@@ -167,6 +212,16 @@ export default function EditProfileScreen() {
       })
       if (interestsDirty) {
         await api.put('/users/interests', { interests: [...interests] })
+      }
+      if (businessDirty) {
+        await api.put('/users/business', {
+          accountType:      isPro ? 'PROFESSIONAL' : 'PERSONAL',
+          businessCategory: category.trim(),
+          businessAddress:  address.trim(),
+          whatsapp:         whatsapp.trim(),
+          businessHours:    hours,
+          profileActions:   [...proActions],
+        })
       }
       await refreshUser()
       nav.goBack()
@@ -268,6 +323,18 @@ export default function EditProfileScreen() {
               )
             })}
           </View>
+        </View>
+
+        {/* Conta profissional / comercial */}
+        <View style={s.section}>
+          <BusinessSection
+            isPro={isPro}           onIsProChange={setIsPro}
+            category={category}     onCategoryChange={setCategory}
+            address={address}       onAddressChange={setAddress}
+            whatsapp={whatsapp}     onWhatsappChange={setWhatsapp}
+            hours={hours}           onHoursChange={setHours}
+            actions={proActions}    onActionsChange={setProActions}
+          />
         </View>
 
         {/* Identidade no Post */}

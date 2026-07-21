@@ -22,6 +22,13 @@ export interface User {
   interests?: string[]
   isAdmin?: boolean
   lastSeen?: string | null
+  // Conta profissional / comercial
+  accountType?: 'PERSONAL' | 'PROFESSIONAL'
+  businessCategory?: string | null
+  businessAddress?: string | null
+  businessHours?: unknown          // 7 entradas; normalizeHours() dá-lhe forma
+  whatsapp?: string | null
+  profileActions?: string[]
 }
 
 export interface PostSticker {

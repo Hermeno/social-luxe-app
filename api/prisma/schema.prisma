@@ -68,6 +68,16 @@ model User {
   lastSeen     DateTime?
   createdAt    DateTime @default(now())
 
+  // ── Conta profissional / comercial ──
+  // PERSONAL | PROFESSIONAL. Em PROFESSIONAL o perfil deixa de responder "quem
+  // sou" e passa a responder "o que vendo e como falas comigo agora".
+  accountType      String   @default("PERSONAL")
+  businessCategory String?                        // guardado em PT (ID estável), mostrado traduzido
+  businessAddress  String?
+  businessHours    Json?                          // 7 entradas: [{ closed, open:"08:00", close:"18:00" }]
+  whatsapp         String?                        // número completo com indicativo
+  profileActions   String[] @default([])          // call | whatsapp | message | directions
+
   posts            Post[]
   friendshipsA     Friendship[]        @relation("FriendA")
   friendshipsB     Friendship[]        @relation("FriendB")
