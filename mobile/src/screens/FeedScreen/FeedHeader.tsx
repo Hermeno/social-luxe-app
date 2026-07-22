@@ -177,22 +177,23 @@ export default memo(function FeedHeader({
           <Text style={s.tileName} numberOfLines={1}>{t.feed_create}</Text>
         </TouchableOpacity>
 
-        {/* Metades — quem está à espera de ti. Vive ao lado do Criar porque é
-            a outra metade do mesmo gesto: começar uma, ou completar a de alguém. */}
-        <TouchableOpacity onPress={() => nav.navigate('Halves')} activeOpacity={0.72} style={s.tile}>
-          <View style={s.ringWrap}>
-            <View style={s.neutralRing} />
-            <View style={[s.avatarCircle, s.halvesCircle]}>
-              <Ionicons name="contrast" size={26} color="#CA2851" />
-            </View>
-            {halvesCount > 0 && (
+        {/* Metades — só aparece quando alguém está mesmo à espera de ti. A fila
+            é de pessoas; um destino fixo aqui cobrava o lugar mais caro da app
+            por uma opção que na maioria dos dias não tem nada para dizer. */}
+        {halvesCount > 0 && (
+          <TouchableOpacity onPress={() => nav.navigate('Halves')} activeOpacity={0.72} style={s.tile}>
+            <View style={s.ringWrap}>
+              <View style={s.activeRing} />
+              <View style={[s.avatarCircle, s.halvesCircle]}>
+                <Ionicons name="contrast" size={26} color="#1A1A1A" />
+              </View>
               <View style={s.halvesBadge}>
                 <Text style={s.halvesBadgeTxt}>{halvesCount > 9 ? '9+' : halvesCount}</Text>
               </View>
-            )}
-          </View>
-          <Text style={s.tileName} numberOfLines={1}>Metades</Text>
-        </TouchableOpacity>
+            </View>
+            <Text style={s.tileName} numberOfLines={1}>Metades</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Posters — anel sempre da mesma cor; só a espessura muda quando o post
             está no ecrã. Presença é um ponto único e preciso. */}
@@ -244,7 +245,7 @@ export default memo(function FeedHeader({
 const s = StyleSheet.create({
   halvesCircle: {
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#FDEEF2',
+    backgroundColor: '#F2F2F5',
   },
   halvesBadge: {
     position: 'absolute', top: 0, right: 0,
