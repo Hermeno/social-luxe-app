@@ -28,6 +28,9 @@ export interface FeedUserGroup {
 // Tudo o resto deriva de AV_SIZE, para a fila escalar como uma peça só.
 const AV_SIZE      = 54
 const RING_STROKE  = 2.2
+// Preto suave, não carmim: o anel emoldura o rosto em vez de competir com ele.
+// A 0.55 ainda se distingue bem do anel neutro (0.12) de quem não publicou.
+const RING_COLOR   = 'rgba(0,0,0,0.55)'
 const RING_GAP     = 3.5
 const RING_OUTER   = Math.round(AV_SIZE + (RING_GAP + RING_STROKE) * 2)   // 65
 const TILE_W       = RING_OUTER + 4
@@ -212,6 +215,7 @@ export default memo(function FeedHeader({
                     count={g.posts.length}
                     size={RING_OUTER}
                     strokeWidth={RING_STROKE}
+                    color={RING_COLOR}
                   />
                 )}
                 <View style={s.avatarCircle}>
@@ -299,7 +303,7 @@ const s = StyleSheet.create({
     top: 0, left: 0, right: 0, bottom: 0,
     borderRadius: RING_OUTER / 2,
     borderWidth:  RING_STROKE,
-    borderColor:  colors.primary,
+    borderColor:  RING_COLOR,
   },
   neutralRing: {
     position:     'absolute',
@@ -382,7 +386,7 @@ const s = StyleSheet.create({
   // 2.2, o que fazia a fila parecer irregular consoante quem estava no ecrã.
   bubbleRing: {
     borderRadius: (BUBBLE_SIZE + 6) / 2, borderWidth: RING_STROKE,
-    borderColor: colors.primary, padding: 2,
+    borderColor: RING_COLOR, padding: 2,
   },
   bubbleRingActive: { borderWidth: RING_STROKE },
   bubbleName: {
