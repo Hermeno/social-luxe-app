@@ -20,6 +20,7 @@ import { useFeedStore } from '../../store/feed.store'
 import { useNotificationStore } from '../../store/notification.store'
 import { getSocket } from '../../socket'
 import { useT } from '../../i18n'
+import { toast } from '../../utils/toast'
 
 const SHUTTER_OUTER = 78
 // Recurso para o primeiro render, antes de o servidor responder. Quem manda na
@@ -142,7 +143,8 @@ export default function CircleScreen() {
   const others     = members.filter((m) => m.user.id !== myId && m.status === 'JOINED')
   const memberIds  = new Set(members.map((m) => m.user.id))
   const showable   = nearby.filter((u) => !memberIds.has(u.id))
-  const photoCount = members.filter((m) => m.photoUrl).length
+  const photoCount  = members.filter((m) => m.photoUrl).length
+  const joinedCount = members.filter((m) => m.status === 'JOINED').length
   const iHavePhoto = members.some((m) => m.user.id === myId && m.photoUrl)
 
   // ── Janela para publicar ────────────────────────────────────────────────────
@@ -455,6 +457,9 @@ export default function CircleScreen() {
       await circle.addCirclePhoto(sess.id, previewUri, overlays)
       setPreviewUri(null)
       setPlaced([])
+      // É aqui que a foto fica guardada no círculo. Sem este aviso a
+      // pré-visualização desaparecia e nada dizia que tinha acontecido.
+      toast.success(t.circle_savedTitle, t.circle_savedSub)
     } catch {
       Alert.alert(t.circle_errTitle, t.circle_photoFail)
     }
@@ -692,6 +697,14 @@ export default function CircleScreen() {
             </Animated.View>
           </Pressable>
           <Text style={s.shutterHint}>{iHavePhoto ? t.circle_takeAnother : t.circle_takePhoto}</Text>
+
+          {/* O círculo está à espera de alguém? Sem isto não havia forma de saber */}
+          {joinedCount > 1 && (
+            <Text style={s.progressHint}>
+              {photoCount}/{joinedCount} {t.circle_photosIn}
+            </Text>
+          )}
+          {canPublish && <Text style={s.progressHint}>{t.circle_publishHint}</Text>}
 
           {/* Qualquer membro pode publicar o álbum com as fotos de todos, por
               isso tem de haver forma de tirar a minha de lá sem sair do círculo. */}
@@ -979,6 +992,10 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center',
   },
   shutterInnerDone: { backgroundColor: colors.primary },
+  progressHint: {
+    marginTop: 5, color: 'rgba(255,255,255,0.72)', fontSize: 12, fontFamily: fonts.medium,
+    textShadowColor: 'rgba(0,0,0,0.45)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3,
+  },
   withdrawBtn: { marginTop: 10, paddingVertical: 6, paddingHorizontal: 14 },
   withdrawTxt: {
     color: 'rgba(255,255,255,0.65)', fontSize: 12.5, fontFamily: fonts.medium,
