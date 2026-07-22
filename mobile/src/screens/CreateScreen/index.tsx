@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs'
 import { useNavigation, useFocusEffect } from '@react-navigation/native'
 import { fonts } from '../../theme'
-import { createPost } from '../../services/post.service'
+import { createPost, createAlbum } from '../../services/post.service'
 import { createHalf } from '../../services/half.service'
 import TargetPicker from './TargetPicker'
 import PostAlbumGrid from '../FeedScreen/PostAlbumGrid'
@@ -124,8 +124,18 @@ export default function CreateScreen() {
     setGalleryOpen(false)
     if (assets.length === 0) return
 
-    // Álbuns nascem de um Círculo — várias pessoas ao mesmo tempo, não uma
-    // pessoa a juntar fotos suas. Aqui só entra uma foto de cada vez.
+    // Várias fotos → álbum (grelha na feed). Vídeos não entram no álbum.
+    if (assets.length > 1) {
+      const images = assets.filter((a) => a.type !== 'video').map((a) => a.uri)
+      if (images.length < 2) {
+        Alert.alert(t.create_albumTitle, t.create_albumMin)
+        return
+      }
+      setAlbum(images.slice(0, 10))
+      setMedia(null)
+      return
+    }
+
     // Uma só → foto ou vídeo
     const asset = assets[0]
     setAlbum(null)
@@ -138,17 +148,20 @@ export default function CreateScreen() {
     return brand ? brand.charAt(0).toUpperCase() + brand.slice(1).toLowerCase() : 'Android'
   }
 
-  // A regra: nada se faz sozinho. Só há dois caminhos para publicar já —
-  // uma união aceite (as duas pessoas já concordaram uma vez) ou um anúncio de
-  // admin. Tudo o resto vira uma metade e espera por alguém.
-  const publishesDirectly = (hasPartner && includePartner && !isAnnouncement) || isAnnouncement
+  // Publicar sozinho é o caminho normal. A metade é uma escolha a mais — para
+  // quem quer que a publicação só exista se outra pessoa entrar nela.
+  const canMakeHalf = !!media && !isAnnouncement
 
   function handlePublish() {
     if (!canPublish || loading) return
     Keyboard.dismiss()
-    if (publishesDirectly) { publishAsPost() }
-    else if (!media)       { Alert.alert('Metade', 'Uma metade precisa de uma foto ou vídeo — o texto sozinho não chega para alguém completar.') }
-    else                   { setPickerOpen(true) }
+    publishAsPost()
+  }
+
+  function handleStartHalf() {
+    if (!canMakeHalf || loading) return
+    Keyboard.dismiss()
+    setPickerOpen(true)
   }
 
   async function publishAsPost() {
@@ -158,7 +171,9 @@ export default function CreateScreen() {
       const deviceModel = getDeviceModel()
       const bgColor     = `${activeBg.bg}|${activeBg.bg}`
 
-      const newPost = media
+      const newPost = album
+        ? await createAlbum(album, caption.trim() || undefined, deviceModel)
+        : media
         ? await createPost(
             media.uri,
             media.type === 'video' ? 'VIDEO' : 'IMAGE',
@@ -456,18 +471,29 @@ export default function CreateScreen() {
         >
           {loading
             ? <ActivityIndicator color={textMode ? '#1A1A1A' : '#fff'} size="small" />
-            : <Text style={[s.publishBtnTxt, textMode && { color: '#1A1A1A' }]}>
-                {publishesDirectly ? t.create_publish : 'Escolher quem completa'}
-              </Text>
+            : <Text style={[s.publishBtnTxt, textMode && { color: '#1A1A1A' }]}>{t.create_publish}</Text>
           }
         </TouchableOpacity>
+
+        {/* Metade — a publicação só existe se outra pessoa puser a dela */}
+        {canMakeHalf && (
+          <TouchableOpacity
+            style={[s.halfBtn, textMode && s.halfBtnLight]}
+            onPress={handleStartHalf}
+            disabled={loading}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="contrast-outline" size={15} color={textMode ? '#fff' : '#1A1A1A'} />
+            <Text style={[s.halfBtnTxt, textMode && { color: '#fff' }]}>Publicar como metade</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <GalleryPicker
         visible={galleryOpen}
         onClose={() => setGalleryOpen(false)}
         onDone={handleGalleryDone}
-        maxSelection={1}
+        maxSelection={10}
       />
 
       <TargetPicker
@@ -755,6 +781,13 @@ const s = StyleSheet.create({
   },
   publishBtnLight: { backgroundColor: '#fff' },
   publishBtnOff: { opacity: 0.25 },
+  halfBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
+    height: 42, borderRadius: 21, marginTop: 8,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: '#DEDEE3',
+  },
+  halfBtnLight: { borderColor: 'rgba(255,255,255,0.45)' },
+  halfBtnTxt: { fontFamily: fonts.semiBold, fontSize: 14, color: '#1A1A1A' },
   publishBtnTxt: {
     fontFamily:    fonts.bold,
     fontSize:      16,

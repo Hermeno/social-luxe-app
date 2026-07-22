@@ -52,13 +52,6 @@ export async function createPost(req: AuthRequest, res: Response) {
       isAnnouncement = true
     }
 
-    // A regra: nada se faz sozinho. Um post só nasce de duas pessoas — uma
-    // união aceite, uma metade completada, ou um círculo. Publicar a solo
-    // devolve o utilizador ao fluxo da metade. Anúncios de admin são a exceção.
-    if (!partnerUserId && !isAnnouncement) {
-      return badRequest(res, 'No Luxee nada se faz sozinho. Cria uma metade e escolhe quem a completa.')
-    }
-
     const post = await postService.createPost(req.user!.userId, mediaUrl, mediaType, caption, bgColor, partnerUserId ?? undefined, isAnnouncement, deviceModel ?? undefined)
 
     // Notify partner of post invitation
@@ -129,6 +122,37 @@ export async function rejectPostPartner(req: AuthRequest, res: Response) {
     await prisma.post.update({ where: { id: req.params.id }, data: { partnerUserId: null } })
     return ok(res, { rejected: true })
   } catch (err) { return handleError(res, err, 'rejectPostPartner') }
+}
+
+// ── Álbum: várias fotos numa publicação → grelha na feed ─────────────────────
+export async function createAlbum(req: AuthRequest, res: Response) {
+  try {
+    const files = (req.files as Express.Multer.File[] | undefined) ?? []
+    if (files.length < 2) return badRequest(res, 'Um álbum precisa de pelo menos 2 fotos')
+    if (files.length > 10) return badRequest(res, 'Máximo de 10 fotos por álbum')
+
+    const { caption, deviceModel } = req.body
+    const urls = await Promise.all(files.map((f) => uploadToCloudinary(f, 'luxe/posts')))
+    const post = await postService.createAlbumPost(req.user!.userId, urls, caption?.trim() || undefined, deviceModel)
+
+    ;(async () => {
+      try {
+        const followers = await prisma.follow.findMany({
+          where:  { followingId: req.user!.userId },
+          select: { followerId: true },
+        })
+        followers.forEach(({ followerId }) => emitToUser(followerId, 'post:new', post))
+      } catch {}
+    })()
+
+    return created(res, post)
+  } catch (err: unknown) {
+    if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({ success: false, message: 'Ficheiro demasiado grande. Máximo 100 MB.' })
+    }
+    console.error('[createAlbum]', err)
+    return serverError(res)
+  }
 }
 
 export async function getFeed(req: AuthRequest, res: Response) {

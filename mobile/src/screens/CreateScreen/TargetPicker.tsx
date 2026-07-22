@@ -29,8 +29,14 @@ export default function TargetPicker({ visible, onClose, onPick }: Props) {
   useEffect(() => {
     if (!visible) return
     setLoading(true)
+    // A ligação traz a pessoa em `.user` — ler os campos no topo dava tudo
+    // vazio, e um cast para `any` tinha escondido isso do compilador.
     getConnections()
-      .then((cs) => setPeople(cs.map((c: any) => ({ id: c.id, name: c.name, avatar: c.avatar ?? null }))))
+      .then((cs) => setPeople(cs.map((c) => ({
+        id:     c.user.id,
+        name:   c.user.name,
+        avatar: c.user.avatar ?? null,
+      }))))
       .catch(() => setPeople([]))
       .finally(() => setLoading(false))
   }, [visible])
