@@ -364,12 +364,41 @@ export default function FeedScreen() {
     const p = postRef.current
     if (!p || !isFocusedRef.current || commentPost) return
     if (p.mediaType === 'VIDEO') safePlayer(() => player.play())
-    const totalDur = p.mediaType === 'VIDEO' ? (videoDurRef.current || IMAGE_DURATION) : IMAGE_DURATION
-    const remaining = Math.max(400, (1 - progressValueRef.current) * totalDur)
+    const isVideo = p.mediaType === 'VIDEO'
+
+    // Num vídeo o tempo que falta vem do leitor, não do que restava do
+    // cronómetro: se a duração ainda não era conhecida quando o post abriu,
+    // retomar com o valor antigo cortava o vídeo a meio.
+    let remaining: number
+    if (isVideo) {
+      let dur = 0, pos = 0
+      try { dur = player.duration ?? 0; pos = player.currentTime ?? 0 } catch {}
+      if (dur > 0) {
+        videoDurRef.current = Math.round(dur * 1000)
+        progressAnim.setValue(Math.min(1, pos / dur))
+        remaining = Math.max(400, (dur - pos) * 1000)
+      } else {
+        remaining = Math.max(400, (1 - progressValueRef.current) * (videoDurRef.current || IMAGE_DURATION))
+      }
+    } else {
+      remaining = Math.max(400, (1 - progressValueRef.current) * IMAGE_DURATION)
+    }
+
     progressRef.current = Animated.timing(progressAnim, {
       toValue: 1, duration: remaining, useNativeDriver: false,
     })
-    progressRef.current.start(({ finished }) => { if (finished) goNextRef.current() })
+    progressRef.current.start(({ finished }) => {
+      if (!finished) return
+      // O cronómetro não decide sozinho: se ainda falta vídeo, volta a armar
+      if (isVideo) {
+        try {
+          const dur = player.duration ?? 0
+          const pos = player.currentTime ?? 0
+          if (dur > 0 && dur - pos > 0.6) { resumeFromCurrentRef.current(); return }
+        } catch {}
+      }
+      goNextRef.current()
+    })
   }
 
   const resumeFromCurrentRef = useRef(resumeFromCurrent)
@@ -454,17 +483,62 @@ export default function FeedScreen() {
         setVideoFit(matchRatio < 0.65 ? 'contain' : 'cover')
       }
 
-      // Arm the progress bar with the REAL video length. expo-video sometimes
-      // reports duration a beat after 'readyToPlay', so we retry briefly and
-      // fall back to a default if it never lands — the video plays either way.
+      // A duração de um vídeo em streaming não é fiável logo à partida: o
+      // expo-video chega a reportar só a parte que já tem em buffer. Armar o
+      // cronómetro com esse primeiro valor fazia um vídeo de dois minutos
+      // avançar ao fim de segundos.
+      //
+      // Duas defesas: a duração é revista enquanto o vídeo corre, e o
+      // cronómetro nunca avança sozinho — quando chega ao fim, confirma com o
+      // leitor onde a reprodução vai e volta a armar-se se ainda faltar vídeo.
+      const END_EPS_S = 0.6
+
+      function playerDur(): number {
+        try { const d = player.duration; return d && d > 0 ? d : 0 } catch { return 0 }
+      }
+      function playerPos(): number {
+        try { const p = player.currentTime; return p && p > 0 ? p : 0 } catch { return 0 }
+      }
+
+      let armedDur = 0
+      let durWatch: ReturnType<typeof setInterval> | null = null
+
+      function armFromPlayer() {
+        if (cancelled) return
+        const dur = playerDur()
+        if (!dur) return
+        const pos  = playerPos()
+        const left = Math.max(0.4, dur - pos)
+        videoDurRef.current = Math.round(dur * 1000)
+        progressRef.current?.stop()
+        progressAnim.setValue(Math.min(1, pos / dur))
+        progressRef.current = Animated.timing(progressAnim, {
+          toValue: 1, duration: Math.round(left * 1000), useNativeDriver: false,
+        })
+        progressRef.current.start(({ finished }) => {
+          if (!finished || cancelled) return
+          // Só passa ao post seguinte se o vídeo acabou mesmo
+          if (playerDur() - playerPos() > END_EPS_S) { armFromPlayer(); return }
+          goNextRef.current()
+        })
+      }
+
       let durTries = 0
       function armProgress() {
         if (cancelled || !started) return
-        const raw = player.duration
-        if (raw && raw > 0) {
-          const dur = Math.round(raw * 1000)
-          videoDurRef.current = dur
-          startProgress(dur)
+        const dur = playerDur()
+        if (dur) {
+          armedDur = dur
+          armFromPlayer()
+          // A duração cresce à medida que o vídeo carrega — quando crescer,
+          // re-armamos com o valor certo em vez de cortar o vídeo a meio.
+          if (!durWatch) {
+            durWatch = setInterval(() => {
+              if (cancelled) return
+              const d = playerDur()
+              if (d && d - armedDur > 0.75) { armedDur = d; armFromPlayer() }
+            }, 1000)
+          }
         } else if (durTries++ < 8) {
           setTimeout(armProgress, 120)
         } else {
@@ -516,6 +590,7 @@ export default function FeedScreen() {
         clearTimeout(mountDelay)
         clearInterval(poll)
         clearTimeout(pollStop)
+        if (durWatch) clearInterval(durWatch)
         sub?.remove?.()
         progressRef.current?.stop()
         safePlayer(() => player.pause())

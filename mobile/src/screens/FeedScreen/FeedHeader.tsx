@@ -23,9 +23,9 @@ export interface FeedUserGroup {
   posts: Post[]
 }
 
-// ── Geometry — hairline rings, real breathing room ──────────────────────────
-// The ring floats 3.5px off the avatar; the stroke itself is 1.6px. Every
-// number below derives from AV_SIZE so the rail scales as one piece.
+// ── Geometria — um só peso de anel em toda a app ────────────────────────────
+// O anel flutua 3.5px do avatar e o traço é sempre RING_STROKE, activo ou não.
+// Tudo o resto deriva de AV_SIZE, para a fila escalar como uma peça só.
 const AV_SIZE      = 54
 const RING_STROKE  = 2.2
 const RING_GAP     = 3.5
@@ -378,11 +378,13 @@ const s = StyleSheet.create({
   bubbleScroll:  { flexGrow: 0 },
   bubbleContent: { paddingHorizontal: 16, gap: 14, alignItems: 'flex-start', paddingBottom: 12 },
   bubble: { alignItems: 'center', gap: 5, width: BUBBLE_SIZE + 14 },
+  // Mesmo peso da fila do feed — os anéis da pesquisa tinham 1.6 e o activo
+  // 2.2, o que fazia a fila parecer irregular consoante quem estava no ecrã.
   bubbleRing: {
-    borderRadius: (BUBBLE_SIZE + 6) / 2, borderWidth: 1.6,
+    borderRadius: (BUBBLE_SIZE + 6) / 2, borderWidth: RING_STROKE,
     borderColor: colors.primary, padding: 2,
   },
-  bubbleRingActive: { borderWidth: 2.2 },
+  bubbleRingActive: { borderWidth: RING_STROKE },
   bubbleName: {
     color: 'rgba(0,0,0,0.75)', fontFamily: fonts.medium,
     fontSize: 11, textAlign: 'center', maxWidth: BUBBLE_SIZE + 12,

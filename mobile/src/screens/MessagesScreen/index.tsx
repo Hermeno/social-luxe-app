@@ -241,7 +241,7 @@ function ConvoRow({ item, viewedIds, onPress, index, myUserId, isQuickOpen, onTo
         <View style={s.avatarWrap}>
           {hasPosts ? (
             <>
-              <SegmentedRing count={item.postIds.length} size={RING} strokeWidth={2} />
+              <SegmentedRing count={item.postIds.length} size={RING} strokeWidth={2} color="#1A1A1A" />
               <View style={s.avatarInner}>
                 <AvatarImage uri={item.user.avatar} name={item.user.name} size={AVA} />
               </View>

@@ -117,7 +117,7 @@ export default function ScheduleMessageModal({
         <View style={m.headerRow}>
           <View style={m.titleGroup}>
             <View style={m.iconBadge}>
-              <Octicons name="stopwatch" size={15} color={colors.primary} />
+              <Octicons name="stopwatch" size={15} color="#1A1A1A" />
             </View>
             <Text style={m.title}>{t.sched_view_title}</Text>
           </View>
@@ -135,7 +135,7 @@ export default function ScheduleMessageModal({
 
         {/* Scheduled time */}
         <View style={m.scheduleInfo}>
-          <Ionicons name="calendar-outline" size={15} color={colors.primary} />
+          <Ionicons name="calendar-outline" size={15} color="#1A1A1A" />
           <Text style={m.scheduleInfoTxt}>
             {formatScheduledDate(existingMessage.scheduledAt)}
           </Text>
@@ -166,7 +166,7 @@ export default function ScheduleMessageModal({
       <View style={m.headerRow}>
         <View style={m.titleGroup}>
           <View style={m.iconBadge}>
-            <Octicons name="stopwatch" size={15} color={colors.primary} />
+            <Octicons name="stopwatch" size={15} color="#1A1A1A" />
           </View>
           <Text style={m.title}>{t.sched_title}</Text>
         </View>
@@ -214,11 +214,11 @@ export default function ScheduleMessageModal({
       <View style={m.timeBlock}>
         <View style={m.wheel}>
           <TouchableOpacity style={m.arrowBtn} onPress={() => bumpHour(1)}>
-            <Ionicons name="chevron-up" size={22} color={colors.primary} />
+            <Ionicons name="chevron-up" size={22} color="#1A1A1A" />
           </TouchableOpacity>
           <Text style={m.wheelNum}>{hStr}</Text>
           <TouchableOpacity style={m.arrowBtn} onPress={() => bumpHour(-1)}>
-            <Ionicons name="chevron-down" size={22} color={colors.primary} />
+            <Ionicons name="chevron-down" size={22} color="#1A1A1A" />
           </TouchableOpacity>
         </View>
 
@@ -226,11 +226,11 @@ export default function ScheduleMessageModal({
 
         <View style={m.wheel}>
           <TouchableOpacity style={m.arrowBtn} onPress={() => bumpMinute(1)}>
-            <Ionicons name="chevron-up" size={22} color={colors.primary} />
+            <Ionicons name="chevron-up" size={22} color="#1A1A1A" />
           </TouchableOpacity>
           <Text style={m.wheelNum}>{mStr}</Text>
           <TouchableOpacity style={m.arrowBtn} onPress={() => bumpMinute(-1)}>
-            <Ionicons name="chevron-down" size={22} color={colors.primary} />
+            <Ionicons name="chevron-down" size={22} color="#1A1A1A" />
           </TouchableOpacity>
         </View>
 
@@ -297,7 +297,7 @@ const m = StyleSheet.create({
   titleGroup: { flexDirection: 'row', alignItems: 'center', gap: 9 },
   iconBadge: {
     width: 30, height: 30, borderRadius: 10,
-    backgroundColor: `${colors.primary}12`,
+    backgroundColor: '#F5F5F7',
     alignItems: 'center', justifyContent: 'center',
   },
   title:    { fontSize: 17, fontFamily: fonts.bold, color: colors.gray800, letterSpacing: -0.3 },
@@ -354,7 +354,7 @@ const m = StyleSheet.create({
   /* Date chips */
   chips:      { gap: 8, paddingRight: 4, marginBottom: 16 },
   chip:       { paddingHorizontal: 15, paddingVertical: 9, borderRadius: 20, backgroundColor: FIELD },
-  chipActive: { backgroundColor: colors.primary },
+  chipActive: { backgroundColor: '#1A1A1A' },
   chipTxt:    { fontSize: 13, fontFamily: fonts.semiBold, color: colors.gray600 },
   chipTxtActive: { color: colors.white },
 
@@ -376,7 +376,7 @@ const m = StyleSheet.create({
   /* CTA */
   cta: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: colors.primary, borderRadius: 26,
+    backgroundColor: '#1A1A1A', borderRadius: 26,
     paddingVertical: 16, paddingHorizontal: 20,
   },
   ctaOff: { backgroundColor: '#D8D8DC' },

@@ -47,7 +47,8 @@ type Route  = RouteProp<AppStackParams, 'Chat'>
 type NavProp = StackNavigationProp<AppStackParams>
 
 const CHAT_BG        = '#FFFFFF'
-const MINE_COLOR     = '#CA2851'
+// A conversa é a preto e branco: a minha bolha é preta, a do outro clara.
+const MINE_COLOR     = '#1A1A1A'
 const THEIRS_COLOR   = '#F0F2F5'
 const REACTION_EMOJIS = ['❤️', '😂', '😮', '😢', '🔥', '👏']
 
@@ -133,7 +134,7 @@ function FileCard({ fileName, mine, url }: { fileName: string; mine: boolean; ur
       onPress={() => { if (canOpen) openDocument(url!) }}
     >
       <View style={fc.iconWrap}>
-        <Ionicons name="document-text-outline" size={22} color={mine ? 'rgba(255,255,255,0.9)' : colors.primary} />
+        <Ionicons name="document-text-outline" size={22} color={mine ? 'rgba(255,255,255,0.9)' : '#1A1A1A'} />
       </View>
       <View style={fc.info}>
         <Text style={[fc.name, mine && fc.nameMine]} numberOfLines={2}>{fileName}</Text>
@@ -207,8 +208,8 @@ function AudioPlayer({ uri, mine, pending }: { uri: string; mine: boolean; pendi
     player.play()
   }
 
-  const btnBg     = mine ? 'rgba(255,255,255,0.22)' : colors.primary
-  const fillColor = mine ? '#fff'                   : colors.primary
+  const btnBg     = mine ? 'rgba(255,255,255,0.22)' : '#1A1A1A'
+  const fillColor = mine ? '#fff'                   : '#1A1A1A'
   const emptyColor= mine ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.13)'
   const timeColor = mine ? 'rgba(255,255,255,0.78)' : colors.gray500
   const iconColor = '#fff'
@@ -1098,7 +1099,7 @@ export default function ChatScreen() {
 
         {editingMsg && (
           <View style={t.editBanner}>
-            <Ionicons name="pencil-outline" size={14} color={colors.primary} />
+            <Ionicons name="pencil-outline" size={14} color="#6E6E73" />
             <Text style={t.editBannerText} numberOfLines={1}>
               Editando: {editingMsg.content}
             </Text>
@@ -1353,8 +1354,8 @@ const t = StyleSheet.create({
     marginBottom: 7, borderRadius: 4,
   },
   replyQuoteMine:      { borderLeftColor: 'rgba(255,255,255,0.7)', backgroundColor: 'rgba(255,255,255,0.12)' },
-  replyQuoteTheirs:    { borderLeftColor: colors.primary,          backgroundColor: `${colors.primary}0F` },
-  replyQuoteName:      { fontSize: 11, fontFamily: fonts.semiBold, color: colors.primary, marginBottom: 1 },
+  replyQuoteTheirs:    { borderLeftColor: '#1A1A1A',                backgroundColor: '#F5F5F7' },
+  replyQuoteName:      { fontSize: 11, fontFamily: fonts.semiBold, color: '#1A1A1A', marginBottom: 1 },
   replyQuoteNameMine:  { color: 'rgba(255,255,255,0.85)' },
   replyQuoteText:      { fontSize: 12, fontFamily: fonts.regular, color: 'rgba(0,0,0,0.4)' },
   replyQuoteTextMine:  { color: 'rgba(255,255,255,0.65)' },
@@ -1400,9 +1401,9 @@ const t = StyleSheet.create({
   // ── Edit banner ───────────────────────────────────────────────────────────
   editBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: `${colors.primary}0D`,
+    backgroundColor: '#FAFAFB',
     paddingHorizontal: 14, paddingVertical: 8,
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: `${colors.primary}30`,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#EDEDF1',
   },
   editBannerText: { flex: 1, fontSize: 13, fontFamily: fonts.regular, color: colors.gray600 },
 
@@ -1448,7 +1449,7 @@ const t = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(0,0,0,0.08)',
   },
-  pairingBannerDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.primary },
+  pairingBannerDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#1A1A1A' },
   pairingBannerTxt: {
     flex: 1,
     fontSize: 12.5,

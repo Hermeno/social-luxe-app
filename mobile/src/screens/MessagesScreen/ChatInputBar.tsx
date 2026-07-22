@@ -190,7 +190,7 @@ const s = StyleSheet.create({
   replyBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: `${colors.primary}0D`,
+    backgroundColor: '#FAFAFB',
     borderRadius: 10,
     marginBottom: 8,
     paddingVertical: 8,
@@ -200,13 +200,13 @@ const s = StyleSheet.create({
   replyAccent: {
     width: 3,
     alignSelf: 'stretch',
-    backgroundColor: colors.primary,
+    backgroundColor: '#1A1A1A',
     marginRight: 10,
     borderTopRightRadius: 2,
     borderBottomRightRadius: 2,
   },
   replyTexts:   { flex: 1, gap: 1 },
-  replyName:    { fontSize: 12, fontFamily: fonts.semiBold, color: colors.primary },
+  replyName:    { fontSize: 12, fontFamily: fonts.semiBold, color: '#1A1A1A' },
   replyContent: { fontSize: 12, fontFamily: fonts.regular, color: colors.gray500 },
   replyClose:   { padding: 4, borderRadius: 12, backgroundColor: `${colors.gray400}18` },
 
@@ -237,10 +237,10 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   actionBtnActive: {
-    backgroundColor: colors.primary,
+    backgroundColor: '#1A1A1A',
     ...Platform.select({
       ios: {
-        shadowColor: colors.primary,
+        shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.4,
         shadowRadius: 8,

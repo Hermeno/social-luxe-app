@@ -84,7 +84,7 @@ export default function ChatHeader({
       <TouchableOpacity onPress={onProfilePress} activeOpacity={0.75}>
         <View style={s.avatarOuter}>
           {hasPosts && (
-            <SegmentedRing count={1} size={RING_OUTER} strokeWidth={1.5} />
+            <SegmentedRing count={1} size={RING_OUTER} strokeWidth={2.2} color="#1A1A1A" />
           )}
           <View style={s.avatarInner}>
             <View style={s.avatarCircle}>
