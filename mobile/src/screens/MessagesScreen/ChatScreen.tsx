@@ -1033,7 +1033,6 @@ export default function ChatScreen() {
         <ChatHeader
           userName={userName}
           avatarUri={userAvatar ?? null}
-          hasPosts={partnerHasPosts}
           isOnline={isOnline}
           isTyping={isTyping}
           onBack={() => nav.goBack()}

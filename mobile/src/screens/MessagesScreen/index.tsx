@@ -48,7 +48,6 @@ import { colors, fonts } from '../../theme'
 import { useT } from '../../i18n'
 import AvatarImage from '../../components/AvatarImage'
 import DuoAvatar from '../../components/DuoAvatar'
-import SegmentedRing from '../../components/SegmentedRing'
 import DiscoveryRow from '../../components/DiscoveryRow'
 
 type Nav = StackNavigationProp<AppStackParams>
@@ -216,7 +215,6 @@ function ConvoRow({ item, viewedIds, onPress, index, myUserId, isQuickOpen, onTo
   const t = useT()
   const hasMsg      = !!item.lastMessage
   const unread      = item.unreadCount > 0
-  const hasPosts    = item.postIds.length > 0
   const viewedCount = item.postIds.filter((id) => viewedIds.has(id)).length
   const iMine       = hasMsg && item.lastMessage!.senderId === myUserId
   const isRead      = hasMsg && !!item.lastMessage!.readAt
@@ -237,18 +235,9 @@ function ConvoRow({ item, viewedIds, onPress, index, myUserId, isQuickOpen, onTo
   return (
     <Animated.View style={{ opacity, transform: [{ translateY }] }}>
       <TouchableOpacity style={s.row} onPress={onPress} activeOpacity={0.6}>
-        {/* Avatar with optional story ring */}
+        {/* Avatar, sem anel — nas conversas o avatar é só a pessoa */}
         <View style={s.avatarWrap}>
-          {hasPosts ? (
-            <>
-              <SegmentedRing count={item.postIds.length} size={RING} strokeWidth={2} color="#1A1A1A" />
-              <View style={s.avatarInner}>
-                <AvatarImage uri={item.user.avatar} name={item.user.name} size={AVA} />
-              </View>
-            </>
-          ) : (
-            <AvatarImage uri={item.user.avatar} name={item.user.name} size={AVA} />
-          )}
+          <AvatarImage uri={item.user.avatar} name={item.user.name} size={AVA} />
         </View>
 
         {/* Text info */}
@@ -1420,7 +1409,6 @@ const s = StyleSheet.create({
     backgroundColor: colors.white,
   },
   avatarWrap:  { width: RING, height: RING, alignItems: 'center', justifyContent: 'center' },
-  avatarInner: { position: 'absolute' },
   info:        { flex: 1, gap: 3 },
   topRow:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   name:        { fontSize: 15, fontFamily: fonts.semiBold, color: '#1A1A1A', flex: 1, letterSpacing: -0.2 },

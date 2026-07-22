@@ -3,18 +3,16 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { colors, fonts, spacing } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
-import SegmentedRing from '../../components/SegmentedRing'
 import { useT } from '../../i18n'
 import { Pairing } from '../../types'
 import { pairingLabel } from '../../services/pairing.service'
 
 const AV_SIZE    = 30
-const RING_OUTER = AV_SIZE + 8  // 38 — small visible gap between avatar and ring
+const AV_BOX     = AV_SIZE + 8  // caixa do avatar, alinhada com o resto do cabeçalho
 
 interface Props {
   userName: string
   avatarUri: string | null
-  hasPosts: boolean
   isOnline: boolean
   isTyping: boolean
   onBack: () => void
@@ -30,7 +28,7 @@ interface Props {
 }
 
 export default function ChatHeader({
-  userName, avatarUri, hasPosts, isOnline, isTyping,
+  userName, avatarUri, isOnline, isTyping,
   onBack, onProfilePress, pairing, myUserId,
   onInvitePairing, onAcceptPairing, onDeclinePairing, onEndPairing,
 }: Props) {
@@ -83,13 +81,8 @@ export default function ChatHeader({
 
       <TouchableOpacity onPress={onProfilePress} activeOpacity={0.75}>
         <View style={s.avatarOuter}>
-          {hasPosts && (
-            <SegmentedRing count={1} size={RING_OUTER} strokeWidth={2.2} color="#1A1A1A" />
-          )}
-          <View style={s.avatarInner}>
-            <View style={s.avatarCircle}>
-              <AvatarImage uri={avatarUri} name={userName} size={AV_SIZE} borderWidth={0} borderColor="transparent" />
-            </View>
+          <View style={s.avatarCircle}>
+            <AvatarImage uri={avatarUri} name={userName} size={AV_SIZE} borderWidth={0} borderColor="transparent" />
           </View>
         </View>
       </TouchableOpacity>
@@ -123,13 +116,8 @@ const s = StyleSheet.create({
   },
 
   avatarOuter: {
-    width:           RING_OUTER,
-    height:          RING_OUTER,
-    alignItems:      'center',
-    justifyContent:  'center',
-  },
-  avatarInner: {
-    position:        'absolute',
+    width:           AV_BOX,
+    height:          AV_BOX,
     alignItems:      'center',
     justifyContent:  'center',
   },
