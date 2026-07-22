@@ -342,35 +342,28 @@ export default function CreateScreen() {
             </View>
           </>
 
-        ) : hasText ? (
-          // Text post — live preview on solid bg
-          <View style={[s.textPreview, { paddingTop: insets.top + 56 }]}>
-            <Text style={[s.textPreviewTxt, { color: '#fff' }]} numberOfLines={10}>
-              {caption}
-            </Text>
-          </View>
-
         ) : (
-          // Empty state — duas escolhas grandes e óbvias
-          <View style={[s.emptyState, { paddingTop: insets.top + 30 }]}>
-            <TouchableOpacity style={s.bigAdd} onPress={pickMedia} activeOpacity={0.85}>
-              <View style={s.bigAddIcon}>
-                <Ionicons name="images" size={30} color="#fff" />
-              </View>
-              <Text style={s.bigAddTitle}>{t.create_addMedia}</Text>
-              <Text style={s.bigAddSub}>{t.create_addMediaSub}</Text>
+          // Sem media, a área de cor *é* o campo. Não há caixinha para procurar
+          // nem botão "escrever": toca em qualquer sítio e escreve. E o que
+          // escreves já está com o aspeto que vai ter depois de publicado.
+          <View style={[s.composeArea, { paddingTop: insets.top + 26 }]}>
+            <TouchableOpacity style={s.addMedia} onPress={pickMedia} activeOpacity={0.85}>
+              <Ionicons name="images" size={17} color="#fff" />
+              <Text style={s.addMediaTxt}>{t.create_addMedia}</Text>
             </TouchableOpacity>
 
-            <View style={s.orRow}>
-              <View style={s.orLine} />
-              <Text style={s.orTxt}>{t.create_or}</Text>
-              <View style={s.orLine} />
-            </View>
-
-            <TouchableOpacity style={s.writeBtn} onPress={() => captionRef.current?.focus()} activeOpacity={0.8}>
-              <Ionicons name="create-outline" size={17} color="#fff" />
-              <Text style={s.writeTxt}>{t.create_writeText}</Text>
-            </TouchableOpacity>
+            <TextInput
+              ref={captionRef}
+              style={s.bigInput}
+              placeholder={t.create_writePh}
+              placeholderTextColor="rgba(255,255,255,0.55)"
+              value={caption}
+              onChangeText={setCaption}
+              multiline
+              maxLength={280}
+              textAlign="center"
+              selectionColor="#fff"
+            />
           </View>
         )}
       </View>
@@ -378,18 +371,19 @@ export default function CreateScreen() {
       {/* ── Panel ── */}
       <View style={[s.panel, { paddingBottom: tabBarHeight + 8 }, textMode && s.panelText]}>
 
-        {/* Caption input */}
-        <TextInput
-          ref={captionRef}
-          style={[s.captionInput, textMode && { color: '#fff' }]}
-          placeholder={media ? t.create_captionPh : t.create_writePh}
-          placeholderTextColor={textMode ? 'rgba(255,255,255,0.6)' : '#C4C4C4'}
-          value={caption}
-          onChangeText={setCaption}
-          multiline
-          maxLength={280}
-          textAlignVertical="top"
-        />
+        {/* Legenda — só com media. Sem media, o campo é a própria área de cor. */}
+        {!textMode && (
+          <TextInput
+            style={s.captionInput}
+            placeholder={t.create_captionPh}
+            placeholderTextColor="#C4C4C4"
+            value={caption}
+            onChangeText={setCaption}
+            multiline
+            maxLength={280}
+            textAlignVertical="top"
+          />
+        )}
 
         {/* Bg swatches + media link — only for text posts */}
         {textMode && (
@@ -526,62 +520,36 @@ const s = StyleSheet.create({
     overflow: 'hidden',
   },
 
-  // Empty state
-  emptyState: {
-    flex:           1,
-    alignItems:     'center',
-    justifyContent: 'center',
-    gap:            14,
-  },
-  // Big primary "add media" — no box, just the tappable content
-  bigAdd: {
-    alignItems:      'center',
-    gap:             4,
-    paddingVertical: 20,
-  },
-  bigAddIcon: {
-    width:           72,
-    height:          72,
-    borderRadius:    36,
-    backgroundColor: 'rgba(255,255,255,0.14)',
-    borderWidth:     1.5,
-    borderColor:     'rgba(255,255,255,0.45)',
-    alignItems:      'center',
-    justifyContent:  'center',
-    marginBottom:    10,
-  },
-  bigAddTitle: { fontFamily: fonts.bold, fontSize: 16, color: '#fff', letterSpacing: -0.3 },
-  bigAddSub:   { fontFamily: fonts.regular, fontSize: 13, color: 'rgba(255,255,255,0.7)' },
-
-  orRow:  { flexDirection: 'row', alignItems: 'center', gap: 12, width: 180, marginTop: 4 },
-  orLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.28)' },
-  orTxt:  { fontFamily: fonts.medium, fontSize: 12, color: 'rgba(255,255,255,0.65)' },
-
-  writeBtn: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               7,
-    paddingHorizontal: 18,
-    paddingVertical:   11,
-    borderRadius:      22,
-    borderWidth:       1.5,
-    borderColor:       'rgba(255,255,255,0.5)',
-  },
-  writeTxt: { fontFamily: fonts.semiBold, fontSize: 14, color: '#fff' },
-
-  // Text post live preview
-  textPreview: {
+  // Área de escrita — sem media, ocupa o frame todo e é ela própria o campo
+  composeArea: {
     flex:              1,
     alignItems:        'center',
-    justifyContent:    'center',
-    paddingHorizontal: 36,
+    paddingHorizontal: 28,
+    gap:               20,
   },
-  textPreviewTxt: {
+  addMedia: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               8,
+    paddingHorizontal: 16,
+    paddingVertical:   10,
+    borderRadius:      22,
+    borderWidth:       1.5,
+    borderColor:       'rgba(255,255,255,0.45)',
+    backgroundColor:   'rgba(255,255,255,0.12)',
+  },
+  addMediaTxt: { fontFamily: fonts.semiBold, fontSize: 14, color: '#fff', letterSpacing: -0.2 },
+
+  // O campo tem o aspeto do post publicado — escrever já é ver o resultado
+  bigInput: {
+    flex:          1,
+    alignSelf:     'stretch',
     fontFamily:    fonts.semiBold,
     fontSize:      26,
-    textAlign:     'center',
     lineHeight:    38,
     letterSpacing: -0.5,
+    color:         '#fff',
+    padding:       0,
   },
 
   // Media state — caption overlay

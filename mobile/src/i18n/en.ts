@@ -570,9 +570,6 @@ export const EN: { [K in keyof typeof import('./pt').PT]: string } = {
 
   // ── Create ──
   create_addMedia: 'Add photo or video',
-  create_addMediaSub: 'Tap to choose from the gallery',
-  create_or: 'or',
-  create_writeText: 'Write text only',
   create_change: 'Change',
   create_media: 'Media',
   create_announce: 'Announcement',

@@ -588,9 +588,6 @@ export const PT = {
 
   // ── Create ──
   create_addMedia: 'Adicionar foto ou vídeo',
-  create_addMediaSub: 'Toca para escolher da galeria',
-  create_or: 'ou',
-  create_writeText: 'Escrever só texto',
   create_change: 'Alterar',
   create_media: 'Media',
   create_announce: 'Anúncio',
