@@ -27,9 +27,9 @@ export interface FeedUserGroup {
 // The ring floats 3.5px off the avatar; the stroke itself is 1.6px. Every
 // number below derives from AV_SIZE so the rail scales as one piece.
 const AV_SIZE      = 54
-const RING_STROKE  = 1.6
+const RING_STROKE  = 2.2
 const RING_GAP     = 3.5
-const RING_OUTER   = Math.round(AV_SIZE + (RING_GAP + RING_STROKE) * 2)   // 64
+const RING_OUTER   = Math.round(AV_SIZE + (RING_GAP + RING_STROKE) * 2)   // 65
 const TILE_W       = RING_OUTER + 4
 const TILE_GAP     = 14
 const DOT_SIZE     = 11
@@ -292,16 +292,15 @@ const s = StyleSheet.create({
     overflow:        'hidden',
     backgroundColor: '#EAEAEA',
   },
-  // Thicker crimson ring marks the user whose post is on screen — same single
-  // ring colour as the rest of the app, weight carries the state
+  // Um só peso de anel na fila inteira — RING_STROKE. Se um anel fosse mais
+  // grosso do que outro, a fila deixava de se ler como um conjunto.
   activeRing: {
     position:     'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
     borderRadius: RING_OUTER / 2,
-    borderWidth:  2.2,
+    borderWidth:  RING_STROKE,
     borderColor:  colors.primary,
   },
-  // Quiet hairline for the create tile
   neutralRing: {
     position:     'absolute',
     top: 0, left: 0, right: 0, bottom: 0,

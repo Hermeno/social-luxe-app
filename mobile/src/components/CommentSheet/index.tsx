@@ -13,6 +13,7 @@ import CommentItem from './CommentItem'
 import CommentInputArea from './CommentInputArea'
 import { colors, fonts } from '../../theme'
 import { useT } from '../../i18n'
+import { useOverlayStore } from '../../store/overlay.store'
 
 // ─── CommentSheet ─────────────────────────────────────────────────────────────
 // Folha branca de comentários.
@@ -28,12 +29,9 @@ interface Props {
   post: Post
   onClose: () => void
   onCommentAdded?: () => void
-  /** Altura do que flutua por baixo da folha (a barra de navegação). Sem isto o
-   *  campo de escrever fica escondido debaixo dos ícones do separador. */
-  bottomOffset?: number
 }
 
-export default function CommentSheet({ post, onClose, onCommentAdded, bottomOffset = 0 }: Props) {
+export default function CommentSheet({ post, onClose, onCommentAdded }: Props) {
   const t = useT()
   const { bottom: safeBottom, top: safeTop } = useSafeAreaInsets()
   const { height: winH } = useWindowDimensions()
@@ -47,6 +45,14 @@ export default function CommentSheet({ post, onClose, onCommentAdded, bottomOffs
   // ── Entrada ────────────────────────────────────────────────────────────────
   const slide   = useRef(new Animated.Value(1)).current   // 1 = fora, 0 = no sítio
   const fade    = useRef(new Animated.Value(0)).current
+
+  // Enquanto a folha existir, a barra de separadores desaparece — senão pinta
+  // por cima do campo de escrever (e no Android sobe com o teclado).
+  useEffect(() => {
+    const { push, pop } = useOverlayStore.getState()
+    push()
+    return pop
+  }, [])
 
   useEffect(() => {
     load()
@@ -77,9 +83,9 @@ export default function CommentSheet({ post, onClose, onCommentAdded, bottomOffs
     return () => { s1.remove(); s2.remove() }
   }, [])
 
-  // Com o teclado aberto a folha está acima da barra de separadores, logo o
-  // espaço para ela deixa de ser preciso. Fechado, o campo tem de a evitar.
-  const inputPad = open ? 0 : Math.max(safeBottom, bottomOffset)
+  // A barra de separadores está escondida enquanto a folha estiver aberta, por
+  // isso o campo só tem de respeitar a área segura do telemóvel.
+  const inputPad = open ? 0 : safeBottom
 
   // A folha nunca pode ser mais alta do que o que sobra acima do teclado.
   const available = winH - kbH - safeTop - 52

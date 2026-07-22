@@ -16,7 +16,6 @@ import {
 import { Image } from 'expo-image'
 import { setStatusBarStyle } from 'expo-status-bar'
 import { useNavigation } from '@react-navigation/native'
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { useFocusEffect } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -65,7 +64,6 @@ export default function FeedScreen() {
   const nav              = useNavigation<Nav>()
   // A barra de separadores flutua por cima do ecrã; a folha de comentários
   // precisa de saber a altura dela para o campo de escrever não ficar tapado.
-  const tabBarHeight     = useBottomTabBarHeight()
   const user             = useAuthStore((s) => s.user)
 
   // Consume a post published from CreateScreen → prepend instantly
@@ -729,7 +727,6 @@ export default function FeedScreen() {
       {commentPost && (
         <CommentSheet
           post={commentPost}
-          bottomOffset={tabBarHeight}
           onClose={() => setCommentPost(null)}
           onCommentAdded={() => setCommentDeltas((d) => ({ ...d, [commentPost!.id]: (d[commentPost!.id] ?? 0) + 1 }))}
         />

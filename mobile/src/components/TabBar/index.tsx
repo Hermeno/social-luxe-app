@@ -8,6 +8,7 @@ import { useFeedStore } from '../../store/feed.store'
 import { useAuthStore } from '../../store/auth.store'
 import { useMessageBadgeStore } from '../../store/messageBadge.store'
 import { useNotificationStore } from '../../store/notification.store'
+import { useOverlayStore } from '../../store/overlay.store'
 
 const SZ = 24
 
@@ -67,6 +68,7 @@ function MessageBadge({ count, iconColor, icon }: { count: number; iconColor: st
 
 export default function TabBar({ state, navigation }: BottomTabBarProps) {
   const { bottom }    = useSafeAreaInsets()
+  const overlayOpen   = useOverlayStore((s) => s.count > 0)
   const newPostsCount = useFeedStore((s) => s.newPostsCount)
   const totalUnread   = useMessageBadgeStore((s) => s.totalUnread)
   const circleInvite  = useNotificationStore((s) => s.circleInvite)
@@ -90,6 +92,10 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
     setOpenSearch(true)
     if (activeTab !== 'Feed') goTo('Feed')
   }
+
+  // Uma folha modal aberta manda na barra: sem isto ela pinta por cima da folha
+  // e, no Android, sobe com o teclado até tapar o botão de enviar.
+  if (overlayOpen) return null
 
   const searchActive = activeTab === 'Feed' && openSearch
   const homeActive   = activeTab === 'Feed' && !openSearch
