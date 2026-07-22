@@ -17,6 +17,7 @@ import TargetPicker from './TargetPicker'
 import PostAlbumGrid from '../FeedScreen/PostAlbumGrid'
 import GalleryPicker, { PickedAsset } from '../../components/GalleryPicker'
 import { getMyUnions } from '../../services/union.service'
+import { UNION_ENABLED } from '../../config/features'
 import { Union } from '../../types'
 import { useFeedStore } from '../../store/feed.store'
 import { useAuthStore } from '../../store/auth.store'
@@ -68,6 +69,7 @@ export default function CreateScreen() {
   const [pickerOpen,       setPickerOpen]       = useState(false)
 
   useEffect(() => {
+    if (!UNION_ENABLED) return
     getMyUnions().then((unions) => setMyUnion(unions[0] ?? null)).catch(() => {})
   }, [])
 

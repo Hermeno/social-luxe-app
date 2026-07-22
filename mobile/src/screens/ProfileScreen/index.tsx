@@ -37,6 +37,7 @@ import { deletePost as apiDeletePost, updatePost as apiUpdatePost } from '../../
 import { toast } from '../../utils/toast'
 import { lifeTier, lifeLabel, isEliteTier } from '../../utils/postLife'
 import { getMyUnions, getPendingInvites, respondToInvite } from '../../services/union.service'
+import { UNION_ENABLED } from '../../config/features'
 import { Union, UnionInvite, Pairing } from '../../types'
 import * as pairingService from '../../services/pairing.service'
 import { useT } from '../../i18n'
@@ -346,7 +347,7 @@ export default function ProfileScreen() {
   }, [targetId]))
 
   useFocusEffect(useCallback(() => {
-    if (!isOwn) return
+    if (!isOwn || !UNION_ENABLED) return
     let active = true
     async function loadUnionData() {
       const [cachedUnions, cachedInvites] = await Promise.all([

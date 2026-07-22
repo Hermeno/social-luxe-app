@@ -126,6 +126,7 @@ export async function getUnionMessages(req: AuthRequest, res: Response) {
   try {
     const { fromId, toId } = req.params
     const before = req.query.before as string | undefined
+    await unionService.assertUnionMember(req.user!.userId, fromId, toId)
     const msgs = await unionService.getUnionMessages(fromId, toId, before)
     return ok(res, msgs)
   } catch (err) { return handleError(res, err) }
@@ -158,6 +159,7 @@ export async function sendUnionMessage(req: AuthRequest, res: Response) {
 export async function markUnionRead(req: AuthRequest, res: Response) {
   try {
     const { fromId, toId } = req.params
+    await unionService.assertUnionMember(req.user!.userId, fromId, toId)
     await unionService.markUnionMessagesRead(fromId, toId)
     return ok(res, { read: true })
   } catch (err) { return handleError(res, err) }

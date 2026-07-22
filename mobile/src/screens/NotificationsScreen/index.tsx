@@ -13,6 +13,7 @@ import { getCache, setCache } from '../../db/database'
 import { isConnected } from '../../services/netinfo.service'
 import { getPartnerPostInvites, respondPartnerPost } from '../../services/post.service'
 import { getPendingInvites, respondToInvite } from '../../services/union.service'
+import { UNION_ENABLED } from '../../config/features'
 import { Post, UnionInvite } from '../../types'
 import AvatarImage from '../../components/AvatarImage'
 import FollowSplitButton from '../../components/FollowSplitButton'
@@ -112,8 +113,12 @@ export default function NotificationsScreen() {
   useFocusEffect(useCallback(() => {
     let active = true
     async function load() {
-      // 1. Cache first — show immediately
-      const cached = await getCache<UnionInvite[]>('union_invites').catch(() => null)
+      // 1. Cache first — show immediately. Com a União desligada não há
+      //    convites de união, mas os convites de post são outra coisa e
+      //    continuam a carregar.
+      const cached = UNION_ENABLED
+        ? await getCache<UnionInvite[]>('union_invites').catch(() => null)
+        : null
       if (cached && active) {
         setUnionInvites(cached)
         setUnionInviteBadge(cached.length)
@@ -123,14 +128,14 @@ export default function NotificationsScreen() {
       setLoadingPartner(true)
       try {
         const [fresh, invites] = await Promise.all([
-          getPendingInvites(),
+          UNION_ENABLED ? getPendingInvites() : Promise.resolve([] as UnionInvite[]),
           getPartnerPostInvites().catch(() => []),
         ])
         if (active) {
           setUnionInvites(fresh)
           setUnionInviteBadge(fresh.length)
           setPostInvites(invites)
-          setCache('union_invites', fresh).catch(() => {})
+          if (UNION_ENABLED) setCache('union_invites', fresh).catch(() => {})
         }
       } catch {}
       if (active) setLoadingPartner(false)

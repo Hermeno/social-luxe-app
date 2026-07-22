@@ -23,6 +23,7 @@ import { Connection, Union, UnionMessage, TogetherLivePayload, Pairing, Post } f
 import { searchPosts as searchPostsApi } from '../../services/post.service'
 import * as pairingService from '../../services/pairing.service'
 import { useUnionStore } from '../../store/union.store'
+import { UNION_ENABLED } from '../../config/features'
 import {
   getViewedPostIds,
   getCachedConnections,
@@ -446,6 +447,7 @@ export default function MessagesScreen() {
   }, [])
 
   useFocusEffect(useCallback(() => {
+    if (!UNION_ENABLED) return
     // Background refresh from API (cache is already showing)
     unionService.getMyUnions().then(setMyUnions).catch(() => {})
     unionService.getPendingInvites().then(setPendingInvites).catch(() => {})

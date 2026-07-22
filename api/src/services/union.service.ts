@@ -52,6 +52,21 @@ export async function createUnion(
   })
 }
 
+// Ler ou marcar uma conversa entre uniões exige pertencer a uma delas. Sem
+// isto, qualquer utilizador autenticado lia a conversa privada de duas uniões
+// só com os IDs — os handlers recebiam-nos do URL e nunca olhavam para quem
+// estava a pedir.
+export async function assertUnionMember(userId: string, ...unionIds: string[]) {
+  const mine = await prisma.union.findFirst({
+    where: {
+      id: { in: unionIds },
+      OR: [{ memberAId: userId }, { memberBId: userId }],
+    },
+    select: { id: true },
+  })
+  if (!mine) throw new Error('Não pertences a esta união')
+}
+
 export async function getUnion(id: string) {
   return prisma.union.findUnique({ where: { id }, select: UNION_SELECT })
 }
