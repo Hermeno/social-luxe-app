@@ -168,7 +168,7 @@ function QuickReplyBox({ userName, onSend, onClose }: {
     <View style={q.container}>
       <View style={q.header}>
         <View style={q.replyLabel}>
-          <Ionicons name="return-down-forward" size={13} color={colors.primary} />
+          <Ionicons name="return-down-forward" size={13} color="#6E6E73" />
           <Text style={q.replyTxt} numberOfLines={1}>
             {t.msg_reply_to} <Text style={q.replyName}>{userName}</Text>
           </Text>
@@ -281,7 +281,7 @@ function ConvoRow({ item, viewedIds, onPress, index, myUserId, isQuickOpen, onTo
                 <Ionicons
                   name={isQuickOpen ? 'chevron-up' : 'chevron-down'}
                   size={16}
-                  color={isQuickOpen ? colors.white : colors.primary}
+                  color={isQuickOpen ? colors.white : '#6E6E73'}
                 />
               </TouchableOpacity>
             </>
@@ -369,7 +369,7 @@ function SuggestedUserRow({ user, onPress }: { user: UserResult; onPress: () => 
       <View style={s.info}>
         <Text style={s.name} numberOfLines={1}>{user.name}</Text>
         <View style={sg.tag}>
-          <Ionicons name="sparkles" size={10} color={colors.primary} />
+          <Ionicons name="sparkles" size={10} color="#ABABAB" />
           <Text style={sg.tagTxt}>{t.msg_suggestion_one}</Text>
         </View>
       </View>
@@ -1343,7 +1343,7 @@ const s = StyleSheet.create({
   searchCancel: {
     fontFamily: fonts.semiBold,
     fontSize: 15,
-    color: colors.primary,
+    color: '#6E6E73',
   },
   /* ── Nav avatar + ring ── */
   navAvatarOuter: {
@@ -1380,12 +1380,12 @@ const s = StyleSheet.create({
     textTransform: 'uppercase',
   },
   countPill: {
-    backgroundColor: `${colors.primary}18`,
+    backgroundColor: '#F5F5F7',
     borderRadius: 10,
     paddingHorizontal: 7,
     paddingVertical: 2,
   },
-  countPillTxt: { fontSize: 11, fontFamily: fonts.semiBold, color: colors.primary },
+  countPillTxt: { fontSize: 11, fontFamily: fonts.semiBold, color: '#6E6E73' },
 
   spinnerWrap: { flex: 1, alignItems: 'center', paddingTop: 60 },
 
@@ -1395,7 +1395,7 @@ const s = StyleSheet.create({
     width: 64, height: 64, borderRadius: 32,
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 4,
-    shadowColor: colors.primary, shadowOpacity: 0.25, shadowRadius: 14, shadowOffset: { width: 0, height: 6 },
+    shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 14, shadowOffset: { width: 0, height: 6 },
   },
   chatEmptySuggestLabel: {
     alignSelf: 'flex-start',
@@ -1426,15 +1426,15 @@ const s = StyleSheet.create({
   name:        { fontSize: 15, fontFamily: fonts.semiBold, color: '#1A1A1A', flex: 1, letterSpacing: -0.2 },
   nameBold:    { fontFamily: fonts.extraBold },
   time:        { fontSize: 12, fontFamily: fonts.medium, color: '#ABABAB' },
-  timeActive:  { color: colors.primary, fontFamily: fonts.semiBold },
+  timeActive:  { color: '#1A1A1A', fontFamily: fonts.semiBold },
   preview:     { fontSize: 13, fontFamily: fonts.regular, color: '#ABABAB' },
   previewBold: { fontFamily: fonts.medium, color: '#3A3A3C' },
   previewMuted:{ fontStyle: 'italic', color: '#C0C0C8' },
-  dot:         { minWidth: 20, height: 20, borderRadius: 10, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
+  dot:         { minWidth: 20, height: 20, borderRadius: 10, backgroundColor: '#1A1A1A', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
   dotTxt:      { fontSize: 11, fontFamily: fonts.extraBold, color: colors.white },
   rowRight:      { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  replyArrow:    { width: 28, height: 28, borderRadius: 14, backgroundColor: `${colors.primary}12`, alignItems: 'center', justifyContent: 'center' },
-  replyArrowActive: { backgroundColor: colors.primary },
+  replyArrow:    { width: 28, height: 28, borderRadius: 14, backgroundColor: '#F5F5F7', alignItems: 'center', justifyContent: 'center' },
+  replyArrowActive: { backgroundColor: '#1A1A1A' },
 
   /* ── Empty states ── */
   empty:       { alignItems: 'center', paddingTop: 100, paddingHorizontal: 48, gap: 10 },
@@ -1480,7 +1480,7 @@ const s = StyleSheet.create({
   tabBtnActive: { backgroundColor: colors.black, borderColor: colors.black },
   tabBtnTxt:    { fontFamily: fonts.semiBold, fontSize: 14, color: colors.gray500 },
   tabBtnTxtActive: { color: colors.white },
-  tabBadge:     { backgroundColor: colors.primary, borderRadius: 10, minWidth: 18, height: 18, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  tabBadge:     { backgroundColor: '#1A1A1A', borderRadius: 10, minWidth: 18, height: 18, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
   tabBadgeTxt:  { fontFamily: fonts.bold, fontSize: 11, color: colors.white },
 
   livePill:    { backgroundColor: '#FF6766', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 },
@@ -1493,7 +1493,7 @@ const s = StyleSheet.create({
     marginBottom: 10, marginTop: 14,
   },
   invitesBadge: {
-    backgroundColor: colors.primary, borderRadius: 10,
+    backgroundColor: '#1A1A1A', borderRadius: 10,
     minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5,
   },
   invitesBadgeTxt:    { fontFamily: fonts.bold, fontSize: 11, color: colors.white },
@@ -1541,10 +1541,10 @@ const s = StyleSheet.create({
 
 const q = StyleSheet.create({
   container: {
-    backgroundColor: `${colors.primary}08`,
+    backgroundColor: '#FAFAFB',
     borderTopWidth: StyleSheet.hairlineWidth,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: `${colors.primary}25`,
+    borderColor: '#EDEDF1',
     paddingHorizontal: 16,
     paddingTop: 10,
     paddingBottom: 12,
@@ -1553,7 +1553,7 @@ const q = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   replyLabel: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   replyTxt:   { fontSize: 13, fontFamily: fonts.medium, color: colors.gray600 },
-  replyName:  { fontFamily: fonts.bold, color: colors.primary },
+  replyName:  { fontFamily: fonts.bold, color: '#1A1A1A' },
   row:        { flexDirection: 'row', alignItems: 'center', gap: 10 },
   input: {
     flex: 1,
@@ -1655,7 +1655,7 @@ const g = StyleSheet.create({
 
 // ── Suggested user row ────────────────────────────────────────────────────────
 const sg = StyleSheet.create({
-  row: { backgroundColor: '#FFFAFB' },
+  row: { backgroundColor: colors.white },
   tag: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  tagTxt: { fontSize: 12, fontFamily: fonts.medium, color: colors.primary },
+  tagTxt: { fontSize: 12, fontFamily: fonts.medium, color: '#6E6E73' },
 })
