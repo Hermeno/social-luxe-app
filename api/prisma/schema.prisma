@@ -51,9 +51,7 @@ model User {
   avatar       String?
   bio          String?
   availability String?  @default("Disponível")
-  ghostMode    Boolean  @default(false)
   viewsPublic          Boolean  @default(false)
-  coinBalance          Int      @default(0)
   contact              String?
   defaultFollowDuration String? @default("forever")
   city                 String?
@@ -98,16 +96,10 @@ model User {
   stories          Story[]
   storyViews       StoryView[]         @relation("StoryViewer")
   reactions        Reaction[]
-  bookmarks        Bookmark[]
   blocksGiven      Block[]             @relation("Blocker")
   blocksReceived   Block[]             @relation("Blocked")
   reports          Report[]
   extendVotes      PostExtendVote[]
-  highlights       Highlight[]
-  coinsSent        LuxeCoin[]          @relation("CoinSender")
-  coinsReceived    LuxeCoin[]          @relation("CoinReceiver")
-  momentos         Momento[]
-  momentoViews     MomentoView[]       @relation("MomentoViewer")
   deviceTokens     DeviceToken[]
   collabPostsA     CollabPost[]        @relation("CollabA")
   collabPostsB     CollabPost[]        @relation("CollabB")
@@ -117,18 +109,11 @@ model User {
   donationsGiven   Donation[]         @relation("DonorDonations")
   donationsReceived Donation[]        @relation("RequesterDonations")
   donationFeedbacks DonationFeedback[] @relation("FeedbackGiver")
-  postStickers     PostSticker[]
-  stickerLikes     StickerLike[]
-  stickerReactions StickerReaction[]
-  stickerViews     StickerView[]
-  travelObjects    TravelObject[]
   unionsAsA        Union[]        @relation("UnionMemberA")
   unionsAsB        Union[]        @relation("UnionMemberB")
   unionInvites     UnionInvite[]
   pairingsAsA      Pairing[]      @relation("PairingUserA")
   pairingsAsB      Pairing[]      @relation("PairingUserB")
-  circleCaptures   CircleCapture[]
-  circleVotes      CircleVote[]
   circleSessionsHosted CircleSession[]       @relation("CircleHost")
   circleMemberships    CircleSessionMember[] @relation("CircleMember")
 }
@@ -153,8 +138,6 @@ model Post {
   partnerAccepted Boolean   @default(false)
   isAnnouncement  Boolean   @default(false)
 
-  stickersEnabled  Boolean   @default(false)
-  isTravelEnabled  Boolean   @default(false)
 
   user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   partnerUser    User?            @relation("PostPartner", fields: [partnerUserId], references: [id], onDelete: SetNull)
@@ -163,107 +146,9 @@ model Post {
   shares         Share[]
   views          View[]
   reactions      Reaction[]
-  bookmarks      Bookmark[]
   extendVotes    PostExtendVote[]
-  coins          LuxeCoin[]
-  stickers       PostSticker[]
-  travelNodes    TravelNode[]
-  travelObjects  TravelObject[]
 }
 
-// ─── Travel Posts ─────────────────────────────────────────────────────────────
-
-model TravelNode {
-  id                 String   @id @default(cuid())
-  postId             String
-  countryCode        String
-  countryName        String
-  views              Int      @default(0)
-  likes              Int      @default(0)
-  comments           Int      @default(0)
-  objectsAdded       Int      @default(0)
-  firstInteractionAt DateTime @default(now())
-  lastInteractionAt  DateTime @default(now()) @updatedAt
-
-  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
-
-  @@unique([postId, countryCode])
-  @@index([postId])
-}
-
-model TravelObject {
-  id          String   @id @default(cuid())
-  postId      String
-  userId      String
-  type        String   @default("emoji")
-  value       String
-  countryCode String
-  createdAt   DateTime @default(now())
-
-  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId],  references: [id], onDelete: Cascade)
-
-  @@index([postId])
-}
-
-// ─── Post Stickers ───────────────────────────────────────────────────────────
-
-model PostSticker {
-  id        String   @id @default(cuid())
-  postId    String
-  userId    String
-  type      String   @default("emoji")
-  emoji     String
-  content   String?
-  x         Float
-  y         Float
-  createdAt DateTime @default(now())
-
-  post      Post              @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  likes     StickerLike[]
-  reactions StickerReaction[]
-  views     StickerView[]
-
-  @@index([postId])
-}
-
-model StickerView {
-  id        String      @id @default(cuid())
-  stickerId String
-  userId    String
-  createdAt DateTime    @default(now())
-
-  sticker PostSticker @relation(fields: [stickerId], references: [id], onDelete: Cascade)
-  user    User        @relation(fields: [userId],    references: [id], onDelete: Cascade)
-
-  @@unique([stickerId, userId])
-}
-
-model StickerLike {
-  id        String      @id @default(cuid())
-  stickerId String
-  userId    String
-  createdAt DateTime    @default(now())
-
-  sticker PostSticker @relation(fields: [stickerId], references: [id], onDelete: Cascade)
-  user    User        @relation(fields: [userId],    references: [id], onDelete: Cascade)
-
-  @@unique([stickerId, userId])
-}
-
-model StickerReaction {
-  id        String      @id @default(cuid())
-  stickerId String
-  userId    String
-  word      String
-  createdAt DateTime    @default(now())
-
-  sticker PostSticker @relation(fields: [stickerId], references: [id], onDelete: Cascade)
-  user    User        @relation(fields: [userId],    references: [id], onDelete: Cascade)
-
-  @@unique([stickerId, userId, word])
-}
 
 // ─── Friendship ───────────────────────────────────────────────────────────────
 
@@ -374,17 +259,6 @@ model View {
   @@unique([userId, postId])
 }
 
-model Bookmark {
-  id        String   @id @default(cuid())
-  userId    String
-  postId    String
-  createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, postId])
-}
 
 // ─── Messages ─────────────────────────────────────────────────────────────────
 
@@ -486,85 +360,6 @@ model PostExtendVote {
   @@unique([postId, userId])
 }
 
-// ─── Highlights ──────────────────────────────────────────────────────────────
-
-model Highlight {
-  id        String          @id @default(cuid())
-  userId    String
-  title     String
-  coverUrl  String?
-  createdAt DateTime        @default(now())
-
-  user  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  posts HighlightPost[]
-}
-
-model HighlightPost {
-  id          String    @id @default(cuid())
-  highlightId String
-  mediaUrl    String
-  mediaType   MediaType
-  caption     String?
-  addedAt     DateTime  @default(now())
-
-  highlight Highlight @relation(fields: [highlightId], references: [id], onDelete: Cascade)
-}
-
-// ─── Challenges ──────────────────────────────────────────────────────────────
-
-model Challenge {
-  id          String   @id @default(cuid())
-  title       String
-  description String
-  hashtag     String   @unique
-  coverUrl    String?
-  startsAt    DateTime
-  endsAt      DateTime
-  createdAt   DateTime @default(now())
-}
-
-// ─── Luxe Coins ──────────────────────────────────────────────────────────────
-
-model LuxeCoin {
-  id         String   @id @default(cuid())
-  senderId   String
-  receiverId String
-  postId     String?
-  amount     Int
-  message    String?
-  createdAt  DateTime @default(now())
-
-  sender   User  @relation("CoinSender",   fields: [senderId],   references: [id], onDelete: Cascade)
-  receiver User  @relation("CoinReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
-  post     Post? @relation(fields: [postId], references: [id], onDelete: SetNull)
-}
-
-// ─── Momento ─────────────────────────────────────────────────────────────────
-
-model Momento {
-  id        String        @id @default(cuid())
-  userId    String
-  latitude  Float
-  longitude Float
-  label     String?
-  expiresAt DateTime
-  createdAt DateTime      @default(now())
-
-  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  viewers MomentoView[]
-}
-
-model MomentoView {
-  id        String   @id @default(cuid())
-  momentoId String
-  viewerId  String
-  createdAt DateTime @default(now())
-
-  momento Momento @relation(fields: [momentoId], references: [id], onDelete: Cascade)
-  viewer  User    @relation("MomentoViewer", fields: [viewerId], references: [id], onDelete: Cascade)
-
-  @@unique([momentoId, viewerId])
-}
 
 // ─── Device Tokens ───────────────────────────────────────────────────────────
 
@@ -762,54 +557,6 @@ model Pairing {
 
 // ─── Círculo (caça a objetos do mundo real, verificada pela comunidade) ──────
 
-enum CircleCaptureStatus {
-  PENDING
-  LIVE
-  REJECTED
-}
-
-model CircleTarget {
-  id        String   @id @default(cuid())
-  title     String
-  emoji     String
-  startsAt  DateTime @default(now())
-  endsAt    DateTime
-  createdAt DateTime @default(now())
-
-  captures CircleCapture[]
-}
-
-model CircleCapture {
-  id         String              @id @default(cuid())
-  targetId   String
-  userId     String
-  mediaUrl   String
-  overlays   Json?               // camadas de emoji: [{ emoji, x, y }] com x/y em fração 0..1
-  status     CircleCaptureStatus @default(PENDING)
-  approvals  Int                 @default(0)
-  rejections Int                 @default(0)
-  createdAt  DateTime            @default(now())
-
-  target CircleTarget @relation(fields: [targetId], references: [id], onDelete: Cascade)
-  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  votes  CircleVote[]
-
-  @@unique([targetId, userId])
-  @@index([targetId, status])
-}
-
-model CircleVote {
-  id        String   @id @default(cuid())
-  captureId String
-  voterId   String
-  match     Boolean
-  createdAt DateTime @default(now())
-
-  capture CircleCapture @relation(fields: [captureId], references: [id], onDelete: Cascade)
-  voter   User          @relation(fields: [voterId], references: [id], onDelete: Cascade)
-
-  @@unique([captureId, voterId])
-}
 
 // ─── Círculo — sessão de foto em grupo, ao vivo com pessoas próximas ─────────
 

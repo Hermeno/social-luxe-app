@@ -319,14 +319,3 @@ export async function getSuggestedUsers(req: AuthRequest, res: Response) {
   } catch (err) { return handleError(res, err) }
 }
 
-export async function toggleGhostMode(req: AuthRequest, res: Response) {
-  try {
-    const { ghostMode } = req.body
-    if (typeof ghostMode !== 'boolean') return badRequest(res, 'ghostMode must be a boolean')
-    const user = await userService.toggleGhostMode(req.user!.userId, ghostMode)
-    return ok(res, user)
-  } catch (err) {
-    if (isSelfRecordNotFound(err)) return unauthorized(res, 'Sessão inválida. Inicia sessão novamente.')
-    return handleError(res, err)
-  }
-}

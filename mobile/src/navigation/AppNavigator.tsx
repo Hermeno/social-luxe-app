@@ -8,16 +8,11 @@ import CreateScreen from '../screens/CreateScreen'
 import ProfileScreen from '../screens/ProfileScreen'
 import ChatScreen from '../screens/MessagesScreen/ChatScreen'
 import TabBar from '../components/TabBar'
-import BookmarksScreen from '../screens/BookmarksScreen'
-import ChallengesScreen from '../screens/ChallengesScreen'
-import CoinsScreen from '../screens/CoinsScreen'
-import MomentoScreen from '../screens/MomentoScreen'
 import NotificationsScreen from '../screens/NotificationsScreen'
 import PostViewerScreen from '../screens/PostViewerScreen'
 import EditProfileScreen from '../screens/EditProfileScreen'
 import StoryViewerScreen from '../screens/StoryViewerScreen'
 import CreateStoryScreen from '../screens/CreateStoryScreen'
-import HighlightsScreen from '../screens/HighlightsScreen'
 import AboutScreen from '../screens/AboutScreen'
 import VerifiedScreen from '../screens/VerifiedScreen'
 import SettingsScreen from '../screens/SettingsScreen'
@@ -40,7 +35,7 @@ import { StoryGroup } from '../services/story.service'
 export type AppTabParams = {
   Feed: undefined
   Messages: undefined
-  Create: undefined          // accessed via FeedHeader / ChallengesScreen, not shown in tab bar
+  Create: undefined          // accessed via FeedHeader, not shown in tab bar
   Circle: undefined
   Profile: { userId?: string }
 }
@@ -51,10 +46,6 @@ export type AppStackParams = {
   Chat: { userId: string; userName: string; userAvatar: string | null; partnerHasPosts?: boolean }
   About: undefined
   Verified: undefined
-  Bookmarks: undefined
-  Challenges: undefined
-  Coins: undefined
-  Momento: undefined
   Notifications: undefined
   PostViewer: { posts: Post[]; startIndex: number }
   EditProfile: undefined
@@ -68,7 +59,6 @@ export type AppStackParams = {
   Help: undefined
   StoryViewer: { groups: StoryGroup[]; startGroupIndex: number }
   CreateStory: undefined
-  Highlights: { userId: string }
   Donations: undefined
   CreateDonation: undefined
   DonationDetail: { donationId: string }
@@ -127,16 +117,11 @@ export default function AppNavigator({ defaultTab }: { defaultTab: 'Feed' | 'Mes
       <Stack.Screen name="Tabs">{() => <Tabs defaultTab={defaultTab} />}</Stack.Screen>
       <Stack.Screen name="Profile" component={ProfileScreen} />
       <Stack.Screen name="Chat" component={ChatScreen} />
-      <Stack.Screen name="Bookmarks" component={BookmarksScreen} />
-      <Stack.Screen name="Challenges" component={ChallengesScreen} />
-      <Stack.Screen name="Coins" component={CoinsScreen} />
-      <Stack.Screen name="Momento" component={MomentoScreen} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
       <Stack.Screen name="PostViewer" component={PostViewerScreen} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="StoryViewer" component={StoryViewerScreen} />
       <Stack.Screen name="CreateStory" component={CreateStoryScreen} />
-      <Stack.Screen name="Highlights" component={HighlightsScreen} />
       <Stack.Screen name="About" component={AboutScreen} />
       <Stack.Screen name="Verified" component={VerifiedScreen} />
       <Stack.Screen name="Settings" component={SettingsScreen} />

@@ -13,13 +13,12 @@ export async function createPost(
   partnerUserId?: string,
   isAnnouncement?: boolean,
   deviceModel?: string,
-  stickersEnabled?: boolean,
 ) {
   const expiresAt = isAnnouncement
     ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
     : new Date(Date.now() + POST_INITIAL_HOURS * 60 * 60 * 1000)
   const post = await prisma.post.create({
-    data: { userId, mediaUrl, mediaType, caption, bgColor, expiresAt, partnerUserId: partnerUserId ?? null, isAnnouncement: isAnnouncement ?? false, deviceModel: deviceModel ?? null, stickersEnabled: stickersEnabled ?? false },
+    data: { userId, mediaUrl, mediaType, caption, bgColor, expiresAt, partnerUserId: partnerUserId ?? null, isAnnouncement: isAnnouncement ?? false, deviceModel: deviceModel ?? null },
     include: {
       user:        { select: { id: true, name: true, avatar: true, viewsPublic: true, showDevice: true, statusLabel: true } },
       partnerUser: { select: { id: true, name: true, avatar: true } },
@@ -75,112 +74,9 @@ function haversine(lat1: number, lng1: number, lat2: number, lng2: number) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
-// ─── Sticker service functions ───────────────────────────────────────────────
-
-type RawStickerRow = {
-  id: string; postId: string; userId: string; type: string; emoji: string
-  content: string | null; x: number; y: number; createdAt: Date
-  user:  { id: string; name: string; avatar: string | null }
-  likes: { userId: string }[]
-  views: { userId: string }[]
-}
-
-function formatSticker(s: RawStickerRow, requesterId?: string) {
-  return {
-    id:        s.id,
-    postId:    s.postId,
-    userId:    s.userId,
-    type:      s.type,
-    emoji:     s.emoji,
-    content:   s.content,
-    x:         s.x,
-    y:         s.y,
-    createdAt: s.createdAt,
-    user:      s.user,
-    likeCount: s.likes.length,
-    myLike:    s.likes.some((l) => l.userId === requesterId),
-    viewCount: s.views.length,
-  }
-}
-
-export async function getStickers(postId: string, requesterId?: string) {
-  const rows = await prisma.postSticker.findMany({
-    where:   { postId },
-    include: {
-      user:  { select: { id: true, name: true, avatar: true } },
-      likes: { select: { userId: true } },
-      views: { select: { userId: true } },
-    },
-    orderBy: { createdAt: 'asc' },
-  })
-  return rows.map((s) => formatSticker(s as RawStickerRow, requesterId))
-}
-
-export async function likeSticker(userId: string, stickerId: string) {
-  const existing = await prisma.stickerLike.findUnique({
-    where: { stickerId_userId: { stickerId, userId } },
-  })
-  if (existing) {
-    await prisma.stickerLike.delete({ where: { stickerId_userId: { stickerId, userId } } })
-    return { liked: false }
-  }
-  await prisma.stickerLike.create({ data: { stickerId, userId } })
-  return { liked: true }
-}
-
-export async function viewSticker(userId: string, stickerId: string) {
-  await prisma.stickerView.upsert({
-    where:  { stickerId_userId: { stickerId, userId } },
-    update: {},
-    create: { stickerId, userId },
-  })
-}
-
-const STICKER_LIMIT = 50
-
-export async function addSticker(userId: string, postId: string, emoji: string, x: number, y: number, type = 'emoji', content?: string) {
-  const post = await prisma.post.findUnique({ where: { id: postId }, select: { stickersEnabled: true } })
-  if (!post?.stickersEnabled) throw new Error('Stickers not enabled for this post')
-  const count = await prisma.postSticker.count({ where: { postId } })
-  if (count >= STICKER_LIMIT) throw new Error('Sticker limit reached')
-  const sticker = await prisma.postSticker.create({
-    data:    { postId, userId, emoji, x, y, type, content: content ?? null },
-    include: { user: { select: { id: true, name: true, avatar: true } } },
-  })
-  recalcPostLife(postId).catch(() => {})
-  return sticker
-}
-
-export async function removeSticker(userId: string, stickerId: string) {
-  const sticker = await prisma.postSticker.findUnique({
-    where:   { id: stickerId },
-    include: { post: { select: { userId: true } } },
-  })
-  if (!sticker) throw new Error('Not found')
-  // Only the sticker's creator or the post owner may delete
-  if (sticker.userId !== userId && sticker.post.userId !== userId) throw new Error('Not authorized')
-  await prisma.postSticker.delete({ where: { id: stickerId } })
-}
-
-// Reposicionar um objeto (arrastar). Mesmas permissões do delete: autor do
-// objeto ou dono do post. x/y em percentagem (0–100), com margem de segurança.
-export async function moveSticker(userId: string, stickerId: string, x: number, y: number) {
-  const sticker = await prisma.postSticker.findUnique({
-    where:   { id: stickerId },
-    include: { post: { select: { userId: true } } },
-  })
-  if (!sticker) throw new Error('Not found')
-  if (sticker.userId !== userId && sticker.post.userId !== userId) throw new Error('Not authorized')
-  const cx = Math.max(3, Math.min(97, Number(x)))
-  const cy = Math.max(3, Math.min(97, Number(y)))
-  if (!Number.isFinite(cx) || !Number.isFinite(cy)) throw new Error('Invalid position')
-  await prisma.postSticker.update({ where: { id: stickerId }, data: { x: cx, y: cy } })
-  return { ok: true }
-}
-
 // ─── Feed meta helpers ────────────────────────────────────────────────────────
 
-// Fetch up to 4 unique non-author commenters, stickers, and the caller's vote
+// Fetch up to 4 unique non-author commenters and the caller's vote
 // status for each post — all in O(1) round-trips regardless of post count.
 async function attachRecentCommenters(posts: any[], userId?: string): Promise<any[]> {
   const allPostIds      = posts.map((p) => p.id)
@@ -198,25 +94,6 @@ async function attachRecentCommenters(posts: any[], userId?: string): Promise<an
       if (!byPost.has(c.postId)) byPost.set(c.postId, [])
       byPost.get(c.postId)!.push(c)
     }
-  }
-
-  // ── Stickers ────────────────────────────────────────────────────────────────
-  const stickerEnabledIds = posts.filter((p) => p.stickersEnabled).map((p) => p.id)
-  const allStickers = stickerEnabledIds.length > 0
-    ? await prisma.postSticker.findMany({
-        where:   { postId: { in: stickerEnabledIds } },
-        include: {
-          user:  { select: { id: true, name: true, avatar: true } },
-          likes: { select: { userId: true } },
-          views: { select: { userId: true } },
-        },
-        orderBy: { createdAt: 'asc' },
-      })
-    : []
-  const stickersByPost = new Map<string, ReturnType<typeof formatSticker>[]>()
-  for (const s of allStickers) {
-    if (!stickersByPost.has(s.postId)) stickersByPost.set(s.postId, [])
-    stickersByPost.get(s.postId)!.push(formatSticker(s as RawStickerRow, userId))
   }
 
   // ── Vote extend + User likes ─────────────────────────────────────────────────
@@ -249,7 +126,6 @@ async function attachRecentCommenters(posts: any[], userId?: string): Promise<an
     return {
       ...p,
       recentCommenters,
-      stickers:       stickersByPost.get(p.id) ?? [],
       hasVotedExtend: votedPostIds.has(p.id),
       userLiked:      likedPostIds.has(p.id),
     }
@@ -407,7 +283,7 @@ async function extendLife(postId: string, minutes: number) {
 // Todo post nasce com 24h. Interações somam pontos; ao atingir um nível, a vida
 // (contada a partir do createdAt) sobe: 3 dias → 10 → 30 → 1 ano → para sempre.
 // A expiração nunca encolhe — só cresce.
-const ENGAGE_WEIGHTS = { view: 1, like: 3, reaction: 3, sticker: 4, comment: 5, share: 8 }
+const ENGAGE_WEIGHTS = { view: 1, like: 3, reaction: 3, comment: 5, share: 8 }
 const DAY_MS = 24 * 60 * 60 * 1000
 const LIFE_TIERS: { minScore: number; lifeMs: number }[] = [
   { minScore: 2000, lifeMs: 100 * 365 * DAY_MS },  // para sempre (100 anos)
@@ -422,7 +298,7 @@ export async function recalcPostLife(postId: string) {
     where:  { id: postId },
     select: {
       createdAt: true, expiresAt: true, isAnnouncement: true, deletedAt: true,
-      _count: { select: { likes: true, comments: true, shares: true, views: true, stickers: true } },
+      _count: { select: { likes: true, comments: true, shares: true, views: true } },
     },
   })
   if (!post || post.isAnnouncement || post.deletedAt) return
@@ -433,7 +309,6 @@ export async function recalcPostLife(postId: string) {
     c.views    * ENGAGE_WEIGHTS.view +
     c.likes    * ENGAGE_WEIGHTS.like +
     reactions  * ENGAGE_WEIGHTS.reaction +
-    c.stickers * ENGAGE_WEIGHTS.sticker +
     c.comments * ENGAGE_WEIGHTS.comment +
     c.shares   * ENGAGE_WEIGHTS.share
 
@@ -459,9 +334,6 @@ export async function likePost(userId: string, postId: string) {
 }
 
 export async function addView(userId: string, postId: string) {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { ghostMode: true } })
-  if (user?.ghostMode) return
-
   await prisma.view.upsert({
     where: { userId_postId: { userId, postId } },
     update: {},
@@ -480,7 +352,6 @@ export async function deletePost(userId: string, postId: string) {
     prisma.comment.deleteMany({ where: { postId } }),
     prisma.view.deleteMany({ where: { postId } }),
     prisma.share.deleteMany({ where: { postId } }),
-    prisma.bookmark.deleteMany({ where: { postId } }),
     prisma.reaction.deleteMany({ where: { postId } }),
     prisma.postExtendVote.deleteMany({ where: { postId } }),
     prisma.post.delete({ where: { id: postId } }),
@@ -520,7 +391,6 @@ export async function repostPost(userId: string, postId: string) {
       mediaType:       original.mediaType,
       caption:         original.caption,
       bgColor:         original.bgColor,
-      stickersEnabled: original.stickersEnabled,
       expiresAt,
     },
     include: {

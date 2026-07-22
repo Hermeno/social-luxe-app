@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
 import {
   View, Text, FlatList, StyleSheet, TouchableOpacity,
-  TextInput, KeyboardAvoidingView, Platform, ActivityIndicator,
+  TextInput, Platform, ActivityIndicator,
   Animated, Alert, Modal, Switch,
 } from 'react-native'
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -400,7 +401,7 @@ export default function UnionChatScreen() {
   const displayName = otherUnion?.name ?? route.params.unionName ?? t.un_union
 
   return (
-    <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={s.root} behavior="padding">
       {/* Header */}
       <LinearGradient colors={['#fff', '#fff']} style={[s.header, { paddingTop: insets.top + 4 }]}>
         <TouchableOpacity style={s.backBtn} onPress={() => nav.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>

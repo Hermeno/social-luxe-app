@@ -162,10 +162,3 @@ export async function getMutualConnections(viewerId: string, targetId: string, l
   return { total: ids.length, users }
 }
 
-export async function toggleGhostMode(userId: string, ghostMode: boolean) {
-  return prisma.user.update({
-    where: { id: userId },
-    data: { ghostMode },
-    select: { id: true, ghostMode: true },
-  })
-}

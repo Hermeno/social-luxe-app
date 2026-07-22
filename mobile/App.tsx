@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
+import { KeyboardProvider } from 'react-native-keyboard-controller'
 import { useFonts } from 'expo-font'
 import {
   GoogleSansFlex_400Regular,
@@ -279,6 +280,11 @@ export default function App() {
 
   return (
     <GestureHandlerRootView style={s.root}>
+      {/* KeyboardProvider: lê o inset real do teclado (WindowInsets IME no
+          Android) em vez de o adivinhar por eventos. É o que permite ao
+          KeyboardAvoidingView do keyboard-controller funcionar em edge-to-edge,
+          onde o do React Native falha. Tem de envolver a app toda. */}
+      <KeyboardProvider>
       <SafeAreaProvider style={s.root}>
         <StatusBar style="light" />
         {!ready ? (
@@ -307,6 +313,7 @@ export default function App() {
           </>
         )}
       </SafeAreaProvider>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   )
 }

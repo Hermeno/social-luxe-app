@@ -3,7 +3,6 @@ import {
   View, Text, TextInput, TouchableOpacity,
   ScrollView, StyleSheet,
 } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { Search } from 'lucide-react-native'
@@ -35,7 +34,6 @@ const BADGE_SIZE   = 21
 const BUBBLE_SIZE  = 56
 const ONLINE_THRESH = 5 * 60 * 1000
 
-const GRAD: [string, string, string] = ['#CA2851', '#FF6766', '#FFB173']
 
 function resolveAvatar(uri: string | null | undefined): string | null {
   if (!uri) return null
@@ -49,7 +47,6 @@ function isOnlineByLastSeen(lastSeen?: string | null): boolean {
 
 export interface FeedHeaderProps {
   filteredGroups:  FeedUserGroup[]
-  viewedIds:       Set<string>
   activeUserId:    string | undefined
   searchMode:      boolean
   searchQuery:     string
@@ -61,7 +58,7 @@ export interface FeedHeaderProps {
 }
 
 export default memo(function FeedHeader({
-  filteredGroups, viewedIds, activeUserId,
+  filteredGroups, activeUserId,
   searchMode, searchQuery,
   onSearchClose, onSearchChange, onSearchPress,
   onBubblePress, onCreatePress,
@@ -157,19 +154,19 @@ export default memo(function FeedHeader({
                 </View>
               )}
             </View>
-            <LinearGradient colors={GRAD} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.addBadge}>
+            {/* Sólido, não gradiente: a fila inteira usa uma cor só */}
+            <View style={s.addBadge}>
               <Ionicons name="add" size={13} color="#fff" />
-            </LinearGradient>
+            </View>
           </View>
           <Text style={s.tileName} numberOfLines={1}>{t.feed_create}</Text>
         </TouchableOpacity>
 
-        {/* Posters — hairline gradient ring while unseen, quiet when seen,
-            white when on screen. Presence is a single precise dot. */}
+        {/* Posters — anel sempre da mesma cor; só a espessura muda quando o post
+            está no ecrã. Presença é um ponto único e preciso. */}
         {filteredGroups.map((g) => {
-          const online      = isSocketOnline(g.user.id) || isOnlineByLastSeen(g.user.lastSeen)
-          const isActive    = g.user.id === activeUserId
-          const viewedCount = g.posts.filter((p) => viewedIds.has(p.id)).length
+          const online   = isSocketOnline(g.user.id) || isOnlineByLastSeen(g.user.lastSeen)
+          const isActive = g.user.id === activeUserId
 
           return (
             <TouchableOpacity
@@ -184,10 +181,8 @@ export default memo(function FeedHeader({
                 ) : (
                   <SegmentedRing
                     count={g.posts.length}
-                    viewedCount={viewedCount}
                     size={RING_OUTER}
                     strokeWidth={RING_STROKE}
-                    inactiveColor="rgba(0,0,0,0.12)"
                   />
                 )}
                 <View style={s.avatarCircle}>
@@ -313,6 +308,7 @@ const s = StyleSheet.create({
     justifyContent:  'center',
     borderWidth:     2,
     borderColor:     colors.white,
+    backgroundColor: colors.primary,
   },
 
   /* ── Search panel ─────────────────────────────────────────────────────────── */

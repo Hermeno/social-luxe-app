@@ -524,21 +524,7 @@ export const EN: { [K in keyof typeof import('./pt').PT]: string } = {
   dn_reviews: 'Reviews',
 
   // ── Empty states / misc screens ──
-  ch_title: 'Challenges',
-  ch_participate: 'Participate',
-  ch_closed: 'Closed',
-  ch_closes_in: 'Closes in',
-  ch_empty: 'No active challenges',
-  hl_title: 'Highlights',
-  hl_new: 'New Highlight',
-  hl_empty: 'No highlights',
-  bm_title: 'Saved',
-  bm_empty: 'No saved posts',
-  bm_empty_sub: 'Posts you save will appear here',
   feed_no_users: 'No user found',
-  feed_sticker_hint: 'Drag or tap where you want to place it',
-  sticker_add_post: 'Add to post',
-  sticker_add_msg: 'Add message 💌',
   cs_publish: 'Publish Story',
   msg_loading: 'Loading conversations…',
   chat_delete_fail: 'Failed to delete message',
@@ -574,16 +560,6 @@ export const EN: { [K in keyof typeof import('./pt').PT]: string } = {
   fr_duration_q: 'For how long?',
   fr_failed: 'Failed',
 
-  // ── Stickers ──
-  sticker_sec_popular: 'Popular',
-  sticker_sec_mood: 'Mood',
-  sticker_sec_celebration: 'Celebration',
-  sticker_sec_life: 'Life',
-  sticker_gift_banner: '🎆 Bursts into animation when someone taps!',
-  sticker_msg_ph: 'Write something nice...',
-  sticker_tab_emoji: 'Emoji',
-  sticker_tab_gift: 'Gift',
-  sticker_tab_msg: 'Message',
 
   // ── Story / About / Help / Feed misc ──
   cs_publish_fail: 'Couldn’t publish the story.',
@@ -591,7 +567,6 @@ export const EN: { [K in keyof typeof import('./pt').PT]: string } = {
   about_link_fail: 'Couldn’t open the link.',
   help_open_fail: 'Couldn’t open.',
   feed_limit_reached: 'Limit reached',
-  feed_sticker_limit: 'This post already has 50 stickers.',
 
   // ── Create ──
   create_addMedia: 'Add photo or video',
@@ -600,7 +575,6 @@ export const EN: { [K in keyof typeof import('./pt').PT]: string } = {
   create_writeText: 'Write text only',
   create_change: 'Change',
   create_media: 'Media',
-  create_stickers: 'Objects',
   create_announce: 'Announcement',
   create_publish: 'Publish',
   create_captionPh: 'Write a caption…',
@@ -707,6 +681,9 @@ export const EN: { [K in keyof typeof import('./pt').PT]: string } = {
   // ── Comments ──
   circle_countdown_hint: 'Everyone shoots at the same time',
   cmt_edited: 'edited',
+  cmt_now: 'now',
+  cmt_empty_title: 'No comments yet',
+  cmt_empty_sub: 'Be the first to say something.',
   cmt_del_title: 'Delete comment',
   cmt_del_msg: 'This cannot be undone.',
 

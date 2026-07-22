@@ -4,13 +4,8 @@ import postRoutes from './post.routes'
 import userRoutes from './user.routes'
 import messageRoutes from './message.routes'
 import storyRoutes from './story.routes'
-import bookmarkRoutes from './bookmark.routes'
 import blockRoutes from './block.routes'
 import reportRoutes from './report.routes'
-import highlightRoutes from './highlight.routes'
-import challengeRoutes from './challenge.routes'
-import coinRoutes from './coin.routes'
-import momentoRoutes from './momento.routes'
 import notificationRoutes from './notification.routes'
 import friendshipRoutes from './friendship.routes'
 import donationRoutes from './donation.routes'
@@ -25,13 +20,8 @@ router.use('/posts', postRoutes)
 router.use('/users', userRoutes)
 router.use('/messages', messageRoutes)
 router.use('/stories', storyRoutes)
-router.use('/bookmarks', bookmarkRoutes)
 router.use('/blocks', blockRoutes)
 router.use('/reports', reportRoutes)
-router.use('/highlights', highlightRoutes)
-router.use('/challenges', challengeRoutes)
-router.use('/coins', coinRoutes)
-router.use('/momentos', momentoRoutes)
 router.use('/notifications', notificationRoutes)
 router.use('/friendships', friendshipRoutes)
 router.use('/donations', donationRoutes)

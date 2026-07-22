@@ -4,6 +4,9 @@ import {
   Keyboard, Platform, Animated, Pressable, TouchableOpacity, Modal, StatusBar, AppState,
   ScrollView, Alert, TextInput,
 } from 'react-native'
+// Do keyboard-controller, não do react-native: este lê o inset real do teclado
+// (WindowInsets IME) e funciona em edge-to-edge, onde o do RN falha.
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
@@ -15,7 +18,6 @@ import * as msgService from '../../services/message.service'
 import * as pairingService from '../../services/pairing.service'
 import { useAuthStore } from '../../store/auth.store'
 import { useOnlineStore } from '../../store/online.store'
-import { useKeyboardPad } from '../../hooks/useKeyboardPad'
 import { useMessageBadgeStore } from '../../store/messageBadge.store'
 import { getSocket } from '../../socket'
 import { AppStackParams } from '../../navigation/AppNavigator'
@@ -453,9 +455,8 @@ export default function ChatScreen() {
   const { bottom, top } = useSafeAreaInsets()
   const isOnline        = useOnlineStore((s) => s.isOnline(userId))
 
-  // Espaço para o teclado — a conta e o porquê vivem no hook, partilhado com a
-  // folha de comentários para as duas nunca divergirem outra vez.
-  const kbPad = useKeyboardPad()
+  // Teclado: tratado pelo KeyboardAvoidingView do react-native-keyboard-controller
+  // no render. Nada de código manual de teclado nesta app.
 
   const formatDateLabel = useCallback((dateStr: string) => {
     const d    = new Date(dateStr)
@@ -1024,7 +1025,10 @@ export default function ChatScreen() {
 
   return (
     <View style={[t.screen, { paddingTop: top }]}>
-      <Animated.View style={{ flex: 1, paddingBottom: kbPad }}>
+      {/* behavior="padding" nas DUAS plataformas: este KeyboardAvoidingView usa
+          o inset real do teclado, por isso não há o problema antigo de o Android
+          abrir espaço e nós somarmos por cima. */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <ChatHeader
           userName={userName}
           avatarUri={userAvatar ?? null}
@@ -1229,7 +1233,7 @@ export default function ChatScreen() {
             </Pressable>
           </Pressable>
         </Modal>
-      </Animated.View>
+      </KeyboardAvoidingView>
 
     </View>
   )

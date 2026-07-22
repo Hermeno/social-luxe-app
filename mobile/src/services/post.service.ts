@@ -1,5 +1,5 @@
 import { api, uploadApi } from './api'
-import { ApiResponse, Post, Comment, PostSticker } from '../types'
+import { ApiResponse, Post, Comment } from '../types'
 
 export async function getFeed(page = 1): Promise<Post[]> {
   const res = await api.get<ApiResponse<Post[]>>(`/posts/feed?page=${page}`)
@@ -34,10 +34,9 @@ export async function createPost(
   partnerUserId?: string,
   isAnnouncement?: boolean,
   deviceModel?: string,
-  stickersEnabled?: boolean,
 ) {
   if (mediaType === 'TEXT') {
-    const res = await api.post<ApiResponse<Post>>('/posts', { caption, bgColor, partnerUserId, isAnnouncement, deviceModel, stickersEnabled })
+    const res = await api.post<ApiResponse<Post>>('/posts', { caption, bgColor, partnerUserId, isAnnouncement, deviceModel })
     return res.data.data
   }
 
@@ -49,39 +48,10 @@ export async function createPost(
   if (partnerUserId)                form.append('partnerUserId', partnerUserId)
   if (isAnnouncement)               form.append('isAnnouncement', 'true')
   if (deviceModel)                  form.append('deviceModel', deviceModel)
-  if (stickersEnabled)              form.append('stickersEnabled', 'true')
   const res = await uploadApi.post<ApiResponse<Post>>('/posts', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
   return res.data.data
-}
-
-export async function getStickers(postId: string): Promise<PostSticker[]> {
-  const res = await api.get<ApiResponse<PostSticker[]>>(`/posts/${postId}/stickers`)
-  return res.data.data
-}
-
-export async function addSticker(postId: string, emoji: string, x: number, y: number, type = 'emoji', content?: string): Promise<PostSticker> {
-  const res = await api.post<ApiResponse<PostSticker>>(`/posts/${postId}/stickers`, { emoji, x, y, type, content })
-  return res.data.data
-}
-
-export async function removeSticker(postId: string, stickerId: string): Promise<void> {
-  await api.delete(`/posts/${postId}/stickers/${stickerId}`)
-}
-
-// Reposicionar um objeto arrastado (x/y em percentagem 0–100)
-export async function moveSticker(stickerId: string, x: number, y: number): Promise<void> {
-  await api.patch(`/posts/stickers/${stickerId}`, { x, y })
-}
-
-export async function likeSticker(stickerId: string): Promise<{ liked: boolean }> {
-  const res = await api.post<ApiResponse<{ liked: boolean }>>(`/posts/stickers/${stickerId}/like`)
-  return res.data.data
-}
-
-export async function viewSticker(stickerId: string): Promise<void> {
-  await api.post(`/posts/stickers/${stickerId}/view`)
 }
 
 export async function getPartnerPostInvites(): Promise<Post[]> {

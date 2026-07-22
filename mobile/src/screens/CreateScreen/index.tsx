@@ -62,7 +62,6 @@ export default function CreateScreen() {
   const [loading,          setLoading]          = useState(false)
   const [includePartner,   setIncludePartner]   = useState(false)
   const [isAnnouncement,   setIsAnnouncement]   = useState(false)
-  const [stickersEnabled,  setStickersEnabled]  = useState(true)
   const [myUnion,          setMyUnion]          = useState<Union | null>(null)
 
   useEffect(() => {
@@ -166,7 +165,6 @@ export default function CreateScreen() {
             partnerId,
             isAnnouncement,
             deviceModel,
-            stickersEnabled,
           )
         : await createPost(
             null,
@@ -176,7 +174,6 @@ export default function CreateScreen() {
             partnerId,
             isAnnouncement,
             deviceModel,
-            stickersEnabled,
           )
 
       if (newPost) {
@@ -187,7 +184,6 @@ export default function CreateScreen() {
       setAlbum(null)
       setBgKey('gray')
       setIsAnnouncement(false)
-      setStickersEnabled(true)
       setIncludePartner(false)
       toast.success(t.feed_published, isAnnouncement ? t.feed_announcement_sub : t.feed_published_sub)
       nav.navigate('Feed' as never)
@@ -414,15 +410,6 @@ export default function CreateScreen() {
               </Text>
             </TouchableOpacity>
           )}
-
-          <TouchableOpacity
-            style={[s.chip, textMode && s.chipLight, stickersEnabled && s.chipOn]}
-            onPress={() => setStickersEnabled((v) => !v)}
-            activeOpacity={0.8}
-          >
-            <Text style={stickersEnabled ? s.chipStarOn : textMode ? s.chipStarOn : s.chipStar}>✦</Text>
-            <Text style={[s.chipTxt, textMode && s.chipTxtLight, stickersEnabled && s.chipTxtOn]}>{t.create_stickers}</Text>
-          </TouchableOpacity>
 
           {isAdmin && (
             <TouchableOpacity

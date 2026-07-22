@@ -22,8 +22,6 @@ async function hardDeletePost(postId: string, mediaUrl: string | null): Promise<
   await prisma.$transaction([
     prisma.postExtendVote.deleteMany({ where: { postId } }),
     prisma.reaction.deleteMany({ where: { postId } }),
-    prisma.bookmark.deleteMany({ where: { postId } }),
-    prisma.luxeCoin.deleteMany({ where: { postId } }),
     prisma.share.deleteMany({ where: { postId } }),
     prisma.view.deleteMany({ where: { postId } }),
     prisma.like.deleteMany({ where: { postId } }),
@@ -89,18 +87,12 @@ async function processExpiredStories() {
   }
 }
 
-// Momentos have no media — a bulk delete is enough (views cascade)
-async function processExpiredMomentos() {
-  await prisma.momento.deleteMany({ where: { expiresAt: { lte: new Date() } } })
-}
-
 async function runCleanup() {
   await processExpiredPosts().catch((err) => console.error('[Cron] post cleanup failed:', err))
   await processExpiredStories().catch((err) => console.error('[Cron] story cleanup failed:', err))
-  await processExpiredMomentos().catch((err) => console.error('[Cron] momento cleanup failed:', err))
 }
 
 export function startCleanupJob() {
   cron.schedule('0 * * * *', runCleanup)
-  console.log('[Cron] Cleanup job started (posts, stories, momentos)')
+  console.log('[Cron] Cleanup job started (posts, stories)')
 }

@@ -4,23 +4,16 @@ import { colors } from '../theme'
 
 interface Props {
   count: number
-  viewedCount?: number
   size: number
   strokeWidth?: number
-  inactiveColor?: string
 }
 
-// Todos os anéis da app usam uma única cor: o crimson da marca.
-export default function SegmentedRing({
-  count,
-  viewedCount = 0,
-  size,
-  strokeWidth = 3,
-  inactiveColor = 'rgba(0,0,0,0.12)',
-}: Props) {
+// UMA cor, sempre: o crimson da marca. Sem variação por visto/não visto — se o
+// anel mudasse de cor conforme o estado, a fila deixava de se ler como um só
+// conjunto. O que distingue estados é a espessura do traço, não a cor.
+export default function SegmentedRing({ count, size, strokeWidth = 3 }: Props) {
   if (count === 0) return null
 
-  const allViewed = viewedCount >= count
   const r  = (size - strokeWidth) / 2
   const cx = size / 2
   const cy = size / 2
@@ -32,7 +25,7 @@ export default function SegmentedRing({
         cy={cy}
         r={r}
         fill="none"
-        stroke={allViewed ? inactiveColor : colors.primary}
+        stroke={colors.primary}
         strokeWidth={strokeWidth}
       />
     </Svg>

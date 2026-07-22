@@ -17,7 +17,7 @@ export async function register(body: RegisterBody) {
 
   const user = await prisma.user.create({
     data: { name, phone, countryCode, password: hashed },
-    select: { id: true, name: true, phone: true, countryCode: true, avatar: true, bio: true, availability: true, ghostMode: true, coinBalance: true, createdAt: true },
+    select: { id: true, name: true, phone: true, countryCode: true, avatar: true, bio: true, availability: true,  createdAt: true },
   })
 
   const token = signToken({ userId: user.id, phone: user.phone })
@@ -43,8 +43,8 @@ export async function getProfile(userId: string) {
     where: { id: userId },
     select: {
       id: true, name: true, phone: true, countryCode: true,
-      avatar: true, bio: true, availability: true, ghostMode: true,
-      coinBalance: true, viewsPublic: true, contact: true,
+      avatar: true, bio: true, availability: true,
+      viewsPublic: true, contact: true,
       defaultFollowDuration: true, city: true, district: true,
       autoReply: true, showDevice: true, statusLabel: true, interests: true,
       isAdmin: true, createdAt: true,

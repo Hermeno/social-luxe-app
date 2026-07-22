@@ -542,21 +542,7 @@ export const PT = {
   dn_reviews: 'Avaliações',
 
   // ── Empty states / misc screens ──
-  ch_title: 'Desafios',
-  ch_participate: 'Participar',
-  ch_closed: 'Encerrado',
-  ch_closes_in: 'Encerra em',
-  ch_empty: 'Nenhum desafio ativo',
-  hl_title: 'Destaques',
-  hl_new: 'Novo Destaque',
-  hl_empty: 'Nenhum destaque',
-  bm_title: 'Salvos',
-  bm_empty: 'Nenhum post salvo',
-  bm_empty_sub: 'Posts que você salvar aparecerão aqui',
   feed_no_users: 'Nenhum utilizador encontrado',
-  feed_sticker_hint: 'Arraste ou toque onde deseja colocar',
-  sticker_add_post: 'Adicionar ao post',
-  sticker_add_msg: 'Adicionar mensagem 💌',
   cs_publish: 'Publicar Story',
   msg_loading: 'A carregar conversas…',
   chat_delete_fail: 'Falha ao excluir mensagem',
@@ -592,16 +578,6 @@ export const PT = {
   fr_duration_q: 'Por quanto tempo?',
   fr_failed: 'Falhou',
 
-  // ── Stickers ──
-  sticker_sec_popular: 'Popular',
-  sticker_sec_mood: 'Mood',
-  sticker_sec_celebration: 'Celebração',
-  sticker_sec_life: 'Vida',
-  sticker_gift_banner: '🎆 Explode em animação quando alguém tocar!',
-  sticker_msg_ph: 'Escreve algo bonito...',
-  sticker_tab_emoji: 'Emoji',
-  sticker_tab_gift: 'Presente',
-  sticker_tab_msg: 'Mensagem',
 
   // ── Story / About / Help / Feed misc ──
   cs_publish_fail: 'Não foi possível publicar o story.',
@@ -609,7 +585,6 @@ export const PT = {
   about_link_fail: 'Não foi possível abrir o link.',
   help_open_fail: 'Não foi possível abrir.',
   feed_limit_reached: 'Limite atingido',
-  feed_sticker_limit: 'Este post já tem 50 stickers.',
 
   // ── Create ──
   create_addMedia: 'Adicionar foto ou vídeo',
@@ -618,7 +593,6 @@ export const PT = {
   create_writeText: 'Escrever só texto',
   create_change: 'Alterar',
   create_media: 'Media',
-  create_stickers: 'Objetos',
   create_announce: 'Anúncio',
   create_publish: 'Publicar',
   create_captionPh: 'Escreve uma legenda…',
@@ -725,6 +699,9 @@ export const PT = {
   // ── Comentários ──
   circle_countdown_hint: 'Toda a gente dispara ao mesmo tempo',
   cmt_edited: 'editado',
+  cmt_now: 'agora',
+  cmt_empty_title: 'Ainda sem comentários',
+  cmt_empty_sub: 'Sê o primeiro a dizer alguma coisa.',
   cmt_del_title: 'Eliminar comentário',
   cmt_del_msg: 'Esta ação não pode ser desfeita.',
 

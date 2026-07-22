@@ -16,6 +16,7 @@ import {
 import { Image } from 'expo-image'
 import { setStatusBarStyle } from 'expo-status-bar'
 import { useNavigation } from '@react-navigation/native'
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { useFocusEffect } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -36,10 +37,6 @@ import PostInfo from './PostInfo'
 import CommentSheet from '../../components/CommentSheet'
 import FeedHeader, { FeedUserGroup as UserGroup } from './FeedHeader'
 import PostAlbumGrid from './PostAlbumGrid'
-import StickerLayer from './StickerLayer'
-import StickerPicker, { StickerChoice } from './StickerPicker'
-import ObjectBar from './ObjectBar'
-import { PostSticker } from '../../types'
 import { API_BASE } from '../../config'
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window')
@@ -66,6 +63,9 @@ export default function FeedScreen() {
     return `${Math.floor(h / 24)}${t.time_d_ago}`
   }
   const nav              = useNavigation<Nav>()
+  // A barra de separadores flutua por cima do ecrã; a folha de comentários
+  // precisa de saber a altura dela para o campo de escrever não ficar tapado.
+  const tabBarHeight     = useBottomTabBarHeight()
   const user             = useAuthStore((s) => s.user)
 
   // Consume a post published from CreateScreen → prepend instantly
@@ -112,23 +112,11 @@ export default function FeedScreen() {
   const [commentDeltas, setCommentDeltas] = useState<Record<string, number>>({})
   const [likedPostIds,  setLikedPostIds]  = useState<Set<string>>(new Set())
   const [repostedIds,   setRepostedIds]   = useState<Set<string>>(new Set())
-  const [stickersHidden, setStickersHidden] = useState<Set<string>>(new Set())
-  const [stickerPickerOpen,  setStickerPickerOpen]  = useState(false)
-  const [pendingSticker, setPendingSticker] = useState<StickerChoice | null>(null)
-  const [localStickers, setLocalStickers] = useState<Record<string, PostSticker[]>>({})
-  const [stickerDragging, setStickerDragging] = useState(false)
-  const stickerDragPos = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current
   // Refs needed inside PanResponder (avoids stale closure in useMemo)
-  const pendingStickerRef    = useRef(pendingSticker)
-  pendingStickerRef.current  = pendingSticker
-  const stickerPickerRef     = useRef(stickerPickerOpen)
-  stickerPickerRef.current   = stickerPickerOpen
   const viewerWRef           = useRef(viewerW)
   viewerWRef.current         = viewerW
   const viewerHRef           = useRef(viewerH)
   viewerHRef.current         = viewerH
-  const handlePlaceStickerRef = useRef(handlePlaceSticker)
-  handlePlaceStickerRef.current = handlePlaceSticker
   // playerRef assigned below after `player` is declared (line ~213)
   const playerRef            = useRef<ReturnType<typeof useVideoPlayer> | null>(null)
   const pauseTimerRef        = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -142,8 +130,6 @@ export default function FeedScreen() {
   const swipePanResponder = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => false,
     onMoveShouldSetPanResponder: (_, gs) =>
-      !pendingStickerRef.current &&
-      !stickerPickerRef.current &&
       Math.abs(gs.dx) > 20 &&
       Math.abs(gs.dx) > Math.abs(gs.dy) * 1.5,
 
@@ -155,27 +141,6 @@ export default function FeedScreen() {
     },
   }), [])
 
-  // PanResponder — sticker placement. Captures on touch-start (this overlay only
-  // renders while `pendingSticker` is set, so nothing else needs the gesture).
-  // A plain tap places on release with no movement; a drag moves the preview
-  // with the finger via `stickerDragPos` and places at the final release point.
-  const stickerDragResponder = useMemo(() => PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onPanResponderGrant: (e) => {
-      stickerDragPos.setValue({ x: e.nativeEvent.locationX, y: e.nativeEvent.locationY })
-      setStickerDragging(true)
-    },
-    onPanResponderMove: (e) => {
-      stickerDragPos.setValue({ x: e.nativeEvent.locationX, y: e.nativeEvent.locationY })
-    },
-    onPanResponderRelease: (e) => {
-      setStickerDragging(false)
-      const x = Math.max(2, Math.min(98, (e.nativeEvent.locationX / viewerWRef.current) * 100))
-      const y = Math.max(2, Math.min(98, (e.nativeEvent.locationY / viewerHRef.current) * 100))
-      handlePlaceStickerRef.current(x, y)
-    },
-    onPanResponderTerminate: () => setStickerDragging(false),
-  }), [])
   const likedLoadedRef = useRef(false)
   const likedSyncedFromServerRef = useRef(false)
 
@@ -634,90 +599,6 @@ export default function FeedScreen() {
     if (urls.length > 0) prefetchMedia(urls)
   }, [currentIndex])
 
-  const STICKER_LIMIT = 50
-
-  // ── Sticker placement ─────────────────────────────────────────────────────
-  async function placeStickerAt(choice: StickerChoice, x: number, y: number) {
-    const p = post
-    if (!p) return
-
-    const tempId = `temp-${Date.now()}`
-    const tempSticker: PostSticker = {
-      id: tempId, emoji: choice.emoji, type: choice.type, content: choice.content, x, y,
-      user: { id: user?.id ?? '', name: user?.name ?? '', avatar: user?.avatar ?? null },
-    }
-    setLocalStickers((prev) => ({ ...prev, [p.id]: [...(prev[p.id] ?? p.stickers ?? []), tempSticker] }))
-
-    try {
-      const saved = await postService.addSticker(p.id, choice.emoji, x, y, choice.type, choice.content)
-      setLocalStickers((prev) => ({
-        ...prev,
-        [p.id]: (prev[p.id] ?? []).map((s) => s.id === tempId ? saved : s),
-      }))
-    } catch {
-      setLocalStickers((prev) => ({
-        ...prev,
-        [p.id]: (prev[p.id] ?? []).filter((s) => s.id !== tempId),
-      }))
-    }
-  }
-
-  async function handlePlaceSticker(x: number, y: number) {
-    const choice = pendingSticker
-    const p      = post
-    if (!choice || !p) return
-    const stickerCount = (localStickers[p.id] ?? p.stickers ?? []).length
-    if (stickerCount >= STICKER_LIMIT) {
-      setPendingSticker(null)
-      resumeFromCurrent()
-      Alert.alert(t.feed_limit_reached, t.feed_sticker_limit)
-      return
-    }
-    setPendingSticker(null)
-    resumeFromCurrent()
-    placeStickerAt(choice, x, y)
-  }
-
-  // Toque num objeto da barra flutuante → pousa já no post (zona central,
-  // com dispersão leve para não empilhar) e fica arrastável.
-  function handleQuickPlace(emoji: string) {
-    const p = post
-    if (!p) return
-    const count = (localStickers[p.id] ?? p.stickers ?? []).length
-    if (count >= STICKER_LIMIT) {
-      Alert.alert(t.feed_limit_reached, t.feed_sticker_limit)
-      return
-    }
-    const x = 36 + Math.random() * 28   // 36–64%
-    const y = 26 + Math.random() * 26   // 26–52%
-    placeStickerAt({ type: 'emoji', emoji }, x, y)
-  }
-
-  // Arrastou um objeto → fixa a nova posição (otimista) e persiste
-  function handleMoveSticker(stickerId: string, x: number, y: number) {
-    const p = post
-    if (!p) return
-    setLocalStickers((prev) => ({
-      ...prev,
-      [p.id]: (prev[p.id] ?? p.stickers ?? []).map((s) => s.id === stickerId ? { ...s, x, y } : s),
-    }))
-    if (!stickerId.startsWith('temp-')) postService.moveSticker(stickerId, x, y).catch(() => {})
-  }
-
-  function handleRemoveSticker(stickerId: string) {
-    const p = post
-    if (!p) return
-    setLocalStickers((prev) => ({
-      ...prev,
-      [p.id]: (prev[p.id] ?? p.stickers ?? []).filter((s) => s.id !== stickerId),
-    }))
-    postService.removeSticker(p.id, stickerId).catch(() => {})
-  }
-
-  const currentStickers = post
-    ? (localStickers[post.id] ?? post.stickers ?? [])
-    : []
-
   // ── Viewer dimensions measured for reliable native clipping ───────────────
   const videoStyle = useMemo(
     () => viewerH > 0
@@ -732,7 +613,6 @@ export default function FeedScreen() {
       {/* ── Rail: who posted — first-class section at the top ───────────────── */}
       <FeedHeader
         filteredGroups={filteredGroups}
-        viewedIds={viewedIds}
         activeUserId={post?.user.id}
         searchMode={searchMode}
         searchQuery={searchQuery}
@@ -791,9 +671,7 @@ export default function FeedScreen() {
                 ActionBar/PostInfo are outside mediaClip so they always win their own taps.
                 onStart=false means we never steal taps; onMove threshold means we only
                 claim clear horizontal swipes — fingers on video/image can still swipe. */}
-            {!pendingSticker && (
-              <View style={s.absLayer} {...swipePanResponder.panHandlers} />
-            )}
+            <View style={s.absLayer} {...swipePanResponder.panHandlers} />
           </View>
 
           {post.mediaType !== 'TEXT' && (
@@ -818,77 +696,6 @@ export default function FeedScreen() {
             onEdited={(id, caption) => updatePost(id, caption)}
             onBlockingChange={setActionBlocking}
           />
-
-          {/* Sticker placement overlay — drag follows the finger, release to place; a plain tap places instantly */}
-          {pendingSticker && (
-            <View style={s.stickerPlacementOverlay} {...stickerDragResponder.panHandlers}>
-              <View style={s.stickerPlacementDecoLayer} pointerEvents="none" />
-              {!stickerDragging && (
-                <View style={s.stickerDragHintWrap} pointerEvents="none">
-                  <Text style={s.stickerDragHintEmoji}>{pendingSticker.type === 'message' ? '💌' : pendingSticker.emoji}</Text>
-                  <Text style={s.stickerDragHintText}>{t.feed_sticker_hint}</Text>
-                </View>
-              )}
-              {stickerDragging && (
-                <Animated.View
-                  pointerEvents="none"
-                  style={[s.stickerDragFollow, { transform: stickerDragPos.getTranslateTransform() }]}
-                >
-                  <Text style={s.stickerDragFollowEmoji}>{pendingSticker.type === 'message' ? '💌' : pendingSticker.emoji}</Text>
-                </Animated.View>
-              )}
-              <Pressable style={s.stickerPlacementCancel} onPress={() => { setStickerDragging(false); setPendingSticker(null); resumeFromCurrent() }}>
-                <Text style={s.stickerPlacementCancelTxt}>{t.cancel}</Text>
-              </Pressable>
-            </View>
-          )}
-
-          {/* StickerLayer INSIDE viewer, BEFORE ActionBar.
-              Touch order (last child = first to receive tap in Fabric):
-                ActionBar (last)  → buttons win  ✓
-                StickerLayer      → sticker taps win over swipeView  ✓
-                mediaClip/swipe   → falls through to swipe gesture  ✓ */}
-          {post.stickersEnabled && !stickersHidden.has(post.id) && (
-            <StickerLayer
-              postId={post.id}
-              stickers={currentStickers}
-              containerW={viewerW}
-              containerH={viewerH}
-              onLongPress={handleRemoveSticker}
-              onMove={handleMoveSticker}
-              currentUserId={user?.id}
-              postOwnerId={post.userId}
-              onMessageOpen={() => {
-                progressRef.current?.stop()
-                safePlayer(() => player.pause())
-              }}
-              onMessageClose={() => resumeFromCurrent()}
-            />
-          )}
-
-          {/* Objetos flutuam sobre o post: toque → pousa; arrasta para posicionar */}
-          {post.stickersEnabled && !post.isAnnouncement && !pendingSticker && (
-            <ObjectBar
-              hidden={stickersHidden.has(post.id)}
-              onPick={handleQuickPlace}
-              onMore={() => {
-                if ((localStickers[post.id] ?? post.stickers ?? []).length >= STICKER_LIMIT) {
-                  Alert.alert(t.feed_limit_reached, t.feed_sticker_limit)
-                  return
-                }
-                // Fecha a pesquisa (e o teclado) antes do Modal — evita luta de foco
-                if (searchMode) { Keyboard.dismiss(); setSearchMode(false); setSearchQuery('') }
-                progressRef.current?.stop()
-                safePlayer(() => player.pause())
-                setStickerPickerOpen(true)
-              }}
-              onToggleHidden={() => setStickersHidden((prev) => {
-                const s = new Set(prev)
-                s.has(post.id) ? s.delete(post.id) : s.add(post.id)
-                return s
-              })}
-            />
-          )}
 
           <ActionBar
             post={post}
@@ -922,24 +729,12 @@ export default function FeedScreen() {
       {commentPost && (
         <CommentSheet
           post={commentPost}
+          bottomOffset={tabBarHeight}
           onClose={() => setCommentPost(null)}
           onCommentAdded={() => setCommentDeltas((d) => ({ ...d, [commentPost!.id]: (d[commentPost!.id] ?? 0) + 1 }))}
         />
       )}
 
-      <StickerPicker
-        visible={stickerPickerOpen}
-        onClose={() => {
-          setStickerPickerOpen(false)
-          // Resume only if user didn't select a sticker (pendingSticker would resume via placement flow)
-          if (!pendingSticker) resumeFromCurrent()
-        }}
-        onSelect={(choice) => {
-          setStickerPickerOpen(false)
-          setPendingSticker(choice)
-          // Keep paused — user is now in drag-and-drop placement mode
-        }}
-      />
 
     </View>
   )
@@ -1030,44 +825,6 @@ const s = StyleSheet.create({
   progressFull:  { flex: 1, backgroundColor: colors.white },
   progressFill:  { height: '100%', backgroundColor: colors.white },
 
-
-  stickerPlacementOverlay: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    zIndex: 50,
-  },
-  stickerPlacementDecoLayer: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-  },
-  stickerDragHintWrap: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    alignItems: 'center', justifyContent: 'center', gap: 10,
-  },
-  stickerDragHintEmoji: { fontSize: 64, textAlign: 'center' },
-  stickerDragHintText: {
-    color: '#fff', fontSize: 15, fontFamily: fonts.semiBold,
-    textAlign: 'center', letterSpacing: -0.2,
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
-    backgroundColor: 'rgba(0,0,0,0.42)',
-    borderRadius: 16, paddingHorizontal: 18, paddingVertical: 8,
-  },
-  stickerDragFollow: {
-    position: 'absolute', left: -42, top: -42,
-    width: 84, height: 84, borderRadius: 42,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  stickerDragFollowEmoji: { fontSize: 44 },
-  stickerPlacementCancel: {
-    position: 'absolute', bottom: 110,
-    alignSelf: 'center',
-    paddingHorizontal: 28, paddingVertical: 11,
-    borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.18)',
-  },
-  stickerPlacementCancelTxt: {
-    color: '#fff', fontFamily: fonts.semiBold, fontSize: 14,
-  },
 
   emptyViewer:  { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 36, gap: 14 },
   emptyTitle:   { fontSize: 18, fontFamily: fonts.semiBold, color: colors.gray800, letterSpacing: -0.3, textAlign: 'center', marginTop: 4 },
