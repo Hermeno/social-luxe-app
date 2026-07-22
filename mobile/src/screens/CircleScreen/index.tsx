@@ -22,9 +22,9 @@ import { getSocket } from '../../socket'
 import { useT } from '../../i18n'
 
 const SHUTTER_OUTER = 78
-// Tempo para publicar depois de a foto entrar. Mantém em sincronia com
-// PUBLISH_WINDOW_MS em api/src/services/circleSession.service.ts.
-const PUBLISH_WINDOW_MS = 60 * 1000
+// Recurso para o primeiro render, antes de o servidor responder. Quem manda na
+// janela é o servidor (publishWindowMs) — é ele que a aplica ao publicar.
+const PUBLISH_WINDOW_FALLBACK_MS = 60 * 1000
 const SHUTTER_INNER = 62
 const INVITE_TTL_MS = 2 * 60 * 1000   // convite expira em 2 min (igual ao backend)
 
@@ -128,6 +128,8 @@ export default function CircleScreen() {
   const [friendsSheet,  setFriendsSheet]  = useState(false)
   const [friends,       setFriends]       = useState<CircleUser[]>([])
   const [loadingFriends, setLoadingFriends] = useState(false)
+  const [publishWindowMs, setPublishWindowMs] = useState(PUBLISH_WINDOW_FALLBACK_MS)
+  const [withdrawing, setWithdrawing] = useState(false)
 
   const sessionRef = useRef<CircleSession | null>(null)
   sessionRef.current = session
@@ -151,7 +153,7 @@ export default function CircleScreen() {
   const [nowTs, setNowTs] = useState(() => Date.now())
   useEffect(() => {
     if (!myPhotoAt) return
-    const end = new Date(myPhotoAt).getTime() + PUBLISH_WINDOW_MS
+    const end = new Date(myPhotoAt).getTime() + publishWindowMs
     if (Date.now() >= end) { setNowTs(Date.now()); return }   // janela já fechada
     const id = setInterval(() => {
       const t = Date.now()
@@ -159,17 +161,35 @@ export default function CircleScreen() {
       if (t >= end) clearInterval(id)   // fechou: não vale a pena continuar a acordar
     }, 500)
     return () => clearInterval(id)
-  }, [myPhotoAt])
+  }, [myPhotoAt, publishWindowMs])
 
   const publishLeftMs = myPhotoAt
-    ? Math.max(0, PUBLISH_WINDOW_MS - (nowTs - new Date(myPhotoAt).getTime()))
+    ? Math.max(0, publishWindowMs - (nowTs - new Date(myPhotoAt).getTime()))
     : 0
   const canPublish = publishLeftMs > 0 && photoCount >= 1 && !published
 
-  // ── Localização (só se já permitida) ────────────────────────────────────────
+  async function handleWithdraw() {
+    const sid = sessionRef.current?.id
+    if (!sid || withdrawing) return
+    setWithdrawing(true)
+    try {
+      await circle.withdrawMyPhoto(sid)
+      setMembers((prev) => prev.map((m) => m.user.id === myId ? { ...m, photoUrl: null, photoAt: null } : m))
+    } catch {}
+    setWithdrawing(false)
+  }
+
+  // ── Localização ─────────────────────────────────────────────────────────────
+  // Pedimos de facto em vez de só verificar: sem coordenadas o servidor deixa
+  // de filtrar por distância e o "vizinhos a 3 km" passava a ser todos os
+  // mútuos, sem ninguém dar por isso. Quem recusar continua a poder usar o
+  // Círculo — só deixa de ser por proximidade.
   async function getLoc(): Promise<{ lat?: number; lng?: number }> {
     try {
-      const { status } = await Location.getForegroundPermissionsAsync()
+      let { status } = await Location.getForegroundPermissionsAsync()
+      if (status !== 'granted') {
+        ;({ status } = await Location.requestForegroundPermissionsAsync())
+      }
       if (status === 'granted') {
         const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
         return { lat: loc.coords.latitude, lng: loc.coords.longitude }
@@ -195,6 +215,7 @@ export default function CircleScreen() {
     try {
       const st = await circle.openCircle(lat, lng)
       setSession(st.session); setMembers(st.members); setNearby(st.nearby); setInitError(false); setInitDone(true)
+      if (st.publishWindowMs) setPublishWindowMs(st.publishWindowMs)
       return st.session
     } catch {
       setInitError(true); setInitDone(true)
@@ -303,6 +324,7 @@ export default function CircleScreen() {
     try {
       const st = await circle.joinCircle(incoming.sessionId)
       setSession(st.session); setMembers(st.members); setNearby([]); setIncoming(null)
+      if (st.publishWindowMs) setPublishWindowMs(st.publishWindowMs)
     } catch {
       Alert.alert(t.circle_errTitle, t.circle_sessionGone)
       setIncoming(null)
@@ -354,6 +376,7 @@ export default function CircleScreen() {
     try {
       const st = await circle.openCircle(lat, lng)
       setSession(st.session); setMembers(st.members); setNearby(st.nearby)
+      if (st.publishWindowMs) setPublishWindowMs(st.publishWindowMs)
     } catch {}
   }
 
@@ -669,6 +692,16 @@ export default function CircleScreen() {
             </Animated.View>
           </Pressable>
           <Text style={s.shutterHint}>{iHavePhoto ? t.circle_takeAnother : t.circle_takePhoto}</Text>
+
+          {/* Qualquer membro pode publicar o álbum com as fotos de todos, por
+              isso tem de haver forma de tirar a minha de lá sem sair do círculo. */}
+          {iHavePhoto && !published && (
+            <TouchableOpacity onPress={handleWithdraw} activeOpacity={0.7} style={s.withdrawBtn} disabled={withdrawing}>
+              <Text style={s.withdrawTxt}>
+                {withdrawing ? '...' : 'Retirar a minha foto'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       ) : (
         <View style={[s.previewBottom, { paddingBottom: bottom + 62 }]}>
@@ -946,6 +979,11 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center',
   },
   shutterInnerDone: { backgroundColor: colors.primary },
+  withdrawBtn: { marginTop: 10, paddingVertical: 6, paddingHorizontal: 14 },
+  withdrawTxt: {
+    color: 'rgba(255,255,255,0.65)', fontSize: 12.5, fontFamily: fonts.medium,
+    textDecorationLine: 'underline',
+  },
   shutterHint: { color: '#fff', fontSize: 12, fontFamily: fonts.medium, textShadowColor: 'rgba(0,0,0,0.4)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
 
   /* ── Pré-visualização ── */

@@ -4,6 +4,7 @@ import { POST_EXTENSION_THRESHOLD } from '../types'
 import { deleteFromCloudinary } from '../utils/cloudinary.util'
 import { deleteFromR2, isR2Url } from '../utils/r2.util'
 import { expireStaleHalves } from '../services/half.service'
+import { closeStaleSessions } from '../services/circleSession.service'
 
 async function deleteMediaUrl(url: string | null): Promise<void> {
   if (!url) return
@@ -88,13 +89,23 @@ async function processExpiredStories() {
   }
 }
 
+// Sessões de Círculo que passaram da idade: fecham e as fotos que ninguém
+// publicou saem do armazenamento.
+async function processStaleCircles() {
+  const urls = await closeStaleSessions()
+  for (const url of urls) {
+    await deleteMediaUrl(url).catch(() => {})
+  }
+}
+
 async function runCleanup() {
   await processExpiredPosts().catch((err) => console.error('[Cron] post cleanup failed:', err))
   await processExpiredStories().catch((err) => console.error('[Cron] story cleanup failed:', err))
   await expireStaleHalves().catch((err) => console.error('[Cron] half cleanup failed:', err))
+  await processStaleCircles().catch((err) => console.error('[Cron] circle cleanup failed:', err))
 }
 
 export function startCleanupJob() {
   cron.schedule('0 * * * *', runCleanup)
-  console.log('[Cron] Cleanup job started (posts, stories, halves)')
+  console.log('[Cron] Cleanup job started (posts, stories, halves, circles)')
 }

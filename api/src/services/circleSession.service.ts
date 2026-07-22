@@ -6,16 +6,54 @@ import { createAlbumPost } from './post.service'
 const RADIUS_KM = 3
 const INVITE_TTL_MS = 2 * 60 * 1000   // convite expira em 2 minutos
 
+// Uma sessão é um momento, não uma sala permanente. Passado isto o anfitrião
+// abre uma nova em vez de reutilizar a antiga — senão membros e fotos de há
+// semanas continuavam agarrados à mesma sessão.
+export const SESSION_MAX_AGE_MS = 2 * 60 * 60 * 1000   // 2 horas
+
+// Quantas chamadas um anfitrião pode fazer numa janela — um convite é um push
+// no telemóvel de outra pessoa, por isso tem preço.
+const CALL_LIMIT       = 12
+const CALL_WINDOW_MS   = 5 * 60 * 1000
+const CALL_COOLDOWN_MS = 30 * 1000   // insistir na mesma pessoa não repete o push
+
 // Remove convites pendentes (INVITED) com mais de 2 min — evita que alguém
 // aceite 1h depois quando quem chamou já desistiu.
-async function expireInvites(sessionId?: string) {
+// `scope` limita o varrimento: sem ele isto lia a tabela inteira a cada chamada.
+async function expireInvites(scope: { sessionId?: string; userId?: string } = {}) {
   const cutoff = new Date(Date.now() - INVITE_TTL_MS)
   const res = await prisma.circleSessionMember.deleteMany({
-    where: { status: 'INVITED', createdAt: { lt: cutoff }, ...(sessionId ? { sessionId } : {}) },
+    where: {
+      status: 'INVITED',
+      createdAt: { lt: cutoff },
+      ...(scope.sessionId ? { sessionId: scope.sessionId } : {}),
+      ...(scope.userId    ? { userId:    scope.userId }    : {}),
+    },
   }).catch(() => null)
   // Avisa a sessão para os clientes tirarem o convidado da lista de membros —
   // senão ficaria escondido de "chamar mais pessoas" para sempre.
-  if (sessionId && res && res.count > 0) await broadcast(sessionId).catch(() => {})
+  if (scope.sessionId && res && res.count > 0) await broadcast(scope.sessionId).catch(() => {})
+}
+
+// Seguimento mútuo e sem bloqueio em nenhuma direção. É a condição para se
+// poder chamar alguém — a mesma que o `nearbyMutuals` usa para montar a lista,
+// mas verificada também no servidor. Antes vivia só na UI.
+async function canCall(hostId: string, targetId: string): Promise<boolean> {
+  if (hostId === targetId) return false
+  const [iFollow, followsMe, blocked] = await Promise.all([
+    prisma.follow.findFirst({ where: { followerId: hostId,   followingId: targetId }, select: { id: true } }),
+    prisma.follow.findFirst({ where: { followerId: targetId, followingId: hostId },   select: { id: true } }),
+    prisma.block.findFirst({
+      where: {
+        OR: [
+          { blockerId: hostId,   blockedId: targetId },
+          { blockerId: targetId, blockedId: hostId },
+        ],
+      },
+      select: { id: true },
+    }),
+  ])
+  return !!iFollow && !!followsMe && !blocked
 }
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
@@ -81,9 +119,12 @@ async function membersOf(sessionId: string) {
   }))
 }
 
+// Só para quem já aceitou. O estado leva os URLs das fotos, e quem foi chamado
+// mas ainda não entrou não tem nada que os receber — para esse a chamada chega
+// pelo evento `circle:called`.
 async function broadcast(sessionId: string) {
   const [rows, members] = await Promise.all([
-    prisma.circleSessionMember.findMany({ where: { sessionId }, select: { userId: true } }),
+    prisma.circleSessionMember.findMany({ where: { sessionId, status: 'JOINED' }, select: { userId: true } }),
     membersOf(sessionId),
   ])
   rows.forEach((r) => emitToUser(r.userId, 'circle:update', { sessionId, members }))
@@ -95,27 +136,58 @@ export async function openSession(userId: string, lat?: number, lng?: number) {
     prisma.user.update({ where: { id: userId }, data: { lat, lng } }).catch(() => {})
   }
 
-  let session = await prisma.circleSession.findFirst({ where: { hostId: userId, status: 'OPEN' } })
+  // Só se reutiliza uma sessão recente. Sem o limite de idade, o anfitrião
+  // caía sempre na primeira sessão que abriu na vida — com os membros e as
+  // fotos de então ainda lá dentro.
+  const fresh = new Date(Date.now() - SESSION_MAX_AGE_MS)
+  let session = await prisma.circleSession.findFirst({
+    where:   { hostId: userId, status: 'OPEN', createdAt: { gte: fresh } },
+    orderBy: { createdAt: 'desc' },
+  })
   if (!session) {
+    await closeStaleSessionsOf(userId)
     session = await prisma.circleSession.create({ data: { hostId: userId, lat, lng } })
     await prisma.circleSessionMember.create({ data: { sessionId: session.id, userId, status: 'JOINED' } })
   }
 
-  await expireInvites(session.id)
+  await expireInvites({ sessionId: session.id })
 
   const [members, nearby] = await Promise.all([
     membersOf(session.id),
     nearbyMutuals(userId, lat, lng),
   ])
   const memberIds = new Set(members.map((m) => m.user.id))
-  return { session, members, nearby: nearby.filter((u) => !memberIds.has(u.id)) }
+  return {
+    session,
+    members,
+    nearby: nearby.filter((u) => !memberIds.has(u.id)),
+    publishWindowMs: PUBLISH_WINDOW_MS,
+  }
 }
 
-export async function getSessionState(sessionId: string) {
+// Fecha as sessões antigas deste anfitrião. As fotos são apagadas do
+// armazenamento pelo cron (limparCirculos), não aqui — fechar tem de ser rápido.
+async function closeStaleSessionsOf(hostId: string) {
+  await prisma.circleSession.updateMany({
+    where: { hostId, status: 'OPEN', createdAt: { lt: new Date(Date.now() - SESSION_MAX_AGE_MS) } },
+    data:  { status: 'CLOSED' },
+  }).catch(() => {})
+}
+
+// Ler uma sessão expõe quem lá está e os URLs das fotos de toda a gente, por
+// isso exige ser membro. Sem isto qualquer utilizador autenticado lia qualquer
+// sessão só com o ID.
+export async function getSessionState(sessionId: string, requesterId: string) {
   const session = await prisma.circleSession.findUnique({ where: { id: sessionId } })
   if (!session) throw new Error('Sessão não encontrada')
-  await expireInvites(sessionId)
-  return { session, members: await membersOf(sessionId) }
+
+  const me = await prisma.circleSessionMember.findUnique({
+    where: { sessionId_userId: { sessionId, userId: requesterId } },
+  })
+  if (!me) throw new Error('Não estás nesta sessão')
+
+  await expireInvites({ sessionId })
+  return { session, members: await membersOf(sessionId), publishWindowMs: PUBLISH_WINDOW_MS }
 }
 
 // Anfitrião chama alguém próximo → convite (push + socket ao vivo)
@@ -123,6 +195,36 @@ export async function callUser(hostId: string, sessionId: string, targetId: stri
   const session = await prisma.circleSession.findUnique({ where: { id: sessionId } })
   if (!session || session.hostId !== hostId) throw new Error('Sessão não encontrada')
   if (session.status !== 'OPEN') throw new Error('Sessão já fechou')
+
+  // Um convite é uma notificação no telemóvel de outra pessoa. Sem esta
+  // verificação, quem chamasse a API diretamente mandava pushes a estranhos —
+  // e a quem o tivesse bloqueado.
+  if (!(await canCall(hostId, targetId))) throw new Error('Só podes chamar pessoas que te seguem e que segues')
+
+  const existing = await prisma.circleSessionMember.findUnique({
+    where:  { sessionId_userId: { sessionId, userId: targetId } },
+    select: { status: true, createdAt: true },
+  })
+  if (existing?.status === 'JOINED') throw new Error('Esta pessoa já está no círculo')
+
+  // Insistir na mesma pessoa não vale um push novo. Sem isto, carregar em
+  // "chamar" em ciclo mandava-lhe notificações sem fim — o limite abaixo não
+  // apanhava, porque reconvidar reaproveita a mesma linha.
+  if (existing && Date.now() - existing.createdAt.getTime() < CALL_COOLDOWN_MS) {
+    return { ok: true, alreadyCalled: true }
+  }
+
+  // Quantas pessoas *diferentes* chamei na janela. Conta linhas, e reconvidar
+  // reaproveita a linha, por isso o que isto limita é o alcance: espalhar
+  // convites por muita gente de uma vez.
+  const recentCalls = await prisma.circleSessionMember.count({
+    where: {
+      session:   { hostId },
+      status:    'INVITED',
+      createdAt: { gte: new Date(Date.now() - CALL_WINDOW_MS) },
+    },
+  })
+  if (recentCalls >= CALL_LIMIT) throw new Error('Chamaste demasiadas pessoas em pouco tempo. Espera um pouco.')
 
   // (re)convite renova a janela de 2 min a partir de agora
   await prisma.circleSessionMember.upsert({
@@ -145,20 +247,24 @@ export async function joinSession(userId: string, sessionId: string) {
   if (!session) throw new Error('Sessão não encontrada')
   if (session.status !== 'OPEN') throw new Error('Sessão já fechou')
 
-  // Convite só é válido durante 2 min — depois disso expira
+  // Entra-se por convite, nunca por conhecer o ID da sessão. Antes o upsert
+  // criava a linha de raiz, o que deixava qualquer pessoa entrar num círculo
+  // alheio e passar a receber as fotos de todos por socket.
   const existing = await prisma.circleSessionMember.findUnique({ where: { sessionId_userId: { sessionId, userId } } })
-  if (existing && existing.status === 'INVITED' && Date.now() - existing.createdAt.getTime() > INVITE_TTL_MS) {
+  if (!existing) throw new Error('Não foste convidado para este círculo')
+
+  // Convite só é válido durante 2 min — depois disso expira
+  if (existing.status === 'INVITED' && Date.now() - existing.createdAt.getTime() > INVITE_TTL_MS) {
     await prisma.circleSessionMember.delete({ where: { sessionId_userId: { sessionId, userId } } }).catch(() => {})
     throw new Error('O convite expirou')
   }
 
-  await prisma.circleSessionMember.upsert({
-    where:  { sessionId_userId: { sessionId, userId } },
-    update: { status: 'JOINED' },
-    create: { sessionId, userId, status: 'JOINED' },
+  await prisma.circleSessionMember.update({
+    where: { sessionId_userId: { sessionId, userId } },
+    data:  { status: 'JOINED' },
   })
   await broadcast(sessionId)
-  return getSessionState(sessionId)
+  return getSessionState(sessionId, userId)
 }
 
 // Sair de uma sessão (desfazer o "aceitar"). O anfitrião não sai por aqui.
@@ -190,10 +296,25 @@ type Overlay = { emoji: string; x: number; y: number }
 // Membro guarda a sua foto (com emojis) na sessão
 export async function addPhoto(userId: string, sessionId: string, photoUrl: string, overlays: Overlay[] = []) {
   const member = await prisma.circleSessionMember.findUnique({ where: { sessionId_userId: { sessionId, userId } } })
+  // Tem de já ter aceitado: antes, gravar uma foto promovia sozinho um
+  // convidado a membro sem ele alguma vez ter carregado em aceitar.
+  if (!member || member.status !== 'JOINED') throw new Error('Não estás nesta sessão')
+  await prisma.circleSessionMember.update({
+    where: { sessionId_userId: { sessionId, userId } },
+    data:  { photoUrl, photoAt: new Date(), overlays: overlays.length > 0 ? overlays : undefined },
+  })
+  await broadcast(sessionId)
+  return { ok: true }
+}
+
+// Retirar a minha foto do círculo. Qualquer membro pode publicar o álbum com as
+// fotos de todos, por isso tem de haver forma de dizer não sem sair da sessão.
+export async function withdrawPhoto(userId: string, sessionId: string) {
+  const member = await prisma.circleSessionMember.findUnique({ where: { sessionId_userId: { sessionId, userId } } })
   if (!member) throw new Error('Não estás nesta sessão')
   await prisma.circleSessionMember.update({
     where: { sessionId_userId: { sessionId, userId } },
-    data:  { photoUrl, photoAt: new Date(), overlays: overlays.length > 0 ? overlays : undefined, status: 'JOINED' },
+    data:  { photoUrl: null, photoAt: null, overlays: undefined },
   })
   await broadcast(sessionId)
   return { ok: true }
@@ -252,8 +373,12 @@ export async function publishSession(userId: string, sessionId: string, caption?
     throw new Error('A janela para publicar esta foto já passou')
   }
 
+  // Só entram as fotos da ronda atual. A janela aplicava-se só à minha foto, o
+  // que deixava sair no álbum uma foto que outra pessoa tirou semanas antes —
+  // e que ela já não esperava ver publicada.
+  const roundStart = new Date(Date.now() - PUBLISH_WINDOW_MS)
   const withPhotos = await prisma.circleSessionMember.findMany({
-    where:   { sessionId, status: 'JOINED', photoUrl: { not: null } },
+    where:   { sessionId, status: 'JOINED', photoUrl: { not: null }, photoAt: { gte: roundStart } },
     orderBy: { createdAt: 'asc' },
   })
   const urls     = withPhotos.map((m) => m.photoUrl!).filter(Boolean)
@@ -265,9 +390,40 @@ export async function publishSession(userId: string, sessionId: string, caption?
   return post
 }
 
+// Chamado pelo cron. Fecha as sessões que passaram da idade e devolve os URLs
+// das fotos que ficaram por publicar, para quem chama as apagar do
+// armazenamento. Sem isto, cada círculo deixava fotos no Cloudinary para sempre.
+export async function closeStaleSessions(): Promise<string[]> {
+  const cutoff = new Date(Date.now() - SESSION_MAX_AGE_MS)
+  const stale = await prisma.circleSession.findMany({
+    where:  { status: 'OPEN', createdAt: { lt: cutoff } },
+    select: { id: true },
+  })
+  if (stale.length === 0) return []
+
+  const ids = stale.map((s) => s.id)
+  const photos = await prisma.circleSessionMember.findMany({
+    where:  { sessionId: { in: ids }, photoUrl: { not: null } },
+    select: { photoUrl: true },
+  })
+
+  await prisma.$transaction([
+    prisma.circleSessionMember.updateMany({
+      where: { sessionId: { in: ids } },
+      data:  { photoUrl: null, photoAt: null },
+    }),
+    prisma.circleSession.updateMany({
+      where: { id: { in: ids } },
+      data:  { status: 'CLOSED' },
+    }),
+  ])
+
+  return photos.map((p) => p.photoUrl!).filter(Boolean)
+}
+
 // Uma chamada pendente para mim (para quem abre o Círculo após ser chamado)
 export async function incomingCall(userId: string) {
-  await expireInvites()
+  await expireInvites({ userId })
   const cutoff = new Date(Date.now() - INVITE_TTL_MS)
   const m = await prisma.circleSessionMember.findFirst({
     where:   { userId, status: 'INVITED', createdAt: { gte: cutoff }, session: { status: 'OPEN' } },

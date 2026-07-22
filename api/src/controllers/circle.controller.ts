@@ -16,7 +16,7 @@ export async function open(req: AuthRequest, res: Response) {
 
 export async function state(req: AuthRequest, res: Response) {
   try {
-    return ok(res, await session.getSessionState(req.params.id))
+    return ok(res, await session.getSessionState(req.params.id, req.user!.userId))
   } catch (err) { return handleError(res, err, 'circle.state') }
 }
 
@@ -90,6 +90,14 @@ export async function countdown(req: AuthRequest, res: Response) {
     const result = await session.startCountdown(req.user!.userId, sessionId)
     return ok(res, result)
   } catch (err) { return handleError(res, err, 'circle.countdown') }
+}
+
+export async function withdrawPhoto(req: AuthRequest, res: Response) {
+  try {
+    const { sessionId } = req.body
+    if (!sessionId) return badRequest(res, 'sessionId required')
+    return ok(res, await session.withdrawPhoto(req.user!.userId, sessionId))
+  } catch (err) { return handleError(res, err, 'circle.withdrawPhoto') }
 }
 
 export async function publish(req: AuthRequest, res: Response) {

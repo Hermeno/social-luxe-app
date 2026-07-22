@@ -30,11 +30,15 @@ export interface CircleOpenState {
   session: CircleSession
   members: CircleMember[]
   nearby: CircleUser[]
+  /** Janela para publicar depois do disparo. Vem do servidor — é ele que a
+   *  aplica, e antes o cliente tinha a sua própria cópia do número. */
+  publishWindowMs?: number
 }
 
 export interface CircleState {
   session: CircleSession
   members: CircleMember[]
+  publishWindowMs?: number
 }
 
 // Abre (ou reutiliza) a minha sessão como anfitrião + vizinhos mútuos a chamar
@@ -90,6 +94,12 @@ export async function addCirclePhoto(sessionId: string, uri: string, overlays: E
 export async function publishCircle(sessionId: string, caption?: string): Promise<Post> {
   const res = await api.post('/circle/publish', { sessionId, caption })
   return res.data.data
+}
+
+// Retirar a minha foto sem sair do círculo — qualquer membro pode publicar o
+// álbum com as fotos de todos, por isso tem de haver forma de dizer não.
+export async function withdrawMyPhoto(sessionId: string): Promise<void> {
+  await api.post('/circle/photo/withdraw', { sessionId })
 }
 
 export async function getCircleSession(sessionId: string): Promise<CircleState> {
