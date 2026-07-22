@@ -4,6 +4,7 @@ import {
   ScrollView, StyleSheet,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useNavigation } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
 import { Search } from 'lucide-react-native'
 import { colors, fonts } from '../../theme'
@@ -12,6 +13,8 @@ import SegmentedRing from '../../components/SegmentedRing'
 import { useOnlineStore } from '../../store/online.store'
 import { useAuthStore } from '../../store/auth.store'
 import { useT } from '../../i18n'
+import { useFocusEffect } from '@react-navigation/native'
+import { getIncomingHalves } from '../../services/half.service'
 import { Post } from '../../types'
 import { API_BASE } from '../../config'
 
@@ -64,9 +67,18 @@ export default memo(function FeedHeader({
   onBubblePress, onCreatePress,
 }: FeedHeaderProps) {
   const { top } = useSafeAreaInsets()
+  const nav = useNavigation<any>()
   const t = useT()
   const isSocketOnline = useOnlineStore((s) => s.isOnline)
   const currentUser    = useAuthStore((s) => s.user)
+  const [halvesCount, setHalvesCount] = React.useState(0)
+
+  // Quantas metades esperam por mim — recontado a cada volta ao feed
+  useFocusEffect(
+    React.useCallback(() => {
+      getIncomingHalves().then((hs) => setHalvesCount(hs.length)).catch(() => {})
+    }, []),
+  )
 
   /* ── Search panel — replaces the rail in-flow, post card stays below ─────── */
   if (searchMode) {
@@ -162,6 +174,23 @@ export default memo(function FeedHeader({
           <Text style={s.tileName} numberOfLines={1}>{t.feed_create}</Text>
         </TouchableOpacity>
 
+        {/* Metades — quem está à espera de ti. Vive ao lado do Criar porque é
+            a outra metade do mesmo gesto: começar uma, ou completar a de alguém. */}
+        <TouchableOpacity onPress={() => nav.navigate('Halves')} activeOpacity={0.72} style={s.tile}>
+          <View style={s.ringWrap}>
+            <View style={s.neutralRing} />
+            <View style={[s.avatarCircle, s.halvesCircle]}>
+              <Ionicons name="contrast" size={26} color="#CA2851" />
+            </View>
+            {halvesCount > 0 && (
+              <View style={s.halvesBadge}>
+                <Text style={s.halvesBadgeTxt}>{halvesCount > 9 ? '9+' : halvesCount}</Text>
+              </View>
+            )}
+          </View>
+          <Text style={s.tileName} numberOfLines={1}>Metades</Text>
+        </TouchableOpacity>
+
         {/* Posters — anel sempre da mesma cor; só a espessura muda quando o post
             está no ecrã. Presença é um ponto único e preciso. */}
         {filteredGroups.map((g) => {
@@ -209,6 +238,23 @@ export default memo(function FeedHeader({
 })
 
 const s = StyleSheet.create({
+  halvesCircle: {
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#FDEEF2',
+  },
+  halvesBadge: {
+    position: 'absolute', top: 0, right: 0,
+    minWidth: 18, height: 18, borderRadius: 9,
+    paddingHorizontal: 5,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#CA2851',
+    borderWidth: 2, borderColor: '#fff',
+  },
+  halvesBadgeTxt: {
+    color: '#fff', fontSize: 10, fontFamily: fonts.bold,
+    includeFontPadding: false,
+  },
+
 
   /* ── Rail — pure white stage above the dark feed ──────────────────────────── */
   wrapper: {

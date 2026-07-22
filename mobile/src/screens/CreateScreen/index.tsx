@@ -11,7 +11,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs'
 import { useNavigation, useFocusEffect } from '@react-navigation/native'
 import { fonts } from '../../theme'
-import { createPost, createAlbum } from '../../services/post.service'
+import { createPost } from '../../services/post.service'
+import { createHalf } from '../../services/half.service'
+import TargetPicker from './TargetPicker'
 import PostAlbumGrid from '../FeedScreen/PostAlbumGrid'
 import GalleryPicker, { PickedAsset } from '../../components/GalleryPicker'
 import { getMyUnions } from '../../services/union.service'
@@ -63,6 +65,7 @@ export default function CreateScreen() {
   const [includePartner,   setIncludePartner]   = useState(false)
   const [isAnnouncement,   setIsAnnouncement]   = useState(false)
   const [myUnion,          setMyUnion]          = useState<Union | null>(null)
+  const [pickerOpen,       setPickerOpen]       = useState(false)
 
   useEffect(() => {
     getMyUnions().then((unions) => setMyUnion(unions[0] ?? null)).catch(() => {})
@@ -121,18 +124,8 @@ export default function CreateScreen() {
     setGalleryOpen(false)
     if (assets.length === 0) return
 
-    // Várias fotos → álbum (grelha na feed). Vídeos não entram no álbum.
-    if (assets.length > 1) {
-      const images = assets.filter((a) => a.type !== 'video').map((a) => a.uri)
-      if (images.length < 2) {
-        Alert.alert(t.create_albumTitle, t.create_albumMin)
-        return
-      }
-      setAlbum(images.slice(0, 10))
-      setMedia(null)
-      return
-    }
-
+    // Álbuns nascem de um Círculo — várias pessoas ao mesmo tempo, não uma
+    // pessoa a juntar fotos suas. Aqui só entra uma foto de cada vez.
     // Uma só → foto ou vídeo
     const asset = assets[0]
     setAlbum(null)
@@ -145,18 +138,27 @@ export default function CreateScreen() {
     return brand ? brand.charAt(0).toUpperCase() + brand.slice(1).toLowerCase() : 'Android'
   }
 
-  async function handlePublish() {
+  // A regra: nada se faz sozinho. Só há dois caminhos para publicar já —
+  // uma união aceite (as duas pessoas já concordaram uma vez) ou um anúncio de
+  // admin. Tudo o resto vira uma metade e espera por alguém.
+  const publishesDirectly = (hasPartner && includePartner && !isAnnouncement) || isAnnouncement
+
+  function handlePublish() {
     if (!canPublish || loading) return
     Keyboard.dismiss()
+    if (publishesDirectly) { publishAsPost() }
+    else if (!media)       { Alert.alert('Metade', 'Uma metade precisa de uma foto ou vídeo — o texto sozinho não chega para alguém completar.') }
+    else                   { setPickerOpen(true) }
+  }
+
+  async function publishAsPost() {
     setLoading(true)
     try {
       const partnerId   = hasPartner && includePartner && !isAnnouncement ? otherMember!.id : undefined
       const deviceModel = getDeviceModel()
       const bgColor     = `${activeBg.bg}|${activeBg.bg}`
 
-      const newPost = album
-        ? await createAlbum(album, caption.trim() || undefined, deviceModel)
-        : media
+      const newPost = media
         ? await createPost(
             media.uri,
             media.type === 'video' ? 'VIDEO' : 'IMAGE',
@@ -176,28 +178,46 @@ export default function CreateScreen() {
             deviceModel,
           )
 
-      if (newPost) {
-        setPendingPost(newPost)
-      }
-      setCaption('')
-      setMedia(null)
-      setAlbum(null)
-      setBgKey('gray')
-      setIsAnnouncement(false)
-      setIncludePartner(false)
+      if (newPost) setPendingPost(newPost)
+      resetComposer()
       toast.success(t.feed_published, isAnnouncement ? t.feed_announcement_sub : t.feed_published_sub)
       nav.navigate('Feed' as never)
     } catch (e: unknown) {
-      const msg =
-        (e as any)?.response?.status === 413
-          ? 'Vídeo demasiado grande. Máximo 50 MB.'
-          : e instanceof Error
-            ? e.message
-            : t.chat_retry
-      toast.error(t.error, msg)
+      toast.error(t.error, publishError(e))
     } finally {
       setLoading(false)
     }
+  }
+
+  // targetId null = metade aberta a qualquer ligação
+  async function handlePickTarget(targetId: string | null) {
+    setPickerOpen(false)
+    if (!media) return
+    setLoading(true)
+    try {
+      await createHalf(media.uri, caption.trim() || undefined, targetId ?? undefined)
+      resetComposer()
+      toast.success('Metade criada', targetId ? 'Agora falta a outra pessoa.' : 'Aberta — falta quem a complete.')
+      nav.navigate('Halves' as never)
+    } catch (e: unknown) {
+      toast.error(t.error, publishError(e))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function publishError(e: unknown): string {
+    if ((e as any)?.response?.status === 413) return 'Vídeo demasiado grande. Máximo 50 MB.'
+    return (e as any)?.response?.data?.message ?? (e instanceof Error ? e.message : t.chat_retry)
+  }
+
+  function resetComposer() {
+    setCaption('')
+    setMedia(null)
+    setAlbum(null)
+    setBgKey('gray')
+    setIsAnnouncement(false)
+    setIncludePartner(false)
   }
 
   return (
@@ -436,7 +456,9 @@ export default function CreateScreen() {
         >
           {loading
             ? <ActivityIndicator color={textMode ? '#1A1A1A' : '#fff'} size="small" />
-            : <Text style={[s.publishBtnTxt, textMode && { color: '#1A1A1A' }]}>{t.create_publish}</Text>
+            : <Text style={[s.publishBtnTxt, textMode && { color: '#1A1A1A' }]}>
+                {publishesDirectly ? t.create_publish : 'Escolher quem completa'}
+              </Text>
           }
         </TouchableOpacity>
       </View>
@@ -445,7 +467,13 @@ export default function CreateScreen() {
         visible={galleryOpen}
         onClose={() => setGalleryOpen(false)}
         onDone={handleGalleryDone}
-        maxSelection={10}
+        maxSelection={1}
+      />
+
+      <TargetPicker
+        visible={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onPick={handlePickTarget}
       />
     </KeyboardAvoidingView>
   )

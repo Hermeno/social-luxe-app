@@ -24,6 +24,7 @@ import AppearanceScreen from '../screens/AppearanceScreen'
 import LanguageScreen from '../screens/LanguageScreen'
 import HelpScreen from '../screens/HelpScreen'
 import CircleScreen from '../screens/CircleScreen'
+import HalvesScreen from '../screens/HalvesScreen'
 import DonationsScreen from '../screens/DonationsScreen'
 import CreateDonationScreen from '../screens/DonationsScreen/CreateDonationScreen'
 import DonationDetailScreen from '../screens/DonationsScreen/DonationDetailScreen'
@@ -46,6 +47,7 @@ export type AppStackParams = {
   Chat: { userId: string; userName: string; userAvatar: string | null; partnerHasPosts?: boolean }
   About: undefined
   Verified: undefined
+  Halves: undefined
   Notifications: undefined
   PostViewer: { posts: Post[]; startIndex: number }
   EditProfile: undefined
@@ -117,6 +119,7 @@ export default function AppNavigator({ defaultTab }: { defaultTab: 'Feed' | 'Mes
       <Stack.Screen name="Tabs">{() => <Tabs defaultTab={defaultTab} />}</Stack.Screen>
       <Stack.Screen name="Profile" component={ProfileScreen} />
       <Stack.Screen name="Chat" component={ChatScreen} />
+      <Stack.Screen name="Halves" component={HalvesScreen} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
       <Stack.Screen name="PostViewer" component={PostViewerScreen} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />

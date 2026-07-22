@@ -114,6 +114,9 @@ model User {
   unionInvites     UnionInvite[]
   pairingsAsA      Pairing[]      @relation("PairingUserA")
   pairingsAsB      Pairing[]      @relation("PairingUserB")
+  halvesCreated        Half[]                @relation("HalfCreator")
+  halvesReceived       Half[]                @relation("HalfTarget")
+  halvesCompleted      Half[]                @relation("HalfCompleter")
   circleSessionsHosted CircleSession[]       @relation("CircleHost")
   circleMemberships    CircleSessionMember[] @relation("CircleMember")
 }
@@ -147,6 +150,45 @@ model Post {
   views          View[]
   reactions      Reaction[]
   extendVotes    PostExtendVote[]
+  half           Half?
+}
+
+// ─── Metade ───────────────────────────────────────────────────────────────────
+// A regra do Luxee: nada se faz sozinho. Uma pessoa cria sempre uma *metade*
+// — existe, é dela, mas não chega ao feed. Só quando alguém a completa é que
+// nasce um Post, e esse Post é dos dois. Uma metade que ninguém completa
+// expira e nunca foi publicada.
+
+enum HalfStatus {
+  WAITING
+  COMPLETED
+  EXPIRED
+}
+
+model Half {
+  id            String     @id @default(cuid())
+  creatorId     String
+  mediaUrl      String
+  mediaType     MediaType
+  caption       String?
+  // null = aberta a qualquer ligação; preenchido = dirigida a uma pessoa
+  targetUserId  String?
+  status        HalfStatus @default(WAITING)
+  expiresAt     DateTime
+  completedById String?
+  completedUrl  String?
+  postId        String?    @unique
+  completedAt   DateTime?
+  createdAt     DateTime   @default(now())
+
+  creator     User  @relation("HalfCreator",   fields: [creatorId],     references: [id], onDelete: Cascade)
+  targetUser  User? @relation("HalfTarget",    fields: [targetUserId],  references: [id], onDelete: Cascade)
+  completedBy User? @relation("HalfCompleter", fields: [completedById], references: [id], onDelete: SetNull)
+  post        Post? @relation(fields: [postId], references: [id], onDelete: SetNull)
+
+  @@index([creatorId, status])
+  @@index([targetUserId, status])
+  @@index([status, expiresAt])
 }
 
 

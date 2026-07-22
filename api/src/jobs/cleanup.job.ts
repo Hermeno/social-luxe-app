@@ -3,6 +3,7 @@ import { prisma } from '../config/database'
 import { POST_EXTENSION_THRESHOLD } from '../types'
 import { deleteFromCloudinary } from '../utils/cloudinary.util'
 import { deleteFromR2, isR2Url } from '../utils/r2.util'
+import { expireStaleHalves } from '../services/half.service'
 
 async function deleteMediaUrl(url: string | null): Promise<void> {
   if (!url) return
@@ -90,9 +91,10 @@ async function processExpiredStories() {
 async function runCleanup() {
   await processExpiredPosts().catch((err) => console.error('[Cron] post cleanup failed:', err))
   await processExpiredStories().catch((err) => console.error('[Cron] story cleanup failed:', err))
+  await expireStaleHalves().catch((err) => console.error('[Cron] half cleanup failed:', err))
 }
 
 export function startCleanupJob() {
   cron.schedule('0 * * * *', runCleanup)
-  console.log('[Cron] Cleanup job started (posts, stories)')
+  console.log('[Cron] Cleanup job started (posts, stories, halves)')
 }
