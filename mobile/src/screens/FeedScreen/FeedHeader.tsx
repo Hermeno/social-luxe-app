@@ -29,8 +29,8 @@ export interface FeedUserGroup {
 const AV_SIZE      = 54
 const RING_STROKE  = 2.2
 // Preto suave, não carmim: o anel emoldura o rosto em vez de competir com ele.
-// A 0.55 ainda se distingue bem do anel neutro (0.12) de quem não publicou.
-const RING_COLOR   = 'rgba(0,0,0,0.55)'
+// Vem do tema (colors.ring) para não haver cópias do valor espalhadas.
+const RING_COLOR   = colors.ring
 const RING_GAP     = 3.5
 const RING_OUTER   = Math.round(AV_SIZE + (RING_GAP + RING_STROKE) * 2)   // 65
 const TILE_W       = RING_OUTER + 4
@@ -311,7 +311,7 @@ const s = StyleSheet.create({
     top: 0, left: 0, right: 0, bottom: 0,
     borderRadius: RING_OUTER / 2,
     borderWidth:  RING_STROKE,
-    borderColor:  'rgba(0,0,0,0.12)',
+    borderColor:  colors.ringMuted,
   },
   tileName: {
     color:         'rgba(0,0,0,0.55)',

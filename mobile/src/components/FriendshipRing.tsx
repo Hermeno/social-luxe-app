@@ -14,8 +14,8 @@ export default function FriendshipRing({ level, size, strokeWidth = 3 }: Props) 
   const circumference = 2 * Math.PI * r
   const filled = (level / 100) * circumference
   const dashoffset = circumference - filled
-  // Uma única cor de anel em toda a app; o tier é comunicado pelo preenchimento
-  const color = colors.primary
+  // Uma única cor de anel em toda a app; o nível é dito pelo preenchimento
+  const color = colors.ring
   const cx = size / 2
   const cy = size / 2
 

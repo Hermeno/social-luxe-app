@@ -18,6 +18,11 @@ export const colors = {
   gray800: '#333333',
   dark:    '#000000',
 
+  // Anéis à volta de avatares. Preto suave, nunca carmim: o anel emoldura o
+  // rosto em vez de competir com ele. O carmim fica para acções.
+  ring:         'rgba(0,0,0,0.55)',
+  ringMuted:    'rgba(0,0,0,0.12)',   // quem não publicou
+
   overlay:      'rgba(0,0,0,0.4)',
   overlayLight: 'rgba(0,0,0,0.2)',
   transparent:  'transparent',

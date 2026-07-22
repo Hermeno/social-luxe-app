@@ -33,7 +33,7 @@ export default function AvatarSection({ uri, availability, onPress }: Props) {
 
 const s = StyleSheet.create({
   wrap:       { position: 'relative', width: 88, height: 88 },
-  avatar:     { width: 88, height: 88, borderRadius: 44, borderWidth: 2.5, borderColor: colors.primary },
+  avatar:     { width: 88, height: 88, borderRadius: 44, borderWidth: 2.5, borderColor: colors.ring },
   placeholder:{ backgroundColor: colors.gray100, alignItems: 'center', justifyContent: 'center' },
   cam:        { position: 'absolute', bottom: 0, right: 0, width: 26, height: 26, borderRadius: 13, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.white },
   dot:        { position: 'absolute', top: 3, right: 3, width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: colors.white },

@@ -104,7 +104,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ringActive: { borderColor: colors.primary },
+  ringActive: { borderColor: colors.ring },
   ringViewed: { borderColor: 'rgba(255,255,255,0.2)' },
   ringGray:   { borderColor: 'rgba(255,255,255,0.15)' },
   avatarWrap: { position: 'relative' },

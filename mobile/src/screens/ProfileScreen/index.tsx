@@ -624,7 +624,7 @@ export default function ProfileScreen() {
           >
             {hasPosts && (
               <View style={StyleSheet.absoluteFill} pointerEvents="none">
-                <SegmentedRing count={1} size={AV_OUTER} strokeWidth={RING_STROKE} />
+                <SegmentedRing count={1} size={AV_OUTER} strokeWidth={RING_STROKE} color={colors.ring} />
               </View>
             )}
             <View style={m.avatarCircle}>
