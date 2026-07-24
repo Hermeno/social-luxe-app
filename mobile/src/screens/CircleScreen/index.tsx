@@ -15,6 +15,7 @@ import AvatarImage from '../../components/AvatarImage'
 import * as circle from '../../services/circle.service'
 import { CircleMember, CircleSession, CircleUser, EmojiOverlay } from '../../services/circle.service'
 import { getMyFollowing } from '../../services/follow.service'
+import { useFollowStore } from '../../store/follow.store'
 import { useAuthStore } from '../../store/auth.store'
 import { useFeedStore } from '../../store/feed.store'
 import { useNotificationStore } from '../../store/notification.store'
@@ -101,6 +102,10 @@ export default function CircleScreen() {
   const user = useAuthStore((s) => s.user)
   const t    = useT()
   const setPendingPost = useFeedStore((s) => s.setPendingPost)
+  // Fonte única de quem sigo. Ler daqui faz o deixar de seguir (em qualquer
+  // ecrã) tirar a pessoa da lista de convite na hora — chamar quem já não é
+  // mútuo dava erro no servidor.
+  const followingIds = useFollowStore((s) => s.followingIds)
 
   const [permission, requestPermission] = useCameraPermissions()
   const camRef = useRef<CameraView>(null)
@@ -142,7 +147,12 @@ export default function CircleScreen() {
   const isHost     = !!session && session.hostId === myId
   const others     = members.filter((m) => m.user.id !== myId && m.status === 'JOINED')
   const memberIds  = new Set(members.map((m) => m.user.id))
-  const showable   = nearby.filter((u) => !memberIds.has(u.id))
+  // Só quem eu ainda sigo. O servidor só devolve mútuos ao abrir, mas se eu
+  // deixar de seguir depois, o store atualiza e a pessoa sai daqui na hora.
+  const showable   = nearby.filter((u) => !memberIds.has(u.id) && followingIds.has(u.id))
+  // A lista do sheet "chamar amigos" fica em cache; filtrá-la pelo store faz o
+  // deixar de seguir tirar a pessoa daqui sem ter de fechar e reabrir.
+  const visibleFriends = friends.filter((f) => followingIds.has(f.id))
   const photoCount  = members.filter((m) => m.photoUrl).length
   const joinedCount = members.filter((m) => m.status === 'JOINED').length
   const iHavePhoto = members.some((m) => m.user.id === myId && m.photoUrl)
@@ -764,11 +774,11 @@ export default function CircleScreen() {
 
             {loadingFriends ? (
               <ActivityIndicator color="#fff" style={{ marginVertical: 30 }} />
-            ) : friends.length === 0 ? (
+            ) : visibleFriends.length === 0 ? (
               <Text style={s.fsEmpty}>{t.circle_noFriends}</Text>
             ) : (
               <ScrollView style={{ maxHeight: 360 }} showsVerticalScrollIndicator={false}>
-                {friends.map((f) => {
+                {visibleFriends.map((f) => {
                   const called = calling.has(f.id) || memberIds.has(f.id)
                   return (
                     <View key={f.id} style={s.fsRow}>
