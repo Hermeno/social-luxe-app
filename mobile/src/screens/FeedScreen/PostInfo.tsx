@@ -3,6 +3,7 @@ import {
   Animated, View, Text, TouchableOpacity, StyleSheet, Image,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
@@ -69,6 +70,7 @@ export default function PostInfo({
   const { user }    = useAuthStore()
   const nav         = useNavigation<Nav>()
   const t           = useT()
+  const { bottom: safeBottom } = useSafeAreaInsets()
   const following   = useFollowStore((s) => s.followingIds.has(post.user.id))
   const [expanded, setExpanded]           = useState(false)
   const [loadingFollow, setLoadingFollow] = useState(false)
@@ -194,7 +196,35 @@ export default function PostInfo({
     return `${m}m`
   }
 
+  const commentersBlock = commenters.length > 0 && (
+    <View style={s.commentersRow}>
+      {commenters.map((c, i) => {
+        const uri = resolveAvatar(c.avatar)
+        return (
+          <View key={c.id} style={[s.commenterAvatar, { marginLeft: i === 0 ? 0 : -9, zIndex: MAX_COMMENTERS - i }]}>
+            {uri ? (
+              <Image source={{ uri }} style={s.commenterImg} />
+            ) : (
+              <View style={[s.commenterImg, s.commenterFallback]}>
+                <Text style={s.commenterInitial}>{c.name?.[0]?.toUpperCase() ?? '?'}</Text>
+              </View>
+            )}
+          </View>
+        )
+      })}
+      <Text style={s.commentersLabel}>
+        {(() => {
+          const total = commentCountProp ?? post._count.comments
+          if (total <= 1) return t.comment_ed
+          const others = total - 1
+          return `+${others} ${others === 1 ? t.comment_one : t.comment_many}`
+        })()}
+      </Text>
+    </View>
+  )
+
   return (
+    <>
     <View style={s.container}>
 
       {/* Linha de topo — autor à esquerda, ações à direita */}
@@ -318,35 +348,16 @@ export default function PostInfo({
         </TouchableOpacity>
       )}
 
-      {/* Avatares dos comentadores */}
-      {commenters.length > 0 && (
-        <View style={s.commentersRow}>
-          {commenters.map((c, i) => {
-            const uri = resolveAvatar(c.avatar)
-            return (
-              <View key={c.id} style={[s.commenterAvatar, { marginLeft: i === 0 ? 0 : -9, zIndex: MAX_COMMENTERS - i }]}>
-                {uri ? (
-                  <Image source={{ uri }} style={s.commenterImg} />
-                ) : (
-                  <View style={[s.commenterImg, s.commenterFallback]}>
-                    <Text style={s.commenterInitial}>{c.name?.[0]?.toUpperCase() ?? '?'}</Text>
-                  </View>
-                )}
-              </View>
-            )
-          })}
-          <Text style={s.commentersLabel}>
-            {(() => {
-              const total = commentCountProp ?? post._count.comments
-              if (total <= 1) return t.comment_ed
-              const others = total - 1
-              return `+${others} ${others === 1 ? t.comment_one : t.comment_many}`
-            })()}
-          </Text>
-        </View>
-      )}
-
     </View>
+
+    {/* Comentadores — canto inferior esquerdo, por cima da barra de baixo e à
+        esquerda da coluna de ações. Vive fora do cabeçalho de propósito. */}
+    {commentersBlock && (
+      <View style={[s.commentersBottom, { bottom: safeBottom + 70 }]} pointerEvents="none">
+        {commentersBlock}
+      </View>
+    )}
+    </>
   )
 }
 
@@ -420,10 +431,15 @@ const s = StyleSheet.create({
   timerDying: { color: '#FF3B30' },
 
   // ── Commenter avatars ────────────────────────────────────────────────────────
+  // Ancorado ao fundo-esquerda; à direita deixa espaço para a coluna de ações.
+  commentersBottom: {
+    position: 'absolute',
+    left: 16, right: 74,
+    zIndex: 30,
+  },
   commentersRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 46,
   },
   commenterAvatar: {
     width: 22, height: 22, borderRadius: 11,

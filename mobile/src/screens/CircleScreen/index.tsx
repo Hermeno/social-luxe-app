@@ -14,7 +14,7 @@ import { colors, fonts } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
 import * as circle from '../../services/circle.service'
 import { CircleMember, CircleSession, CircleUser, EmojiOverlay } from '../../services/circle.service'
-import { getMyFollowing } from '../../services/follow.service'
+import { getMyFollowing, getMyFollowers } from '../../services/follow.service'
 import { useFollowStore } from '../../store/follow.store'
 import { useAuthStore } from '../../store/auth.store'
 import { useFeedStore } from '../../store/feed.store'
@@ -310,21 +310,34 @@ export default function CircleScreen() {
         setMembers((prev) => prev.filter((m) => !(m.user.id === u.id && m.status === 'INVITED')))
       }, INVITE_TTL_MS)
       callTimers.current.push(timer)
-    } catch {
+    } catch (err: any) {
       setCalling((prev) => { const n = new Set(prev); n.delete(u.id); return n })
-      Alert.alert(t.circle_errTitle, t.circle_callFail)
+      // O servidor recusa se já não houver seguimento mútuo (ex.: a pessoa
+      // deixou de me seguir depois de a lista carregar). Diz porquê e tira-a da
+      // lista, para não se tentar chamá-la outra vez.
+      const msg = err?.response?.data?.message
+      if (err?.response?.status === 400 && msg) {
+        setNearby((prev) => prev.filter((n) => n.id !== u.id))
+        setFriends((prev) => prev.filter((f) => f.id !== u.id))
+      }
+      Alert.alert(t.circle_errTitle, msg || t.circle_callFail)
     }
   }
 
-  // ── Convidar amigos (pessoas que sigo) ──────────────────────────────────────
+  // ── Convidar amigos (só seguimento MÚTUO) ───────────────────────────────────
+  // Chamar exige mútuo — o servidor recusa o resto. Antes mostrávamos toda a
+  // gente que sigo, e chamar quem não me segue de volta dava erro. Cruzamos
+  // quem sigo com quem me segue e mostramos só a interseção.
   async function openFriends() {
     setFriendsSheet(true)
     ensureSession()   // garante que dá para chamar
     if (friends.length === 0) {
       setLoadingFriends(true)
       try {
-        const list = await getMyFollowing()
-        setFriends(list.map((f) => ({ id: f.id, name: f.name, avatar: f.avatar })))
+        const [following, followers] = await Promise.all([getMyFollowing(), getMyFollowers()])
+        const followerIds = new Set(followers.map((f) => f.id))
+        const mutual = following.filter((f) => followerIds.has(f.id))
+        setFriends(mutual.map((f) => ({ id: f.id, name: f.name, avatar: f.avatar })))
       } catch {}
       setLoadingFriends(false)
     }
