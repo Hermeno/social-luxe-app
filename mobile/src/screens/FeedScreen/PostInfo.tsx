@@ -353,7 +353,7 @@ export default function PostInfo({
     {/* Comentadores — canto inferior esquerdo, logo acima da barra de ações
         horizontal (que agora vive em baixo). Vive fora do cabeçalho de propósito. */}
     {commentersBlock && (
-      <View style={[s.commentersBottom, { bottom: safeBottom + 112 }]} pointerEvents="none">
+      <View style={[s.commentersBottom, { bottom: safeBottom + 156 }]} pointerEvents="none">
         {commentersBlock}
       </View>
     )}

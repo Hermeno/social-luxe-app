@@ -195,6 +195,7 @@ export const EN: { [K in keyof typeof import('./pt').PT]: string } = {
   feed_delete_msg: 'This action is permanent.',
   feed_edit_caption: 'Edit caption',
   feed_caption_ph: 'Caption...',
+  feed_add_comment: 'Add a comment…',
   feed_share_msg: 'Check it on luxee before it expires! 🔥',
   feed_published: 'Published!',
   feed_published_sub: 'Visible for 24 hours',

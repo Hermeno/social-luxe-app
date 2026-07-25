@@ -206,6 +206,7 @@ export const PT = {
   feed_delete_msg: 'Esta ação é permanente.',
   feed_edit_caption: 'Editar legenda',
   feed_caption_ph: 'Legenda...',
+  feed_add_comment: 'Adiciona um comentário…',
   feed_share_msg: 'Vê no luxee antes que expire! 🔥',
   feed_published: 'Publicado!',
   feed_published_sub: 'Visível por 24 horas',

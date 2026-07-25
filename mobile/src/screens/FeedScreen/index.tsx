@@ -14,6 +14,9 @@ import {
   Keyboard,
 } from 'react-native'
 import { Image } from 'expo-image'
+import { Ionicons } from '@expo/vector-icons'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import AvatarImage from '../../components/AvatarImage'
 import { setStatusBarStyle } from 'expo-status-bar'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
@@ -62,6 +65,7 @@ export default function FeedScreen() {
     return `${Math.floor(h / 24)}${t.time_d_ago}`
   }
   const nav              = useNavigation<Nav>()
+  const { bottom: safeBottom } = useSafeAreaInsets()
   // A barra de separadores flutua por cima do ecrã; a folha de comentários
   // precisa de saber a altura dela para o campo de escrever não ficar tapado.
   const user             = useAuthStore((s) => s.user)
@@ -791,6 +795,22 @@ export default function FeedScreen() {
             onRepost={() => handleRepost(post.id)}
             commentCount={(post._count?.comments ?? 0) + (commentDeltas[post.id] ?? 0)}
           />
+
+          {/* Campo de comentário — horizontal, por baixo dos ícones e por cima
+              da navegação. Escrever por cima de um vídeo em ecrã inteiro luta
+              com o teclado, por isso tocar abre a folha de comentários (como no
+              Instagram/TikTok), onde o teclado já é tratado. */}
+          <Pressable
+            style={[s.commentBar, { bottom: safeBottom + 54 }]}
+            onPress={() => {
+              if (searchMode) { Keyboard.dismiss(); setSearchMode(false); setSearchQuery('') }
+              setCommentPost(post)
+            }}
+          >
+            <AvatarImage uri={user?.avatar ?? null} name={user?.name ?? ''} size={28} />
+            <Text style={s.commentBarPh} numberOfLines={1}>{t.feed_add_comment}</Text>
+            <Ionicons name="send" size={17} color="rgba(255,255,255,0.7)" />
+          </Pressable>
         </View>
       ) : (
         <View style={s.emptyViewer}>
@@ -814,6 +834,28 @@ export default function FeedScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.black },
+
+  // Campo de comentário do feed — horizontal, sobre a media, acima da navegação
+  commentBar: {
+    position: 'absolute',
+    left: 16, right: 16,
+    zIndex: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    height: 44,
+    paddingHorizontal: 12,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.28)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.22)',
+  },
+  commentBarPh: {
+    flex: 1,
+    color: 'rgba(255,255,255,0.7)',
+    fontFamily: fonts.regular,
+    fontSize: 13.5,
+  },
 
   viewer: {
     flex: 1,

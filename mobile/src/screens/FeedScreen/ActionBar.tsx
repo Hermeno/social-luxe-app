@@ -43,7 +43,6 @@ export default React.memo(function ActionBar({
   newPostsCount = 0, commentCount: commentCountProp,
 }: Props) {
   const { bottom: safeBottom } = useSafeAreaInsets()
-  const tabOffset = 42 + Math.max(safeBottom, 8)
   const t          = useT()
 
   const [liked,      setLiked]      = useState(likedProp)
@@ -141,9 +140,9 @@ export default React.memo(function ActionBar({
 
   return (
     <>
-      {/* Barra horizontal — em baixo à esquerda, por cima da barra de baixo.
-          (Antes era uma coluna vertical à direita.) */}
-      <View style={[s.row, { bottom: tabOffset }]}>
+      {/* Barra horizontal — em baixo à esquerda, por cima do campo de comentário
+          (que fica logo abaixo). Antes era uma coluna vertical à direita. */}
+      <View style={[s.row, { bottom: Math.max(safeBottom, 8) + 108 }]}>
 
         {/* Like */}
         {!isAnnouncement && (
