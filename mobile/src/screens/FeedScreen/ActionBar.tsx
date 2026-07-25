@@ -141,8 +141,9 @@ export default React.memo(function ActionBar({
 
   return (
     <>
-      {/* Vertical column — right edge, alinhado com user info */}
-      <View style={[s.column, { bottom: 16 + tabOffset }]}>
+      {/* Barra horizontal — em baixo à esquerda, por cima da barra de baixo.
+          (Antes era uma coluna vertical à direita.) */}
+      <View style={[s.row, { bottom: tabOffset }]}>
 
         {/* Like */}
         {!isAnnouncement && (
@@ -230,21 +231,23 @@ export default React.memo(function ActionBar({
 })
 
 const s = StyleSheet.create({
-  // ── Icon column ─────────────────────────────────────────────────────────────
-  column: {
+  // ── Barra horizontal ────────────────────────────────────────────────────────
+  row: {
     position: 'absolute',
-    right: 12,
-    width: 52,
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 22,
     zIndex: 20,
   },
 
-  // Botão principal: ícone + contador
+  // Botão: ícone + contador lado a lado
   btn: {
-    width: 52,
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 11,
-    gap: 5,
+    gap: 7,
+    paddingVertical: 6,
   },
 
   mirrorX:    { transform: [{ scaleX: -1 }] },
@@ -253,8 +256,8 @@ const s = StyleSheet.create({
 
   burstHeart: {
     position: 'absolute',
-    top: 24,    // centro vertical do ícone de coração (paddingTop 11 + metade do ícone 26)
-    left: 19,   // centro horizontal (52/2 - 7)
+    top: -2,   // sai de cima do ícone de coração (primeiro botão da fila)
+    left: 6,
     zIndex: 30,
   },
 

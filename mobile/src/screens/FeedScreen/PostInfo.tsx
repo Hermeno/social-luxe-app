@@ -350,10 +350,10 @@ export default function PostInfo({
 
     </View>
 
-    {/* Comentadores — canto inferior esquerdo, por cima da barra de baixo e à
-        esquerda da coluna de ações. Vive fora do cabeçalho de propósito. */}
+    {/* Comentadores — canto inferior esquerdo, logo acima da barra de ações
+        horizontal (que agora vive em baixo). Vive fora do cabeçalho de propósito. */}
     {commentersBlock && (
-      <View style={[s.commentersBottom, { bottom: safeBottom + 70 }]} pointerEvents="none">
+      <View style={[s.commentersBottom, { bottom: safeBottom + 112 }]} pointerEvents="none">
         {commentersBlock}
       </View>
     )}
