@@ -634,8 +634,8 @@ export default function FeedScreen() {
 
   useFocusEffect(useCallback(() => {
     isFocusedRef.current = true
-    // White rail at the top → dark status-bar icons while the feed is focused
-    setStatusBarStyle('dark')
+    // O vídeo sobe até ao topo → ícones da barra de estado a branco
+    setStatusBarStyle('light')
     refreshRef.current()
 
     const task = InteractionManager.runAfterInteractions(() => {
@@ -655,7 +655,8 @@ export default function FeedScreen() {
 
     return () => {
       isFocusedRef.current = false
-      setStatusBarStyle('light')
+      // Fora do feed, os ecrãs são brancos → ícones escuros
+      setStatusBarStyle('dark')
       task.cancel()
       progressRef.current?.stop()
       safePlayer(() => player.pause())
@@ -687,7 +688,7 @@ export default function FeedScreen() {
   return (
     <View style={s.container}>
 
-      {/* ── Rail: who posted — first-class section at the top ───────────────── */}
+      {/* ── Barra de vidro sobre o vídeo (overlay absoluto, não empurra a media) ── */}
       <FeedHeader
         filteredGroups={filteredGroups}
         activeUserId={post?.user.id}
@@ -700,7 +701,7 @@ export default function FeedScreen() {
         onCreatePress={handleCreatePress}
       />
 
-      {/* ── Post: full-bleed below the rail, exactly as before ──────────────── */}
+      {/* ── Post: full-bleed, agora até ao topo (o header flutua por cima) ───── */}
       {post ? (
         <View
           style={s.viewer}

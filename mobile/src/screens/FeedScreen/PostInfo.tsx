@@ -70,7 +70,7 @@ export default function PostInfo({
   const { user }    = useAuthStore()
   const nav         = useNavigation<Nav>()
   const t           = useT()
-  const { bottom: safeBottom } = useSafeAreaInsets()
+  const { bottom: safeBottom, top: safeTop } = useSafeAreaInsets()
   const following   = useFollowStore((s) => s.followingIds.has(post.user.id))
   const [expanded, setExpanded]           = useState(false)
   const [loadingFollow, setLoadingFollow] = useState(false)
@@ -225,7 +225,8 @@ export default function PostInfo({
 
   return (
     <>
-    <View style={s.container}>
+    {/* Empurrado para baixo da barra de vidro do topo (a media agora sobe ao topo) */}
+    <View style={[s.container, { top: safeTop + 52 }]}>
 
       {/* Linha de topo — autor à esquerda, ações à direita */}
       <View style={s.topRow}>
