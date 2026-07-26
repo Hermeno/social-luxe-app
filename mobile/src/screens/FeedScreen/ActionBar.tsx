@@ -15,6 +15,7 @@ const CHIP_GRAD = ['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.03)'] as const
 import * as postService from '../../services/post.service'
 import { updateCachedPost } from '../../db/database'
 import ReactionPicker from '../../components/ReactionPicker'
+import AvatarImage from '../../components/AvatarImage'
 import { useT } from '../../i18n'
 
 interface Props {
@@ -142,6 +143,7 @@ export default React.memo(function ActionBar({
   }
 
   const isAnnouncement = post.isAnnouncement ?? false
+  const commenters = post.recentCommenters ?? []
 
   return (
     <>
@@ -194,10 +196,21 @@ export default React.memo(function ActionBar({
         {!isAnnouncement && (
           <TouchableOpacity style={s.btn} onPress={onCommentPress} activeOpacity={0.75}>
             <LinearGradient colors={CHIP_GRAD} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={s.chip}>
-              {/* No lucide a cauda nasce à esquerda; espelhamos para ficar à direita */}
-              <View style={s.mirrorX}>
-                <MessageCircle size={20} strokeWidth={2} color="#fff" />
-              </View>
+              {commenters.length > 0 ? (
+                // Quem comentou — até 5 avatares pequenos, sobrepostos
+                <View style={s.commenterStack}>
+                  {commenters.slice(0, 5).map((c, i) => (
+                    <View key={c.id} style={[i > 0 && s.commenterOverlap, { zIndex: 5 - i }]}>
+                      <AvatarImage uri={c.avatar} name={c.name} size={18} borderWidth={1.5} borderColor="rgba(255,255,255,0.9)" />
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                // Sem comentários ainda → o ícone
+                <View style={s.mirrorX}>
+                  <MessageCircle size={20} strokeWidth={2} color="#fff" />
+                </View>
+              )}
               <Text style={s.label}>{fmt(commentCountProp ?? post._count?.comments ?? 0)}</Text>
             </LinearGradient>
           </TouchableOpacity>
@@ -268,6 +281,10 @@ const s = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.28)',
     overflow: 'hidden',
   },
+
+  // Pilha de avatares dentro do chip de comentário
+  commenterStack: { flexDirection: 'row', alignItems: 'center' },
+  commenterOverlap: { marginLeft: -7 },
 
   mirrorX:    { transform: [{ scaleX: -1 }] },
   repostIcon: { width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
