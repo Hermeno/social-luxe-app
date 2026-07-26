@@ -196,8 +196,12 @@ export default React.memo(function ActionBar({
         {!isAnnouncement && (
           <TouchableOpacity style={s.btn} onPress={onCommentPress} activeOpacity={0.75}>
             <LinearGradient colors={CHIP_GRAD} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={s.chip}>
-              {commenters.length > 0 ? (
-                // Quem comentou — até 5 avatares pequenos, sobrepostos
+              {/* O ícone fica sempre */}
+              <View style={s.mirrorX}>
+                <MessageCircle size={20} strokeWidth={2} color="#fff" />
+              </View>
+              {/* Quem comentou — até 5 avatares pequenos, sobrepostos */}
+              {commenters.length > 0 && (
                 <View style={s.commenterStack}>
                   {commenters.slice(0, 5).map((c, i) => (
                     <View key={c.id} style={[i > 0 && s.commenterOverlap, { zIndex: 5 - i }]}>
@@ -205,12 +209,8 @@ export default React.memo(function ActionBar({
                     </View>
                   ))}
                 </View>
-              ) : (
-                // Sem comentários ainda → o ícone
-                <View style={s.mirrorX}>
-                  <MessageCircle size={20} strokeWidth={2} color="#fff" />
-                </View>
               )}
+              {/* Número total — só o número, sem a palavra */}
               <Text style={s.label}>{fmt(commentCountProp ?? post._count?.comments ?? 0)}</Text>
             </LinearGradient>
           </TouchableOpacity>
@@ -256,11 +256,11 @@ export default React.memo(function ActionBar({
 
 const s = StyleSheet.create({
   // ── Barra horizontal ────────────────────────────────────────────────────────
-  // Espaçamento par: 10 entre retângulos, alinhado à esquerda com o conteúdo.
+  // Sem largura fixa (só left): a fila ajusta-se ao conteúdo e o chip de
+  // comentário pode crescer com os avatares sem empurrar os outros para fora.
   row: {
     position: 'absolute',
     left: 16,
-    right: 16,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
