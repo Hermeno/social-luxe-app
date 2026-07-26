@@ -70,7 +70,7 @@ export default function PostInfo({
   const { user }    = useAuthStore()
   const nav         = useNavigation<Nav>()
   const t           = useT()
-  const { bottom: safeBottom, top: safeTop } = useSafeAreaInsets()
+  const { bottom: safeBottom } = useSafeAreaInsets()
   const following   = useFollowStore((s) => s.followingIds.has(post.user.id))
   const [expanded, setExpanded]           = useState(false)
   const [loadingFollow, setLoadingFollow] = useState(false)
@@ -225,8 +225,9 @@ export default function PostInfo({
 
   return (
     <>
-    {/* Logo abaixo da barra de vidro do topo (que traz os avatares redondos) */}
-    <View style={[s.container, { top: safeTop + 104 }]}>
+    {/* Autor + legenda + comentadores num só bloco, em baixo, por cima dos
+        ícones de like/comentar. Ancorado por baixo → cresce para cima. */}
+    <View style={[s.container, { bottom: safeBottom + 150 }]}>
 
       {/* Linha de topo — autor à esquerda, ações à direita */}
       <View style={s.topRow}>
@@ -349,22 +350,17 @@ export default function PostInfo({
         </TouchableOpacity>
       )}
 
-    </View>
+      {/* Comentadores — no mesmo bloco, por baixo da legenda */}
+      {commentersBlock}
 
-    {/* Comentadores — canto inferior esquerdo, logo acima da barra de ações
-        horizontal (que agora vive em baixo). Vive fora do cabeçalho de propósito. */}
-    {commentersBlock && (
-      <View style={[s.commentersBottom, { bottom: safeBottom + 156 }]} pointerEvents="none">
-        {commentersBlock}
-      </View>
-    )}
+    </View>
     </>
   )
 }
 
 const s = StyleSheet.create({
-  // Cabeçalho do post — ancorado ao topo, largura toda para a legenda respirar
-  container: { position: 'absolute', top: 12, left: 16, right: 14, gap: 8, zIndex: 30 },
+  // Bloco do autor — agora ancorado em baixo (nome + Seguir por cima dos ícones)
+  container: { position: 'absolute', left: 16, right: 14, gap: 8, zIndex: 30 },
 
   topRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
 

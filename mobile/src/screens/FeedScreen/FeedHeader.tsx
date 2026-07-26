@@ -27,16 +27,16 @@ export interface FeedUserGroup {
 // ── Geometria — um só peso de anel em toda a app ────────────────────────────
 // O anel flutua 3.5px do avatar e o traço é sempre RING_STROKE, activo ou não.
 // Tudo o resto deriva de AV_SIZE, para a fila escalar como uma peça só.
-const AV_SIZE      = 54
-const RING_STROKE  = 2.2
+const AV_SIZE      = 72
+const RING_STROKE  = 3.6
 // Preto suave, não carmim: o anel emoldura o rosto em vez de competir com ele.
 // Vem do tema (colors.ring) para não haver cópias do valor espalhadas.
 const RING_COLOR   = colors.ring
 const RING_GAP     = 3.5
-const RING_OUTER   = Math.round(AV_SIZE + (RING_GAP + RING_STROKE) * 2)   // 65
+const RING_OUTER   = Math.round(AV_SIZE + (RING_GAP + RING_STROKE) * 2)   // ~76
 const TILE_W       = RING_OUTER + 4
 const TILE_GAP     = 14
-const DOT_SIZE     = 11
+const DOT_SIZE     = 15
 const BADGE_SIZE   = 21
 const BUBBLE_SIZE  = 56
 const CLUSTER_AV   = 34   // avatar no grupo compacto do topo (barra de vidro)
@@ -207,7 +207,9 @@ export default memo(function FeedHeader({
                 </View>
                 {online && <View style={s.onlineDot} />}
               </View>
-              <Text style={s.glassTileName} numberOfLines={1}>{g.user.name.split(' ')[0]}</Text>
+              <Text style={[s.glassTileName, isActive && s.glassTileNameActive]} numberOfLines={1}>
+                {g.user.name.split(' ')[0]}
+              </Text>
             </TouchableOpacity>
           )
         })}
@@ -285,16 +287,23 @@ const s = StyleSheet.create({
     borderWidth: RING_STROKE,
     borderColor: '#fff',
   },
+  // Nome — por defeito discreto; só o da pessoa cujo post está no ecrã acende.
+  // A hierarquia diz "é isto que estás a ver" sem precisar de outra cor.
   glassTileName: {
-    color: 'rgba(255,255,255,0.92)',
+    color: 'rgba(255,255,255,0.6)',
     fontFamily: fonts.medium,
     fontSize: 11,
+    letterSpacing: 0.1,
     maxWidth: TILE_W,
-    marginTop: 5,
+    marginTop: 6,
     textAlign: 'center',
-    textShadowColor: 'rgba(0,0,0,0.4)',
+    textShadowColor: 'rgba(0,0,0,0.45)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
+  },
+  glassTileNameActive: {
+    color: '#fff',
+    fontFamily: fonts.semiBold,
   },
 
   // ── Tile — ring + avatar + first name ─────────────────────────────────────

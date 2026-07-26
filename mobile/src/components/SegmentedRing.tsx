@@ -11,14 +11,25 @@ interface Props {
   color?: string
 }
 
-// Uma cor por zona da app, nunca variação por visto/não visto: se o anel mudasse
-// de cor conforme o estado, a fila deixava de se ler como um só conjunto.
+// Anel MESMO segmentado: parte-se em arcos = nº de posts da pessoa. O anel diz
+// quantos momentos há, não é enfeite. Uma pessoa com 1 post → anel inteiro;
+// com 3 → três arcos com folga entre eles. Acima de MAX o ganho de informação
+// deixa de compensar o ruído visual, por isso satura.
+const MAX_SEGMENTS = 8
+
 export default function SegmentedRing({ count, size, strokeWidth = 3, color = colors.ring }: Props) {
   if (count === 0) return null
 
   const r  = (size - strokeWidth) / 2
   const cx = size / 2
   const cy = size / 2
+
+  const segments = Math.min(count, MAX_SEGMENTS)
+  const circumference = 2 * Math.PI * r
+  // Folga entre arcos proporcional ao tamanho; sem folga quando é um só.
+  const gap = segments > 1 ? Math.max(3, circumference * 0.03) : 0
+  const seg = circumference / segments
+  const dash = Math.max(0.1, seg - gap)
 
   return (
     <Svg width={size} height={size} style={{ position: 'absolute' }}>
@@ -29,6 +40,10 @@ export default function SegmentedRing({ count, size, strokeWidth = 3, color = co
         fill="none"
         stroke={color}
         strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeDasharray={`${dash} ${gap}`}
+        // Começa no topo (12h), não à direita — fica alinhado e simétrico.
+        transform={`rotate(-90 ${cx} ${cy})`}
       />
     </Svg>
   )
