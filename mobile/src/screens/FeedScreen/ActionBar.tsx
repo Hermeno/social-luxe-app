@@ -3,10 +3,15 @@ import {
   View, Text, TouchableOpacity, StyleSheet, Share, Modal, Animated,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { LinearGradient } from 'expo-linear-gradient'
 import { Heart, RefreshCw, Forward, MessageCircle } from 'lucide-react-native'
 
 import { Post } from '../../types'
 import { fonts } from '../../theme'
+
+// Bolha de vidro por baixo de cada ícone — escura, com um brilho no canto
+// superior. Dá profundidade sem cor a mais; o ícone branco assenta por cima.
+const CHIP_GRAD = ['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.03)'] as const
 import * as postService from '../../services/post.service'
 import { updateCachedPost } from '../../db/database'
 import ReactionPicker from '../../components/ReactionPicker'
@@ -152,12 +157,14 @@ export default React.memo(function ActionBar({
             onLongPress={() => setShowReactions(true)}
             activeOpacity={0.75}
           >
-            <Heart
-              size={26}
-              strokeWidth={2}
-              color={liked ? '#FF4B6E' : '#fff'}
-              fill={liked ? '#FF4B6E' : 'transparent'}
-            />
+            <LinearGradient colors={CHIP_GRAD} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={s.chip}>
+              <Heart
+                size={23}
+                strokeWidth={2}
+                color={liked ? '#FF4B6E' : '#fff'}
+                fill={liked ? '#FF4B6E' : 'transparent'}
+              />
+            </LinearGradient>
             <Text style={s.label}>{fmt(likeCount)}</Text>
 
             {/* Heart burst particles */}
@@ -183,14 +190,15 @@ export default React.memo(function ActionBar({
           </TouchableOpacity>
         )}
 
-        {/* Comment — ícone da pasta icins (cauda à direita, sem espelhar) */}
+        {/* Comment */}
         {!isAnnouncement && (
           <TouchableOpacity style={s.btn} onPress={onCommentPress} activeOpacity={0.75}>
-            {/* No lucide a cauda nasce à esquerda; espelhamos para ficar em baixo
-                à direita, como no ícone de mensagens da navegação */}
-            <View style={s.mirrorX}>
-              <MessageCircle size={26} strokeWidth={2} color="#fff" />
-            </View>
+            <LinearGradient colors={CHIP_GRAD} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={s.chip}>
+              {/* No lucide a cauda nasce à esquerda; espelhamos para ficar à direita */}
+              <View style={s.mirrorX}>
+                <MessageCircle size={23} strokeWidth={2} color="#fff" />
+              </View>
+            </LinearGradient>
             <Text style={s.label}>{fmt(commentCountProp ?? post._count?.comments ?? 0)}</Text>
           </TouchableOpacity>
         )}
@@ -198,7 +206,9 @@ export default React.memo(function ActionBar({
         {/* Share */}
         {!isAnnouncement && (
           <TouchableOpacity style={s.btn} onPress={handleShare} activeOpacity={0.75}>
-            <Forward size={26} strokeWidth={2} color="#fff" />
+            <LinearGradient colors={CHIP_GRAD} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={s.chip}>
+              <Forward size={23} strokeWidth={2} color="#fff" />
+            </LinearGradient>
             <Text style={s.label}>{fmt(shareCount)}</Text>
           </TouchableOpacity>
         )}
@@ -206,12 +216,14 @@ export default React.memo(function ActionBar({
         {/* Repostar — gira ao repostar e mostra o ponto central (refresh-cw-dot) */}
         {!isAnnouncement && (
           <TouchableOpacity style={s.btn} onPress={handleRepost} activeOpacity={0.75}>
-            <View style={s.repostIcon}>
-              <Animated.View style={{ transform: [{ rotate: repostRotate }] }}>
-                <RefreshCw size={26} strokeWidth={2} color="#fff" />
-              </Animated.View>
-              {reposted && <View style={s.repostDot} pointerEvents="none" />}
-            </View>
+            <LinearGradient colors={CHIP_GRAD} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={s.chip}>
+              <View style={s.repostIcon}>
+                <Animated.View style={{ transform: [{ rotate: repostRotate }] }}>
+                  <RefreshCw size={23} strokeWidth={2} color="#fff" />
+                </Animated.View>
+                {reposted && <View style={s.repostDot} pointerEvents="none" />}
+              </View>
+            </LinearGradient>
             <Text style={s.label}>{fmt(shareCount)}</Text>
           </TouchableOpacity>
         )}
@@ -229,43 +241,58 @@ export default React.memo(function ActionBar({
   )
 })
 
+const CHIP_SIZE = 44
+
 const s = StyleSheet.create({
   // ── Barra horizontal ────────────────────────────────────────────────────────
+  // Espaçamento par: 14 entre bolhas, alinhado à esquerda com o resto do conteúdo.
   row: {
     position: 'absolute',
     left: 16,
     right: 16,
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 22,
+    alignItems: 'flex-start',
+    gap: 14,
     zIndex: 20,
   },
 
-  // Botão: ícone + contador lado a lado
+  // Botão: bolha por cima, contador por baixo (centrados)
   btn: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
-    paddingVertical: 6,
+    gap: 5,
+    width: CHIP_SIZE,
+  },
+
+  // Bolha de vidro à volta do ícone
+  chip: {
+    width: CHIP_SIZE,
+    height: CHIP_SIZE,
+    borderRadius: CHIP_SIZE / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.28)',
+    overflow: 'hidden',
   },
 
   mirrorX:    { transform: [{ scaleX: -1 }] },
-  repostIcon: { width: 26, height: 26, alignItems: 'center', justifyContent: 'center' },
-  repostDot:  { position: 'absolute', top: 10.5, left: 10.5, width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#fff' },
+  repostIcon: { width: 23, height: 23, alignItems: 'center', justifyContent: 'center' },
+  repostDot:  { position: 'absolute', top: 9, left: 9, width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#fff' },
 
+  // Centrado sobre a bolha do like (primeiro botão)
   burstHeart: {
     position: 'absolute',
-    top: -2,   // sai de cima do ícone de coração (primeiro botão da fila)
-    left: 6,
+    top: 15,
+    left: 15,
     zIndex: 30,
   },
 
   label: {
     color: '#fff',
     fontFamily: fonts.semiBold,
-    fontSize: 12,
+    fontSize: 11.5,
     letterSpacing: -0.1,
-    textShadowColor: 'rgba(0,0,0,0.28)',
+    textShadowColor: 'rgba(0,0,0,0.32)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },
