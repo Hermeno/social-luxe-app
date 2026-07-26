@@ -834,7 +834,7 @@ export default function FeedScreen() {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.black },
+  container: { flex: 1, backgroundColor: colors.white },
 
   // Campo de comentário do feed — horizontal, sobre a media, acima da navegação
   commentBar: {
@@ -860,14 +860,16 @@ const s = StyleSheet.create({
 
   viewer: {
     flex: 1,
-    backgroundColor: colors.black,
+    backgroundColor: colors.white,
     overflow: 'hidden',
   },
   mediaClip: {
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
     overflow: 'hidden',
-    backgroundColor: colors.black,
+    // Branco: uma imagem que não enche o ecrã fica com barras brancas (como no
+    // perfil), não pretas. Vídeo/texto enchem, por isso não se vê.
+    backgroundColor: colors.white,
   },
   // Fills the mediaClip container — used by both thumbnail and full-media layers
   absLayer: {
