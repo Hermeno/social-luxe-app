@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
 import { Search } from 'lucide-react-native'
+import { LinearGradient } from 'expo-linear-gradient'
 import { colors, fonts } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
 import SegmentedRing from '../../components/SegmentedRing'
@@ -143,54 +144,77 @@ export default memo(function FeedHeader({
     )
   }
 
-  /* ── Barra de vidro sobre o vídeo (o vídeo sobe até ao topo) ──────────────── */
-  const CLUSTER_MAX = 4
-  const shown = filteredGroups.slice(0, CLUSTER_MAX)
-  const extra = filteredGroups.length - shown.length
-
+  /* ── Barra de vidro fosco com os avatares redondos por cima ──────────────── */
   return (
-    <View style={[s.overlayBar, { paddingTop: top + 8 }]} pointerEvents="box-none">
-      {/* Esquerda — pesquisar */}
-      <TouchableOpacity onPress={onSearchPress} activeOpacity={0.7} style={s.glassBtn}>
-        <Search size={18} strokeWidth={2.2} color="#fff" />
-      </TouchableOpacity>
+    <View style={[s.glassBar, { paddingTop: top + 6 }]}>
+      {/* Vidro fingido: gradiente escuro→transparente (o desfoque nativo real
+          fica para quando o expo-blur entrar num build). */}
+      <LinearGradient
+        colors={['rgba(8,8,10,0.62)', 'rgba(8,8,10,0.20)', 'transparent']}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
 
-      {/* Centro — quem publicou, num grupo compacto de avatares + contador.
-          Toca para abrir o primeiro. (Substitui a fila de tiles redondos.) */}
-      <TouchableOpacity
-        style={s.cluster}
-        activeOpacity={0.8}
-        disabled={shown.length === 0}
-        onPress={() => shown[0] && onBubblePress(shown[0])}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={s.railContent}
       >
-        {shown.map((g, i) => {
-          const online = isSocketOnline(g.user.id) || isOnlineByLastSeen(g.user.lastSeen)
-          return (
-            <View key={g.user.id} style={[s.clusterAv, i > 0 && { marginLeft: -12 }, { zIndex: CLUSTER_MAX - i }]}>
-              <AvatarImage uri={g.user.avatar} name={g.user.name} size={CLUSTER_AV} borderWidth={2} borderColor="rgba(255,255,255,0.92)" />
-              {online && <View style={s.clusterDot} />}
+        {/* Criar — o teu avatar + badge */}
+        <TouchableOpacity onPress={onCreatePress} activeOpacity={0.72} style={s.tile}>
+          <View style={s.ringWrap}>
+            <View style={s.glassNeutralRing} />
+            <View style={s.avatarCircle}>
+              {currentUser?.avatar ? (
+                <AvatarImage uri={resolveAvatar(currentUser.avatar)} name={currentUser.name} size={AV_SIZE} borderWidth={0} borderColor="transparent" />
+              ) : (
+                <View style={s.addPlaceholder}><Ionicons name="person" size={26} color="rgba(255,255,255,0.5)" /></View>
+              )}
             </View>
-          )
-        })}
-        {extra > 0 && (
-          <View style={s.clusterMore}><Text style={s.clusterMoreTxt}>+{extra}</Text></View>
-        )}
-      </TouchableOpacity>
+            <View style={s.addBadge}><Ionicons name="add" size={13} color="#fff" /></View>
+          </View>
+          <Text style={s.glassTileName} numberOfLines={1}>{t.feed_create}</Text>
+        </TouchableOpacity>
 
-      {/* Direita — Metades (se houver) + Criar */}
-      <View style={s.rightBtns}>
+        {/* Metades — só quando alguém espera por ti */}
         {halvesCount > 0 && (
-          <TouchableOpacity onPress={() => nav.navigate('Halves')} activeOpacity={0.7} style={s.glassBtn}>
-            <Ionicons name="contrast" size={18} color="#fff" />
-            <View style={s.halvesBadgeSm}>
-              <Text style={s.halvesBadgeTxt}>{halvesCount > 9 ? '9+' : halvesCount}</Text>
+          <TouchableOpacity onPress={() => nav.navigate('Halves')} activeOpacity={0.72} style={s.tile}>
+            <View style={s.ringWrap}>
+              <View style={s.glassActiveRing} />
+              <View style={[s.avatarCircle, s.halvesCircle]}>
+                <Ionicons name="contrast" size={26} color="#1A1A1A" />
+              </View>
+              <View style={s.halvesBadge}><Text style={s.halvesBadgeTxt}>{halvesCount > 9 ? '9+' : halvesCount}</Text></View>
             </View>
+            <Text style={s.glassTileName} numberOfLines={1}>Metades</Text>
           </TouchableOpacity>
         )}
-        <TouchableOpacity onPress={onCreatePress} activeOpacity={0.7} style={s.glassBtn}>
-          <Ionicons name="add" size={23} color="#fff" />
-        </TouchableOpacity>
-      </View>
+
+        {/* Quem publicou — avatares redondos com anel claro (sobre o vídeo) */}
+        {filteredGroups.map((g) => {
+          const online   = isSocketOnline(g.user.id) || isOnlineByLastSeen(g.user.lastSeen)
+          const isActive = g.user.id === activeUserId
+          return (
+            <TouchableOpacity key={g.user.id} onPress={() => onBubblePress(g)} activeOpacity={0.72} style={s.tile}>
+              <View style={s.ringWrap}>
+                {isActive ? (
+                  <View style={s.glassActiveRing} />
+                ) : (
+                  <SegmentedRing count={g.posts.length} size={RING_OUTER} strokeWidth={RING_STROKE} color="rgba(255,255,255,0.9)" />
+                )}
+                <View style={s.avatarCircle}>
+                  <AvatarImage uri={g.user.avatar} name={g.user.name} size={AV_SIZE} borderWidth={0} borderColor="transparent" />
+                </View>
+                {online && <View style={s.onlineDot} />}
+              </View>
+              <Text style={s.glassTileName} numberOfLines={1}>{g.user.name.split(' ')[0]}</Text>
+            </TouchableOpacity>
+          )
+        })}
+      </ScrollView>
+
+      {/* linha fina em baixo, a fechar o vidro */}
+      <View style={s.glassHairline} />
     </View>
   )
 })
@@ -235,52 +259,42 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.10)',
   },
 
-  // ── Barra de vidro sobre o vídeo ──────────────────────────────────────────
-  overlayBar: {
+  // ── Barra de vidro fosco (overlay sobre o vídeo) ──────────────────────────
+  glassBar: {
     position: 'absolute',
     top: 0, left: 0, right: 0,
     zIndex: 40,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingBottom: 10,
-    gap: 10,
+    overflow: 'hidden',
   },
-  glassBtn: {
-    width: 38, height: 38, borderRadius: 19,
-    backgroundColor: 'rgba(0,0,0,0.32)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.22)',
-    alignItems: 'center', justifyContent: 'center',
+  glassHairline: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.14)',
   },
-  cluster: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+  // Anel neutro do "Criar" — claro, sobre o vidro escuro
+  glassNeutralRing: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    borderRadius: RING_OUTER / 2,
+    borderWidth: RING_STROKE,
+    borderColor: 'rgba(255,255,255,0.4)',
   },
-  clusterAv: { borderRadius: CLUSTER_AV / 2 },
-  clusterDot: {
-    position: 'absolute', right: 0, bottom: 0,
-    width: 10, height: 10, borderRadius: 5,
-    backgroundColor: '#3BD07A',
-    borderWidth: 1.5, borderColor: '#000',
+  glassActiveRing: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    borderRadius: RING_OUTER / 2,
+    borderWidth: RING_STROKE,
+    borderColor: '#fff',
   },
-  clusterMore: {
-    marginLeft: -12,
-    width: CLUSTER_AV, height: CLUSTER_AV, borderRadius: CLUSTER_AV / 2,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.92)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  clusterMoreTxt: { color: '#fff', fontSize: 11, fontFamily: fonts.bold },
-  rightBtns: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  halvesBadgeSm: {
-    position: 'absolute', top: -2, right: -2,
-    minWidth: 16, height: 16, borderRadius: 8,
-    backgroundColor: colors.primary,
-    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3,
+  glassTileName: {
+    color: 'rgba(255,255,255,0.92)',
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    maxWidth: TILE_W,
+    marginTop: 5,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.4)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
 
   // ── Tile — ring + avatar + first name ─────────────────────────────────────

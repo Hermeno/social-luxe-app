@@ -225,8 +225,8 @@ export default function PostInfo({
 
   return (
     <>
-    {/* Empurrado para baixo da barra de vidro do topo (a media agora sobe ao topo) */}
-    <View style={[s.container, { top: safeTop + 52 }]}>
+    {/* Logo abaixo da barra de vidro do topo (que traz os avatares redondos) */}
+    <View style={[s.container, { top: safeTop + 104 }]}>
 
       {/* Linha de topo — autor à esquerda, ações à direita */}
       <View style={s.topRow}>
