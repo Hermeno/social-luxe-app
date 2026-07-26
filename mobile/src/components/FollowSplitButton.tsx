@@ -48,14 +48,13 @@ export default function FollowSplitButton({ following, loading, onFollow, theme 
     : <Text style={s.labelFollow}>{followBack ? t.profile_follow_back : t.follow}</Text>
 
   if (isDark) {
+    // No feed (sobre o vídeo) o Seguir é a ação principal → gradiente da marca,
+    // a combinar com os anéis. Deixou de ser um contorno branco genérico.
     return (
-      <TouchableOpacity
-        style={[s.pill, s.pillDark]}
-        onPress={() => onFollow('forever')}
-        activeOpacity={0.75}
-        disabled={loading}
-      >
-        {content}
+      <TouchableOpacity onPress={() => onFollow('forever')} activeOpacity={0.85} disabled={loading}>
+        <LinearGradient colors={GRAD} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[s.pill, s.pillDarkFollow]}>
+          {content}
+        </LinearGradient>
       </TouchableOpacity>
     )
   }
@@ -82,19 +81,24 @@ const s = StyleSheet.create({
     borderRadius: 22,
   },
 
-  pillDark: {
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.9)',
-    paddingHorizontal: 16,
-    paddingVertical: 7,
+  // Seguir (feed): gradiente da marca, com um brilho carmim por baixo
+  pillDarkFollow: {
+    paddingHorizontal: 17,
+    paddingVertical: 7.5,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 9,
+    elevation: 3,
   },
+  // A seguir: pastilha de vidro discreta
   pillDarkFollowing: {
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.55)',
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.5)',
+    backgroundColor: 'rgba(255,255,255,0.14)',
     borderRadius: 22,
     paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingVertical: 7.5,
   },
 
   pillLight: {

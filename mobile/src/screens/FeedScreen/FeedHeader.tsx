@@ -1,7 +1,7 @@
-import React, { memo } from 'react'
+import React, { memo, useRef, useEffect } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity,
-  ScrollView, StyleSheet,
+  ScrollView, StyleSheet, Animated, Easing,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
@@ -11,6 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { colors, fonts } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
 import SegmentedRing from '../../components/SegmentedRing'
+import LiveRing from '../../components/LiveRing'
 import { useOnlineStore } from '../../store/online.store'
 import { useAuthStore } from '../../store/auth.store'
 import { useT } from '../../i18n'
@@ -25,14 +26,12 @@ export interface FeedUserGroup {
 }
 
 // ── Geometria — um só peso de anel em toda a app ────────────────────────────
-// O anel flutua 3.5px do avatar e o traço é sempre RING_STROKE, activo ou não.
+// O anel respira longe do avatar (RING_GAP) e o traço é sempre RING_STROKE.
 // Tudo o resto deriva de AV_SIZE, para a fila escalar como uma peça só.
 const AV_SIZE      = 72
 const RING_STROKE  = 3.6
-// Preto suave, não carmim: o anel emoldura o rosto em vez de competir com ele.
-// Vem do tema (colors.ring) para não haver cópias do valor espalhadas.
 const RING_COLOR   = colors.ring
-const RING_GAP     = 3.5
+const RING_GAP     = 6     // folga generosa entre avatar e anel — respira
 const RING_OUTER   = Math.round(AV_SIZE + (RING_GAP + RING_STROKE) * 2)   // ~76
 const TILE_W       = RING_OUTER + 4
 const TILE_GAP     = 14
@@ -77,6 +76,21 @@ export default memo(function FeedHeader({
   const isSocketOnline = useOnlineStore((s) => s.isOnline)
   const currentUser    = useAuthStore((s) => s.user)
   const [halvesCount, setHalvesCount] = React.useState(0)
+
+  // Respirar — o avatar de quem está no ecrã pulsa devagar, para o topo não
+  // parecer morto. Loop suave por native driver.
+  const breathe = useRef(new Animated.Value(0)).current
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(breathe, { toValue: 1, duration: 1900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(breathe, { toValue: 0, duration: 1900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ]),
+    )
+    loop.start()
+    return () => loop.stop()
+  }, [breathe])
+  const breatheScale = breathe.interpolate({ inputRange: [0, 1], outputRange: [1, 1.05] })
 
   // Quantas metades esperam por mim — recontado a cada volta ao feed
   useFocusEffect(
@@ -198,13 +212,14 @@ export default memo(function FeedHeader({
             <TouchableOpacity key={g.user.id} onPress={() => onBubblePress(g)} activeOpacity={0.72} style={s.tile}>
               <View style={s.ringWrap}>
                 {isActive ? (
-                  <View style={s.glassActiveRing} />
+                  // Quem está no ecrã: anel de gradiente que roda (vivo)
+                  <LiveRing size={RING_OUTER} strokeWidth={RING_STROKE} color={colors.primary} />
                 ) : (
                   <SegmentedRing count={g.posts.length} size={RING_OUTER} strokeWidth={RING_STROKE} color="rgba(202,40,81,0.7)" />
                 )}
-                <View style={s.avatarCircle}>
+                <Animated.View style={[s.avatarCircle, isActive && { transform: [{ scale: breatheScale }] }]}>
                   <AvatarImage uri={g.user.avatar} name={g.user.name} size={AV_SIZE} borderWidth={0} borderColor="transparent" />
-                </View>
+                </Animated.View>
                 {online && <View style={s.onlineDot} />}
               </View>
               <Text style={[s.glassTileName, isActive && s.glassTileNameActive]} numberOfLines={1}>
@@ -215,8 +230,13 @@ export default memo(function FeedHeader({
         })}
       </ScrollView>
 
-      {/* linha fina em baixo, a fechar o vidro */}
-      <View style={s.glassHairline} />
+      {/* linha fina em baixo, a fechar o vidro — desvanece nas pontas */}
+      <LinearGradient
+        colors={['transparent', 'rgba(255,255,255,0.22)', 'transparent']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={s.glassHairline}
+      />
     </View>
   )
 })
@@ -269,8 +289,7 @@ const s = StyleSheet.create({
     overflow: 'hidden',
   },
   glassHairline: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(255,255,255,0.14)',
+    height: 1,
   },
   // Anel neutro do "Criar" — claro, sobre o vidro escuro
   glassNeutralRing: {
@@ -290,16 +309,16 @@ const s = StyleSheet.create({
   // Nome — por defeito discreto; só o da pessoa cujo post está no ecrã acende.
   // A hierarquia diz "é isto que estás a ver" sem precisar de outra cor.
   glassTileName: {
-    color: 'rgba(255,255,255,0.6)',
+    color: 'rgba(255,255,255,0.62)',
     fontFamily: fonts.medium,
-    fontSize: 11,
-    letterSpacing: 0.1,
-    maxWidth: TILE_W,
-    marginTop: 6,
+    fontSize: 11.5,
+    letterSpacing: -0.2,
+    maxWidth: TILE_W + 6,
+    marginTop: 9,
     textAlign: 'center',
-    textShadowColor: 'rgba(0,0,0,0.45)',
+    textShadowColor: 'rgba(0,0,0,0.5)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    textShadowRadius: 4,
   },
   glassTileNameActive: {
     color: '#fff',
