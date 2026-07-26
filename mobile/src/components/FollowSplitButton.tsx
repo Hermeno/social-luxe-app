@@ -48,13 +48,15 @@ export default function FollowSplitButton({ following, loading, onFollow, theme 
     : <Text style={s.labelFollow}>{followBack ? t.profile_follow_back : t.follow}</Text>
 
   if (isDark) {
-    // No feed (sobre o vídeo) o Seguir é a ação principal → gradiente da marca,
-    // a combinar com os anéis. Deixou de ser um contorno branco genérico.
+    // No feed o Seguir é sempre transparente — só o contorno, sobre o vídeo.
     return (
-      <TouchableOpacity onPress={() => onFollow('forever')} activeOpacity={0.85} disabled={loading}>
-        <LinearGradient colors={GRAD} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[s.pill, s.pillDarkFollow]}>
-          {content}
-        </LinearGradient>
+      <TouchableOpacity
+        style={[s.pill, s.pillDarkFollow]}
+        onPress={() => onFollow('forever')}
+        activeOpacity={0.75}
+        disabled={loading}
+      >
+        {content}
       </TouchableOpacity>
     )
   }
@@ -81,24 +83,22 @@ const s = StyleSheet.create({
     borderRadius: 22,
   },
 
-  // Seguir (feed): gradiente da marca, com um brilho carmim por baixo
+  // Seguir (feed): sempre transparente, só o contorno branco
   pillDarkFollow: {
-    paddingHorizontal: 17,
-    paddingVertical: 7.5,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.4,
-    shadowRadius: 9,
-    elevation: 3,
+    borderWidth: 1.4,
+    borderColor: 'rgba(255,255,255,0.9)',
+    backgroundColor: 'transparent',
+    paddingHorizontal: 16,
+    paddingVertical: 7,
   },
-  // A seguir: pastilha de vidro discreta
+  // A seguir: também transparente, contorno mais discreto
   pillDarkFollowing: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.5)',
-    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: 1.4,
+    borderColor: 'rgba(255,255,255,0.55)',
+    backgroundColor: 'transparent',
     borderRadius: 22,
     paddingHorizontal: 14,
-    paddingVertical: 7.5,
+    paddingVertical: 7,
   },
 
   pillLight: {
