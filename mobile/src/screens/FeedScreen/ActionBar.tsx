@@ -159,13 +159,13 @@ export default React.memo(function ActionBar({
           >
             <LinearGradient colors={CHIP_GRAD} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={s.chip}>
               <Heart
-                size={23}
+                size={20}
                 strokeWidth={2}
                 color={liked ? '#FF4B6E' : '#fff'}
                 fill={liked ? '#FF4B6E' : 'transparent'}
               />
+              <Text style={s.label}>{fmt(likeCount)}</Text>
             </LinearGradient>
-            <Text style={s.label}>{fmt(likeCount)}</Text>
 
             {/* Heart burst particles */}
             {hearts.map((h) => (
@@ -196,10 +196,10 @@ export default React.memo(function ActionBar({
             <LinearGradient colors={CHIP_GRAD} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={s.chip}>
               {/* No lucide a cauda nasce à esquerda; espelhamos para ficar à direita */}
               <View style={s.mirrorX}>
-                <MessageCircle size={23} strokeWidth={2} color="#fff" />
+                <MessageCircle size={20} strokeWidth={2} color="#fff" />
               </View>
+              <Text style={s.label}>{fmt(commentCountProp ?? post._count?.comments ?? 0)}</Text>
             </LinearGradient>
-            <Text style={s.label}>{fmt(commentCountProp ?? post._count?.comments ?? 0)}</Text>
           </TouchableOpacity>
         )}
 
@@ -207,9 +207,9 @@ export default React.memo(function ActionBar({
         {!isAnnouncement && (
           <TouchableOpacity style={s.btn} onPress={handleShare} activeOpacity={0.75}>
             <LinearGradient colors={CHIP_GRAD} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={s.chip}>
-              <Forward size={23} strokeWidth={2} color="#fff" />
+              <Forward size={20} strokeWidth={2} color="#fff" />
+              <Text style={s.label}>{fmt(shareCount)}</Text>
             </LinearGradient>
-            <Text style={s.label}>{fmt(shareCount)}</Text>
           </TouchableOpacity>
         )}
 
@@ -219,12 +219,12 @@ export default React.memo(function ActionBar({
             <LinearGradient colors={CHIP_GRAD} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={s.chip}>
               <View style={s.repostIcon}>
                 <Animated.View style={{ transform: [{ rotate: repostRotate }] }}>
-                  <RefreshCw size={23} strokeWidth={2} color="#fff" />
+                  <RefreshCw size={20} strokeWidth={2} color="#fff" />
                 </Animated.View>
                 {reposted && <View style={s.repostDot} pointerEvents="none" />}
               </View>
+              <Text style={s.label}>{fmt(shareCount)}</Text>
             </LinearGradient>
-            <Text style={s.label}>{fmt(shareCount)}</Text>
           </TouchableOpacity>
         )}
 
@@ -241,56 +241,50 @@ export default React.memo(function ActionBar({
   )
 })
 
-const CHIP_SIZE = 44
-
 const s = StyleSheet.create({
   // ── Barra horizontal ────────────────────────────────────────────────────────
-  // Espaçamento par: 14 entre bolhas, alinhado à esquerda com o resto do conteúdo.
+  // Espaçamento par: 10 entre retângulos, alinhado à esquerda com o conteúdo.
   row: {
     position: 'absolute',
     left: 16,
     right: 16,
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 14,
+    alignItems: 'center',
+    gap: 10,
     zIndex: 20,
   },
 
-  // Botão: bolha por cima, contador por baixo (centrados)
-  btn: {
-    alignItems: 'center',
-    gap: 5,
-    width: CHIP_SIZE,
-  },
+  btn: {},
 
-  // Bolha de vidro à volta do ícone
+  // Retângulo de vidro: ícone + número lado a lado, lá dentro
   chip: {
-    width: CHIP_SIZE,
-    height: CHIP_SIZE,
-    borderRadius: CHIP_SIZE / 2,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 6,
+    height: 38,
+    paddingHorizontal: 12,
+    borderRadius: 13,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,255,255,0.28)',
     overflow: 'hidden',
   },
 
   mirrorX:    { transform: [{ scaleX: -1 }] },
-  repostIcon: { width: 23, height: 23, alignItems: 'center', justifyContent: 'center' },
-  repostDot:  { position: 'absolute', top: 9, left: 9, width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#fff' },
+  repostIcon: { width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
+  repostDot:  { position: 'absolute', top: 7.5, left: 7.5, width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#fff' },
 
-  // Centrado sobre a bolha do like (primeiro botão)
+  // Centrado sobre o retângulo do like (primeiro botão)
   burstHeart: {
     position: 'absolute',
-    top: 15,
-    left: 15,
+    top: 12,
+    left: 20,
     zIndex: 30,
   },
 
   label: {
     color: '#fff',
     fontFamily: fonts.semiBold,
-    fontSize: 11.5,
+    fontSize: 12.5,
     letterSpacing: -0.1,
     textShadowColor: 'rgba(0,0,0,0.32)',
     textShadowOffset: { width: 0, height: 1 },

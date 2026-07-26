@@ -200,7 +200,7 @@ export default memo(function FeedHeader({
                 {isActive ? (
                   <View style={s.glassActiveRing} />
                 ) : (
-                  <SegmentedRing count={g.posts.length} size={RING_OUTER} strokeWidth={RING_STROKE} color="rgba(255,255,255,0.9)" />
+                  <SegmentedRing count={g.posts.length} size={RING_OUTER} strokeWidth={RING_STROKE} color={colors.primary} />
                 )}
                 <View style={s.avatarCircle}>
                   <AvatarImage uri={g.user.avatar} name={g.user.name} size={AV_SIZE} borderWidth={0} borderColor="transparent" />
@@ -285,7 +285,7 @@ const s = StyleSheet.create({
     top: 0, left: 0, right: 0, bottom: 0,
     borderRadius: RING_OUTER / 2,
     borderWidth: RING_STROKE,
-    borderColor: '#fff',
+    borderColor: colors.primary,
   },
   // Nome — por defeito discreto; só o da pessoa cujo post está no ecrã acende.
   // A hierarquia diz "é isto que estás a ver" sem precisar de outra cor.
