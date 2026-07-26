@@ -200,7 +200,7 @@ export default function PostInfo({
     <>
     {/* Autor + legenda + comentadores num só bloco, em baixo, por cima dos
         ícones de like/comentar. Ancorado por baixo → cresce para cima. */}
-    <View style={[s.container, { bottom: safeBottom + 152 }]}>
+    <View style={[s.container, { bottom: safeBottom + 176 }]}>
 
       {/* Linha de topo — autor à esquerda, ações à direita */}
       <View style={s.topRow}>
