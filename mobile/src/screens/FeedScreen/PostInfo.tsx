@@ -196,33 +196,6 @@ export default function PostInfo({
     return `${m}m`
   }
 
-  const commentersBlock = commenters.length > 0 && (
-    <View style={s.commentersRow}>
-      {commenters.map((c, i) => {
-        const uri = resolveAvatar(c.avatar)
-        return (
-          <View key={c.id} style={[s.commenterAvatar, { marginLeft: i === 0 ? 0 : -9, zIndex: MAX_COMMENTERS - i }]}>
-            {uri ? (
-              <Image source={{ uri }} style={s.commenterImg} />
-            ) : (
-              <View style={[s.commenterImg, s.commenterFallback]}>
-                <Text style={s.commenterInitial}>{c.name?.[0]?.toUpperCase() ?? '?'}</Text>
-              </View>
-            )}
-          </View>
-        )
-      })}
-      <Text style={s.commentersLabel}>
-        {(() => {
-          const total = commentCountProp ?? post._count.comments
-          if (total <= 1) return t.comment_ed
-          const others = total - 1
-          return `+${others} ${others === 1 ? t.comment_one : t.comment_many}`
-        })()}
-      </Text>
-    </View>
-  )
-
   return (
     <>
     {/* Autor + legenda + comentadores num só bloco, em baixo, por cima dos
@@ -349,9 +322,6 @@ export default function PostInfo({
           </Text>
         </TouchableOpacity>
       )}
-
-      {/* Comentadores — no mesmo bloco, por baixo da legenda */}
-      {commentersBlock}
 
     </View>
     </>
