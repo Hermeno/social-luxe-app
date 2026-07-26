@@ -150,7 +150,7 @@ export default memo(function FeedHeader({
       {/* Vidro fingido: gradiente escuro→transparente (o desfoque nativo real
           fica para quando o expo-blur entrar num build). */}
       <LinearGradient
-        colors={['rgba(8,8,10,0.62)', 'rgba(8,8,10,0.20)', 'transparent']}
+        colors={['rgba(6,6,9,0.88)', 'rgba(6,6,9,0.5)', 'rgba(6,6,9,0.08)']}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />
@@ -200,7 +200,7 @@ export default memo(function FeedHeader({
                 {isActive ? (
                   <View style={s.glassActiveRing} />
                 ) : (
-                  <SegmentedRing count={g.posts.length} size={RING_OUTER} strokeWidth={RING_STROKE} color={colors.primary} />
+                  <SegmentedRing count={g.posts.length} size={RING_OUTER} strokeWidth={RING_STROKE} color="rgba(202,40,81,0.7)" />
                 )}
                 <View style={s.avatarCircle}>
                   <AvatarImage uri={g.user.avatar} name={g.user.name} size={AV_SIZE} borderWidth={0} borderColor="transparent" />
@@ -285,7 +285,7 @@ const s = StyleSheet.create({
     top: 0, left: 0, right: 0, bottom: 0,
     borderRadius: RING_OUTER / 2,
     borderWidth: RING_STROKE,
-    borderColor: colors.primary,
+    borderColor: 'rgba(202,40,81,0.85)',
   },
   // Nome — por defeito discreto; só o da pessoa cujo post está no ecrã acende.
   // A hierarquia diz "é isto que estás a ver" sem precisar de outra cor.
