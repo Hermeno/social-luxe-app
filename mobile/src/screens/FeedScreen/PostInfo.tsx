@@ -57,6 +57,9 @@ interface Props {
   post: Post
   isActive: boolean
   commentCount?: number
+  /** Feed: cabeçalho na faixa branca do topo, texto escuro. Sem isto (PostViewer):
+   *  sobreposto no vídeo, em baixo, texto branco. */
+  light?: boolean
   onExpired?: () => void
   onDeleted?: (id: string) => void
   onEdited?: (id: string, caption: string) => void
@@ -64,13 +67,13 @@ interface Props {
 }
 
 export default function PostInfo({
-  post, isActive, commentCount: commentCountProp, onExpired,
+  post, isActive, commentCount: commentCountProp, light = false, onExpired,
   onDeleted, onEdited, onBlockingChange,
 }: Props) {
   const { user }    = useAuthStore()
   const nav         = useNavigation<Nav>()
   const t           = useT()
-  const { bottom: safeBottom } = useSafeAreaInsets()
+  const { bottom: safeBottom, top: safeTop } = useSafeAreaInsets()
   const following   = useFollowStore((s) => s.followingIds.has(post.user.id))
   const [expanded, setExpanded]           = useState(false)
   const [loadingFollow, setLoadingFollow] = useState(false)
@@ -200,7 +203,7 @@ export default function PostInfo({
     <>
     {/* Autor + legenda + comentadores num só bloco, em baixo, por cima dos
         ícones de like/comentar. Ancorado por baixo → cresce para cima. */}
-    <View style={[s.container, { bottom: safeBottom + 176 }]}>
+    <View style={[s.container, light ? { top: safeTop + 120 } : { bottom: safeBottom + 176 }]}>
 
       {/* Linha de topo — autor à esquerda, ações à direita */}
       <View style={s.topRow}>
@@ -239,7 +242,7 @@ export default function PostInfo({
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity onPress={() => nav.navigate('Profile', { userId: post.user.id })} activeOpacity={0.8}>
-                  <Text style={s.username} numberOfLines={1}>
+                  <Text style={[s.username, light && s.usernameLight]} numberOfLines={1}>
                     {post.user.name}{post.partnerUser && post.partnerAccepted ? ` & ${post.partnerUser.name}` : ''}
                   </Text>
                 </TouchableOpacity>
@@ -261,15 +264,15 @@ export default function PostInfo({
                 </View>
               ) : (
                 <Animated.View style={{ opacity: isDying ? pulseAnim : 1 }}>
-                  <Text style={[s.timer, isDying && s.timerDying]}>{timeLeft()}</Text>
+                  <Text style={[s.timer, light && s.timerLight, isDying && s.timerDying]}>{timeLeft()}</Text>
                 </Animated.View>
               )}
 
               {post.user.showDevice && !post.isAnnouncement && (
                 <>
-                  <Text style={s.metaSep}>·</Text>
+                  <Text style={[s.metaSep, light && s.metaLightTxt]}>·</Text>
                   <Ionicons name="phone-portrait-outline" size={9.5} color="rgba(255,255,255,0.62)" />
-                  <Text style={s.metaTxt} numberOfLines={1}>
+                  <Text style={[s.metaTxt, light && s.metaLightTxt]} numberOfLines={1}>
                     {t.feed_posted_by} {post.deviceModel ?? 'Mobile'}
                   </Text>
                 </>
@@ -284,7 +287,7 @@ export default function PostInfo({
                 style={s.pairingRow}
               >
                 <View style={s.pairingDot} />
-                <Text style={s.pairingRowTxt} numberOfLines={1}>
+                <Text style={[s.pairingRowTxt, light && s.pairingRowTxtLight]} numberOfLines={1}>
                   {pairingService.pairingLabel(authorPairing)} · {pairingService.pairingPartner(authorPairing, post.user.id).name}
                 </Text>
               </TouchableOpacity>
@@ -299,7 +302,7 @@ export default function PostInfo({
               following={following}
               loading={loadingFollow}
               onFollow={handleFollow}
-              theme="dark"
+              theme={light ? 'light' : 'dark'}
             />
           )}
           {isSelf && (
@@ -315,10 +318,10 @@ export default function PostInfo({
 
       {/* Legenda — expande para baixo ao toque */}
       {caption.length > 0 && post.mediaType !== 'TEXT' && (
-        <TouchableOpacity onPress={() => setExpanded((e) => !e)} activeOpacity={0.8} style={s.captionWrap}>
-          <Text style={s.caption}>
+        <TouchableOpacity onPress={() => setExpanded((e) => !e)} activeOpacity={0.8} style={[s.captionWrap, light && s.captionWrapLight]}>
+          <Text style={[s.caption, light && s.captionLight]} numberOfLines={light && !expanded ? 1 : undefined}>
             {displayed}
-            {isLong && !expanded && <Text style={s.seeMore}> {t.see_more}</Text>}
+            {isLong && !expanded && <Text style={[s.seeMore, light && s.seeMoreLight]}> {t.see_more}</Text>}
           </Text>
         </TouchableOpacity>
       )}
@@ -396,6 +399,15 @@ const s = StyleSheet.create({
 
   timer:      { color: 'rgba(255,255,255,0.65)', fontFamily: fonts.medium, fontSize: 11, letterSpacing: 0.1 },
   timerDying: { color: '#FF3B30' },
+
+  // ── Variante clara (feed): texto escuro sobre a faixa branca, sem sombras ──
+  usernameLight:      { color: '#111114', fontSize: 15, letterSpacing: -0.3, textShadowRadius: 0, textShadowColor: 'transparent' },
+  metaLightTxt:       { color: 'rgba(0,0,0,0.42)' },
+  pairingRowTxtLight: { color: 'rgba(0,0,0,0.55)', textShadowRadius: 0, textShadowColor: 'transparent' },
+  captionWrapLight:   { marginLeft: 0, marginTop: 6 },
+  captionLight:       { color: '#2A2A2E', fontSize: 13.5, lineHeight: 19 },
+  seeMoreLight:       { color: 'rgba(0,0,0,0.4)' },
+  timerLight:         { color: 'rgba(0,0,0,0.4)' },
 
   // ── Commenter avatars ────────────────────────────────────────────────────────
   // Ancorado ao fundo-esquerda; à direita deixa espaço para a coluna de ações.

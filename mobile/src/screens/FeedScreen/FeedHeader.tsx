@@ -31,7 +31,7 @@ export interface FeedUserGroup {
 const AV_SIZE      = 72
 const RING_STROKE  = 3.6
 const RING_COLOR   = colors.ring
-const RING_GAP     = 6     // folga generosa entre avatar e anel — respira
+const RING_GAP     = 4     // folga entre avatar e anel
 const RING_OUTER   = Math.round(AV_SIZE + (RING_GAP + RING_STROKE) * 2)   // ~76
 const TILE_W       = RING_OUTER + 4
 const TILE_GAP     = 14
@@ -161,14 +161,6 @@ export default memo(function FeedHeader({
   /* ── Barra de vidro fosco com os avatares redondos por cima ──────────────── */
   return (
     <View style={[s.glassBar, { paddingTop: top + 6 }]}>
-      {/* Vidro fingido: gradiente escuro→transparente (o desfoque nativo real
-          fica para quando o expo-blur entrar num build). */}
-      <LinearGradient
-        colors={['rgba(6,6,9,0.88)', 'rgba(6,6,9,0.5)', 'rgba(6,6,9,0.08)']}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
-
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -182,7 +174,7 @@ export default memo(function FeedHeader({
               {currentUser?.avatar ? (
                 <AvatarImage uri={resolveAvatar(currentUser.avatar)} name={currentUser.name} size={AV_SIZE} borderWidth={0} borderColor="transparent" />
               ) : (
-                <View style={s.addPlaceholder}><Ionicons name="person" size={26} color="rgba(255,255,255,0.5)" /></View>
+                <View style={s.addPlaceholder}><Ionicons name="person" size={26} color="rgba(0,0,0,0.35)" /></View>
               )}
             </View>
             <View style={s.addBadge}><Ionicons name="add" size={13} color="#fff" /></View>
@@ -230,13 +222,8 @@ export default memo(function FeedHeader({
         })}
       </ScrollView>
 
-      {/* linha fina em baixo, a fechar o vidro — desvanece nas pontas */}
-      <LinearGradient
-        colors={['transparent', 'rgba(255,255,255,0.22)', 'transparent']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={s.glassHairline}
-      />
+      {/* linha fina em baixo, a separar do vídeo */}
+      <View style={s.glassHairline} />
     </View>
   )
 })
@@ -289,7 +276,8 @@ const s = StyleSheet.create({
     overflow: 'hidden',
   },
   glassHairline: {
-    height: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(0,0,0,0.07)',
   },
   // Anel neutro do "Criar" — claro, sobre o vidro escuro
   glassNeutralRing: {
@@ -297,7 +285,7 @@ const s = StyleSheet.create({
     top: 0, left: 0, right: 0, bottom: 0,
     borderRadius: RING_OUTER / 2,
     borderWidth: RING_STROKE,
-    borderColor: 'rgba(255,255,255,0.4)',
+    borderColor: colors.ringMuted,
   },
   glassActiveRing: {
     position: 'absolute',
@@ -309,19 +297,16 @@ const s = StyleSheet.create({
   // Nome — por defeito discreto; só o da pessoa cujo post está no ecrã acende.
   // A hierarquia diz "é isto que estás a ver" sem precisar de outra cor.
   glassTileName: {
-    color: 'rgba(255,255,255,0.62)',
+    color: 'rgba(0,0,0,0.55)',
     fontFamily: fonts.medium,
     fontSize: 11.5,
     letterSpacing: -0.2,
     maxWidth: TILE_W + 6,
-    marginTop: 9,
+    marginTop: 3,
     textAlign: 'center',
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
   },
   glassTileNameActive: {
-    color: '#fff',
+    color: '#111114',
     fontFamily: fonts.semiBold,
   },
 

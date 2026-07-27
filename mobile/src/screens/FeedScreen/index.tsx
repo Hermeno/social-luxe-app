@@ -65,7 +65,10 @@ export default function FeedScreen() {
     return `${Math.floor(h / 24)}${t.time_d_ago}`
   }
   const nav              = useNavigation<Nav>()
-  const { bottom: safeBottom } = useSafeAreaInsets()
+  const { bottom: safeBottom, top: safeTop } = useSafeAreaInsets()
+  // O vídeo desce para baixo da faixa branca (avatares + autor). Este é o topo
+  // do vídeo; o que fica acima é branco, com texto escuro e legível.
+  const MEDIA_TOP = safeTop + 182
   // A barra de separadores flutua por cima do ecrã; a folha de comentários
   // precisa de saber a altura dela para o campo de escrever não ficar tapado.
   const user             = useAuthStore((s) => s.user)
@@ -634,8 +637,8 @@ export default function FeedScreen() {
 
   useFocusEffect(useCallback(() => {
     isFocusedRef.current = true
-    // O vídeo sobe até ao topo → ícones da barra de estado a branco
-    setStatusBarStyle('light')
+    // Topo do feed agora é branco (avatares + autor) → ícones escuros
+    setStatusBarStyle('dark')
     refreshRef.current()
 
     const task = InteractionManager.runAfterInteractions(() => {
@@ -710,8 +713,8 @@ export default function FeedScreen() {
             setViewerH(e.nativeEvent.layout.height)
           }}
         >
-          {/* ── Media ──────────────────────────────────────────────────── */}
-          <View style={s.mediaClip}>
+          {/* ── Media: baixada para debaixo da faixa branca do topo ─────── */}
+          <View style={[s.mediaClip, { top: MEDIA_TOP }]}>
             {post.mediaType === 'TEXT' ? (() => {
               const parts = post.bgColor?.split('|') ?? []
               const gc: [string, string] = parts.length === 2 ? [parts[0], parts[1]] : ['#FF6B35', '#E63946']
@@ -754,11 +757,12 @@ export default function FeedScreen() {
 
           {/* Véus de topo e fundo removidos — a ver como fica sem eles */}
 
-          {/* Cabeçalho do post: autor + legenda à esquerda, seguir + opções à direita */}
+          {/* Cabeçalho do post: autor + Seguir na faixa branca do topo, texto escuro */}
           <PostInfo
             key={post.id}
             post={post}
             isActive
+            light
             commentCount={(post._count?.comments ?? 0) + (commentDeltas[post.id] ?? 0)}
             onExpired={() => {
               removePost(post.id)
