@@ -795,23 +795,7 @@ export default function FeedScreen() {
             commentCount={(post._count?.comments ?? 0) + (commentDeltas[post.id] ?? 0)}
           />
 
-          {/* Campo de comentário — horizontal, por baixo dos ícones e por cima
-              da navegação. Escrever por cima de um vídeo em ecrã inteiro luta
-              com o teclado, por isso tocar abre a folha de comentários (como no
-              Instagram/TikTok), onde o teclado já é tratado. */}
-          <Pressable
-            style={[s.commentBar, { bottom: safeBottom + 54 }]}
-            onPress={() => {
-              if (searchMode) { Keyboard.dismiss(); setSearchMode(false); setSearchQuery('') }
-              setCommentPost(post)
-            }}
-          >
-            <AvatarImage uri={user?.avatar ?? null} name={user?.name ?? ''} size={30} />
-            <Text style={s.commentBarPh} numberOfLines={1}>{t.feed_add_comment}</Text>
-            <View style={s.commentSend}>
-              <Ionicons name="arrow-up" size={17} color="#fff" />
-            </View>
-          </Pressable>
+          {/* O campo de comentário passou para dentro da ActionBar (barra única) */}
         </View>
       ) : (
         <View style={s.emptyViewer}>

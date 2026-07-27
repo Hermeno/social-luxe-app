@@ -16,6 +16,7 @@ import * as postService from '../../services/post.service'
 import { updateCachedPost } from '../../db/database'
 import ReactionPicker from '../../components/ReactionPicker'
 import AvatarImage from '../../components/AvatarImage'
+import { useAuthStore } from '../../store/auth.store'
 import { useT } from '../../i18n'
 
 interface Props {
@@ -50,6 +51,8 @@ export default React.memo(function ActionBar({
 }: Props) {
   const { bottom: safeBottom } = useSafeAreaInsets()
   const t          = useT()
+  const myAvatar   = useAuthStore((s) => s.user?.avatar ?? null)
+  const myName     = useAuthStore((s) => s.user?.name ?? '')
 
   const [liked,      setLiked]      = useState(likedProp)
   const [reposted,   setReposted]   = useState(repostedProp)
@@ -147,65 +150,36 @@ export default React.memo(function ActionBar({
 
   return (
     <>
-      {/* Cápsula de vidro única — os ícones separados por traços finos, tipo dock */}
+      {/* Barra única — comentar à esquerda, gostar + partilhar à direita */}
       {!isAnnouncement && (
-        <View style={[s.row, { bottom: Math.max(safeBottom, 8) + 108 }]}>
-          <LinearGradient colors={CHIP_GRAD} start={{ x: 0.15, y: 0 }} end={{ x: 0.85, y: 1 }} style={s.capsule}>
-
-            {/* Like */}
-            <TouchableOpacity style={s.seg} onPress={handleLike} onLongPress={() => setShowReactions(true)} activeOpacity={0.65}>
-              <Heart size={21} strokeWidth={2} color={liked ? '#FF4B6E' : '#fff'} fill={liked ? '#FF4B6E' : 'transparent'} />
-              <Text style={s.label}>{fmt(likeCount)}</Text>
-              {hearts.map((h) => (
-                <Animated.View
-                  key={h.id}
-                  pointerEvents="none"
-                  style={[s.burstHeart, { opacity: h.o, transform: [{ translateX: h.tx }, { translateY: h.ty }, { scale: h.s }] }]}
-                >
-                  <Heart size={14} strokeWidth={0} color="#FF4B6E" fill="#FF4B6E" />
-                </Animated.View>
-              ))}
+        <View style={[s.row, { left: 16, right: 16, bottom: safeBottom + 54 }]}>
+          <View style={s.bar}>
+            {/* Comentar — avatar + placeholder, toca e abre a folha */}
+            <TouchableOpacity style={s.commentArea} onPress={onCommentPress} activeOpacity={0.8}>
+              <AvatarImage uri={myAvatar} name={myName} size={30} />
+              <Text style={s.commentPh} numberOfLines={1}>{t.feed_add_comment}</Text>
             </TouchableOpacity>
 
-            <View style={s.divider} />
-
-            {/* Comment */}
-            <TouchableOpacity style={s.seg} onPress={onCommentPress} activeOpacity={0.65}>
-              <View style={s.mirrorX}><MessageCircle size={21} strokeWidth={2} color="#fff" /></View>
-              {commenters.length > 0 && (
-                <View style={s.commenterStack}>
-                  {commenters.slice(0, 3).map((c, i) => (
-                    <View key={c.id} style={[i > 0 && s.commenterOverlap, { zIndex: 3 - i }]}>
-                      <AvatarImage uri={c.avatar} name={c.name} size={18} />
-                    </View>
-                  ))}
-                </View>
-              )}
-              <Text style={s.label}>{fmt(commentCountProp ?? post._count?.comments ?? 0)}</Text>
-            </TouchableOpacity>
-
-            <View style={s.divider} />
-
-            {/* Share */}
-            <TouchableOpacity style={s.seg} onPress={handleShare} activeOpacity={0.65}>
-              <Forward size={21} strokeWidth={2} color="#fff" />
-              <Text style={s.label}>{fmt(shareCount)}</Text>
-            </TouchableOpacity>
-
-            <View style={s.divider} />
-
-            {/* Repostar */}
-            <TouchableOpacity style={s.seg} onPress={handleRepost} activeOpacity={0.65}>
-              <View style={s.repostIcon}>
-                <Animated.View style={{ transform: [{ rotate: repostRotate }] }}>
-                  <RefreshCw size={21} strokeWidth={2} color="#fff" />
-                </Animated.View>
-                {reposted && <View style={s.repostDot} pointerEvents="none" />}
-              </View>
-              <Text style={s.label}>{fmt(shareCount)}</Text>
-            </TouchableOpacity>
-
-          </LinearGradient>
+            {/* Ações — gostar + partilhar */}
+            <View style={s.barActs}>
+              <TouchableOpacity style={s.act} onPress={handleLike} onLongPress={() => setShowReactions(true)} activeOpacity={0.7}>
+                <Heart size={23} strokeWidth={2} color={liked ? '#FF4B6E' : '#fff'} fill={liked ? '#FF4B6E' : 'transparent'} />
+                <Text style={s.actN}>{fmt(likeCount)}</Text>
+                {hearts.map((h) => (
+                  <Animated.View
+                    key={h.id}
+                    pointerEvents="none"
+                    style={[s.burstHeart, { opacity: h.o, transform: [{ translateX: h.tx }, { translateY: h.ty }, { scale: h.s }] }]}
+                  >
+                    <Heart size={14} strokeWidth={0} color="#FF4B6E" fill="#FF4B6E" />
+                  </Animated.View>
+                ))}
+              </TouchableOpacity>
+              <TouchableOpacity style={s.act} onPress={handleShare} activeOpacity={0.7}>
+                <Forward size={23} strokeWidth={2} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       )}
 
@@ -231,32 +205,25 @@ const s = StyleSheet.create({
     zIndex: 20,
   },
 
-  // Cápsula única — vidro escuro, cantos redondos, os segmentos lá dentro
-  capsule: {
+  // Barra única de vidro — comentar + ações
+  bar: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    height: 46,
-    borderRadius: 23,
+    height: 50,
+    borderRadius: 25,
+    paddingLeft: 8,
+    paddingRight: 16,
+    backgroundColor: 'rgba(16,16,20,0.5)',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.18)',
-    alignSelf: 'flex-start',
+    borderColor: 'rgba(255,255,255,0.16)',
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.32, shadowRadius: 12,
   },
-  // Cada ação — segmento com folga, alinhado à cápsula
-  seg: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-    paddingHorizontal: 15,
-    alignSelf: 'stretch',
-    justifyContent: 'center',
-  },
-  // Traço fino a separar os segmentos
-  divider: {
-    width: StyleSheet.hairlineWidth,
-    height: 22,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-  },
+  commentArea: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  commentPh:   { flex: 1, color: 'rgba(255,255,255,0.72)', fontFamily: fonts.regular, fontSize: 14, letterSpacing: -0.1 },
+  barActs:     { flexDirection: 'row', alignItems: 'center', gap: 18 },
+  act:         { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  actN:        { color: '#fff', fontFamily: fonts.semiBold, fontSize: 12.5, fontVariant: ['tabular-nums'] },
 
   // Pilha de avatares dentro do chip de comentário
   commenterStack: { flexDirection: 'row', alignItems: 'center' },
