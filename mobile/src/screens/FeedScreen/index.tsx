@@ -752,24 +752,7 @@ export default function FeedScreen() {
             <View style={s.absLayer} {...swipePanResponder.panHandlers} />
           </View>
 
-          {post.mediaType !== 'TEXT' && (
-            <>
-              {/* Véus — fade suave de 3 pontos (como no perfil), alto e gradual,
-                  para não parecer uma banda/box-shadow */}
-              <LinearGradient
-                colors={['rgba(0,0,0,0.5)', 'rgba(0,0,0,0.14)', 'transparent']}
-                locations={[0, 0.55, 1]}
-                style={s.topGradient}
-                pointerEvents="none"
-              />
-              <LinearGradient
-                colors={['transparent', 'rgba(0,0,0,0.28)', 'rgba(0,0,0,0.82)']}
-                locations={[0, 0.5, 1]}
-                style={s.bottomGradient}
-                pointerEvents="none"
-              />
-            </>
-          )}
+          {/* Véus de topo e fundo removidos — a ver como fica sem eles */}
 
           {/* Cabeçalho do post: autor + legenda à esquerda, seguir + opções à direita */}
           <PostInfo
