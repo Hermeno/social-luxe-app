@@ -12,7 +12,6 @@ import { colors, fonts } from '../../theme'
 import { useT } from '../../i18n'
 import { useAuthStore } from '../../store/auth.store'
 import { useFollowStore } from '../../store/follow.store'
-import { getUserFollowers, FollowUser } from '../../services/follow.service'
 import { getCache, setCache } from '../../db/database'
 import { toast } from '../../utils/toast'
 import * as postService from '../../services/post.service'
@@ -81,20 +80,6 @@ export default function PostInfo({
   const [now, setNow]                     = useState(Date.now)
   const [extraCommenters, setExtraCommenters] = useState<CommenterThumb[]>([])
   const [authorPairing, setAuthorPairing] = useState<Pairing | null>(null)
-  // Seguidores do postador — avatares que aparecem ao lado do Seguir, ao tocar
-  const [followers, setFollowers]         = useState<FollowUser[]>([])
-  const [showFollowers, setShowFollowers] = useState(false)
-  const [loadingFollowers, setLoadingFollowers] = useState(false)
-
-  async function toggleFollowers() {
-    if (showFollowers) { setShowFollowers(false); return }
-    setShowFollowers(true)
-    if (followers.length === 0) {
-      setLoadingFollowers(true)
-      try { setFollowers(await getUserFollowers(post.user.id)) } catch {}
-      setLoadingFollowers(false)
-    }
-  }
 
   const caption   = post.caption ?? ''
   const isLong    = caption.length > 80
@@ -310,38 +295,34 @@ export default function PostInfo({
           </View>
         </View>
 
-        {/* ── Direita: seguir + (feed) avatares dos seguidores ───────────────── */}
+        {/* ── Direita: interruptor Seguir | Seguindo (feed) ou botão (viewer) ── */}
         <View style={s.actions}>
-          {!isSelf && (
+          {!isSelf && (light ? (
+            // Segmentado: os dois lados já lá estão; o foco salta ao tocar. Sem cor.
+            <View style={s.segToggle}>
+              <TouchableOpacity
+                style={[s.segItem, !following && s.segItemActive]}
+                activeOpacity={0.8}
+                onPress={() => { if (following) handleFollow('forever') }}
+              >
+                <Text style={[s.segTxt, !following && s.segTxtActive]}>{t.follow}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.segItem, following && s.segItemActive]}
+                activeOpacity={0.8}
+                onPress={() => { if (!following) handleFollow('forever') }}
+              >
+                <Text style={[s.segTxt, following && s.segTxtActive]}>{t.following}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
             <FollowSplitButton
               following={following}
               loading={loadingFollow}
               onFollow={handleFollow}
-              theme={light ? 'light' : 'dark'}
+              theme="dark"
             />
-          )}
-          {/* Seguidores do postador — 5 avatares sobrepostos, ao lado, ao tocar */}
-          {light && !isSelf && (
-            <TouchableOpacity onPress={toggleFollowers} activeOpacity={0.75} style={s.followersBtn}>
-              {showFollowers ? (
-                loadingFollowers ? (
-                  <Text style={s.followersHint}>…</Text>
-                ) : followers.length > 0 ? (
-                  <View style={s.followerStack}>
-                    {followers.slice(0, 5).map((f, i) => (
-                      <View key={f.id} style={[i > 0 && s.followerOverlap, { zIndex: 5 - i }]}>
-                        <AvatarImage uri={f.avatar} name={f.name} size={22} borderWidth={1.5} borderColor="#fff" />
-                      </View>
-                    ))}
-                  </View>
-                ) : (
-                  <Text style={s.followersHint}>sem seguidores</Text>
-                )
-              ) : (
-                <Ionicons name="chevron-down" size={16} color="rgba(0,0,0,0.38)" />
-              )}
-            </TouchableOpacity>
-          )}
+          ))}
           {isSelf && (
             <PostOptionsMenu
               post={post}
@@ -411,11 +392,18 @@ const s = StyleSheet.create({
   // Seguir + 3 pontinhos, à direita e no topo
   actions: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 3 },
 
-  // Seguidores ao lado do Seguir (feed)
-  followersBtn:   { flexDirection: 'row', alignItems: 'center', minHeight: 24, paddingHorizontal: 2 },
-  followerStack:  { flexDirection: 'row', alignItems: 'center' },
-  followerOverlap:{ marginLeft: -8 },
-  followersHint:  { color: 'rgba(0,0,0,0.4)', fontFamily: fonts.medium, fontSize: 11.5 },
+  // Interruptor Seguir | Seguindo — monocromático, o foco salta de lado
+  segToggle: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.14)',
+    borderRadius: 9,
+    overflow: 'hidden',
+  },
+  segItem: { paddingHorizontal: 13, paddingVertical: 6, justifyContent: 'center' },
+  segItemActive: { backgroundColor: '#111114' },
+  segTxt: { fontFamily: fonts.semiBold, fontSize: 12.5, color: 'rgba(0,0,0,0.45)', letterSpacing: -0.1 },
+  segTxtActive: { color: '#fff' },
 
   pairingRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   pairingDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: colors.primary },
