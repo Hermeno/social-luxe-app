@@ -147,103 +147,67 @@ export default React.memo(function ActionBar({
 
   return (
     <>
-      {/* Barra horizontal — em baixo à esquerda, por cima do campo de comentário
-          (que fica logo abaixo). Antes era uma coluna vertical à direita. */}
-      <View style={[s.row, { bottom: Math.max(safeBottom, 8) + 108 }]}>
+      {/* Cápsula de vidro única — os ícones separados por traços finos, tipo dock */}
+      {!isAnnouncement && (
+        <View style={[s.row, { bottom: Math.max(safeBottom, 8) + 108 }]}>
+          <LinearGradient colors={CHIP_GRAD} start={{ x: 0.15, y: 0 }} end={{ x: 0.85, y: 1 }} style={s.capsule}>
 
-        {/* Like */}
-        {!isAnnouncement && (
-          <TouchableOpacity
-            style={s.btn}
-            onPress={handleLike}
-            onLongPress={() => setShowReactions(true)}
-            activeOpacity={0.75}
-          >
-            <LinearGradient colors={CHIP_GRAD} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={s.chip}>
-              <Heart
-                size={20}
-                strokeWidth={2}
-                color={liked ? '#FF4B6E' : '#fff'}
-                fill={liked ? '#FF4B6E' : 'transparent'}
-              />
+            {/* Like */}
+            <TouchableOpacity style={s.seg} onPress={handleLike} onLongPress={() => setShowReactions(true)} activeOpacity={0.65}>
+              <Heart size={21} strokeWidth={2} color={liked ? '#FF4B6E' : '#fff'} fill={liked ? '#FF4B6E' : 'transparent'} />
               <Text style={s.label}>{fmt(likeCount)}</Text>
-            </LinearGradient>
+              {hearts.map((h) => (
+                <Animated.View
+                  key={h.id}
+                  pointerEvents="none"
+                  style={[s.burstHeart, { opacity: h.o, transform: [{ translateX: h.tx }, { translateY: h.ty }, { scale: h.s }] }]}
+                >
+                  <Heart size={14} strokeWidth={0} color="#FF4B6E" fill="#FF4B6E" />
+                </Animated.View>
+              ))}
+            </TouchableOpacity>
 
-            {/* Heart burst particles */}
-            {hearts.map((h) => (
-              <Animated.View
-                key={h.id}
-                pointerEvents="none"
-                style={[
-                  s.burstHeart,
-                  {
-                    opacity: h.o,
-                    transform: [
-                      { translateX: h.tx },
-                      { translateY: h.ty },
-                      { scale: h.s },
-                    ],
-                  },
-                ]}
-              >
-                <Heart size={14} strokeWidth={0} color="#FF4B6E" fill="#FF4B6E" />
-              </Animated.View>
-            ))}
-          </TouchableOpacity>
-        )}
+            <View style={s.divider} />
 
-        {/* Comment */}
-        {!isAnnouncement && (
-          <TouchableOpacity style={s.btn} onPress={onCommentPress} activeOpacity={0.75}>
-            <LinearGradient colors={CHIP_GRAD} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={s.chip}>
-              {/* O ícone fica sempre */}
-              <View style={s.mirrorX}>
-                <MessageCircle size={20} strokeWidth={2} color="#fff" />
-              </View>
-              {/* Quem comentou — até 5 avatares pequenos, sobrepostos */}
+            {/* Comment */}
+            <TouchableOpacity style={s.seg} onPress={onCommentPress} activeOpacity={0.65}>
+              <View style={s.mirrorX}><MessageCircle size={21} strokeWidth={2} color="#fff" /></View>
               {commenters.length > 0 && (
                 <View style={s.commenterStack}>
-                  {commenters.slice(0, 5).map((c, i) => (
-                    <View key={c.id} style={[i > 0 && s.commenterOverlap, { zIndex: 5 - i }]}>
+                  {commenters.slice(0, 3).map((c, i) => (
+                    <View key={c.id} style={[i > 0 && s.commenterOverlap, { zIndex: 3 - i }]}>
                       <AvatarImage uri={c.avatar} name={c.name} size={18} />
                     </View>
                   ))}
                 </View>
               )}
-              {/* Número total — só o número, sem a palavra */}
               <Text style={s.label}>{fmt(commentCountProp ?? post._count?.comments ?? 0)}</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        )}
+            </TouchableOpacity>
 
-        {/* Share */}
-        {!isAnnouncement && (
-          <TouchableOpacity style={s.btn} onPress={handleShare} activeOpacity={0.75}>
-            <LinearGradient colors={CHIP_GRAD} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={s.chip}>
-              <Forward size={20} strokeWidth={2} color="#fff" />
+            <View style={s.divider} />
+
+            {/* Share */}
+            <TouchableOpacity style={s.seg} onPress={handleShare} activeOpacity={0.65}>
+              <Forward size={21} strokeWidth={2} color="#fff" />
               <Text style={s.label}>{fmt(shareCount)}</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        )}
+            </TouchableOpacity>
 
-        {/* Repostar — gira ao repostar e mostra o ponto central (refresh-cw-dot) */}
-        {!isAnnouncement && (
-          <TouchableOpacity style={s.btn} onPress={handleRepost} activeOpacity={0.75}>
-            <LinearGradient colors={CHIP_GRAD} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={s.chip}>
+            <View style={s.divider} />
+
+            {/* Repostar */}
+            <TouchableOpacity style={s.seg} onPress={handleRepost} activeOpacity={0.65}>
               <View style={s.repostIcon}>
                 <Animated.View style={{ transform: [{ rotate: repostRotate }] }}>
-                  <RefreshCw size={20} strokeWidth={2} color="#fff" />
+                  <RefreshCw size={21} strokeWidth={2} color="#fff" />
                 </Animated.View>
                 {reposted && <View style={s.repostDot} pointerEvents="none" />}
               </View>
               <Text style={s.label}>{fmt(shareCount)}</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        )}
+            </TouchableOpacity>
 
-        {/* Views saíram da feed — o autor vê-as no próprio perfil.
-            Os 3 pontinhos passaram para o topo do post (PostOptionsMenu). */}
-      </View>
+          </LinearGradient>
+        </View>
+      )}
 
       {showReactions && !isAnnouncement && (
         <Modal transparent animationType="none" visible onRequestClose={() => setShowReactions(false)}>
@@ -267,21 +231,31 @@ const s = StyleSheet.create({
     zIndex: 20,
   },
 
-  btn: {},
-
-  // Retângulo de vidro: ícone + número lado a lado, lá dentro
-  chip: {
+  // Cápsula única — vidro escuro, cantos redondos, os segmentos lá dentro
+  capsule: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 46,
+    borderRadius: 23,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.18)',
+    alignSelf: 'flex-start',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.32, shadowRadius: 12,
+  },
+  // Cada ação — segmento com folga, alinhado à cápsula
+  seg: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
-    height: 40,
-    paddingHorizontal: 13,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.16)',
-    overflow: 'hidden',
-    // sombra suave para o chip flutuar sobre o vídeo
-    shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.28, shadowRadius: 8,
+    paddingHorizontal: 15,
+    alignSelf: 'stretch',
+    justifyContent: 'center',
+  },
+  // Traço fino a separar os segmentos
+  divider: {
+    width: StyleSheet.hairlineWidth,
+    height: 22,
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
 
   // Pilha de avatares dentro do chip de comentário
@@ -292,11 +266,11 @@ const s = StyleSheet.create({
   repostIcon: { width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
   repostDot:  { position: 'absolute', top: 7.5, left: 7.5, width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#fff' },
 
-  // Centrado sobre o retângulo do like (primeiro botão)
+  // Centrado sobre o ícone do like (primeiro segmento)
   burstHeart: {
     position: 'absolute',
-    top: 12,
-    left: 20,
+    top: 14,
+    left: 18,
     zIndex: 30,
   },
 
