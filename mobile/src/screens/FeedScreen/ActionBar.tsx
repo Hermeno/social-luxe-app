@@ -160,10 +160,10 @@ export default React.memo(function ActionBar({
               <Text style={s.commentPh} numberOfLines={1}>{t.feed_add_comment}</Text>
             </TouchableOpacity>
 
-            {/* Ações — gostar + partilhar */}
+            {/* Ações — gostar · comentários · repost · partilhar */}
             <View style={s.barActs}>
               <TouchableOpacity style={s.act} onPress={handleLike} onLongPress={() => setShowReactions(true)} activeOpacity={0.7}>
-                <Heart size={23} strokeWidth={2} color={liked ? '#FF4B6E' : '#fff'} fill={liked ? '#FF4B6E' : 'transparent'} />
+                <Heart size={21} strokeWidth={2} color={liked ? '#FF4B6E' : '#fff'} fill={liked ? '#FF4B6E' : 'transparent'} />
                 <Text style={s.actN}>{fmt(likeCount)}</Text>
                 {hearts.map((h) => (
                   <Animated.View
@@ -175,8 +175,23 @@ export default React.memo(function ActionBar({
                   </Animated.View>
                 ))}
               </TouchableOpacity>
+
+              <TouchableOpacity style={s.act} onPress={onCommentPress} activeOpacity={0.7}>
+                <View style={s.mirrorX}><MessageCircle size={21} strokeWidth={2} color="#fff" /></View>
+                <Text style={s.actN}>{fmt(commentCountProp ?? post._count?.comments ?? 0)}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={s.act} onPress={handleRepost} activeOpacity={0.7}>
+                <View style={s.repostIcon}>
+                  <Animated.View style={{ transform: [{ rotate: repostRotate }] }}>
+                    <RefreshCw size={21} strokeWidth={2} color="#fff" />
+                  </Animated.View>
+                  {reposted && <View style={s.repostDot} pointerEvents="none" />}
+                </View>
+              </TouchableOpacity>
+
               <TouchableOpacity style={s.act} onPress={handleShare} activeOpacity={0.7}>
-                <Forward size={23} strokeWidth={2} color="#fff" />
+                <Forward size={21} strokeWidth={2} color="#fff" />
               </TouchableOpacity>
             </View>
           </View>
@@ -213,25 +228,25 @@ const s = StyleSheet.create({
     height: 50,
     borderRadius: 25,
     paddingLeft: 8,
-    paddingRight: 16,
+    paddingRight: 15,
     backgroundColor: 'rgba(16,16,20,0.5)',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,255,255,0.16)',
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.32, shadowRadius: 12,
   },
-  commentArea: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  commentPh:   { flex: 1, color: 'rgba(255,255,255,0.72)', fontFamily: fonts.regular, fontSize: 14, letterSpacing: -0.1 },
-  barActs:     { flexDirection: 'row', alignItems: 'center', gap: 18 },
-  act:         { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  actN:        { color: '#fff', fontFamily: fonts.semiBold, fontSize: 12.5, fontVariant: ['tabular-nums'] },
+  commentArea: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 9 },
+  commentPh:   { flex: 1, color: 'rgba(255,255,255,0.7)', fontFamily: fonts.regular, fontSize: 13.5, letterSpacing: -0.1 },
+  barActs:     { flexDirection: 'row', alignItems: 'center', gap: 15 },
+  act:         { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  actN:        { color: '#fff', fontFamily: fonts.semiBold, fontSize: 12, fontVariant: ['tabular-nums'], letterSpacing: 0.1 },
 
   // Pilha de avatares dentro do chip de comentário
   commenterStack: { flexDirection: 'row', alignItems: 'center' },
   commenterOverlap: { marginLeft: -7 },
 
   mirrorX:    { transform: [{ scaleX: -1 }] },
-  repostIcon: { width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
-  repostDot:  { position: 'absolute', top: 7.5, left: 7.5, width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#fff' },
+  repostIcon: { width: 21, height: 21, alignItems: 'center', justifyContent: 'center' },
+  repostDot:  { position: 'absolute', top: 8, left: 8, width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#fff' },
 
   // Centrado sobre o ícone do like (primeiro segmento)
   burstHeart: {
