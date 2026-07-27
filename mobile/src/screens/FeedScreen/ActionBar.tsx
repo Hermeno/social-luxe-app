@@ -9,9 +9,9 @@ import { Heart, RefreshCw, Forward, MessageCircle } from 'lucide-react-native'
 import { Post } from '../../types'
 import { fonts } from '../../theme'
 
-// Bolha de vidro por baixo de cada ícone — escura, com um brilho no canto
-// superior. Dá profundidade sem cor a mais; o ícone branco assenta por cima.
-const CHIP_GRAD = ['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.03)'] as const
+// Vidro escuro real: base escura com um brilho no topo (não um gradiente branco
+// lavado). Dá profundidade e faz o ícone branco assentar com contraste.
+const CHIP_GRAD = ['rgba(72,72,80,0.55)', 'rgba(14,14,18,0.5)'] as const
 import * as postService from '../../services/post.service'
 import { updateCachedPost } from '../../db/database'
 import ReactionPicker from '../../components/ReactionPicker'
@@ -273,13 +273,15 @@ const s = StyleSheet.create({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    height: 38,
-    paddingHorizontal: 12,
-    borderRadius: 13,
+    gap: 7,
+    height: 40,
+    paddingHorizontal: 13,
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.28)',
+    borderColor: 'rgba(255,255,255,0.16)',
     overflow: 'hidden',
+    // sombra suave para o chip flutuar sobre o vídeo
+    shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.28, shadowRadius: 8,
   },
 
   // Pilha de avatares dentro do chip de comentário
@@ -302,9 +304,7 @@ const s = StyleSheet.create({
     color: '#fff',
     fontFamily: fonts.semiBold,
     fontSize: 12.5,
-    letterSpacing: -0.1,
-    textShadowColor: 'rgba(0,0,0,0.32)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    letterSpacing: 0.1,
+    fontVariant: ['tabular-nums'],
   },
 })

@@ -806,9 +806,11 @@ export default function FeedScreen() {
               setCommentPost(post)
             }}
           >
-            <AvatarImage uri={user?.avatar ?? null} name={user?.name ?? ''} size={28} />
+            <AvatarImage uri={user?.avatar ?? null} name={user?.name ?? ''} size={30} />
             <Text style={s.commentBarPh} numberOfLines={1}>{t.feed_add_comment}</Text>
-            <Ionicons name="send" size={17} color="rgba(255,255,255,0.7)" />
+            <View style={s.commentSend}>
+              <Ionicons name="arrow-up" size={17} color="#fff" />
+            </View>
           </Pressable>
         </View>
       ) : (
@@ -842,18 +844,26 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    height: 44,
-    paddingHorizontal: 12,
-    borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,0.28)',
+    height: 48,
+    paddingLeft: 8, paddingRight: 7,
+    borderRadius: 24,
+    backgroundColor: 'rgba(18,18,22,0.46)',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.22)',
+    borderColor: 'rgba(255,255,255,0.16)',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10,
   },
   commentBarPh: {
     flex: 1,
-    color: 'rgba(255,255,255,0.7)',
+    color: 'rgba(255,255,255,0.74)',
     fontFamily: fonts.regular,
-    fontSize: 13.5,
+    fontSize: 14,
+    letterSpacing: -0.1,
+  },
+  // Enviar — círculo carmim, a única cor de ação
+  commentSend: {
+    width: 34, height: 34, borderRadius: 17,
+    backgroundColor: colors.primary,
+    alignItems: 'center', justifyContent: 'center',
   },
 
   viewer: {
