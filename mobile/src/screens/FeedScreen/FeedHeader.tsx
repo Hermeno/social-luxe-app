@@ -31,7 +31,7 @@ export interface FeedUserGroup {
 const AV_SIZE      = 72
 const RING_STROKE  = 3.6
 const RING_COLOR   = colors.ring
-const RING_GAP     = 4     // folga entre avatar e anel
+const RING_GAP     = 3     // folga entre avatar e anel
 const RING_OUTER   = Math.round(AV_SIZE + (RING_GAP + RING_STROKE) * 2)   // ~76
 const TILE_W       = RING_OUTER + 4
 const TILE_GAP     = 14
@@ -300,7 +300,7 @@ const s = StyleSheet.create({
     fontSize: 11.5,
     letterSpacing: -0.2,
     maxWidth: TILE_W + 6,
-    marginTop: 3,
+    marginTop: -2,   // puxa o nome para junto do avatar (o anel deixa folga)
     textAlign: 'center',
   },
   glassTileNameActive: {
