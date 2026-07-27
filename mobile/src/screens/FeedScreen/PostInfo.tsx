@@ -313,18 +313,20 @@ export default function PostInfo({
                 <View style={[s.segUnderline, !following && s.segUnderlineOn]} />
               </TouchableOpacity>
               <TouchableOpacity style={s.segItem} activeOpacity={0.8} onPress={() => { if (!following) handleFollow('forever') }}>
-                <Text style={[s.segTxt, following && s.segTxtActive]}>{t.following}</Text>
+                {/* "Seguindo" + avatares ao lado; o traço passa por baixo de ambos */}
+                <View style={s.segRow}>
+                  <Text style={[s.segTxt, following && s.segTxtActive]}>{t.following}</Text>
+                  {following && followers.length > 0 && (
+                    <View style={s.followerStack}>
+                      {followers.slice(0, 3).map((f, i) => (
+                        <View key={f.id} style={[i > 0 && s.followerOverlap, { zIndex: 3 - i }]}>
+                          <AvatarImage uri={f.avatar} name={f.name} size={14} />
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
                 <View style={[s.segUnderline, following && s.segUnderlineOn]} />
-                {/* Seguidores — pequenos, por baixo do "Seguindo", dentro do traço */}
-                {following && followers.length > 0 && (
-                  <View style={s.followerStack}>
-                    {followers.slice(0, 3).map((f, i) => (
-                      <View key={f.id} style={[i > 0 && s.followerOverlap, { zIndex: 3 - i }]}>
-                        <AvatarImage uri={f.avatar} name={f.name} size={14} />
-                      </View>
-                    ))}
-                  </View>
-                )}
               </TouchableOpacity>
             </View>
           ) : (
@@ -407,13 +409,14 @@ const s = StyleSheet.create({
   // Interruptor Seguir | Seguindo — o foco é uma linha por baixo, sem cor
   segToggle: { flexDirection: 'row', gap: 16 },
   segItem: { alignItems: 'center', paddingBottom: 5 },
+  segRow:  { flexDirection: 'row', alignItems: 'center', gap: 6 },
   segTxt: { fontFamily: fonts.semiBold, fontSize: 13, color: 'rgba(0,0,0,0.4)', letterSpacing: -0.1 },
   segTxtActive: { color: '#111114' },
   segUnderline: { height: 2, alignSelf: 'stretch', borderRadius: 1, marginTop: 4, backgroundColor: 'transparent' },
   segUnderlineOn: { backgroundColor: '#111114' },
 
-  // Avatares dos seguidores — pequenos, por baixo do "Seguindo"
-  followerStack:  { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+  // Avatares dos seguidores — pequenos, ao lado do "Seguindo"
+  followerStack:  { flexDirection: 'row', alignItems: 'center' },
   followerOverlap:{ marginLeft: -5 },
 
   pairingRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
