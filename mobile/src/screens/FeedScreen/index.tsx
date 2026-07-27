@@ -754,9 +754,20 @@ export default function FeedScreen() {
 
           {post.mediaType !== 'TEXT' && (
             <>
-              {/* Véu superior — o cabeçalho do autor vive aqui e tem de ler-se sobre média clara */}
-              <LinearGradient colors={['rgba(0,0,0,0.58)', 'rgba(0,0,0,0)']} style={s.topGradient} pointerEvents="none" />
-              <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.72)']} style={s.bottomGradient} pointerEvents="none" />
+              {/* Véus — fade suave de 3 pontos (como no perfil), alto e gradual,
+                  para não parecer uma banda/box-shadow */}
+              <LinearGradient
+                colors={['rgba(0,0,0,0.5)', 'rgba(0,0,0,0.14)', 'transparent']}
+                locations={[0, 0.55, 1]}
+                style={s.topGradient}
+                pointerEvents="none"
+              />
+              <LinearGradient
+                colors={['transparent', 'rgba(0,0,0,0.28)', 'rgba(0,0,0,0.82)']}
+                locations={[0, 0.5, 1]}
+                style={s.bottomGradient}
+                pointerEvents="none"
+              />
             </>
           )}
 
@@ -902,8 +913,8 @@ const s = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 6,
   },
-  topGradient:    { position: 'absolute', top: 0, left: 0, right: 0, height: 190 },
-  bottomGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 200 },
+  topGradient:    { position: 'absolute', top: 0, left: 0, right: 0, height: 240 },
+  bottomGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 340 },
 
 
   viewerUserInfo: {
