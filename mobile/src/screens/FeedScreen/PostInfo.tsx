@@ -318,8 +318,8 @@ export default function PostInfo({
                 {/* Seguidores — pequenos, por baixo do "Seguindo", dentro do traço */}
                 {following && followers.length > 0 && (
                   <View style={s.followerStack}>
-                    {followers.slice(0, 5).map((f, i) => (
-                      <View key={f.id} style={[i > 0 && s.followerOverlap, { zIndex: 5 - i }]}>
+                    {followers.slice(0, 3).map((f, i) => (
+                      <View key={f.id} style={[i > 0 && s.followerOverlap, { zIndex: 3 - i }]}>
                         <AvatarImage uri={f.avatar} name={f.name} size={14} />
                       </View>
                     ))}
