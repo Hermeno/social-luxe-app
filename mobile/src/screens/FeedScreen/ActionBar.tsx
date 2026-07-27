@@ -205,7 +205,7 @@ export default React.memo(function ActionBar({
                 <View style={s.commenterStack}>
                   {commenters.slice(0, 5).map((c, i) => (
                     <View key={c.id} style={[i > 0 && s.commenterOverlap, { zIndex: 5 - i }]}>
-                      <AvatarImage uri={c.avatar} name={c.name} size={18} borderWidth={1.5} borderColor="rgba(255,255,255,0.9)" />
+                      <AvatarImage uri={c.avatar} name={c.name} size={18} />
                     </View>
                   ))}
                 </View>

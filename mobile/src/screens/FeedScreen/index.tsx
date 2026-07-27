@@ -68,7 +68,7 @@ export default function FeedScreen() {
   const { bottom: safeBottom, top: safeTop } = useSafeAreaInsets()
   // O vídeo desce para baixo da faixa branca (avatares + autor). Este é o topo
   // do vídeo; o que fica acima é branco, com texto escuro e legível.
-  const MEDIA_TOP = safeTop + 214
+  const MEDIA_TOP = safeTop + 182
   // A barra de separadores flutua por cima do ecrã; a folha de comentários
   // precisa de saber a altura dela para o campo de escrever não ficar tapado.
   const user             = useAuthStore((s) => s.user)

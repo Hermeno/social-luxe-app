@@ -304,16 +304,40 @@ export default function PostInfo({
           </View>
         </View>
 
-        {/* ── Direita: botão (viewer) ou opções ──────────────────────────────── */}
+        {/* ── Direita: interruptor Seguir|Seguindo + seguidores (feed) ou botão ── */}
         <View style={s.actions}>
-          {!isSelf && !light && (
+          {!isSelf && (light ? (
+            <View style={s.followInline}>
+              {/* Seguir | Seguindo — o foco é uma linha por baixo, sem cor */}
+              <View style={s.segToggle}>
+                <TouchableOpacity style={s.segItem} activeOpacity={0.8} onPress={() => { if (following) handleFollow('forever') }}>
+                  <Text style={[s.segTxt, !following && s.segTxtActive]}>{t.follow}</Text>
+                  <View style={[s.segUnderline, !following && s.segUnderlineOn]} />
+                </TouchableOpacity>
+                <TouchableOpacity style={s.segItem} activeOpacity={0.8} onPress={() => { if (!following) handleFollow('forever') }}>
+                  <Text style={[s.segTxt, following && s.segTxtActive]}>{t.following}</Text>
+                  <View style={[s.segUnderline, following && s.segUnderlineOn]} />
+                </TouchableOpacity>
+              </View>
+              {/* Seguidores do postador — só enquanto sigo, sem aro */}
+              {following && followers.length > 0 && (
+                <View style={s.followerStack}>
+                  {followers.slice(0, 5).map((f, i) => (
+                    <View key={f.id} style={[i > 0 && s.followerOverlap, { zIndex: 5 - i }]}>
+                      <AvatarImage uri={f.avatar} name={f.name} size={22} />
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          ) : (
             <FollowSplitButton
               following={following}
               loading={loadingFollow}
               onFollow={handleFollow}
               theme="dark"
             />
-          )}
+          ))}
           {isSelf && (
             <PostOptionsMenu
               post={post}
@@ -324,34 +348,6 @@ export default function PostInfo({
           )}
         </View>
       </View>
-
-      {/* ── Linha do Seguir (feed): interruptor à esquerda, seguidores à direita ── */}
-      {light && !isSelf && (
-        <View style={s.followLine}>
-          {/* Seguir | Seguindo — o foco é uma linha por baixo, sem cor */}
-          <View style={s.segToggle}>
-            <TouchableOpacity style={s.segItem} activeOpacity={0.8} onPress={() => { if (following) handleFollow('forever') }}>
-              <Text style={[s.segTxt, !following && s.segTxtActive]}>{t.follow}</Text>
-              <View style={[s.segUnderline, !following && s.segUnderlineOn]} />
-            </TouchableOpacity>
-            <TouchableOpacity style={s.segItem} activeOpacity={0.8} onPress={() => { if (!following) handleFollow('forever') }}>
-              <Text style={[s.segTxt, following && s.segTxtActive]}>{t.following}</Text>
-              <View style={[s.segUnderline, following && s.segUnderlineOn]} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Seguidores do postador — só enquanto sigo */}
-          {following && followers.length > 0 && (
-            <View style={s.followerStack}>
-              {followers.slice(0, 5).map((f, i) => (
-                <View key={f.id} style={[i > 0 && s.followerOverlap, { zIndex: 5 - i }]}>
-                  <AvatarImage uri={f.avatar} name={f.name} size={22} borderWidth={1.5} borderColor="#fff" />
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
-      )}
 
       {/* Legenda — expande para baixo ao toque */}
       {caption.length > 0 && post.mediaType !== 'TEXT' && (
@@ -411,11 +407,11 @@ const s = StyleSheet.create({
   // Seguir + 3 pontinhos, à direita e no topo
   actions: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 3 },
 
-  // Linha do Seguir — interruptor à esquerda, seguidores à direita
-  followLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginLeft: 46, marginRight: 4, marginTop: 8 },
+  // Interruptor + seguidores, à direita do nome
+  followInline: { flexDirection: 'row', alignItems: 'center', gap: 10 },
 
   // Interruptor Seguir | Seguindo — o foco é uma linha por baixo, sem cor
-  segToggle: { flexDirection: 'row', gap: 18 },
+  segToggle: { flexDirection: 'row', gap: 16 },
   segItem: { alignItems: 'center', paddingBottom: 5 },
   segTxt: { fontFamily: fonts.semiBold, fontSize: 13, color: 'rgba(0,0,0,0.4)', letterSpacing: -0.1 },
   segTxtActive: { color: '#111114' },
