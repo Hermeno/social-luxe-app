@@ -222,8 +222,6 @@ export default memo(function FeedHeader({
         })}
       </ScrollView>
 
-      {/* linha fina em baixo, a separar do vídeo */}
-      <View style={s.glassHairline} />
     </View>
   )
 })
