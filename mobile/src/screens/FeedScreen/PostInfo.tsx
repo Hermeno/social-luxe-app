@@ -12,6 +12,7 @@ import { colors, fonts } from '../../theme'
 import { useT } from '../../i18n'
 import { useAuthStore } from '../../store/auth.store'
 import { useFollowStore } from '../../store/follow.store'
+import { getUserFollowers, FollowUser } from '../../services/follow.service'
 import { getCache, setCache } from '../../db/database'
 import { toast } from '../../utils/toast'
 import * as postService from '../../services/post.service'
@@ -80,6 +81,20 @@ export default function PostInfo({
   const [now, setNow]                     = useState(Date.now)
   const [extraCommenters, setExtraCommenters] = useState<CommenterThumb[]>([])
   const [authorPairing, setAuthorPairing] = useState<Pairing | null>(null)
+  // Seguidores do postador — avatares que aparecem ao lado do Seguir, ao tocar
+  const [followers, setFollowers]         = useState<FollowUser[]>([])
+  const [showFollowers, setShowFollowers] = useState(false)
+  const [loadingFollowers, setLoadingFollowers] = useState(false)
+
+  async function toggleFollowers() {
+    if (showFollowers) { setShowFollowers(false); return }
+    setShowFollowers(true)
+    if (followers.length === 0) {
+      setLoadingFollowers(true)
+      try { setFollowers(await getUserFollowers(post.user.id)) } catch {}
+      setLoadingFollowers(false)
+    }
+  }
 
   const caption   = post.caption ?? ''
   const isLong    = caption.length > 80
@@ -295,7 +310,7 @@ export default function PostInfo({
           </View>
         </View>
 
-        {/* ── Direita: seguir + opções ───────────────────────────────────────── */}
+        {/* ── Direita: seguir + (feed) avatares dos seguidores ───────────────── */}
         <View style={s.actions}>
           {!isSelf && (
             <FollowSplitButton
@@ -304,6 +319,28 @@ export default function PostInfo({
               onFollow={handleFollow}
               theme={light ? 'light' : 'dark'}
             />
+          )}
+          {/* Seguidores do postador — 5 avatares sobrepostos, ao lado, ao tocar */}
+          {light && !isSelf && (
+            <TouchableOpacity onPress={toggleFollowers} activeOpacity={0.75} style={s.followersBtn}>
+              {showFollowers ? (
+                loadingFollowers ? (
+                  <Text style={s.followersHint}>…</Text>
+                ) : followers.length > 0 ? (
+                  <View style={s.followerStack}>
+                    {followers.slice(0, 5).map((f, i) => (
+                      <View key={f.id} style={[i > 0 && s.followerOverlap, { zIndex: 5 - i }]}>
+                        <AvatarImage uri={f.avatar} name={f.name} size={22} borderWidth={1.5} borderColor="#fff" />
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={s.followersHint}>sem seguidores</Text>
+                )
+              ) : (
+                <Ionicons name="chevron-down" size={16} color="rgba(0,0,0,0.38)" />
+              )}
+            </TouchableOpacity>
           )}
           {isSelf && (
             <PostOptionsMenu
@@ -372,7 +409,13 @@ const s = StyleSheet.create({
   announceTxt: { color: '#fff', fontFamily: fonts.semiBold, fontSize: 10, letterSpacing: 0.2 },
 
   // Seguir + 3 pontinhos, à direita e no topo
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingTop: 3 },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 3 },
+
+  // Seguidores ao lado do Seguir (feed)
+  followersBtn:   { flexDirection: 'row', alignItems: 'center', minHeight: 24, paddingHorizontal: 2 },
+  followerStack:  { flexDirection: 'row', alignItems: 'center' },
+  followerOverlap:{ marginLeft: -8 },
+  followersHint:  { color: 'rgba(0,0,0,0.4)', fontFamily: fonts.medium, fontSize: 11.5 },
 
   pairingRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   pairingDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: colors.primary },
