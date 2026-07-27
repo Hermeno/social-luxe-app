@@ -12,6 +12,7 @@ import { colors, fonts } from '../../theme'
 import { useT } from '../../i18n'
 import { useAuthStore } from '../../store/auth.store'
 import { useFollowStore } from '../../store/follow.store'
+import { getUserFollowers, FollowUser } from '../../services/follow.service'
 import { getCache, setCache } from '../../db/database'
 import { toast } from '../../utils/toast'
 import * as postService from '../../services/post.service'
@@ -80,6 +81,14 @@ export default function PostInfo({
   const [now, setNow]                     = useState(Date.now)
   const [extraCommenters, setExtraCommenters] = useState<CommenterThumb[]>([])
   const [authorPairing, setAuthorPairing] = useState<Pairing | null>(null)
+  // Seguidores do postador — aparecem enquanto sigo, somem se deixar de seguir
+  const [followers, setFollowers] = useState<FollowUser[]>([])
+  useEffect(() => {
+    if (!light || !following || followers.length > 0) return
+    let cancelled = false
+    getUserFollowers(post.user.id).then((fs) => { if (!cancelled) setFollowers(fs) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [light, following, post.user.id])
 
   const caption   = post.caption ?? ''
   const isLong    = caption.length > 80
@@ -295,34 +304,16 @@ export default function PostInfo({
           </View>
         </View>
 
-        {/* ── Direita: interruptor Seguir | Seguindo (feed) ou botão (viewer) ── */}
+        {/* ── Direita: botão (viewer) ou opções ──────────────────────────────── */}
         <View style={s.actions}>
-          {!isSelf && (light ? (
-            // Segmentado: os dois lados já lá estão; o foco salta ao tocar. Sem cor.
-            <View style={s.segToggle}>
-              <TouchableOpacity
-                style={[s.segItem, !following && s.segItemActive]}
-                activeOpacity={0.8}
-                onPress={() => { if (following) handleFollow('forever') }}
-              >
-                <Text style={[s.segTxt, !following && s.segTxtActive]}>{t.follow}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[s.segItem, following && s.segItemActive]}
-                activeOpacity={0.8}
-                onPress={() => { if (!following) handleFollow('forever') }}
-              >
-                <Text style={[s.segTxt, following && s.segTxtActive]}>{t.following}</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
+          {!isSelf && !light && (
             <FollowSplitButton
               following={following}
               loading={loadingFollow}
               onFollow={handleFollow}
               theme="dark"
             />
-          ))}
+          )}
           {isSelf && (
             <PostOptionsMenu
               post={post}
@@ -333,6 +324,34 @@ export default function PostInfo({
           )}
         </View>
       </View>
+
+      {/* ── Linha do Seguir (feed): interruptor à esquerda, seguidores à direita ── */}
+      {light && !isSelf && (
+        <View style={s.followLine}>
+          {/* Seguir | Seguindo — o foco é uma linha por baixo, sem cor */}
+          <View style={s.segToggle}>
+            <TouchableOpacity style={s.segItem} activeOpacity={0.8} onPress={() => { if (following) handleFollow('forever') }}>
+              <Text style={[s.segTxt, !following && s.segTxtActive]}>{t.follow}</Text>
+              <View style={[s.segUnderline, !following && s.segUnderlineOn]} />
+            </TouchableOpacity>
+            <TouchableOpacity style={s.segItem} activeOpacity={0.8} onPress={() => { if (!following) handleFollow('forever') }}>
+              <Text style={[s.segTxt, following && s.segTxtActive]}>{t.following}</Text>
+              <View style={[s.segUnderline, following && s.segUnderlineOn]} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Seguidores do postador — só enquanto sigo */}
+          {following && followers.length > 0 && (
+            <View style={s.followerStack}>
+              {followers.slice(0, 5).map((f, i) => (
+                <View key={f.id} style={[i > 0 && s.followerOverlap, { zIndex: 5 - i }]}>
+                  <AvatarImage uri={f.avatar} name={f.name} size={22} borderWidth={1.5} borderColor="#fff" />
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Legenda — expande para baixo ao toque */}
       {caption.length > 0 && post.mediaType !== 'TEXT' && (
@@ -392,18 +411,20 @@ const s = StyleSheet.create({
   // Seguir + 3 pontinhos, à direita e no topo
   actions: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 3 },
 
-  // Interruptor Seguir | Seguindo — monocromático, o foco salta de lado
-  segToggle: {
-    flexDirection: 'row',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.14)',
-    borderRadius: 9,
-    overflow: 'hidden',
-  },
-  segItem: { paddingHorizontal: 13, paddingVertical: 6, justifyContent: 'center' },
-  segItemActive: { backgroundColor: '#111114' },
-  segTxt: { fontFamily: fonts.semiBold, fontSize: 12.5, color: 'rgba(0,0,0,0.45)', letterSpacing: -0.1 },
-  segTxtActive: { color: '#fff' },
+  // Linha do Seguir — interruptor à esquerda, seguidores à direita
+  followLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginLeft: 46, marginRight: 4, marginTop: 8 },
+
+  // Interruptor Seguir | Seguindo — o foco é uma linha por baixo, sem cor
+  segToggle: { flexDirection: 'row', gap: 18 },
+  segItem: { alignItems: 'center', paddingBottom: 5 },
+  segTxt: { fontFamily: fonts.semiBold, fontSize: 13, color: 'rgba(0,0,0,0.4)', letterSpacing: -0.1 },
+  segTxtActive: { color: '#111114' },
+  segUnderline: { height: 2, alignSelf: 'stretch', borderRadius: 1, marginTop: 4, backgroundColor: 'transparent' },
+  segUnderlineOn: { backgroundColor: '#111114' },
+
+  // Avatares dos seguidores, à direita
+  followerStack:  { flexDirection: 'row', alignItems: 'center' },
+  followerOverlap:{ marginLeft: -8 },
 
   pairingRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   pairingDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: colors.primary },
