@@ -9,7 +9,6 @@ import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs'
 import { Post } from '../../types'
 import { colors, fonts } from '../../theme'
 import { AppStackParams } from '../../navigation/AppNavigator'
@@ -56,7 +55,6 @@ function FeedItem({
 }: Props) {
   const nav = useNavigation<Nav>()
   const { top: safeTop, bottom: safeBottom } = useSafeAreaInsets()
-  const tabBarHeight = useBottomTabBarHeight()
 
   const isVideo = post.mediaType === 'VIDEO'
   const isText  = post.mediaType === 'TEXT'
@@ -122,8 +120,9 @@ function FeedItem({
 
   return (
     <Pressable onPress={handleTap} style={s.container}>
-      {/* ── Média: entre a status bar (topo) e a navegação (fundo) ── */}
-      <View style={[s.mediaBox, { top: safeTop, bottom: tabBarHeight }]}>
+      {/* ── Média: começa abaixo da status bar; enche até ao fundo
+             (a navegação flutua por cima) ── */}
+      <View style={[s.mediaBox, { top: safeTop }]}>
         {isText ? (
           <LinearGradient colors={textGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.media}>
             <Text style={s.textContent}>{post.caption}</Text>
@@ -195,7 +194,7 @@ export default React.memo(FeedItem)
 
 const s = StyleSheet.create({
   container:   { width, height, backgroundColor: colors.black },
-  mediaBox:    { position: 'absolute', left: 0, right: 0, overflow: 'hidden', backgroundColor: colors.black },
+  mediaBox:    { position: 'absolute', left: 0, right: 0, bottom: 0, overflow: 'hidden', backgroundColor: colors.black },
   media:       { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   bottomScrim: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 300 },
   description: {
