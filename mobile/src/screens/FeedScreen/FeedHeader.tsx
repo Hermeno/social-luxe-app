@@ -166,10 +166,9 @@ export default memo(function FeedHeader({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={s.railContent}
       >
-        {/* Criar — o teu avatar + badge */}
+        {/* Criar — o teu avatar + badge, sem anel */}
         <TouchableOpacity onPress={onCreatePress} activeOpacity={0.72} style={s.tile}>
           <View style={s.ringWrap}>
-            <View style={s.glassNeutralRing} />
             <View style={s.avatarCircle}>
               {currentUser?.avatar ? (
                 <AvatarImage uri={resolveAvatar(currentUser.avatar)} name={currentUser.name} size={AV_SIZE} borderWidth={0} borderColor="transparent" />
