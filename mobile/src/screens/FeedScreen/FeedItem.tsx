@@ -54,7 +54,7 @@ function FeedItem({
   onCommentPress, onLikeChange, onRepost, onDeleted, onEdited, onExpired, onBlockingChange,
 }: Props) {
   const nav = useNavigation<Nav>()
-  const { top: safeTop, bottom: safeBottom } = useSafeAreaInsets()
+  const { bottom: safeBottom } = useSafeAreaInsets()
 
   const isVideo = post.mediaType === 'VIDEO'
   const isText  = post.mediaType === 'TEXT'
@@ -120,36 +120,33 @@ function FeedItem({
 
   return (
     <Pressable onPress={handleTap} style={s.container}>
-      {/* ── Média: começa abaixo da status bar; enche até ao fundo
-             (a navegação flutua por cima) ── */}
-      <View style={[s.mediaBox, { top: safeTop }]}>
-        {isText ? (
-          <LinearGradient colors={textGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.media}>
-            <Text style={s.textContent}>{post.caption}</Text>
-          </LinearGradient>
-        ) : isAlbum ? (
-          <PostAlbumGrid
-            urls={post.mediaUrls ?? []}
-            overlays={post.albumOverlays}
-            onOpen={() => nav.navigate('PostViewer', { posts: [post], startIndex: 0 })}
-          />
-        ) : isVideo ? (
-          <VideoView player={player} style={s.media} contentFit="cover" nativeControls={false} />
-        ) : (
-          <Image source={{ uri }} style={s.media} contentFit="cover" cachePolicy="disk" recyclingKey={post.id} transition={150} />
-        )}
+      {/* ── Média em ecrã inteiro ── */}
+      {isText ? (
+        <LinearGradient colors={textGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.media}>
+          <Text style={s.textContent}>{post.caption}</Text>
+        </LinearGradient>
+      ) : isAlbum ? (
+        <PostAlbumGrid
+          urls={post.mediaUrls ?? []}
+          overlays={post.albumOverlays}
+          onOpen={() => nav.navigate('PostViewer', { posts: [post], startIndex: 0 })}
+        />
+      ) : isVideo ? (
+        <VideoView player={player} style={s.media} contentFit="cover" nativeControls={false} />
+      ) : (
+        <Image source={{ uri }} style={s.media} contentFit="cover" cachePolicy="disk" recyclingKey={post.id} transition={150} />
+      )}
 
-        {/* Véu de fundo — só para o texto ler sobre a média */}
-        {!isText && (
-          <LinearGradient colors={['transparent', 'rgba(0,0,0,0.55)']} style={s.bottomScrim} pointerEvents="none" />
-        )}
+      {/* Véu de fundo — só para o texto ler sobre a média */}
+      {!isText && (
+        <LinearGradient colors={['transparent', 'rgba(0,0,0,0.55)']} style={s.bottomScrim} pointerEvents="none" />
+      )}
 
-        {buffering && (
-          <View style={s.center} pointerEvents="none">
-            <ActivityIndicator size="large" color="rgba(255,255,255,0.85)" />
-          </View>
-        )}
-      </View>
+      {buffering && (
+        <View style={s.center} pointerEvents="none">
+          <ActivityIndicator size="large" color="rgba(255,255,255,0.85)" />
+        </View>
+      )}
 
       {/* Coração do duplo toque */}
       <Animated.View style={[s.bigHeart, { opacity: heartOpacity, transform: [{ scale: heartScale }] }]} pointerEvents="none">
@@ -194,7 +191,6 @@ export default React.memo(FeedItem)
 
 const s = StyleSheet.create({
   container:   { width, height, backgroundColor: colors.black },
-  mediaBox:    { position: 'absolute', left: 0, right: 0, bottom: 0, overflow: 'hidden', backgroundColor: colors.black },
   media:       { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   bottomScrim: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 300 },
   description: {
