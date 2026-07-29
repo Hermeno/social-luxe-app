@@ -269,8 +269,8 @@ export default function FeedScreen() {
   return (
     <View style={s.container}>
       {flatPosts.length > 0 ? (
-        <FlatList
-          ref={listRef}
+        <Animated.FlatList
+          ref={listRef as React.Ref<any>}
           data={flatPosts}
           keyExtractor={(p) => p.id}
           renderItem={renderItem}
