@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import {
-  View, Text, ActivityIndicator, FlatList, StyleSheet, Dimensions, Keyboard,
+  View, Text, ActivityIndicator, FlatList, StyleSheet, Dimensions, Keyboard, Animated,
   type ViewToken,
 } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { setStatusBarStyle } from 'expo-status-bar'
 import { useNavigation, useFocusEffect } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
@@ -20,9 +21,13 @@ import { colors, fonts } from '../../theme'
 import { API_BASE } from '../../config'
 import FeedHeader, { FeedUserGroup as UserGroup } from './FeedHeader'
 import FeedItem from './FeedItem'
+import PostInfo from './PostInfo'
 import CommentSheet from '../../components/CommentSheet'
 
 const { height: SCREEN_H } = Dimensions.get('window')
+// Quanto se arrasta para a faixa branca do arranque desaparecer e o vídeo ficar
+// em ecrã inteiro. Curto: um gesto para cima e já entra no imersivo.
+const CARD_FADE = SCREEN_H * 0.14
 
 type Nav = StackNavigationProp<AppStackParams>
 
@@ -59,6 +64,22 @@ export default function FeedScreen() {
   const [repostedIds,   setRepostedIds]   = useState<Set<string>>(new Set())
 
   const listRef = useRef<FlatList<Post>>(null)
+  const { top: safeTop } = useSafeAreaInsets()
+
+  // ── Cartão → imersivo, guiado pelo scroll ──────────────────────────────────
+  // No topo (scroll 0) vê-se a faixa branca com os avatares e o autor. Ao
+  // arrastar para cima, a faixa desvanece e o autor "desce" — o do fundo, na
+  // célula, aparece. Uma travessia, não um salto.
+  const scrollY = useRef(new Animated.Value(0)).current
+  const { cardOpacity, cardTranslateY, bottomAuthorOpacity } = useMemo(() => ({
+    cardOpacity:        scrollY.interpolate({ inputRange: [0, CARD_FADE], outputRange: [1, 0], extrapolate: 'clamp' }),
+    cardTranslateY:     scrollY.interpolate({ inputRange: [0, CARD_FADE], outputRange: [0, -44], extrapolate: 'clamp' }),
+    bottomAuthorOpacity: scrollY.interpolate({ inputRange: [0, CARD_FADE], outputRange: [0, 1], extrapolate: 'clamp' }),
+  }), [scrollY])
+  const onScroll = useMemo(
+    () => Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true }),
+    [scrollY],
+  )
 
   // ── Dados: agrupar por autor (topo) e achatar (pager) ──────────────────────
   const userGroups = useMemo<UserGroup[]>(() => {
@@ -224,6 +245,7 @@ export default function FeedScreen() {
     <FeedItem
       post={item}
       isActive={item.id === currentPostId}
+      authorOpacity={bottomAuthorOpacity}
       liked={likedPostIds.has(item.id)}
       reposted={repostedIds.has(item.id)}
       commentCount={(item._count?.comments ?? 0) + (commentDeltas[item.id] ?? 0)}
@@ -238,7 +260,7 @@ export default function FeedScreen() {
       onExpired={(id) => removePost(id)}
       onBlockingChange={() => {}}
     />
-  ), [currentPostId, likedPostIds, repostedIds, commentDeltas, searchMode, handleLikeChange, handleRepost, removePost, updatePost])
+  ), [currentPostId, bottomAuthorOpacity, likedPostIds, repostedIds, commentDeltas, searchMode, handleLikeChange, handleRepost, removePost, updatePost])
 
   const getItemLayout = useCallback((_: unknown, index: number) => (
     { length: SCREEN_H, offset: SCREEN_H * index, index }
@@ -260,6 +282,8 @@ export default function FeedScreen() {
           disableIntervalMomentum
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
           onEndReached={loadMore}
           onEndReachedThreshold={0.6}
           windowSize={3}
@@ -277,18 +301,51 @@ export default function FeedScreen() {
         </View>
       )}
 
-      {/* Topo — barra de avatares, overlay fixo sobre o feed */}
-      <FeedHeader
-        filteredGroups={filteredGroups}
-        activeUserId={activePost?.user.id}
-        searchMode={searchMode}
-        searchQuery={searchQuery}
-        onSearchClose={handleSearchClose}
-        onSearchChange={handleSearchChange}
-        onSearchPress={handleSearchOpen}
-        onBubblePress={handleBubblePress}
-        onCreatePress={handleCreatePress}
-      />
+      {/* Topo. Em pesquisa, o painel ocupa o topo (sem desvanecer). Senão, é a
+          faixa branca do cartão: avatares + autor, que some ao arrastar p/ cima. */}
+      {searchMode ? (
+        <FeedHeader
+          filteredGroups={filteredGroups}
+          activeUserId={activePost?.user.id}
+          searchMode
+          searchQuery={searchQuery}
+          onSearchClose={handleSearchClose}
+          onSearchChange={handleSearchChange}
+          onSearchPress={handleSearchOpen}
+          onBubblePress={handleBubblePress}
+          onCreatePress={handleCreatePress}
+        />
+      ) : (
+        <Animated.View
+          style={[s.cardHeader, { height: safeTop + 224, opacity: cardOpacity, transform: [{ translateY: cardTranslateY }] }]}
+          pointerEvents="box-none"
+        >
+          <FeedHeader
+            filteredGroups={filteredGroups}
+            activeUserId={activePost?.user.id}
+            searchMode={false}
+            searchQuery={searchQuery}
+            onSearchClose={handleSearchClose}
+            onSearchChange={handleSearchChange}
+            onSearchPress={handleSearchOpen}
+            onBubblePress={handleBubblePress}
+            onCreatePress={handleCreatePress}
+          />
+          {activePost && (
+            <PostInfo
+              key={activePost.id}
+              post={activePost}
+              isActive
+              light
+              commentCount={(activePost._count?.comments ?? 0) + (commentDeltas[activePost.id] ?? 0)}
+              onExpired={() => removePost(activePost.id)}
+              onDeleted={(id) => removePost(id)}
+              onEdited={(id, caption) => updatePost(id, caption)}
+              onBlockingChange={() => {}}
+            />
+          )}
+        </Animated.View>
+      )}
 
       {commentPost && (
         <CommentSheet
@@ -303,6 +360,14 @@ export default function FeedScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.black },
+  // Faixa branca do cartão — cobre o topo do vídeo no arranque
+  cardHeader: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0,
+    backgroundColor: colors.white,
+    zIndex: 30,
+    overflow: 'hidden',
+  },
   empty:     { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, backgroundColor: colors.black },
   emptyTxt:  { fontFamily: fonts.medium, fontSize: 14, color: 'rgba(255,255,255,0.7)' },
 })

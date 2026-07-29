@@ -30,6 +30,9 @@ interface Props {
   post: Post
   /** Só a célula visível toca o vídeo e corre a contagem de vida. */
   isActive: boolean
+  /** Opacidade do autor no fundo: 0 no topo (cartão mostra o autor em cima),
+   *  1 quando se arrasta para o imersivo. Cruza-se com a faixa branca. */
+  authorOpacity?: Animated.AnimatedInterpolation<number>
   liked: boolean
   reposted: boolean
   commentCount: number
@@ -46,7 +49,7 @@ interface Props {
 // leitor de vídeo — a virtualização da FlatList monta/desmonta as células, por
 // isso não há um player partilhado a tocar o vídeo errado.
 function FeedItem({
-  post, isActive, liked, reposted, commentCount,
+  post, isActive, authorOpacity, liked, reposted, commentCount,
   onCommentPress, onLikeChange, onRepost, onDeleted, onEdited, onExpired, onBlockingChange,
 }: Props) {
   const nav = useNavigation<Nav>()
@@ -151,15 +154,18 @@ function FeedItem({
         <Ionicons name="heart" size={104} color="rgba(255,255,255,0.92)" />
       </Animated.View>
 
-      <PostInfo
-        post={post}
-        isActive={isActive}
-        commentCount={commentCount}
-        onExpired={() => onExpired(post.id)}
-        onDeleted={onDeleted}
-        onEdited={onEdited}
-        onBlockingChange={onBlockingChange}
-      />
+      {/* Autor no fundo (imersivo). Cruza com a faixa branca do topo via opacidade. */}
+      <Animated.View style={authorOpacity ? { opacity: authorOpacity } : undefined} pointerEvents="box-none">
+        <PostInfo
+          post={post}
+          isActive={isActive}
+          commentCount={commentCount}
+          onExpired={() => onExpired(post.id)}
+          onDeleted={onDeleted}
+          onEdited={onEdited}
+          onBlockingChange={onBlockingChange}
+        />
+      </Animated.View>
 
       <ActionBar
         post={post}
