@@ -337,6 +337,7 @@ export default function FeedScreen() {
               post={activePost}
               isActive
               light
+              hideCaption
               commentCount={(activePost._count?.comments ?? 0) + (commentDeltas[activePost.id] ?? 0)}
               onExpired={() => removePost(activePost.id)}
               onDeleted={(id) => removePost(id)}

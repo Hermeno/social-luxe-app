@@ -61,6 +61,9 @@ interface Props {
   /** Feed: cabeçalho na faixa branca do topo, texto escuro. Sem isto (PostViewer):
    *  sobreposto no vídeo, em baixo, texto branco. */
   light?: boolean
+  /** A descrição vive sempre em baixo-esquerda, à parte — por isso o bloco do
+   *  autor (topo branco e imersivo) não a repete. */
+  hideCaption?: boolean
   onExpired?: () => void
   onDeleted?: (id: string) => void
   onEdited?: (id: string, caption: string) => void
@@ -68,7 +71,7 @@ interface Props {
 }
 
 export default function PostInfo({
-  post, isActive, commentCount: commentCountProp, light = false, onExpired,
+  post, isActive, commentCount: commentCountProp, light = false, hideCaption = false, onExpired,
   onDeleted, onEdited, onBlockingChange,
 }: Props) {
   const { user }    = useAuthStore()
@@ -349,7 +352,7 @@ export default function PostInfo({
       </View>
 
       {/* Legenda — expande para baixo ao toque */}
-      {caption.length > 0 && post.mediaType !== 'TEXT' && (
+      {!hideCaption && caption.length > 0 && post.mediaType !== 'TEXT' && (
         <TouchableOpacity onPress={() => setExpanded((e) => !e)} activeOpacity={0.8} style={[s.captionWrap, light && s.captionWrapLight]}>
           <Text style={[s.caption, light && s.captionLight]} numberOfLines={light && !expanded ? 1 : undefined}>
             {displayed}
