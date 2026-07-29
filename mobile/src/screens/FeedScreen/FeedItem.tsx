@@ -1,141 +1,190 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { View, StyleSheet, Dimensions, TouchableWithoutFeedback, Animated, ActivityIndicator } from 'react-native'
+import {
+  View, StyleSheet, Dimensions, Pressable, Animated, ActivityIndicator, Text,
+} from 'react-native'
 import { useVideoPlayer, VideoView, VideoPlayerStatus } from 'expo-video'
+import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
+import { useNavigation } from '@react-navigation/native'
+import { StackNavigationProp } from '@react-navigation/stack'
 import { Post } from '../../types'
-import { colors, gradients } from '../../theme'
+import { colors, fonts } from '../../theme'
+import { AppStackParams } from '../../navigation/AppNavigator'
+import { API_BASE } from '../../config'
+import * as postService from '../../services/post.service'
 import ActionBar from './ActionBar'
 import PostInfo from './PostInfo'
-import * as postService from '../../services/post.service'
-import { API_BASE } from '../../config'
+import PostAlbumGrid from './PostAlbumGrid'
 
 const { width, height } = Dimensions.get('window')
 
-interface Props {
-  post: Post
-  isActive: boolean
-  onCommentPress: (post: Post) => void
+type Nav = StackNavigationProp<AppStackParams>
+
+function resolveMedia(url: string | null | undefined): string {
+  if (!url) return ''
+  return url.startsWith('http') ? url : `${API_BASE}${url}`
 }
 
-export default function FeedItem({ post, isActive, onCommentPress }: Props) {
-  const uri = post.mediaUrl?.startsWith('http') ? post.mediaUrl : `${API_BASE}${post.mediaUrl ?? ''}`
+interface Props {
+  post: Post
+  /** Só a célula visível toca o vídeo e corre a contagem de vida. */
+  isActive: boolean
+  liked: boolean
+  reposted: boolean
+  commentCount: number
+  onCommentPress: (post: Post) => void
+  onLikeChange: (liked: boolean) => void
+  onRepost: () => void
+  onDeleted: (id: string) => void
+  onEdited: (id: string, caption: string) => void
+  onExpired: (id: string) => void
+  onBlockingChange: (open: boolean) => void
+}
 
-  // Memoized so the player is only recreated when the source actually changes —
-  // an inline `{ uri }` literal would get a new reference on every re-render
-  // (e.g. liking the post), causing expo-video to spin up a fresh player that
-  // never receives a play() call, which is what caused the black-screen bug.
-  const source = useMemo(
-    () => (post.mediaType === 'VIDEO' ? { uri } : null),
-    [post.mediaType, uri],
-  )
+// Uma célula do pager vertical: um post em ecrã inteiro. É a única dona do seu
+// leitor de vídeo — a virtualização da FlatList monta/desmonta as células, por
+// isso não há um player partilhado a tocar o vídeo errado.
+function FeedItem({
+  post, isActive, liked, reposted, commentCount,
+  onCommentPress, onLikeChange, onRepost, onDeleted, onEdited, onExpired, onBlockingChange,
+}: Props) {
+  const nav = useNavigation<Nav>()
+
+  const isVideo = post.mediaType === 'VIDEO'
+  const isText  = post.mediaType === 'TEXT'
+  const isAlbum = !isVideo && !isText && !!post.mediaUrls && post.mediaUrls.length > 1
+  const uri     = resolveMedia(post.mediaUrl)
+
+  // Memoizado: um `{ uri }` inline mudava de referência a cada render (ex.: ao
+  // gostar) e o expo-video criava um player novo que nunca recebia play().
+  const source = useMemo(() => (isVideo ? { uri } : null), [isVideo, uri])
   const player = useVideoPlayer(source, (p) => { p.loop = true; p.muted = false })
 
   const [status, setStatus] = useState<VideoPlayerStatus>('idle')
   useEffect(() => {
-    if (post.mediaType !== 'VIDEO') return
+    if (!isVideo) return
     const sub = player.addListener('statusChange', ({ status: s }) => setStatus(s))
     return () => sub.remove()
-  }, [player, post.mediaType])
-  const isBuffering = post.mediaType === 'VIDEO' && isActive && status === 'loading'
+  }, [player, isVideo])
+  const buffering = isVideo && isActive && status === 'loading'
 
-  // Double-tap to like
-  const lastTap   = useRef(0)
-  const heartAnim = useRef(new Animated.Value(0)).current
-  const heartScale = useRef(new Animated.Value(0.3)).current
-  const [liked, setLiked] = useState(false)
-
+  // Só a célula ativa toca; ao sair de vista, pausa e rebobina.
   useEffect(() => {
-    if (post.mediaType !== 'VIDEO') return
+    if (!isVideo) return
     if (isActive) {
-      player.currentTime = 0
-      player.play()
+      try { player.currentTime = 0; player.play() } catch {}
     } else {
-      player.pause()
+      try { player.pause() } catch {}
     }
-  }, [isActive, player, post.mediaType])
+  }, [isActive, player, isVideo])
+
+  // ── Duplo toque para gostar ──────────────────────────────────────────────
+  const lastTap    = useRef(0)
+  const heartOpacity = useRef(new Animated.Value(0)).current
+  const heartScale   = useRef(new Animated.Value(0.3)).current
 
   function handleTap() {
     const now = Date.now()
     if (now - lastTap.current < 300) {
-      // Double tap — show heart + like
-      triggerHeartBurst()
+      burstHeart()
       if (!liked) {
-        setLiked(true)
+        onLikeChange(true)
         postService.likePost(post.id).catch(() => {})
       }
     }
     lastTap.current = now
   }
 
-  function triggerHeartBurst() {
-    heartAnim.setValue(1)
+  function burstHeart() {
+    heartOpacity.setValue(1)
     heartScale.setValue(0.3)
     Animated.parallel([
       Animated.spring(heartScale, { toValue: 1, useNativeDriver: true, speed: 18, bounciness: 16 }),
       Animated.sequence([
         Animated.delay(500),
-        Animated.timing(heartAnim, { toValue: 0, duration: 350, useNativeDriver: true }),
+        Animated.timing(heartOpacity, { toValue: 0, duration: 350, useNativeDriver: true }),
       ]),
     ]).start()
   }
 
+  const textGradient = useMemo<[string, string]>(() => {
+    const parts = post.bgColor?.split('|') ?? []
+    return parts.length === 2 ? [parts[0], parts[1]] : ['#FF6B35', '#E63946']
+  }, [post.bgColor])
+
   return (
-    <TouchableWithoutFeedback onPress={handleTap}>
-      <View style={s.container}>
-        {post.mediaType === 'VIDEO' ? (
-          <VideoView player={player} style={s.media} contentFit="cover" nativeControls={false} />
-        ) : (
-          <View style={s.imageContainer}>
-            <Animated.Image source={{ uri }} style={s.media} resizeMode="cover" />
-          </View>
-        )}
+    <Pressable onPress={handleTap} style={s.container}>
+      {/* ── Média ── */}
+      {isText ? (
+        <LinearGradient colors={textGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.media}>
+          <Text style={s.textContent}>{post.caption}</Text>
+        </LinearGradient>
+      ) : isAlbum ? (
+        <PostAlbumGrid
+          urls={post.mediaUrls ?? []}
+          overlays={post.albumOverlays}
+          onOpen={() => nav.navigate('PostViewer', { posts: [post], startIndex: 0 })}
+        />
+      ) : isVideo ? (
+        <VideoView player={player} style={s.media} contentFit="cover" nativeControls={false} />
+      ) : (
+        <Image source={{ uri }} style={s.media} contentFit="cover" cachePolicy="disk" recyclingKey={post.id} transition={150} />
+      )}
 
-        {/* Gradients */}
-        <LinearGradient colors={gradients.feedTop}    style={s.topGradient} />
-        <LinearGradient colors={gradients.feedBottom} style={s.bottomGradient} />
+      {/* Véus subtis — só o suficiente para o texto ler sobre a média */}
+      {!isText && (
+        <>
+          <LinearGradient colors={['rgba(0,0,0,0.45)', 'transparent']} style={s.topScrim} pointerEvents="none" />
+          <LinearGradient colors={['transparent', 'rgba(0,0,0,0.55)']} style={s.bottomScrim} pointerEvents="none" />
+        </>
+      )}
 
-        {/* Buffering spinner — shown when network stalls the video */}
-        {isBuffering && (
-          <View style={s.bufferWrap} pointerEvents="none">
-            <ActivityIndicator size="large" color="rgba(255,255,255,0.85)" />
-          </View>
-        )}
+      {buffering && (
+        <View style={s.center} pointerEvents="none">
+          <ActivityIndicator size="large" color="rgba(255,255,255,0.85)" />
+        </View>
+      )}
 
-        {/* Double-tap heart burst */}
-        <Animated.View
-          style={[s.heartWrap, { opacity: heartAnim, transform: [{ scale: heartScale }] }]}
-          pointerEvents="none"
-        >
-          <Ionicons name="heart" size={100} color="rgba(255,255,255,0.92)" />
-        </Animated.View>
+      {/* Coração do duplo toque */}
+      <Animated.View style={[s.bigHeart, { opacity: heartOpacity, transform: [{ scale: heartScale }] }]} pointerEvents="none">
+        <Ionicons name="heart" size={104} color="rgba(255,255,255,0.92)" />
+      </Animated.View>
 
-        <PostInfo post={post} isActive={isActive} />
-        <ActionBar post={post} onCommentPress={() => onCommentPress(post)} liked={liked} onLikeChange={setLiked} />
-      </View>
-    </TouchableWithoutFeedback>
+      <PostInfo
+        post={post}
+        isActive={isActive}
+        commentCount={commentCount}
+        onExpired={() => onExpired(post.id)}
+        onDeleted={onDeleted}
+        onEdited={onEdited}
+        onBlockingChange={onBlockingChange}
+      />
+
+      <ActionBar
+        post={post}
+        onCommentPress={() => onCommentPress(post)}
+        liked={liked}
+        onLikeChange={onLikeChange}
+        reposted={reposted}
+        onRepost={onRepost}
+        commentCount={commentCount}
+      />
+    </Pressable>
   )
 }
 
+export default React.memo(FeedItem)
+
 const s = StyleSheet.create({
-  container:      { width, height, backgroundColor: colors.black },
-  imageContainer: { flex: 1, backgroundColor: colors.black, justifyContent: 'center' },
-  media:          { width, height },
-  topGradient:    { position: 'absolute', top: 0,    left: 0, right: 0, height: 180 },
-  bottomGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 320 },
-  heartWrap: {
-    position: 'absolute',
-    alignSelf: 'center',
-    top: '38%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
-  },
-  bufferWrap: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0, bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
+  container:   { width, height, backgroundColor: colors.black },
+  media:       { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  topScrim:    { position: 'absolute', top: 0, left: 0, right: 0, height: 170 },
+  bottomScrim: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 300 },
+  center:      { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  bigHeart:    { position: 'absolute', alignSelf: 'center', top: '38%' },
+  textContent: {
+    color: '#fff', fontFamily: fonts.bold, fontSize: 26, lineHeight: 36,
+    textAlign: 'center', paddingHorizontal: 36,
   },
 })
