@@ -127,21 +127,20 @@ export default function FeedScreen() {
   const pauseTimerRef        = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isHoldingRef         = useRef(false)
 
-  // PanResponder — horizontal swipe navigates between posts.
-  // NEVER claims on touch-start (onStartShouldSetPanResponder: false) so child
-  // buttons (ActionBar, PostInfo) always win their own taps via the bubble phase.
-  // Only claims once the user has made a clear horizontal movement (>20 px and
-  // more horizontal than vertical), which a tap never triggers.
+  // PanResponder — deslize VERTICAL navega entre posts (tipo TikTok).
+  // Nunca reclama no toque (onStartShouldSetPanResponder: false) para os botões
+  // filhos ganharem o próprio toque. Só reclama num movimento vertical claro
+  // (>20 px e mais vertical que horizontal), que um toque nunca faz.
   const swipePanResponder = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => false,
     onMoveShouldSetPanResponder: (_, gs) =>
-      Math.abs(gs.dx) > 20 &&
-      Math.abs(gs.dx) > Math.abs(gs.dy) * 1.5,
+      Math.abs(gs.dy) > 20 &&
+      Math.abs(gs.dy) > Math.abs(gs.dx) * 1.5,
 
     onPanResponderRelease: (_, gs) => {
-      if (Math.abs(gs.dx) > 50 && Math.abs(gs.dx) > Math.abs(gs.dy)) {
-        if (gs.dx > 0) goPrevRef.current()
-        else           goNextRef.current()
+      if (Math.abs(gs.dy) > 50 && Math.abs(gs.dy) > Math.abs(gs.dx)) {
+        if (gs.dy < 0) goNextRef.current()   // deslizar para cima → próximo
+        else           goPrevRef.current()   // deslizar para baixo → anterior
       }
     },
   }), [])
