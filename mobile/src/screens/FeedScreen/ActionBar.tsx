@@ -4,7 +4,7 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Heart, RefreshCw, Forward, MessageCircle } from 'lucide-react-native'
+import { Heart, Forward, MessageCircle, Bookmark, MoreHorizontal } from 'lucide-react-native'
 
 import { Post } from '../../types'
 import { fonts } from '../../theme'
@@ -59,6 +59,7 @@ export default React.memo(function ActionBar({
   const [likeCount,  setLikeCount]  = useState(post._count?.likes ?? 0)
   const [shareCount, setShareCount] = useState(post._count?.shares ?? 0)
   const [showReactions, setShowReactions] = useState(false)
+  const [saved,      setSaved]      = useState(false)   // guardar — visual, backend depois
   const [hearts,    setHearts]    = useState<HeartP[]>([])
   const heartIdRef = useRef(0)
   const repostSpin = useRef(new Animated.Value(0)).current
@@ -150,51 +151,48 @@ export default React.memo(function ActionBar({
 
   return (
     <>
-      {/* Barra única — comentar à esquerda, gostar + partilhar à direita */}
+      {/* Coluna direita — ícones a flutuar, sem caixas. Like · Comentar ·
+          Partilhar · Guardar · Mais. Contadores discretos por baixo. */}
       {!isAnnouncement && (
-        <View style={[s.row, { left: 16, right: 16, bottom: safeBottom + 54 }]}>
-          <View style={s.bar}>
-            {/* Comentar — avatar + placeholder, toca e abre a folha */}
-            <TouchableOpacity style={s.commentArea} onPress={onCommentPress} activeOpacity={0.8}>
-              <AvatarImage uri={myAvatar} name={myName} size={30} />
-              <Text style={s.commentPh} numberOfLines={1}>{t.feed_add_comment}</Text>
-            </TouchableOpacity>
+        <View style={[s.rail, { bottom: safeBottom + 96 }]} pointerEvents="box-none">
 
-            {/* Ações — gostar · comentários · repost · partilhar */}
-            <View style={s.barActs}>
-              <TouchableOpacity style={s.act} onPress={handleLike} onLongPress={() => setShowReactions(true)} activeOpacity={0.7}>
-                <Heart size={21} strokeWidth={2} color={liked ? '#FF4B6E' : '#fff'} fill={liked ? '#FF4B6E' : 'transparent'} />
-                <Text style={s.actN}>{fmt(likeCount)}</Text>
-                {hearts.map((h) => (
-                  <Animated.View
-                    key={h.id}
-                    pointerEvents="none"
-                    style={[s.burstHeart, { opacity: h.o, transform: [{ translateX: h.tx }, { translateY: h.ty }, { scale: h.s }] }]}
-                  >
-                    <Heart size={14} strokeWidth={0} color="#FF4B6E" fill="#FF4B6E" />
-                  </Animated.View>
-                ))}
-              </TouchableOpacity>
+          {/* Like */}
+          <TouchableOpacity style={s.railBtn} onPress={handleLike} onLongPress={() => setShowReactions(true)} activeOpacity={0.7}>
+            <Heart size={28} strokeWidth={1.9} color={liked ? '#FF3B5C' : '#fff'} fill={liked ? '#FF3B5C' : 'transparent'} />
+            <Text style={s.railN}>{fmt(likeCount)}</Text>
+            {hearts.map((h) => (
+              <Animated.View
+                key={h.id}
+                pointerEvents="none"
+                style={[s.burstHeart, { opacity: h.o, transform: [{ translateX: h.tx }, { translateY: h.ty }, { scale: h.s }] }]}
+              >
+                <Heart size={14} strokeWidth={0} color="#FF3B5C" fill="#FF3B5C" />
+              </Animated.View>
+            ))}
+          </TouchableOpacity>
 
-              <TouchableOpacity style={s.act} onPress={onCommentPress} activeOpacity={0.7}>
-                <View style={s.mirrorX}><MessageCircle size={21} strokeWidth={2} color="#fff" /></View>
-                <Text style={s.actN}>{fmt(commentCountProp ?? post._count?.comments ?? 0)}</Text>
-              </TouchableOpacity>
+          {/* Comentar */}
+          <TouchableOpacity style={s.railBtn} onPress={onCommentPress} activeOpacity={0.7}>
+            <View style={s.mirrorX}><MessageCircle size={27} strokeWidth={1.9} color="#fff" /></View>
+            <Text style={s.railN}>{fmt(commentCountProp ?? post._count?.comments ?? 0)}</Text>
+          </TouchableOpacity>
 
-              <TouchableOpacity style={s.act} onPress={handleRepost} activeOpacity={0.7}>
-                <View style={s.repostIcon}>
-                  <Animated.View style={{ transform: [{ rotate: repostRotate }] }}>
-                    <RefreshCw size={21} strokeWidth={2} color="#fff" />
-                  </Animated.View>
-                  {reposted && <View style={s.repostDot} pointerEvents="none" />}
-                </View>
-              </TouchableOpacity>
+          {/* Partilhar */}
+          <TouchableOpacity style={s.railBtn} onPress={handleShare} activeOpacity={0.7}>
+            <Forward size={27} strokeWidth={1.9} color="#fff" />
+            <Text style={s.railN}>{fmt(shareCount)}</Text>
+          </TouchableOpacity>
 
-              <TouchableOpacity style={s.act} onPress={handleShare} activeOpacity={0.7}>
-                <Forward size={21} strokeWidth={2} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          </View>
+          {/* Guardar — visual por agora */}
+          <TouchableOpacity style={s.railBtn} onPress={() => setSaved((v) => !v)} activeOpacity={0.7}>
+            <Bookmark size={26} strokeWidth={1.9} color="#fff" fill={saved ? '#fff' : 'transparent'} />
+          </TouchableOpacity>
+
+          {/* Mais */}
+          <TouchableOpacity style={s.railBtn} onPress={handleShare} activeOpacity={0.7}>
+            <MoreHorizontal size={26} strokeWidth={1.9} color="#fff" />
+          </TouchableOpacity>
+
         </View>
       )}
 
@@ -208,59 +206,40 @@ export default React.memo(function ActionBar({
 })
 
 const s = StyleSheet.create({
-  // ── Barra horizontal ────────────────────────────────────────────────────────
-  // Sem largura fixa (só left): a fila ajusta-se ao conteúdo e o chip de
-  // comentário pode crescer com os avatares sem empurrar os outros para fora.
-  row: {
+  // ── Coluna direita — ícones a flutuar, sem caixas ──────────────────────────
+  rail: {
     position: 'absolute',
-    left: 16,
-    flexDirection: 'row',
+    right: 8,
     alignItems: 'center',
-    gap: 10,
+    gap: 22,          // ritmo vertical constante
     zIndex: 20,
   },
-
-  // Barra única de vidro — comentar + ações
-  bar: {
-    flex: 1,
-    flexDirection: 'row',
+  // Cada ação: ícone + contador por baixo, centrados. Sombra suave (não caixa)
+  // para o branco ler sobre média clara.
+  railBtn: {
     alignItems: 'center',
-    height: 50,
-    borderRadius: 25,
-    paddingLeft: 8,
-    paddingRight: 15,
-    backgroundColor: 'rgba(16,16,20,0.5)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.16)',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.32, shadowRadius: 12,
+    gap: 5,
+    paddingHorizontal: 6,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.35, shadowRadius: 5,
   },
-  commentArea: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 9 },
-  commentPh:   { flex: 1, color: 'rgba(255,255,255,0.7)', fontFamily: fonts.regular, fontSize: 13.5, letterSpacing: -0.1 },
-  barActs:     { flexDirection: 'row', alignItems: 'center', gap: 15 },
-  act:         { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  actN:        { color: '#fff', fontFamily: fonts.semiBold, fontSize: 12, fontVariant: ['tabular-nums'], letterSpacing: 0.1 },
-
-  // Pilha de avatares dentro do chip de comentário
-  commenterStack: { flexDirection: 'row', alignItems: 'center' },
-  commenterOverlap: { marginLeft: -7 },
-
-  mirrorX:    { transform: [{ scaleX: -1 }] },
-  repostIcon: { width: 21, height: 21, alignItems: 'center', justifyContent: 'center' },
-  repostDot:  { position: 'absolute', top: 8, left: 8, width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#fff' },
-
-  // Centrado sobre o ícone do like (primeiro segmento)
-  burstHeart: {
-    position: 'absolute',
-    top: 14,
-    left: 18,
-    zIndex: 30,
-  },
-
-  label: {
-    color: '#fff',
-    fontFamily: fonts.semiBold,
-    fontSize: 12.5,
+  railN: {
+    color: 'rgba(255,255,255,0.9)',
+    fontFamily: fonts.medium,
+    fontSize: 12,
     letterSpacing: 0.1,
     fontVariant: ['tabular-nums'],
+    textShadowColor: 'rgba(0,0,0,0.4)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+
+  mirrorX:    { transform: [{ scaleX: -1 }] },
+
+  // Centrado sobre o ícone do like (primeiro da coluna)
+  burstHeart: {
+    position: 'absolute',
+    top: 2,
+    left: 8,
+    zIndex: 30,
   },
 })
