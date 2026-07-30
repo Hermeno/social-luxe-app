@@ -11,7 +11,6 @@ import { Heart, Forward, Bookmark } from 'lucide-react-native'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs'
 
 import { Post } from '../../types'
 import { colors, fonts } from '../../theme'
@@ -56,8 +55,7 @@ interface Props {
 // dona do seu leitor — a FlatList monta/desmonta, sem player partilhado.
 function FeedItem({ post, isActive, liked, onCommentPress, onLikeChange, onExpired }: Props) {
   const nav = useNavigation<Nav>()
-  const { top: safeTop } = useSafeAreaInsets()
-  const tabBarHeight = useBottomTabBarHeight()
+  const { top: safeTop, bottom: safeBottom } = useSafeAreaInsets()
 
   const myAvatar = useAuthStore((s) => s.user?.avatar ?? null)
   const myName   = useAuthStore((s) => s.user?.name ?? '')
@@ -71,10 +69,13 @@ function FeedItem({ post, isActive, liked, onCommentPress, onLikeChange, onExpir
   const uri     = resolveUrl(post.mediaUrl)
 
   // ── Geometria da pilha ─────────────────────────────────────────────────────
-  const DOCK_GAP = 6
+  // Altura estável da navegação (área segura + fila de ícones). Não usamos
+  // useBottomTabBarHeight: ele muda com transições e faz o campo saltar.
+  const DOCK_GAP = 8
   const DOCK_H   = 44
-  const videoBottom   = tabBarHeight + DOCK_GAP + DOCK_H + 12   // fundo do vídeo
-  const overlayBottom = videoBottom + 14                       // autor/ações no vídeo
+  const NAV_H    = safeBottom + 48                             // barra a flutuar
+  const videoBottom   = NAV_H + DOCK_GAP + DOCK_H + 10         // fundo do vídeo
+  const overlayBottom = videoBottom + 14                      // autor/ações no vídeo
   const videoFrame = { top: safeTop, bottom: videoBottom }
 
   // ── Leitor de vídeo ─────────────────────────────────────────────────────────
@@ -219,7 +220,7 @@ function FeedItem({ post, isActive, liked, onCommentPress, onLikeChange, onExpir
 
       {/* ── Campo de comentário — por baixo do vídeo, acima da navegação ── */}
       <Pressable
-        style={[s.dock, { bottom: tabBarHeight + DOCK_GAP, height: DOCK_H }]}
+        style={[s.dock, { bottom: NAV_H + DOCK_GAP, height: DOCK_H }]}
         onPress={() => onCommentPress(post)}
       >
         <AvatarImage uri={resolveUrl(myAvatar)} name={myName} size={26} borderWidth={0} borderColor="transparent" />
