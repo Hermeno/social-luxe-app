@@ -8,7 +8,7 @@ import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { Heart, Forward, Bookmark } from 'lucide-react-native'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useIsFocused } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -55,6 +55,7 @@ interface Props {
 // dona do seu leitor — a FlatList monta/desmonta, sem player partilhado.
 function FeedItem({ post, isActive, liked, onCommentPress, onLikeChange, onExpired }: Props) {
   const nav = useNavigation<Nav>()
+  const isFocused = useIsFocused()
   const { top: safeTop, bottom: safeBottom } = useSafeAreaInsets()
 
   const myAvatar = useAuthStore((s) => s.user?.avatar ?? null)
@@ -92,11 +93,13 @@ function FeedItem({ post, isActive, liked, onCommentPress, onLikeChange, onExpir
   }, [player, isVideo])
   const buffering = isVideo && isActive && status === 'loading'
 
+  // Toca só a célula ativa e só com o feed em foco. Ao entrar noutra página o
+  // feed perde foco e o vídeo pausa; ao voltar, retoma.
   useEffect(() => {
     if (!isVideo) return
-    if (isActive) { try { player.currentTime = 0; player.play() } catch {} }
-    else          { try { player.pause() } catch {} }
-  }, [isActive, player, isVideo])
+    if (isActive && isFocused) { try { player.play() } catch {} }
+    else                       { try { player.pause() } catch {} }
+  }, [isActive, isFocused, player, isVideo])
 
   // ── Vida do momento (efémero) — desaparece quando expira ────────────────────
   useEffect(() => {
