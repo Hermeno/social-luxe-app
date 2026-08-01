@@ -65,7 +65,7 @@ export async function editMessage(req: AuthRequest, res: Response) {
     const updated = await prisma.message.update({
       where: { id: req.params.id },
       data: { content: content.trim() },
-      include: { sender: { select: { id: true, name: true, avatar: true } }, replyTo: { select: { id: true, content: true, sender: { select: { name: true } } } }, reactions: { select: { emoji: true, userId: true } } },
+      include: { sender: { select: { id: true, name: true, username: true, avatar: true } }, replyTo: { select: { id: true, content: true, sender: { select: { name: true } } } }, reactions: { select: { emoji: true, userId: true } } },
     })
     emitToUser(msg.receiverId, 'message:edited', updated)
     return ok(res, updated)

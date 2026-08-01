@@ -8,7 +8,7 @@ import { withThumbnail } from '../utils/cloudinary.util'
 // existiu publicação nenhuma. É a fricção que dá peso ao gesto.
 const HALF_TTL_HOURS = 24
 
-const creatorSelect = { select: { id: true, name: true, avatar: true } }
+const creatorSelect = { select: { id: true, name: true, username: true, avatar: true } }
 
 const halfInclude = {
   creator:     creatorSelect,
@@ -167,8 +167,8 @@ export async function completeHalf(userId: string, halfId: string, mediaUrl: str
         expiresAt,
       },
       include: {
-        user:        { select: { id: true, name: true, avatar: true, viewsPublic: true, showDevice: true, statusLabel: true } },
-        partnerUser: { select: { id: true, name: true, avatar: true } },
+        user:        { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true, showDevice: true, statusLabel: true } },
+        partnerUser: { select: { id: true, name: true, username: true, avatar: true } },
         _count:      { select: { likes: true, comments: true, shares: true, views: true } },
       },
     })

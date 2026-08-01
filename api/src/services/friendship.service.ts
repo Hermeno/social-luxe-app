@@ -87,8 +87,8 @@ export async function getFriends(userId: string) {
   const friendships = await prisma.friendship.findMany({
     where: { OR: [{ userAId: userId }, { userBId: userId }] },
     include: {
-      userA: { select: { id: true, name: true, avatar: true } },
-      userB: { select: { id: true, name: true, avatar: true } },
+      userA: { select: { id: true, name: true, username: true, avatar: true } },
+      userB: { select: { id: true, name: true, username: true, avatar: true } },
     },
   })
   return friendships.map((f) => ({

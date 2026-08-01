@@ -4,6 +4,7 @@ import { ApiResponse } from '../types'
 export interface UserSummary {
   id: string
   name: string
+  username?: string | null
   avatar: string | null
   bio: string | null
 }

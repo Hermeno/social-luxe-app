@@ -24,6 +24,7 @@ type Nav = StackNavigationProp<AppStackParams>
 interface UserResult {
   id: string
   name: string
+  username?: string | null
   avatar: string | null
   bio: string | null
   _count?: { followers: number }
@@ -47,7 +48,8 @@ interface RowProps {
 
 function UserRow({ user, followed, loadingFollow, onFollow, onPress }: RowProps) {
   const t = useT()
-  const sub = user.bio?.trim()
+  const sub = (user.username ? `@${user.username}` : null)
+    || user.bio?.trim()
     || (user._count?.followers ? `${fmtCount(user._count.followers)} ${t.followers}` : null)
 
   return (

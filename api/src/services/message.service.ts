@@ -1,7 +1,7 @@
 import { prisma } from '../config/database'
 
 const MSG_SELECT = {
-  sender:    { select: { id: true, name: true, avatar: true } },
+  sender:    { select: { id: true, name: true, username: true, avatar: true } },
   replyTo:   { select: { id: true, content: true, sender: { select: { name: true } } } },
   reactions: { select: { emoji: true, userId: true } },
 } as const
@@ -26,8 +26,8 @@ export async function getConversations(userId: string) {
   return prisma.message.findMany({
     where: { id: { in: rows.map((r) => r.id) } },
     include: {
-      sender:   { select: { id: true, name: true, avatar: true } },
-      receiver: { select: { id: true, name: true, avatar: true } },
+      sender:   { select: { id: true, name: true, username: true, avatar: true } },
+      receiver: { select: { id: true, name: true, username: true, avatar: true } },
     },
     orderBy: { createdAt: 'desc' },
   })

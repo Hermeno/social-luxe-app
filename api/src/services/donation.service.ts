@@ -14,7 +14,7 @@ function distanceKm(lat1: number, lng1: number, lat2: number, lng2: number): num
 // Degree delta for ~radius km bounding box (rough pre-filter)
 function degDelta(km: number) { return km / 111 }
 
-const donorSelect = { id: true, name: true, avatar: true }
+const donorSelect = { id: true, name: true, username: true, avatar: true }
 
 // ── Create donation ───────────────────────────────────────────────────────────
 export async function createDonation(

@@ -8,7 +8,7 @@ async function extendPostLife(postId: string, minutes: number) {
   await prisma.post.update({ where: { id: postId }, data: { expiresAt: new Date(base + minutes * 60_000) } })
 }
 
-const USER_SEL = { select: { id: true, name: true, avatar: true } }
+const USER_SEL = { select: { id: true, name: true, username: true, avatar: true } }
 
 // Aplana o comentário para o cliente: conta de gostos + se o próprio já gostou.
 // O cliente nunca recebe a lista de likes — só o que precisa de desenhar.
@@ -74,7 +74,7 @@ export async function toggleCommentLike(userId: string, commentId: string) {
 export async function addComment(userId: string, postId: string, content: string, parentId?: string) {
   const comment = await prisma.comment.create({
     data: { userId, postId, content, parentId },
-    include: { user: { select: { id: true, name: true, avatar: true } } },
+    include: { user: { select: { id: true, name: true, username: true, avatar: true } } },
   })
   extendPostLife(postId, 30).catch(() => {})
   recalcPostLife(postId).catch(() => {})

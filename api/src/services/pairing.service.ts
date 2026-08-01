@@ -9,8 +9,8 @@ const PAIRING_SELECT = {
   createdAt:   true,
   respondedAt: true,
   endedAt:     true,
-  userA: { select: { id: true, name: true, avatar: true } },
-  userB: { select: { id: true, name: true, avatar: true } },
+  userA: { select: { id: true, name: true, username: true, avatar: true } },
+  userB: { select: { id: true, name: true, username: true, avatar: true } },
 } as const
 
 function canonicalPair(userId: string, targetId: string): [string, string] {

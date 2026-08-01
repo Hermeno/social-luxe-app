@@ -57,7 +57,7 @@ export async function getReactions(postId: string) {
   const reactions = await prisma.reaction.findMany({
     where: { postId },
     include: {
-      user: { select: { id: true, name: true, avatar: true } },
+      user: { select: { id: true, name: true, username: true, avatar: true } },
     },
     orderBy: { createdAt: 'desc' },
   })

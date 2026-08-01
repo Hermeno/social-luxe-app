@@ -22,7 +22,7 @@ import { useT } from '../../i18n'
 type Nav = StackNavigationProp<AppStackParams>
 type Tab = 'discover' | 'following' | 'followers'
 
-interface UserSummary { id: string; name: string; avatar: string | null; bio: string | null }
+interface UserSummary { id: string; name: string; username?: string | null; avatar: string | null; bio: string | null }
 
 function UserRow({
   user,

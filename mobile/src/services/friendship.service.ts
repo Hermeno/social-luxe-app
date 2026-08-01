@@ -1,7 +1,7 @@
 import { api } from './api'
 import { ApiResponse, Friendship, FriendshipDuration } from '../types'
 
-export interface UserSummary { id: string; name: string; avatar: string | null; bio: string | null }
+export interface UserSummary { id: string; name: string; username?: string | null; avatar: string | null; bio: string | null }
 
 export interface FriendshipLevel {
   isFriend: boolean

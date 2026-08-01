@@ -20,8 +20,8 @@ export async function createPost(
   const post = await prisma.post.create({
     data: { userId, mediaUrl, mediaType, caption, bgColor, expiresAt, partnerUserId: partnerUserId ?? null, isAnnouncement: isAnnouncement ?? false, deviceModel: deviceModel ?? null },
     include: {
-      user:        { select: { id: true, name: true, avatar: true, viewsPublic: true, showDevice: true, statusLabel: true } },
-      partnerUser: { select: { id: true, name: true, avatar: true } },
+      user:        { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true, showDevice: true, statusLabel: true } },
+      partnerUser: { select: { id: true, name: true, username: true, avatar: true } },
       _count:      { select: { likes: true, comments: true, shares: true, views: true } },
     },
   })
@@ -55,8 +55,8 @@ export async function createAlbumPost(
       deviceModel: deviceModel ?? null,
     },
     include: {
-      user:        { select: { id: true, name: true, avatar: true, viewsPublic: true, showDevice: true, statusLabel: true } },
-      partnerUser: { select: { id: true, name: true, avatar: true } },
+      user:        { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true, showDevice: true, statusLabel: true } },
+      partnerUser: { select: { id: true, name: true, username: true, avatar: true } },
       _count:      { select: { likes: true, comments: true, shares: true, views: true } },
     },
   })
@@ -394,8 +394,8 @@ export async function repostPost(userId: string, postId: string) {
       expiresAt,
     },
     include: {
-      user:        { select: { id: true, name: true, avatar: true, viewsPublic: true, showDevice: true, statusLabel: true } },
-      partnerUser: { select: { id: true, name: true, avatar: true } },
+      user:        { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true, showDevice: true, statusLabel: true } },
+      partnerUser: { select: { id: true, name: true, username: true, avatar: true } },
       _count:      { select: { likes: true, comments: true, shares: true, views: true } },
     },
   })

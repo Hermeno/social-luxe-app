@@ -202,7 +202,7 @@ export interface Friendship {
   expiresAt: string | null
   renewedAt: string | null
   createdAt: string
-  friend: Pick<User, 'id' | 'name' | 'avatar'>
+  friend: Pick<User, 'id' | 'name' | 'username' | 'avatar'>
   userA?: Pick<User, 'id' | 'name' | 'avatar'>
   userB?: Pick<User, 'id' | 'name' | 'avatar'>
 }

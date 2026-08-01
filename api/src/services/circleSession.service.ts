@@ -85,7 +85,7 @@ async function nearbyMutuals(userId: string, lat?: number | null, lng?: number |
   if (lat == null || lng == null) {
     return prisma.user.findMany({
       where:  { id: { in: mutualIds } },
-      select: { id: true, name: true, avatar: true },
+      select: { id: true, name: true, username: true, avatar: true },
       take:   12,
     })
   }
@@ -99,7 +99,7 @@ async function nearbyMutuals(userId: string, lat?: number | null, lng?: number |
       lat: { gte: lat - latD, lte: lat + latD },
       lng: { gte: lng - lngD, lte: lng + lngD },
     },
-    select: { id: true, name: true, avatar: true, lat: true, lng: true },
+    select: { id: true, name: true, username: true, avatar: true, lat: true, lng: true },
   })
   return cands
     .filter((u) => haversineKm(lat, lng, u.lat!, u.lng!) <= RADIUS_KM)
@@ -110,7 +110,7 @@ async function nearbyMutuals(userId: string, lat?: number | null, lng?: number |
 async function membersOf(sessionId: string) {
   const rows = await prisma.circleSessionMember.findMany({
     where:   { sessionId },
-    include: { user: { select: { id: true, name: true, avatar: true } } },
+    include: { user: { select: { id: true, name: true, username: true, avatar: true } } },
     orderBy: { createdAt: 'asc' },
   })
   return rows.map((r) => ({
@@ -233,7 +233,7 @@ export async function callUser(hostId: string, sessionId: string, targetId: stri
     create: { sessionId, userId: targetId, status: 'INVITED' },
   })
 
-  const host  = await prisma.user.findUnique({ where: { id: hostId }, select: { name: true, avatar: true } })
+  const host  = await prisma.user.findUnique({ where: { id: hostId }, select: { name: true, username: true, avatar: true } })
   const first = host?.name.split(' ')[0] ?? 'Alguém'
   sendPush(targetId, '⭕ Chamada para o Círculo', `${first} quer tirar uma foto contigo agora.`, { type: 'circle_call', sessionId }).catch(() => {})
   emitToUser(targetId, 'circle:called', { sessionId, hostName: host?.name ?? '', hostAvatar: host?.avatar ?? null })
@@ -428,7 +428,7 @@ export async function incomingCall(userId: string) {
   const m = await prisma.circleSessionMember.findFirst({
     where:   { userId, status: 'INVITED', createdAt: { gte: cutoff }, session: { status: 'OPEN' } },
     orderBy: { createdAt: 'desc' },
-    include: { session: { include: { host: { select: { id: true, name: true, avatar: true } } } } },
+    include: { session: { include: { host: { select: { id: true, name: true, username: true, avatar: true } } } } },
   })
   if (!m) return { call: null }
   return { call: { sessionId: m.sessionId, host: m.session.host } }

@@ -20,7 +20,7 @@ export async function getBlockedUsers(userId: string) {
   const blocks = await prisma.block.findMany({
     where: { blockerId: userId },
     include: {
-      blocked: { select: { id: true, name: true, avatar: true } },
+      blocked: { select: { id: true, name: true, username: true, avatar: true } },
     },
     orderBy: { createdAt: 'desc' },
   })

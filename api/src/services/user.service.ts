@@ -157,7 +157,7 @@ export async function getMutualConnections(viewerId: string, targetId: string, l
   // Só os primeiros são precisos para os avatares; `total` carrega a contagem.
   const users = await prisma.user.findMany({
     where:  { id: { in: ids.slice(0, limit) } },
-    select: { id: true, name: true, avatar: true },
+    select: { id: true, name: true, username: true, avatar: true },
   })
 
   return { total: ids.length, users }

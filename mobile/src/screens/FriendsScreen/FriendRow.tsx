@@ -47,6 +47,7 @@ export default function FriendRow({ item, onRenew, onRemove }: Props) {
 
       <TouchableOpacity style={s.info} onPress={goProfile} activeOpacity={0.7}>
         <Text style={s.name}>{item.friend.name}</Text>
+        {!!item.friend.username && <Text style={s.handle} numberOfLines={1}>@{item.friend.username}</Text>}
         <Text style={s.dur}>{LABELS[item.duration]}</Text>
         {left && <Text style={[s.left, left.includes('h') && s.urgent]}>{left}</Text>}
       </TouchableOpacity>
@@ -70,6 +71,7 @@ const s = StyleSheet.create({
   row:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingVertical: 10, gap: spacing.sm },
   info:     { flex: 1 },
   name:     { fontSize: 15, fontFamily: fonts.semiBold, color: colors.gray800 },
+  handle:   { fontSize: 12.5, fontFamily: fonts.regular, color: colors.gray400, marginTop: 1 },
   dur:      { fontSize: 12, fontFamily: fonts.regular, color: colors.gray400, marginTop: 2 },
   left:     { fontSize: 11, fontFamily: fonts.medium, color: colors.gray600, marginTop: 1 },
   urgent:   { color: colors.primary },

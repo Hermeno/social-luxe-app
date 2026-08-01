@@ -4,6 +4,7 @@ import { ApiResponse, Connection } from '../types'
 export interface FollowUser {
   id: string
   name: string
+  username?: string | null
   avatar: string | null
   bio: string | null
   followedAt: string

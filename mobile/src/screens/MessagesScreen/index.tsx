@@ -84,6 +84,7 @@ function fmtCount(n: number): string {
 interface UserResult {
   id: string
   name: string
+  username?: string | null
   avatar: string | null
   bio: string | null
   _count?: { followers: number; posts: number }
@@ -125,7 +126,9 @@ function UserCard({
       <TouchableOpacity onPress={onPress} activeOpacity={0.7} style={c.textWrap}>
         <Text style={c.cardName} numberOfLines={1}>{user.name}</Text>
         <Text style={c.cardSub} numberOfLines={1}>
-          {fmtCount(followers)} {followers === 1 ? t.follower : t.followers}
+          {user.username
+            ? `@${user.username}`
+            : `${fmtCount(followers)} ${followers === 1 ? t.follower : t.followers}`}
         </Text>
       </TouchableOpacity>
 
@@ -361,10 +364,15 @@ function SuggestedUserRow({ user, onPress }: { user: UserResult; onPress: () => 
       <AvatarImage uri={user.avatar} name={user.name} size={AVA} />
       <View style={s.info}>
         <Text style={s.name} numberOfLines={1}>{user.name}</Text>
-        <View style={sg.tag}>
-          <Ionicons name="sparkles" size={10} color="#ABABAB" />
-          <Text style={sg.tagTxt}>{t.msg_suggestion_one}</Text>
-        </View>
+        {user.username
+          ? <Text style={sg.handle} numberOfLines={1}>@{user.username}</Text>
+          : (
+            <View style={sg.tag}>
+              <Ionicons name="sparkles" size={10} color="#ABABAB" />
+              <Text style={sg.tagTxt}>{t.msg_suggestion_one}</Text>
+            </View>
+          )
+        }
       </View>
       <FollowSplitButton following={followed} loading={loading} onFollow={handleFollow} theme="light" />
     </TouchableOpacity>
@@ -1743,4 +1751,5 @@ const sg = StyleSheet.create({
   row: { backgroundColor: colors.white },
   tag: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
   tagTxt: { fontSize: 12, fontFamily: fonts.medium, color: '#6E6E73' },
+  handle: { fontSize: 12.5, fontFamily: fonts.regular, color: colors.gray400, marginTop: 2 },
 })

@@ -7,7 +7,7 @@ export async function createStory(userId: string, mediaUrl: string, mediaType: M
   const expiresAt = new Date(Date.now() + STORY_EXPIRY_HOURS * 60 * 60 * 1000)
   return prisma.story.create({
     data: { userId, mediaUrl, mediaType, expiresAt },
-    include: { user: { select: { id: true, name: true, avatar: true } } },
+    include: { user: { select: { id: true, name: true, username: true, avatar: true } } },
   })
 }
 
@@ -29,7 +29,7 @@ export async function getFriendsStories(userId: string) {
       expiresAt: { gt: new Date() },
     },
     include: {
-      user: { select: { id: true, name: true, avatar: true } },
+      user: { select: { id: true, name: true, username: true, avatar: true } },
       views: { select: { viewerId: true } },
       _count: { select: { views: true } },
     },

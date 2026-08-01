@@ -47,7 +47,7 @@ export async function invitePairing(req: AuthRequest, res: Response) {
     const pairing = await pairingService.invitePairing(userId, targetUserId, type, customLabel?.trim())
 
     const requester = await prisma.user.findUnique({
-      where: { id: userId }, select: { id: true, name: true, avatar: true },
+      where: { id: userId }, select: { id: true, name: true, username: true, avatar: true },
     })
     const message = `${requester?.name} quer formar par contigo como "${labelOf(pairing)}"`
     emitToUser(targetUserId, 'pairing:invited', { pairing })
@@ -80,7 +80,7 @@ export async function respondPairing(req: AuthRequest, res: Response) {
     emitToUser(other, accept ? 'pairing:active' : 'pairing:ended', { pairing })
     if (accept) {
       const responder = await prisma.user.findUnique({
-        where: { id: userId }, select: { id: true, name: true, avatar: true },
+        where: { id: userId }, select: { id: true, name: true, username: true, avatar: true },
       })
       const message = `${responder?.name} aceitou o teu convite de par!`
       emitToUser(other, 'notification:new', {

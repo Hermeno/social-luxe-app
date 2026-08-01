@@ -186,8 +186,8 @@ export async function getConnections(req: AuthRequest, res: Response) {
     const follows = await prisma.follow.findMany({
       where: { OR: [{ followerId: userId }, { followingId: userId }] },
       select: {
-        follower:    { select: { id: true, name: true, avatar: true } },
-        following:   { select: { id: true, name: true, avatar: true } },
+        follower:    { select: { id: true, name: true, username: true, avatar: true } },
+        following:   { select: { id: true, name: true, username: true, avatar: true } },
         followerId:  true,
         followingId: true,
       },
@@ -309,7 +309,7 @@ export async function getSuggestedUsers(req: AuthRequest, res: Response) {
     const users = await prisma.user.findMany({
       where: { id: { notIn: excludeIds } },
       select: {
-        id: true, name: true, avatar: true, bio: true,
+        id: true, name: true, username: true, avatar: true, bio: true,
         _count: { select: { followers: true, posts: true } },
       },
       orderBy: { followers: { _count: 'desc' } },

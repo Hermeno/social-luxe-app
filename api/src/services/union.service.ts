@@ -7,12 +7,12 @@ const UNION_SELECT = {
   label:     true,
   bio:       true,
   createdAt: true,
-  memberA: { select: { id: true, name: true, avatar: true } },
-  memberB: { select: { id: true, name: true, avatar: true } },
+  memberA: { select: { id: true, name: true, username: true, avatar: true } },
+  memberB: { select: { id: true, name: true, username: true, avatar: true } },
 } as const
 
 const MSG_SELECT = {
-  fromUnion: { select: { id: true, name: true, avatar: true, memberA: { select: { id: true, name: true, avatar: true } }, memberB: { select: { id: true, name: true, avatar: true } } } },
+  fromUnion: { select: { id: true, name: true, username: true, avatar: true, memberA: { select: { id: true, name: true, username: true, avatar: true } }, memberB: { select: { id: true, name: true, username: true, avatar: true } } } },
 } as const
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

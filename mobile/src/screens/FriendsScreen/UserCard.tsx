@@ -61,7 +61,9 @@ export default function UserCard({ user, onAdded }: Props) {
 
       <TouchableOpacity style={s.info} onPress={() => nav.navigate('Profile', { userId: user.id })} activeOpacity={0.7}>
         <Text style={s.name}>{user.name}</Text>
-        {user.bio && <Text style={s.bio} numberOfLines={1}>{user.bio}</Text>}
+        {user.username
+          ? <Text style={s.bio} numberOfLines={1}>@{user.username}</Text>
+          : (user.bio ? <Text style={s.bio} numberOfLines={1}>{user.bio}</Text> : null)}
       </TouchableOpacity>
 
       <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
