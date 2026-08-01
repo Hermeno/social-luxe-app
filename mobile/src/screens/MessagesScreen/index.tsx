@@ -393,6 +393,52 @@ function PairingCard({ data, onPress }: { data: Pairing; onPress: () => void }) 
   )
 }
 
+// ── Linha de "stories" — pessoas no topo, anel crimson quem está online ───────
+function StoryAvatar({ item, onPress }: { item: Connection; onPress: () => void }) {
+  const online = useOnlineStore((st) => st.isOnline(item.user.id))
+  return (
+    <TouchableOpacity style={so.item} onPress={onPress} activeOpacity={0.75}>
+      <View style={[so.ring, online ? so.ringOn : so.ringOff]}>
+        <View style={so.hole}>
+          <AvatarImage uri={item.user.avatar} name={item.user.name} size={54} />
+        </View>
+        {online && <View style={so.onlineDot} />}
+      </View>
+      <Text style={so.name} numberOfLines={1}>{item.user.name.split(' ')[0]}</Text>
+    </TouchableOpacity>
+  )
+}
+
+function StoriesRow({ connections, onOpen }: { connections: Connection[]; onOpen: (c: Connection) => void }) {
+  if (connections.length === 0) return null
+  return (
+    <FlatList
+      data={connections.slice(0, 20)}
+      keyExtractor={(c) => `story_${c.user.id}`}
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={so.content}
+      style={so.list}
+      renderItem={({ item }) => <StoryAvatar item={item} onPress={() => onOpen(item)} />}
+    />
+  )
+}
+
+const so = StyleSheet.create({
+  list:    { flexGrow: 0 },
+  content: { paddingHorizontal: 16, paddingVertical: 10, gap: 14 },
+  item:    { alignItems: 'center', width: 66, gap: 5 },
+  ring:    { padding: 2.5, borderRadius: 34, borderWidth: 2, backgroundColor: colors.white },
+  ringOn:  { borderColor: colors.primary },
+  ringOff: { borderColor: '#E6E6EA' },
+  hole:    { width: 54, height: 54, borderRadius: 27, overflow: 'hidden', borderWidth: 2, borderColor: colors.white },
+  onlineDot: {
+    position: 'absolute', right: 2, bottom: 2, width: 13, height: 13, borderRadius: 6.5,
+    backgroundColor: '#22C55E', borderWidth: 2, borderColor: colors.white,
+  },
+  name:    { fontSize: 11.5, fontFamily: fonts.medium, color: '#6E6E73', maxWidth: 64, textAlign: 'center' },
+})
+
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function MessagesScreen() {
@@ -1121,6 +1167,18 @@ export default function MessagesScreen() {
                 }
                 ListHeaderComponent={
                   <>
+                    <StoriesRow
+                      connections={connections}
+                      onOpen={(c) => {
+                        setQuickReplyId(null)
+                        nav.navigate('Chat', {
+                          userId:          c.user.id,
+                          userName:        c.user.name,
+                          userAvatar:      c.user.avatar,
+                          partnerHasPosts: c.postIds.length > 0,
+                        })
+                      }}
+                    />
                     {liveTogetherList.length > 0 && (
                       <View style={g.section}>
                         <Text style={g.sectionLabel}>Em par</Text>
