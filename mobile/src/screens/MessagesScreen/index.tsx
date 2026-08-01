@@ -991,8 +991,8 @@ export default function MessagesScreen() {
                 <Text style={s.searchCancel}>{t.cancel}</Text>
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity style={s.suggestBtn} onPress={() => setShowSuggestions(true)} activeOpacity={0.75}>
-                <Ionicons name="person-add" size={15} color={colors.primary} />
+              <TouchableOpacity style={s.suggestBtn} onPress={() => setShowSuggestions(true)} activeOpacity={0.6}>
+                <Ionicons name="person-add-outline" size={16} color={colors.gray800} />
                 <Text style={s.suggestBtnTxt}>Sugestões</Text>
                 {suggested.length > 0 && (
                   <View style={s.suggestCount}><Text style={s.suggestCountTxt}>{suggested.length}</Text></View>
@@ -1397,11 +1397,12 @@ const s = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderColor: '#E2E2E6',
   },
-  // Botão de sugestões — pill laranja subtil ao lado da pesquisa
+  // Botão de sugestões — só border (sem fundo), mesma altura da barra; só o nº tem cor
   suggestBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: 'rgba(255,122,28,0.1)',
-    borderRadius: 13, paddingHorizontal: 12, paddingVertical: 11.5,
+    alignSelf: 'stretch',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    paddingHorizontal: 13,
+    borderRadius: 13, borderWidth: 1.5, borderColor: '#E2E2E6',
   },
   suggestBtnTxt: { fontSize: 13.5, fontFamily: fonts.semiBold, color: colors.gray800, letterSpacing: -0.2 },
   suggestCount: {
