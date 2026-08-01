@@ -213,10 +213,10 @@ const s = StyleSheet.create({
   // Row
   row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
 
-  // + button
+  // + button — círculo cinza, como no design
   attachBtn: {
+    width: 38, height: 38, borderRadius: 19, backgroundColor: '#F0F0F3',
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-    paddingHorizontal: 4,
   },
 
   // Input
@@ -237,12 +237,12 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   actionBtnActive: {
-    backgroundColor: '#1A1A1A',
+    backgroundColor: '#CA2851',
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: '#CA2851',
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.4,
+        shadowOpacity: 0.35,
         shadowRadius: 8,
       },
       android: { elevation: 4 },

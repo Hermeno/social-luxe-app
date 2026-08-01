@@ -47,8 +47,8 @@ type Route  = RouteProp<AppStackParams, 'Chat'>
 type NavProp = StackNavigationProp<AppStackParams>
 
 const CHAT_BG        = '#FFFFFF'
-// A conversa é a preto e branco: a minha bolha é preta, a do outro clara.
-const MINE_COLOR     = '#1A1A1A'
+// Bolhas ao estilo do design: a minha na cor da marca, a do outro clara.
+const MINE_COLOR     = '#CA2851'
 const THEIRS_COLOR   = '#F0F2F5'
 const REACTION_EMOJIS = ['❤️', '😂', '😮', '😢', '🔥', '👏']
 
