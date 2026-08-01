@@ -93,7 +93,7 @@ export async function getPartnerPostInvites(req: AuthRequest, res: Response) {
     const posts = await prisma.post.findMany({
       where: { partnerUserId: req.user!.userId, partnerAccepted: false, deletedAt: null },
       include: {
-        user: { select: { id: true, name: true, avatar: true, viewsPublic: true } },
+        user: { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true } },
         _count: { select: { likes: true, comments: true, shares: true, views: true } },
       },
       orderBy: { createdAt: 'desc' },

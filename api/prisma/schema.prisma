@@ -45,6 +45,11 @@ enum ReportTarget {
 model User {
   id           String   @id @default(cuid())
   name         String
+  // @handle único. Grátis = base + número (ex.: herminio4821); Pro = base sem
+  // número. usernameBase guarda a parte de texto escolhida (editar/upgrade).
+  username     String?  @unique
+  usernameBase String?
+  isPaid       Boolean  @default(false)
   phone        String   @unique
   countryCode  String
   password     String

@@ -87,7 +87,7 @@ async function attachRecentCommenters(posts: any[], userId?: string): Promise<an
   if (commentPostIds.length > 0) {
     const comments = await prisma.comment.findMany({
       where:   { postId: { in: commentPostIds }, parentId: null },
-      select:  { postId: true, userId: true, user: { select: { id: true, name: true, avatar: true } } },
+      select:  { postId: true, userId: true, user: { select: { id: true, name: true, username: true, avatar: true } } },
       orderBy: { createdAt: 'desc' },
     })
     for (const c of comments) {
@@ -149,8 +149,8 @@ export async function getFeed(userId: string, page = 1, limit = 10) {
     AND: [{ OR: [{ createdAt: { gte: freshSince } }, { isAnnouncement: true }] }],
   }
   const include = {
-    user:        { select: { id: true, name: true, avatar: true, viewsPublic: true, isAdmin: true, showDevice: true, statusLabel: true, lastSeen: true } },
-    partnerUser: { select: { id: true, name: true, avatar: true } },
+    user:        { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true, isAdmin: true, showDevice: true, statusLabel: true, lastSeen: true } },
+    partnerUser: { select: { id: true, name: true, username: true, avatar: true } },
     _count:      { select: { likes: true, comments: true, shares: true, views: true } },
   }
 
@@ -261,8 +261,8 @@ export async function searchPosts(query: string, userId: string) {
       caption: { contains: query, mode: 'insensitive' },
     },
     include: {
-      user:        { select: { id: true, name: true, avatar: true, viewsPublic: true, isAdmin: true, showDevice: true, statusLabel: true, lastSeen: true } },
-      partnerUser: { select: { id: true, name: true, avatar: true } },
+      user:        { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true, isAdmin: true, showDevice: true, statusLabel: true, lastSeen: true } },
+      partnerUser: { select: { id: true, name: true, username: true, avatar: true } },
       _count:      { select: { likes: true, comments: true, shares: true, views: true } },
     },
     orderBy: { createdAt: 'desc' },
@@ -457,7 +457,7 @@ export async function getFlashback(userId: string) {
       createdAt: { gte: rangeStart, lte: rangeEnd },
     },
     include: {
-      user: { select: { id: true, name: true, avatar: true, viewsPublic: true, showDevice: true, statusLabel: true } },
+      user: { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true, showDevice: true, statusLabel: true } },
       _count: { select: { likes: true, comments: true, shares: true, views: true } },
     },
     orderBy: { createdAt: 'desc' },

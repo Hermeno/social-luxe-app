@@ -1,6 +1,7 @@
 import { prisma } from '../config/database'
 import { hashPassword, comparePassword } from '../utils/hash'
 import { signToken } from '../utils/jwt'
+import { slugifyUsername, generateUsername } from '../utils/username'
 import { RegisterBody, LoginBody } from '../types'
 
 export async function register(body: RegisterBody) {
@@ -15,9 +16,13 @@ export async function register(body: RegisterBody) {
 
   const hashed = await hashPassword(password)
 
+  // @handle: o texto vem do nome (o user pode mudar depois); grátis leva número.
+  const usernameBase = slugifyUsername(name)
+  const username = await generateUsername(usernameBase, false)
+
   const user = await prisma.user.create({
-    data: { name, phone, countryCode, password: hashed },
-    select: { id: true, name: true, phone: true, countryCode: true, avatar: true, bio: true, availability: true,  createdAt: true },
+    data: { name, phone, countryCode, password: hashed, username, usernameBase },
+    select: { id: true, name: true, username: true, phone: true, countryCode: true, avatar: true, bio: true, availability: true, createdAt: true },
   })
 
   const token = signToken({ userId: user.id, phone: user.phone })
@@ -42,7 +47,8 @@ export async function getProfile(userId: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
-      id: true, name: true, phone: true, countryCode: true,
+      id: true, name: true, username: true, usernameBase: true, isPaid: true,
+      phone: true, countryCode: true,
       avatar: true, bio: true, availability: true,
       viewsPublic: true, contact: true,
       defaultFollowDuration: true, city: true, district: true,

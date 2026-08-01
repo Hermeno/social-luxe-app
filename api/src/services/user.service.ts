@@ -2,7 +2,7 @@ import { prisma } from '../config/database'
 import { withThumbnails } from '../utils/cloudinary.util'
 
 const USER_SELECT = {
-  id: true, name: true, avatar: true, bio: true, availability: true,
+  id: true, name: true, username: true, avatar: true, bio: true, availability: true,
   _count: { select: { followers: true, posts: true } },
 } as const
 
@@ -32,7 +32,8 @@ export async function searchUsers(query: string, currentUserId: string) {
 // duas nunca divergirem — era por divergirem que city/district/statusLabel não
 // chegavam ao perfil de outra pessoa.
 const PROFILE_SELECT = {
-  id: true, name: true, phone: true, countryCode: true,
+  id: true, name: true, username: true, usernameBase: true, isPaid: true,
+  phone: true, countryCode: true,
   avatar: true, bio: true, availability: true, viewsPublic: true,
   contact: true, defaultFollowDuration: true, city: true, district: true,
   autoReply: true, showDevice: true, statusLabel: true, interests: true,
@@ -102,7 +103,7 @@ export async function getUserPosts(userId: string) {
   const posts = await prisma.post.findMany({
     where: { userId, deletedAt: null, expiresAt: { gt: new Date() } },
     include: {
-      user: { select: { id: true, name: true, avatar: true, viewsPublic: true, isAdmin: true, showDevice: true, statusLabel: true } },
+      user: { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true, isAdmin: true, showDevice: true, statusLabel: true } },
       _count: { select: { likes: true, comments: true, views: true, shares: true } },
     },
     orderBy: { createdAt: 'desc' },
