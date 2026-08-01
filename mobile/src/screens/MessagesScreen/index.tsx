@@ -41,6 +41,7 @@ import { api } from '../../services/api'
 import { getSocket } from '../../socket'
 import { useAuthStore } from '../../store/auth.store'
 import { useFollowStore } from '../../store/follow.store'
+import { useOnlineStore } from '../../store/online.store'
 import { isConnected } from '../../services/netinfo.service'
 import { useMessageBadgeStore } from '../../store/messageBadge.store'
 import { useFeedStore } from '../../store/feed.store'
@@ -214,11 +215,11 @@ function ConvoRow({ item, viewedIds, onPress, index, myUserId, isQuickOpen, onTo
   onQuickSend: (text: string) => void
 }) {
   const t = useT()
+  const isOnline    = useOnlineStore((st) => st.isOnline(item.user.id))
   const hasMsg      = !!item.lastMessage
   const unread      = item.unreadCount > 0
   const viewedCount = item.postIds.filter((id) => viewedIds.has(id)).length
   const iMine       = hasMsg && item.lastMessage!.senderId === myUserId
-  const isRead      = hasMsg && !!item.lastMessage!.readAt
   const showReply   = unread && !iMine
 
   const opacity    = useRef(new Animated.Value(0)).current
@@ -251,33 +252,34 @@ function ConvoRow({ item, viewedIds, onPress, index, myUserId, isQuickOpen, onTo
               </Text>
             )}
           </View>
-          <Text style={[s.preview, unread && s.previewBold, !hasMsg && s.previewMuted]} numberOfLines={1}>
-            {iMine ? `Você: ${preview}` : preview}
-          </Text>
-        </View>
 
-        {/* Right indicators */}
-        <View style={s.rowRight}>
-          {showReply ? (
-            <>
-              <View style={s.dot}>
-                <Text style={s.dotTxt}>{item.unreadCount > 9 ? '9+' : item.unreadCount}</Text>
+          {/* Pré-visualização + estado (badge não-lido, ou online/offline) */}
+          <View style={s.bottomRow}>
+            <Text style={[s.preview, s.previewFlex, unread && s.previewBold, !hasMsg && s.previewMuted]} numberOfLines={1}>
+              {iMine ? `Você: ${preview}` : preview}
+            </Text>
+            {unread ? (
+              <View style={s.trailing}>
+                <View style={s.dot}>
+                  <Text style={s.dotTxt}>{item.unreadCount > 9 ? '9+' : item.unreadCount}</Text>
+                </View>
+                {showReply && (
+                  <TouchableOpacity
+                    style={[s.replyArrow, isQuickOpen && s.replyArrowActive]}
+                    onPress={(e) => { (e as any).stopPropagation?.(); onToggleQuick() }}
+                    hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                  >
+                    <Ionicons name={isQuickOpen ? 'chevron-up' : 'chevron-down'} size={15} color={isQuickOpen ? colors.white : '#6E6E73'} />
+                  </TouchableOpacity>
+                )}
               </View>
-              <TouchableOpacity
-                style={[s.replyArrow, isQuickOpen && s.replyArrowActive]}
-                onPress={(e) => { (e as any).stopPropagation?.(); onToggleQuick() }}
-                hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-              >
-                <Ionicons
-                  name={isQuickOpen ? 'chevron-up' : 'chevron-down'}
-                  size={16}
-                  color={isQuickOpen ? colors.white : '#6E6E73'}
-                />
-              </TouchableOpacity>
-            </>
-          ) : iMine ? (
-            <Ionicons name="checkmark-done" size={16} color={isRead ? '#4FC3F7' : '#C8C8C8'} />
-          ) : null}
+            ) : (
+              <View style={s.status}>
+                <View style={[s.statusDot, isOnline ? s.statusDotOn : s.statusDotOff]} />
+                <Text style={s.statusTxt}>{isOnline ? t.chat_online : t.chat_offline}</Text>
+              </View>
+            )}
+          </View>
         </View>
       </TouchableOpacity>
 
@@ -1418,10 +1420,19 @@ const s = StyleSheet.create({
   time:        { fontSize: 12, fontFamily: fonts.medium, color: '#ABABAB' },
   timeActive:  { color: '#1A1A1A', fontFamily: fonts.semiBold },
   preview:     { fontSize: 13, fontFamily: fonts.regular, color: '#ABABAB' },
+  previewFlex: { flex: 1 },
   previewBold: { fontFamily: fonts.medium, color: '#3A3A3C' },
   previewMuted:{ fontStyle: 'italic', color: '#C0C0C8' },
-  dot:         { minWidth: 20, height: 20, borderRadius: 10, backgroundColor: '#1A1A1A', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
+  bottomRow:   { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  dot:         { minWidth: 20, height: 20, borderRadius: 10, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
   dotTxt:      { fontSize: 11, fontFamily: fonts.extraBold, color: colors.white },
+  trailing:    { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  // Estado online/offline (chats lidos) — ponto + texto, como no design
+  status:      { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  statusDot:   { width: 7, height: 7, borderRadius: 3.5 },
+  statusDotOn: { backgroundColor: '#22C55E' },
+  statusDotOff:{ backgroundColor: '#C9C9CF' },
+  statusTxt:   { fontSize: 11, fontFamily: fonts.medium, color: '#ABABAB' },
   rowRight:      { flexDirection: 'row', alignItems: 'center', gap: 6 },
   replyArrow:    { width: 28, height: 28, borderRadius: 14, backgroundColor: '#F5F5F7', alignItems: 'center', justifyContent: 'center' },
   replyArrowActive: { backgroundColor: '#1A1A1A' },

@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Social Media App Clone</title>
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Fonts for Inter-like typography -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<style data-purpose="custom-styles">
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f3f4f6;
+    }
+    .iphone-frame {
+      width: 375px;
+      height: 812px;
+      border: 8px solid #333;
+      border-radius: 40px;
+      position: relative;
+      background: white;
+      overflow: hidden;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    }
+    .status-bar {
+      height: 44px;
+      padding: 0 24px;
+    }
+    .orange-button {
+      background-color: #ff7a1c;
+    }
+    .story-ring {
+      padding: 2px;
+      border: 2px solid #ff7a1c;
+      border-radius: 50%;
+    }
+    .story-ring-dashed {
+      padding: 2px;
+      border: 2px dashed #ff7a1c;
+      border-radius: 50%;
+    }
+    /* Scrollbar hide */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="flex flex-col md:flex-row items-center justify-center min-h-screen gap-8 p-8">
+<!-- BEGIN: Notifications Screen -->
+<div class="iphone-frame flex flex-col" data-purpose="notifications-screen">
+<!-- Status Bar -->
+<div class="status-bar flex justify-between items-end pb-2">
+<span class="text-sm font-bold">9:41</span>
+<div class="flex gap-1 items-center">
+<svg class="w-4 h-4" fill="currentColor" viewbox="0 0 20 20"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"></path></svg>
+<svg class="w-4 h-4" fill="currentColor" viewbox="0 0 20 20"><path clip-rule="evenodd" d="M17.707 15.707a1 1 0 01-1.414 0l-7-7a1 1 0 011.414-1.414l7 7a1 1 0 010 1.414z" fill-rule="evenodd"></path></svg>
+</div>
+</div>
+<!-- Header -->
+<header class="px-4 py-3 flex items-center justify-between border-b border-gray-50">
+<button class="p-1"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M15 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button>
+<h1 class="text-lg font-bold">Notifications</h1>
+<div class="w-6"></div>
+</header>
+<!-- Activity List -->
+<main class="flex-1 overflow-y-auto no-scrollbar px-4">
+<div class="py-4 space-y-5">
+<!-- Notification Item -->
+<div class="flex items-start gap-3">
+<div class="relative flex-shrink-0">
+<img alt="User" class="w-10 h-10 rounded-full border-2 border-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBzjHmIuafubtzBL1XW73dHfVCHoGLt77hhzF8tC5s7o0LOuW-Pak7MyUgItfTPhF5gvK7JrndnKa9iGUZJ6RolCpXnntmJbqZhXGaLprf9EP5-fE2vwEU2qM4_PNekBw25n6J6TCExYgYgdqQXP_osKMgFR-mLr9aN2rHag4bqLY267bAe8vQ_mmgQ7kbXAIl3dpTjzNk_zpUey6adxqfUE6CsDA5hLPCc8-yACjTvdXJR8I65I2Tssw"/>
+<img alt="User" class="w-6 h-6 rounded-full border-2 border-white absolute -bottom-1 -right-1" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA1foahhcsPNZnCGDULk1DcpRGRpoZ4QrMJq6KuCskiwEvBkoa7NCpbrMMWG9hAFMJA9wYl3wJ8nJceJCzCi6ambM4UePx8vrFH6ZBrAgZtNUfqBiRKb0ITn0gFafy40gzzZzxxmLY8RUYCerDOKGZ1_QBzik1uxxN9RwBBIT7i4xUWaNU1JyQJxyrQD6hRYunrQzvyZUmctkUA00y8wDgbqVISBVd4WI0Jdsc_I_aNHgCpZL52ApIAPg"/>
+</div>
+<div class="flex-1 text-sm">
+<p><span class="font-bold">Scott Stonefield, Hanna Tiffany</span> and 3,000 others liked a reel you posted. <span class="text-gray-400">May 10</span></p>
+</div>
+<img alt="Content" class="w-11 h-11 rounded object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAO32bTxCVKlQtjZcxqghxFBe6xmrTJ8UwSfALDM4W4ZwiUHO5xw4RvPtpWxwSE87Xl1_78ac7A55Zwc4kUPcjLLGR7_YHXVp1IhQ14frWusa4gOa_OtqT6lJSA_Spj8Nk422GLG83y7nANcbgQeR2IyX0Fe4PAu-XJwOCS0ZIR3e8VY3Ick80Pf7XMPl9_N1TIv3eAg06KOEOx7OznIlvkIRoSd5f6JKni3EdFtbkvwv0XDsTPzhbjfw"/>
+</div>
+<div class="flex items-start gap-3">
+<div class="relative flex-shrink-0">
+<img alt="User" class="w-10 h-10 rounded-full border-2 border-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBBMvHcfAs4Sn3DBwGdtlz7JmoFz0Wxs2T6ft9N1rFU-3oLJsGik6emP40pNGqzyb2HXnOgHOiMLrAY0rLEXISTMVvJ7RGut3rSz5ZPI1xyGNKJab8Civ-lzN9zKVD0dCAoVaLUthbk7qYTz51k27Srf63_v-XB4cRjMvo8m_ehH0kRlZT60G6l9XROQYKPnr8HfbYJZLzAtfTE69G21iwmtKSjv2DPztKx3zR-b21ZiWsbfj6gTGP-Sw"/>
+<img alt="User" class="w-6 h-6 rounded-full border-2 border-white absolute -bottom-1 -right-1" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBJJyjX-haEG2VVGW_D228ef7Pf-VWXknOmmpO9AjeVFfjvF1bnrHrmFuIMSrWQxXR_DITO3qYENPe3JwnrKLEzxkq5QZ6Si9E0kqiMs1f-_KOj4LyF3RX-4_y1HI6Mebn6scV5JT5UPDh1uMukKTC20oSS-gBhO8QTcvg32XrF5gduwoZFeLnDMI5vxe_zBevD6KzwzZ6kX7WbBW7pBnectlapTxw_zC3IPE7ly-WDI7yeWhalej2ieg"/>
+</div>
+<div class="flex-1 text-sm">
+<p><span class="font-bold">Ivy Stanley, Hanna Tiffany</span> and 644 others followed you, follow them back to be friends <span class="text-gray-400">May 10</span></p>
+</div>
+<svg class="w-4 h-4 text-gray-400 mt-1" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</div>
+<div class="flex items-start gap-3">
+<div class="relative flex-shrink-0">
+<img alt="User" class="w-10 h-10 rounded-full border-2 border-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuACDsVJAYzRU8IYzT4Pz9lzg-8r0ryHKtkQpk0qxJqnbHUUMuJlVf3EJYHTH80iz8wVFO3T-cSCBb0XE_5kO4cW161G1Bz-EkEKT2oShWoWfvCp-Le3NjsmJMbNwJQtTgGurLtKCY2b5pML56hMY745fegxoLqSqZ98-Rq4_ZkW7wcuggr9hLUFRY3lKEBev9hE7zVg6fo52rI_0fMLySrWnCdHWkmg4nWglpaeZNDkzr3wUIo9EcHYdQ"/>
+<img alt="User" class="w-6 h-6 rounded-full border-2 border-white absolute -bottom-1 -right-1" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBOBFqL4TRmsfci4pPmkU67-mAt1545vmAfcfUUYc2LeTaXnS6RtJdhSIzNT2ePzf-nhM-QA-_eDcONYEXHcxRC8daAD-LWct7D1QH9ozbRXWlkbCRWRpjgmhiiHfYn6MZ88gjkEkeML0afT3RNSYRWZDsP2dbgdrplXV4GI_EvcPXqhwsG8VoX56moTiAyc83dY0Z5V122ApdfCKQANoIqV8BDFe0YQ-9IyYSUn8bX0svVhCFZkFR7MA"/>
+</div>
+<div class="flex-1 text-sm">
+<p><span class="font-bold">Scott Stonefield, Hanna Tiffany</span> and 54 others viewed your profile. <span class="text-gray-400">May 9</span></p>
+</div>
+<svg class="w-4 h-4 text-gray-400 mt-1" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</div>
+<button class="w-full text-center text-xs text-gray-400 py-2">See All ⌵</button>
+<!-- Suggested Section -->
+<section class="mt-4">
+<h2 class="text-sm font-bold mb-4">Suggested accounts for you</h2>
+<div class="space-y-4">
+<!-- Suggestion 1 -->
+<div class="flex items-center gap-3">
+<img alt="Suggested" class="w-12 h-12 rounded-full" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA0L1h51f0wB-mfd6RMOjgTj-WnkyWwi20XiC-SOh_5cWxpBba_rH-FJf6WVUjFkUAlmV9AtQXrwAuReaf9jYXB7PE1C76uSPKa75uGTa1r-XMn7FSzmY1BCjRfkBGFCI-t3sfJjF1yMHzeFfww-cureAc0vu3_rAvOlcY9W5dkXk6AWNeb48yGKhjW_NlWmu6aUHV1vpIe3NWZIPMnh6Mv9LOD8qCS9Csckw98FOB-OBLQANYEmosrQw"/>
+<div class="flex-1">
+<p class="text-sm font-bold flex items-center gap-1">Chrixx lens <svg class="w-3 h-3 text-blue-500" fill="currentColor" viewbox="0 0 20 20"><path d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.64.304 1.25.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"></path></svg></p>
+<p class="text-xs text-gray-400">From your contacts</p>
+</div>
+<button class="orange-button text-white text-xs font-bold px-5 py-2 rounded-full">Follow back</button>
+<button class="text-gray-400"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button>
+</div>
+<!-- Suggestion 2 -->
+<div class="flex items-center gap-3">
+<img alt="Suggested" class="w-12 h-12 rounded-full" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCP8BqxeQBinzDRhLFe-phPFPuVtKw6BWfgsuUfuzzZw6EUmay-HJiqElotmEqivybm40eQr_XUxFoUEyo7hMn-hOXUG2WKscSiN0G4kXi0f6u70iz6x4H0bCtTVSSMtrPXAH9vYSJIhKq3g5A0VIkGih8JbyGrse3LqVHwQjr9Bvsfa1K0fsIRU6dhSBZk6C-rP1QS1TukUQVvfPtDZYKkd95kBqClfCkgmETeTJ-Kz-hlt0jYbNM8hA"/>
+<div class="flex-1">
+<p class="text-sm font-bold flex items-center gap-1">Ivy Stanley <svg class="w-3 h-3 text-blue-500" fill="currentColor" viewbox="0 0 20 20"><path d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.64.304 1.25.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"></path></svg></p>
+<p class="text-xs text-gray-400">From your contacts</p>
+</div>
+<button class="orange-button text-white text-xs font-bold px-5 py-2 rounded-full">Follow back</button>
+<button class="text-gray-400"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button>
+</div>
+<!-- Suggestion 3 -->
+<div class="flex items-center gap-3">
+<img alt="Suggested" class="w-12 h-12 rounded-full" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDj6FIvF30MBu26l03KlrwsSn7SDgziU4TxLznXDtBlbPjeME2QteykkjFHgzwGhgzgVcbFkXOMp-WrmC1_oDuT20su-W3LqdWIsdBpgwNjQmsPHGeMVzhXgIHCC81wXGd3nqoz00HR9Up3Rt618MkIHZOVGpUwFfGR5yf62zMPKCS8ZeKGYlFc7cT3pSdAZcZUwhka7JAdhBfbwd7RoiLAu3awTJdmJ0mf1ddvne7PqJMMb9OWhbmvpA"/>
+<div class="flex-1">
+<p class="text-sm font-bold flex items-center gap-1">Scott Stonefield <svg class="w-3 h-3 text-blue-500" fill="currentColor" viewbox="0 0 20 20"><path d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.64.304 1.25.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"></path></svg></p>
+<p class="text-xs text-gray-400">Followed by <span class="text-gray-600">👤</span></p>
+</div>
+<button class="orange-button text-white text-xs font-bold px-5 py-2 rounded-full">Follow back</button>
+<button class="text-gray-400"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button>
+</div>
+</div>
+</section>
+</div>
+</main>
+</div>
+<!-- END: Notifications Screen -->
+<!-- BEGIN: Inbox Screen -->
+<div class="iphone-frame flex flex-col" data-purpose="inbox-screen">
+<!-- Status Bar -->
+<div class="status-bar flex justify-between items-end pb-2">
+<span class="text-sm font-bold">9:41</span>
+<div class="flex gap-1 items-center">
+<svg class="w-4 h-4" fill="currentColor" viewbox="0 0 20 20"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"></path></svg>
+<svg class="w-4 h-4" fill="currentColor" viewbox="0 0 20 20"><path clip-rule="evenodd" d="M17.707 15.707a1 1 0 01-1.414 0l-7-7a1 1 0 011.414-1.414l7 7a1 1 0 010 1.414z" fill-rule="evenodd"></path></svg>
+</div>
+</div>
+<!-- Header -->
+<header class="px-4 py-3 flex items-center justify-between border-b border-gray-50">
+<button class="p-1 text-gray-700">
+<svg class="w-6 h-6" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M4 6h16M4 12h16m-7 6h7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+</button>
+<h1 class="text-lg font-bold">Inbox</h1>
+<div class="flex gap-4">
+<button><svg class="w-6 h-6" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button>
+<div class="relative">
+<button><svg class="w-6 h-6" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button>
+<span class="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
+</div>
+</div>
+</header>
+<!-- Search Bar -->
+<div class="px-4 py-3">
+<div class="bg-gray-100 rounded-lg flex items-center px-3 py-2">
+<svg class="w-4 h-4 text-gray-400 mr-2" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+<input class="bg-transparent border-none focus:ring-0 text-xs w-full text-gray-500 placeholder-gray-400 p-0" placeholder="Search for your chats, messages here." type="text"/>
+</div>
+</div>
+<!-- Tabs -->
+<div class="px-4 flex gap-6 border-b border-gray-100 text-xs font-medium">
+<button class="pb-3 border-b-2 border-gray-900">Primary</button>
+<button class="pb-3 text-gray-400">Requests</button>
+<button class="pb-3 text-gray-400">General</button>
+</div>
+<!-- Chat List -->
+<main class="flex-1 overflow-y-auto no-scrollbar">
+<!-- Chat Entry 1 -->
+<div class="flex items-center gap-3 px-4 py-4">
+<div class="story-ring">
+<img alt="Avatar" class="w-14 h-14 rounded-full" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCWVSpOrG9BvU890z8_U4icyegsCCJ8amky1KCtEppHdDVck9c77sD09AZX0_MIkIEc2jGeWceSi-YmPoNomCJjACZrT8MoSG5GRW1Yy25v8Msa624l3o0Dt5j7TXnn7Svt9AJpldDxuvAvgS93ypvWprfnUfE1WOeS9H07STA8raiXoQTwqNI_vkfqY54a2vytXnK2x5RVTQTHugduu7UClmwOhzkWYCb6PVxsD1CdoILjh-27by1evA"/>
+</div>
+<div class="flex-1">
+<div class="flex items-center gap-1">
+<p class="font-bold text-sm">Ivy Stanley</p>
+<svg class="w-3 h-3 text-blue-500" fill="currentColor" viewbox="0 0 20 20"><path d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.64.304 1.25.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"></path></svg>
+</div>
+<p class="text-xs text-gray-400">Seen.. 👍</p>
+</div>
+<button class="text-gray-600"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path><path d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path></svg></button>
+</div>
+<!-- Chat Entry 2 -->
+<div class="flex items-center gap-3 px-4 py-4">
+<div class="story-ring">
+<img alt="Avatar" class="w-14 h-14 rounded-full" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDHzt5ay-s6CYGqRu9-zZU01ESnva1HSU3u1WX3OCu-Z5pmJs3lJFZy0M9evoVoslYdNyoqxJPVaZ7kslqN1GsUnWZHHiB63yysp8FCSq-G2p8TZClDiz7wK90GrSt2TkkqHqwJtCXsgbbABzrVJJtdJmveHluG_16sb5erVxoZPvIhto63NkQXC9IWDdAX10R8Df-HqM2cqjQ-Pq2WzKXOlzHdGIXS6ag62oVAUt7RNm8OjJYwrXzSxQ"/>
+</div>
+<div class="flex-1">
+<div class="flex items-center gap-1">
+<p class="font-bold text-sm">Chrixx lens</p>
+<svg class="w-3 h-3 text-blue-500" fill="currentColor" viewbox="0 0 20 20"><path d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.64.304 1.25.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"></path></svg>
+</div>
+<p class="text-xs text-gray-400">Are you coming to the party? <span class="ml-1 text-gray-400">2h</span></p>
+</div>
+<button class="text-gray-600"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path><path d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path></svg></button>
+</div>
+<!-- Chat Entry 3 -->
+<div class="flex items-center gap-3 px-4 py-4">
+<img alt="Avatar" class="w-[60px] h-[60px] rounded-full" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA_ZV-0NkYOQwtXePv4Q2wYWMP9fThrXpO6cK4ryVoog64jgr1CR5HzxUsSi38XgcO7TtyxbGf1abU-TF2P4hFQxaWRmLB7nUtrvIHsJ1_tl2m3jZrPZRoJ45qSJfw0_xz5271GvEmjne6RSjWuj6CZ7z0ze-UXdJhMUBCIVYbMTccAre0Akq80Ga-3ai694kRD9wmLheSRR6CLyXn52dbNoSKbT4DXe58hA6KIeJ-U0YIqRLMc726umw"/>
+<div class="flex-1">
+<div class="flex items-center gap-1">
+<p class="font-bold text-sm">Hanna Tiffany</p>
+<svg class="w-3 h-3 text-blue-500" fill="currentColor" viewbox="0 0 20 20"><path d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.64.304 1.25.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"></path></svg>
+</div>
+<p class="text-xs text-gray-400">Active 3h</p>
+</div>
+<button class="text-gray-600"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path><path d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path></svg></button>
+</div>
+<!-- Chat Entry 4 -->
+<div class="flex items-center gap-3 px-4 py-4">
+<div class="story-ring-dashed">
+<img alt="Avatar" class="w-14 h-14 rounded-full" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBTl58djvyd-Wkx25aaf8TQP4fuW02UFohPqLYaj1BLVjvzmSOX__cOQMfCv4FzZ1kWbajmkQsVS1MbOhfNn33_i9hzL19f8CGv2lZhdEkt5LBEUMAnLWzCSdxDbNdTRerakw8MnU3yI8vPLL1YW4498ZvqcOuBvOqSbsXpG4LnYfmMibPpDidrBiQNVURrzQuwezFUuB-bvp5s3pGSB4Ds5ujEDlPdu_50hSrr4KygGxrwUL8lgx43Ig"/>
+</div>
+<div class="flex-1">
+<div class="flex items-center gap-1">
+<p class="font-bold text-sm">Scott Stonefield</p>
+<svg class="w-3 h-3 text-blue-500" fill="currentColor" viewbox="0 0 20 20"><path d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.64.304 1.25.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"></path></svg>
+</div>
+<p class="text-xs text-gray-400">sent a reel <span class="ml-1 text-gray-400">1h</span></p>
+</div>
+<button class="text-gray-600"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path><path d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"></path></svg></button>
+</div>
+</main>
+<!-- Navigation Bar -->
+<footer class="border-t border-gray-100 flex justify-between px-8 py-3">
+<button class="text-gray-800"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button>
+<button class="text-gray-800"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button>
+<button class="text-gray-800 border-2 border-gray-800 rounded-lg p-0.5"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></button>
+<button class="text-gray-800 relative">
+<svg class="w-6 h-6" fill="currentColor" viewbox="0 0 20 20"><path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v4a2 2 0 01-2 2H9l-3 3v-3H4a2 2 0 01-2-2V5z"></path><path d="M15 7v2a4 4 0 01-4 4H9.828l-1.766 1.767c.28.149.599.233.938.233h2l3 3v-3h2a2 2 0 002-2V9a2 2 0 00-2-2h-1z"></path></svg>
+<span class="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
+</button>
+<img alt="Profile" class="w-6 h-6 rounded-full border border-gray-200" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDqLAKekAtDH2OMdOEcTL5EExm3W51xz5ILudGS2WgeLkKqPqOpZCdtDBe6HkMUsJ0JjSm_OZJrgUadUOHjKYnys93BiSCSSasptN9_M2Hrblec9_clkAr4SjiN7au7mFuiQoPPPGNlYfbtx6VHmSTfErTxVp0nRNZVk6iF4YyV42FNo89_GtQAURQeayHy3Bm8-f2F6Fw6i0MRIfV401B2iiX2hlbhRXpPyuMYExEPtvgdXiUV7-CL6g"/>
+</footer>
+</div>
+<!-- END: Inbox Screen -->
+</body></html>
