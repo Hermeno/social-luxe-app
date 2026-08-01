@@ -70,13 +70,13 @@ function FeedItem({ post, isActive, liked, onCommentPress, onLikeChange, onExpir
   const uri     = resolveUrl(post.mediaUrl)
 
   // ── Geometria da pilha ─────────────────────────────────────────────────────
-  // NAV_H = altura EXATA do TabBar (SZ 24 + paddingTop 10 + paddingV 4·2 +
-  // paddingBottom max(safeBottom,8)), para o campo encostar sem vão. Não usamos
-  // useBottomTabBarHeight: muda com transições e faz o campo saltar.
-  const DOCK_H = 44
-  const NAV_H  = Math.max(safeBottom, 8) + 42
-  const videoBottom   = NAV_H + DOCK_H + 12                   // fundo do vídeo
-  const overlayBottom = videoBottom + 14                      // autor/ações no vídeo
+  // A fila de ícones da nav fica a safeBottom + 32 (paddingBottom + ícone). O
+  // campo assenta logo por cima dela — colado, sem o vão que sobrava. Valor
+  // estável (não useBottomTabBarHeight, que salta em transições).
+  const DOCK_H     = 44
+  const dockBottom = Math.max(safeBottom, 8) + 34
+  const videoBottom   = dockBottom + DOCK_H + 12             // fundo do vídeo
+  const overlayBottom = videoBottom + 14                     // autor/ações no vídeo
   const videoFrame = { top: safeTop, bottom: videoBottom }
 
   // ── Leitor de vídeo ─────────────────────────────────────────────────────────
@@ -223,7 +223,7 @@ function FeedItem({ post, isActive, liked, onCommentPress, onLikeChange, onExpir
 
       {/* ── Campo de comentário — por baixo do vídeo, acima da navegação ── */}
       <Pressable
-        style={[s.dock, { bottom: NAV_H, height: DOCK_H }]}
+        style={[s.dock, { bottom: dockBottom, height: DOCK_H }]}
         onPress={() => onCommentPress(post)}
       >
         <AvatarImage uri={resolveUrl(myAvatar)} name={myName} size={26} borderWidth={0} borderColor="transparent" />
