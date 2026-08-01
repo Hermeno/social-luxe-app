@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   View, Text, StyleSheet, Dimensions, Pressable, TouchableOpacity, Animated,
-  ActivityIndicator,
+  ActivityIndicator, PanResponder,
 } from 'react-native'
 import { useVideoPlayer, VideoView, VideoPlayerStatus } from 'expo-video'
 import { Image } from 'expo-image'
@@ -72,17 +72,18 @@ function FeedItem({
   const isAlbum = !isVideo && !isText && !!post.mediaUrls && post.mediaUrls.length > 1
   const uri     = resolveUrl(post.mediaUrl)
 
-  // ── Geometria da pilha (tudo colado) ───────────────────────────────────────
-  // De baixo para cima, sem vãos: navegação · campo · traço do tempo · vídeo.
-  // Os ícones da nav ficam a safeBottom + 32. Valor estável (não
-  // useBottomTabBarHeight, que salta em transições).
+  // ── Geometria da pilha ──────────────────────────────────────────────────────
+  // De baixo para cima, com folga entre cada peça: navegação · campo · traço do
+  // tempo · vídeo. Valor estável (não useBottomTabBarHeight, que salta).
   const DOCK_H     = 50
-  const TRACK_H    = 2
-  const dockBottom    = Math.max(safeBottom, 8) + 32
-  const trackBottom   = dockBottom + DOCK_H                  // traço por cima do campo
-  const videoBottom   = trackBottom + TRACK_H                // vídeo por cima do traço
-  const overlayBottom = videoBottom + 14                     // autor/ações no vídeo
+  const TRACK_H    = 3
+  const GAP        = 8
+  const dockBottom    = Math.max(safeBottom, 8) + 30        // campo, pouco acima da nav
+  const trackBottom   = dockBottom + DOCK_H + GAP           // traço, com folga do campo
+  const videoBottom   = trackBottom + TRACK_H + GAP         // vídeo, com folga do traço
+  const overlayBottom = videoBottom + 14                    // autor/ações no vídeo
   const videoFrame = { top: safeTop, bottom: videoBottom }
+  const trackWidth = width - 28                             // left/right 14
 
   // ── Leitor de vídeo ─────────────────────────────────────────────────────────
   // Memoizado: um `{ uri }` inline mudava de referência a cada render e o
@@ -102,11 +103,11 @@ function FeedItem({
   // feed perde foco e o vídeo pausa; ao voltar, retoma.
   useEffect(() => {
     if (!isVideo) return
-    if (isActive && isFocused) { try { player.play() } catch {} }
+    if (isActive && isFocused) { try { player.play() } catch {}; setPaused(false) }
     else                       { try { player.pause() } catch {} }
   }, [isActive, isFocused, player, isVideo])
 
-  // ── Traço do tempo do vídeo ─────────────────────────────────────────────────
+  // ── Traço do tempo do vídeo + scrubber ──────────────────────────────────────
   const [progress, setProgress] = useState(0)
   useEffect(() => {
     if (!isVideo || !isActive || !isFocused) return
@@ -119,6 +120,23 @@ function FeedItem({
     return () => clearInterval(id)
   }, [isVideo, isActive, isFocused, player])
 
+  // Tocar/arrastar na linha salta no vídeo (voltar ao início ou correr).
+  const scrub = useMemo(() => {
+    const seekTo = (x: number) => {
+      const frac = Math.max(0, Math.min(1, x / trackWidth))
+      try {
+        const d = player.duration
+        if (d > 0) { player.currentTime = frac * d; setProgress(frac) }
+      } catch {}
+    }
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder:  () => true,
+      onPanResponderGrant: (e) => seekTo(e.nativeEvent.locationX),
+      onPanResponderMove:  (e) => seekTo(e.nativeEvent.locationX),
+    })
+  }, [player, trackWidth])
+
   // ── Vida do momento (efémero) — desaparece quando expira ────────────────────
   useEffect(() => {
     if (!post.expiresAt) return
@@ -128,16 +146,31 @@ function FeedItem({
     return () => clearTimeout(id)
   }, [post.id])
 
-  // ── Duplo toque no vídeo para gostar (as ações vivem na coluna direita) ─────
+  // ── Toque: simples pausa/retoma, duplo gosta ────────────────────────────────
+  const [paused, setPaused] = useState(false)
   const lastTap      = useRef(0)
+  const tapTimer     = useRef<ReturnType<typeof setTimeout> | null>(null)
   const heartOpacity = useRef(new Animated.Value(0)).current
   const heartScale   = useRef(new Animated.Value(0.3)).current
+  useEffect(() => () => { if (tapTimer.current) clearTimeout(tapTimer.current) }, [])
 
+  function togglePlay() {
+    if (!isVideo) return
+    try {
+      if (player.playing) { player.pause(); setPaused(true) }
+      else                { player.play();  setPaused(false) }
+    } catch {}
+  }
   function handleTapMedia() {
     const now = Date.now()
     if (now - lastTap.current < 280) {
+      // Duplo toque → gostar. Cancela o pause do toque simples.
+      if (tapTimer.current) { clearTimeout(tapTimer.current); tapTimer.current = null }
       burstHeart()
       if (!liked) { onLikeChange(true); postService.likePost(post.id).catch(() => {}) }
+    } else {
+      // Toque simples → pausar/retomar, após a janela do duplo toque.
+      tapTimer.current = setTimeout(() => { togglePlay(); tapTimer.current = null }, 280)
     }
     lastTap.current = now
   }
@@ -202,6 +235,12 @@ function FeedItem({
         <Ionicons name="heart" size={104} color="rgba(255,255,255,0.92)" />
       </Animated.View>
 
+      {isVideo && paused && (
+        <View style={s.playOverlay} pointerEvents="none">
+          <Ionicons name="play" size={62} color="rgba(255,255,255,0.92)" />
+        </View>
+      )}
+
       {/* ── Autor + descrição — sobre o vídeo, canto inferior esquerdo ── */}
       <View style={[s.meta, { bottom: overlayBottom }]} pointerEvents="box-none">
         <View style={s.authorRow}>
@@ -230,10 +269,12 @@ function FeedItem({
         bottomOffset={overlayBottom}
       />
 
-      {/* ── Traço do tempo do vídeo — por cima do campo ── */}
+      {/* ── Traço do tempo — scrubber: tocar/arrastar salta no vídeo ── */}
       {isVideo && (
-        <View style={[s.track, { bottom: trackBottom, height: TRACK_H }]} pointerEvents="none">
-          <View style={[s.trackFill, { width: `${Math.round(progress * 100)}%` }]} />
+        <View style={[s.trackRow, { bottom: trackBottom - 9 }]} {...scrub.panHandlers}>
+          <View style={[s.track, { height: TRACK_H }]}>
+            <View style={[s.trackFill, { width: `${Math.round(progress * 100)}%` }]} />
+          </View>
         </View>
       )}
 
@@ -278,9 +319,11 @@ const s = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
   },
 
-  // Traço do tempo do vídeo — hairline por cima do campo
-  track:     { position: 'absolute', left: 14, right: 14, borderRadius: 2, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.16)' },
-  trackFill: { height: '100%', borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.92)' },
+  // Traço do tempo do vídeo — scrubber (área de toque de 22px, linha ao centro)
+  trackRow:  { position: 'absolute', left: 14, right: 14, height: 22, justifyContent: 'center' },
+  track:     { borderRadius: 2, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.18)' },
+  trackFill: { height: '100%', borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.95)' },
+  playOverlay: { position: 'absolute', left: 0, right: 0, top: '40%', alignItems: 'center' },
 
   // Campo de comentário — dark quente (não cinzento default), sem border
   dock: {
