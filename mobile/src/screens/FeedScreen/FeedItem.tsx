@@ -22,7 +22,7 @@ import PostAlbumGrid from './PostAlbumGrid'
 import { useAuthStore } from '../../store/auth.store'
 import { useFollowStore } from '../../store/follow.store'
 
-const { width, height } = Dimensions.get('window')
+const { width } = Dimensions.get('window')
 
 type Nav = StackNavigationProp<AppStackParams>
 
@@ -36,6 +36,8 @@ interface Props {
   post: Post
   /** Só a célula visível toca o vídeo e corre a contagem de vida. */
   isActive: boolean
+  /** Altura real da lista (medida no FeedScreen) — todas as células iguais. */
+  cellHeight: number
   liked: boolean
   reposted: boolean
   commentCount: number
@@ -54,7 +56,7 @@ interface Props {
 // flutuam sobre o vídeo; comentar vive no campo por baixo. A célula é a única
 // dona do seu leitor — a FlatList monta/desmonta, sem player partilhado.
 function FeedItem({
-  post, isActive, liked, reposted, commentCount,
+  post, isActive, cellHeight, liked, reposted, commentCount,
   onCommentPress, onLikeChange, onRepost, onExpired,
 }: Props) {
   const nav = useNavigation<Nav>()
@@ -197,7 +199,7 @@ function FeedItem({
   }, [post.bgColor])
 
   return (
-    <View style={s.cell}>
+    <View style={[s.cell, { height: cellHeight }]}>
       {/* ── Vídeo: janela entre a status bar e o campo de comentário.
              Média sempre filha direta da célula (não a envolver) para o
              leitor nativo assentar e renderizar. ── */}
@@ -296,7 +298,7 @@ function FeedItem({
 export default React.memo(FeedItem)
 
 const s = StyleSheet.create({
-  cell:  { width, height, backgroundColor: '#000' },
+  cell:  { width, backgroundColor: '#000' },
   media: { position: 'absolute', left: 0, right: 0, backgroundColor: '#000' },
   scrim: { position: 'absolute', left: 0, right: 0, height: 190 },
   tapLayer: { position: 'absolute', left: 0, right: 0 },

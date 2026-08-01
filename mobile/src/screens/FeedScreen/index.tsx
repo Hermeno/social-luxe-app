@@ -62,6 +62,10 @@ export default function FeedScreen() {
 
   const listRef = useRef<FlatList<Post>>(null)
   const { top: safeTop } = useSafeAreaInsets()
+  // Altura real da área da lista (medida). O pager usa-a para a célula, o snap
+  // e o layout — assim toda a gente fica alinhada (Dimensions.window no arranque
+  // podia não bater certo e desalinhava os posts a partir do 2.º).
+  const [listH, setListH] = useState(SCREEN_H)
 
   // ── Dados: agrupar por autor (topo) e achatar (pager) ──────────────────────
   const userGroups = useMemo<UserGroup[]>(() => {
@@ -227,6 +231,7 @@ export default function FeedScreen() {
     <FeedItem
       post={item}
       isActive={item.id === currentPostId}
+      cellHeight={listH}
       liked={likedPostIds.has(item.id)}
       reposted={repostedIds.has(item.id)}
       commentCount={(item._count?.comments ?? 0) + (commentDeltas[item.id] ?? 0)}
@@ -241,14 +246,20 @@ export default function FeedScreen() {
       onExpired={(id) => removePost(id)}
       onBlockingChange={() => {}}
     />
-  ), [currentPostId, likedPostIds, repostedIds, commentDeltas, searchMode, handleLikeChange, handleRepost, removePost, updatePost])
+  ), [currentPostId, listH, likedPostIds, repostedIds, commentDeltas, searchMode, handleLikeChange, handleRepost, removePost, updatePost])
 
   const getItemLayout = useCallback((_: unknown, index: number) => (
-    { length: SCREEN_H, offset: SCREEN_H * index, index }
-  ), [])
+    { length: listH, offset: listH * index, index }
+  ), [listH])
 
   return (
-    <View style={s.container}>
+    <View
+      style={s.container}
+      onLayout={(e) => {
+        const h = e.nativeEvent.layout.height
+        if (h > 0 && h !== listH) setListH(h)
+      }}
+    >
       {flatPosts.length > 0 ? (
         <FlatList
           ref={listRef}
@@ -257,7 +268,7 @@ export default function FeedScreen() {
           renderItem={renderItem}
           getItemLayout={getItemLayout}
           showsVerticalScrollIndicator={false}
-          snapToInterval={SCREEN_H}
+          snapToInterval={listH}
           snapToAlignment="start"
           decelerationRate="fast"
           disableIntervalMomentum
@@ -270,7 +281,7 @@ export default function FeedScreen() {
           initialNumToRender={2}
           removeClippedSubviews
           onScrollToIndexFailed={({ index }) => {
-            listRef.current?.scrollToOffset({ offset: SCREEN_H * index, animated: false })
+            listRef.current?.scrollToOffset({ offset: listH * index, animated: false })
           }}
         />
       ) : (
