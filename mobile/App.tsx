@@ -17,7 +17,9 @@ import * as Notifications from 'expo-notifications'
 import * as Location from 'expo-location'
 import { Image, Platform, StyleSheet, Text, View } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { LinearGradient } from 'expo-linear-gradient'
 import RootNavigator from './src/navigation/RootNavigator'
+import LanguageOnboardingScreen from './src/screens/LanguageOnboardingScreen'
 import { connectSocket, disconnectSocket } from './src/socket'
 import { useAuthStore } from './src/store/auth.store'
 import { useI18n } from './src/i18n'
@@ -246,8 +248,16 @@ export default function App() {
   const { isLoading: authLoading, isAuthenticated, loadUser } = useAuthStore()
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null)
   const [defaultTab, setDefaultTab] = useState<'Feed' | 'Messages' | null>(null)
+  // Idioma: no 1.º arranque (sem preferência guardada) mostramos o seletor.
+  const [needsLanguage, setNeedsLanguage] = useState<boolean | null>(null)
 
   useEffect(() => { loadUser() }, [])
+
+  useEffect(() => {
+    AsyncStorage.getItem('@language')
+      .then((v) => setNeedsLanguage(!(v === 'pt' || v === 'en')))
+      .catch(() => setNeedsLanguage(false))
+  }, [])
 
   useEffect(() => {
     // Nesta versão a feed é sempre o ecrã inicial (o seletor Feed/Chat está
@@ -267,6 +277,7 @@ export default function App() {
     fontsLoaded &&
     !authLoading &&
     defaultTab !== null &&
+    needsLanguage !== null &&
     (!isAuthenticated || onboardingDone !== null)
 
   // Release the native splash only after the full app tree is painted.
@@ -288,16 +299,24 @@ export default function App() {
       <SafeAreaProvider style={s.root}>
         <StatusBar style="light" />
         {!ready ? (
-          // JS-level dark cover: visível no Expo Go (onde a splash nativa não é controlável)
-          // e invisível em builds standalone (a splash nativa cobre antes do hideAsync).
+          // Cobertura de arranque com o gradiente laranja da marca. Visível no
+          // Expo Go (onde a splash nativa não é controlável); invisível em builds
+          // standalone (a splash nativa cobre antes do hideAsync).
           <View style={s.cover}>
+            <LinearGradient
+              colors={['#FF6A00', '#FF7A1C', '#FFC58A']}
+              locations={[0, 0.5, 1]}
+              style={StyleSheet.absoluteFill}
+            />
             <Image
-              source={require('./assets/files/luxee-splash-icon.png')}
+              source={require('./assets/files/luxee-L-symbol.png')}
               style={s.splashIcon}
               resizeMode="contain"
             />
             <Text style={s.splashText}>luxee</Text>
           </View>
+        ) : needsLanguage ? (
+          <LanguageOnboardingScreen onDone={() => setNeedsLanguage(false)} />
         ) : (
           <>
             <LangInit />
@@ -321,7 +340,7 @@ export default function App() {
 const s = StyleSheet.create({
   root:       { flex: 1, backgroundColor: DARK },
   cover:      { flex: 1, backgroundColor: DARK, alignItems: 'center', justifyContent: 'center' },
-  splashIcon: { width: 96, height: 96 },
+  splashIcon: { width: 92, height: 92, tintColor: 'rgba(255,255,255,0.96)' },
   splashText: {
     position: 'absolute', bottom: 52,
     color: '#FFFFFF', fontSize: 28, fontFamily: 'Jakarta-Bold', letterSpacing: 8,
