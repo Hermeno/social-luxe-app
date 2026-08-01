@@ -247,7 +247,12 @@ function FeedItem({
       <View style={[s.meta, { bottom: overlayBottom }]} pointerEvents="box-none">
         <View style={s.authorRow}>
           <AvatarImage uri={resolveUrl(post.user.avatar)} name={post.user.name} size={36} borderWidth={0} borderColor="transparent" />
-          <Text style={s.authorName} numberOfLines={1}>{post.user.name}</Text>
+          <View style={s.authorText}>
+            <Text style={s.authorName} numberOfLines={1}>{post.user.name}</Text>
+            {!!post.user.username && (
+              <Text style={s.authorHandle} numberOfLines={1}>@{post.user.username}</Text>
+            )}
+          </View>
           {!isSelf && (
             <TouchableOpacity
               onPress={handleFollow}
@@ -317,8 +322,13 @@ const s = StyleSheet.create({
   // Autor + descrição
   meta:       { position: 'absolute', left: 16, right: 84, gap: 8 },
   authorRow:  { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  authorText: { flexShrink: 1 },
   authorName: {
-    color: '#fff', fontFamily: fonts.semiBold, fontSize: 15, letterSpacing: -0.2, flexShrink: 1,
+    color: '#fff', fontFamily: fonts.semiBold, fontSize: 15, letterSpacing: -0.2,
+    textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
+  },
+  authorHandle: {
+    color: 'rgba(255,255,255,0.62)', fontFamily: fonts.medium, fontSize: 12.5, marginTop: 1,
     textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
   },
   followBtn: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.65)' },

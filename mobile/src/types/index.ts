@@ -3,6 +3,9 @@ export type MediaType = 'IMAGE' | 'VIDEO'
 export interface User {
   id: string
   name: string
+  username?: string | null      // @handle: grátis = base+número, pago = base
+  usernameBase?: string | null  // texto escolhido (para editar/upgrade)
+  isPaid?: boolean              // pago → @ sem número
   phone: string
   countryCode: string
   avatar: string | null
@@ -48,7 +51,7 @@ export interface Post {
   partnerAccepted?: boolean
   partnerUser?: { id: string; name: string; avatar: string | null } | null
   isAnnouncement?: boolean
-  user: Pick<User, 'id' | 'name' | 'avatar' | 'viewsPublic' | 'showDevice' | 'statusLabel' | 'lastSeen'>
+  user: Pick<User, 'id' | 'name' | 'username' | 'avatar' | 'viewsPublic' | 'showDevice' | 'statusLabel' | 'lastSeen'>
   _count: { likes: number; comments: number; shares: number; views: number }
   recentCommenters?: Array<{ id: string; name: string; avatar: string | null }>
   hasVotedExtend?: boolean
