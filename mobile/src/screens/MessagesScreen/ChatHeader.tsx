@@ -12,6 +12,7 @@ const AV_BOX     = AV_SIZE + 8  // caixa do avatar, alinhada com o resto do cabe
 
 interface Props {
   userName: string
+  userHandle?: string | null
   avatarUri: string | null
   isOnline: boolean
   isTyping: boolean
@@ -28,7 +29,7 @@ interface Props {
 }
 
 export default function ChatHeader({
-  userName, avatarUri, isOnline, isTyping,
+  userName, userHandle, avatarUri, isOnline, isTyping,
   onBack, onProfilePress, pairing, myUserId,
   onInvitePairing, onAcceptPairing, onDeclinePairing, onEndPairing,
 }: Props) {
@@ -91,9 +92,13 @@ export default function ChatHeader({
         <Text style={s.name} numberOfLines={1}>{userName}</Text>
         <View style={s.statusRow}>
           {(isOnline || isTyping) && <View style={s.onlineDot} />}
-          <Text style={[s.status, { color: isOnline || isTyping ? '#22C55E' : colors.gray400 }]}>
-            {statusText}
-          </Text>
+          {isTyping ? (
+            <Text style={[s.status, { color: '#22C55E' }]}>{statusText}</Text>
+          ) : userHandle ? (
+            <Text style={s.handle} numberOfLines={1}>@{userHandle}</Text>
+          ) : (
+            <Text style={[s.status, { color: isOnline ? '#22C55E' : colors.gray400 }]}>{statusText}</Text>
+          )}
         </View>
       </View>
 
@@ -134,6 +139,7 @@ const s = StyleSheet.create({
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 1 },
   onlineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#22C55E' },
   status:    { fontSize: 12, fontFamily: fonts.regular },
+  handle:    { fontSize: 12.5, fontFamily: fonts.regular, color: colors.gray400 },
 
   actions: { alignItems: 'center', justifyContent: 'center' },
 

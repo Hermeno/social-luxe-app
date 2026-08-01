@@ -18,6 +18,7 @@ import * as msgService from '../../services/message.service'
 import * as pairingService from '../../services/pairing.service'
 import { useAuthStore } from '../../store/auth.store'
 import { useOnlineStore } from '../../store/online.store'
+import { api } from '../../services/api'
 import { useMessageBadgeStore } from '../../store/messageBadge.store'
 import { getSocket } from '../../socket'
 import { AppStackParams } from '../../navigation/AppNavigator'
@@ -447,6 +448,7 @@ export default function ChatScreen() {
 
   // ── Pairing (persistent relationship tag) ──────────────────────────────────
   const [pairing, setPairing]             = useState<Pairing | null>(null)
+  const [partnerHandle, setPartnerHandle] = useState<string | null>(null)
   const [pairingPickerOpen, setPairingPickerOpen] = useState(false)
   const [customizingPairing, setCustomizingPairing] = useState(false)
   const [customPairingLabel, setCustomPairingLabel] = useState('')
@@ -455,6 +457,15 @@ export default function ChatScreen() {
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { bottom, top } = useSafeAreaInsets()
   const isOnline        = useOnlineStore((s) => s.isOnline(userId))
+
+  // @handle do parceiro — o backend devolve-o no perfil; mostramos no cabeçalho.
+  useEffect(() => {
+    let active = true
+    api.get(`/users/${userId}`)
+      .then((res) => { if (active) setPartnerHandle(res.data?.data?.username ?? res.data?.username ?? null) })
+      .catch(() => {})
+    return () => { active = false }
+  }, [userId])
 
   // Teclado: tratado pelo KeyboardAvoidingView do react-native-keyboard-controller
   // no render. Nada de código manual de teclado nesta app.
@@ -1032,6 +1043,7 @@ export default function ChatScreen() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <ChatHeader
           userName={userName}
+          userHandle={partnerHandle}
           avatarUri={userAvatar ?? null}
           isOnline={isOnline}
           isTyping={isTyping}
