@@ -87,12 +87,12 @@ function notifIcon(type: AppNotification['type']): string {
 
 function notifColor(type: AppNotification['type']): string {
   switch (type) {
-    case 'like':            return '#CA2851'
+    case 'like':            return '#FF7A1C'
     case 'comment':         return '#3B82F6'
     case 'reaction':        return '#F59E0B'
     case 'message':         return '#10B981'
     case 'coin':            return '#8B5CF6'
-    case 'extend_vote':     return '#CA2851'
+    case 'extend_vote':     return '#FF7A1C'
     case 'union_invite':    return '#FF4B6E'
     case 'follow':          return '#1A1A1A'
     case 'pairing_invite':  return '#0A0A0A'

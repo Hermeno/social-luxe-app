@@ -22,7 +22,7 @@ function resolveMedia(url: string) {
 const T_C = '#1A1A1A'
 const S   = '#6E6E73'
 const M   = '#ABABAB'
-const B   = '#CA2851'
+const B   = '#FF7A1C'
 const BG  = '#FFFFFF'
 const SEP = '#F0F0F3'
 const CARD_BD = '#EDEDF1'

@@ -1114,7 +1114,7 @@ export default function MessagesScreen() {
             {!connsLoading && !connsError && feedItems.length === 0 && (
               <View style={s.chatEmptyWrap}>
                 <LinearGradient
-                  colors={['#CA2851', '#FF6766']}
+                  colors={['#FF7A1C', '#FF6766']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={s.chatEmptyIcon}

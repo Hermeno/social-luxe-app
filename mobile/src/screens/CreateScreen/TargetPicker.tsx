@@ -55,7 +55,7 @@ export default function TargetPicker({ visible, onClose, onPick }: Props) {
           <Text style={s.sub}>Sem a metade de alguém, isto não vai para o feed.</Text>
 
           <TouchableOpacity style={s.open} onPress={() => onPick(null)} activeOpacity={0.85}>
-            <View style={s.openIcon}><Ionicons name="globe-outline" size={16} color="#CA2851" /></View>
+            <View style={s.openIcon}><Ionicons name="globe-outline" size={16} color="#FF7A1C" /></View>
             <View style={{ flex: 1 }}>
               <Text style={s.openTitle}>Deixar aberta</Text>
               <Text style={s.openSub}>A primeira ligação que responder fica no post</Text>
@@ -74,7 +74,7 @@ export default function TargetPicker({ visible, onClose, onPick }: Props) {
           </View>
 
           {loading ? (
-            <View style={s.center}><ActivityIndicator color="#CA2851" /></View>
+            <View style={s.center}><ActivityIndicator color="#FF7A1C" /></View>
           ) : (
             <FlatList
               data={filtered}

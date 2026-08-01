@@ -9,7 +9,7 @@ import { fonts } from '../../theme'
 
 const T_C = '#1A1A1A'
 const M   = '#ABABAB'
-const B   = '#CA2851'
+const B   = '#FF7A1C'
 const BD  = '#E5E5EA'
 const BG  = '#FFFFFF'
 const SX  = '#F9F9FB'
@@ -23,7 +23,7 @@ export default function AppearanceScreen() {
   const t = useT()
 
   const [theme,    setTheme]    = useState<Theme>('auto')
-  const [accent,   setAccent]   = useState('#CA2851')
+  const [accent,   setAccent]   = useState('#FF7A1C')
   const [textSize, setTextSize] = useState(3)
 
   useEffect(() => {
@@ -39,7 +39,7 @@ export default function AppearanceScreen() {
   function saveSize(v: number)  { setTextSize(v); AsyncStorage.setItem('@text_size', String(v)) }
 
   const ACCENTS = [
-    { color: '#CA2851', label: t.ac_blue   },
+    { color: '#FF7A1C', label: t.ac_blue   },
     { color: '#7C5FE6', label: t.ac_purple },
     { color: '#22C55E', label: t.ac_green  },
     { color: '#FF4B6E', label: t.ac_red    },

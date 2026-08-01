@@ -143,7 +143,7 @@ export default function DonationDetailScreen() {
         {photo ? (
           <Image source={{ uri: photo }} style={s.hero} />
         ) : (
-          <LinearGradient colors={['#CA2851', '#FF6766', '#FFB173']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.hero}>
+          <LinearGradient colors={['#FF7A1C', '#FF6766', '#FFB173']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.hero}>
             <Ionicons name={donation.type === 'ITEM' ? 'gift' : 'cash'} size={40} color="#fff" />
           </LinearGradient>
         )}

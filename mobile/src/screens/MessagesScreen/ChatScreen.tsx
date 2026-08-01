@@ -49,7 +49,7 @@ type NavProp = StackNavigationProp<AppStackParams>
 
 const CHAT_BG        = '#FFFFFF'
 // Bolhas ao estilo do design: a minha na cor da marca, a do outro clara.
-const MINE_COLOR     = '#CA2851'
+const MINE_COLOR     = '#FF7A1C'
 const THEIRS_COLOR   = '#F0F2F5'
 const REACTION_EMOJIS = ['❤️', '😂', '😮', '😢', '🔥', '👏']
 

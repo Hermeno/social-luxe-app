@@ -13,7 +13,7 @@ import { useT } from '../../i18n'
 
 const T_C = '#1A1A1A'
 const M   = '#ABABAB'
-const B   = '#CA2851'
+const B   = '#FF7A1C'
 const BD  = '#E5E5EA'
 const BG  = '#FFFFFF'
 const SX  = '#F9F9FB'

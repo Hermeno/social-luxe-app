@@ -304,7 +304,7 @@ export default function PhoneScreen() {
   )
 }
 
-const B  = '#CA2851'
+const B  = '#FF7A1C'
 const T  = '#1A1A1A'
 const S  = '#6E6E73'
 const M  = '#ABABAB'

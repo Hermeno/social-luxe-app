@@ -61,5 +61,5 @@ export default function AvatarImage({ uri, name, size = 44, style, borderColor, 
 const s = StyleSheet.create({
   container:   { overflow: 'hidden' },
   placeholder: { backgroundColor: '#D8E6FA', alignItems: 'center', justifyContent: 'center' },
-  initials:    { fontFamily: fonts.bold, color: '#CA2851', letterSpacing: 0.5 },
+  initials:    { fontFamily: fonts.bold, color: '#FF7A1C', letterSpacing: 0.5 },
 })

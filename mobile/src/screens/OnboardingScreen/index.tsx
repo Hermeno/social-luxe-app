@@ -19,7 +19,7 @@ import { useT, useI18n } from '../../i18n'
 const T  = '#1A1A1A'
 const S  = '#6E6E73'
 const M  = '#ABABAB'
-const B  = '#CA2851'
+const B  = '#FF7A1C'
 const BD = '#E5E5EA'
 const BG = '#FFFFFF'
 
@@ -40,7 +40,7 @@ function useBounce() {
 
 // Decorative avatar bg dots for SetPhotoStep
 const BG_COLORS = [
-  '#FFD580','#CA2851','#FF6B6B','#6BCB77','#A29BFE','#FD79A8',
+  '#FFD580','#FF7A1C','#FF6B6B','#6BCB77','#A29BFE','#FD79A8',
   '#FDCB6E','#74B9FF','#E17055','#55EFC4','#B2BEC3','#DFE6E9',
   '#81ECEC','#FAB1A0','#6C5CE7','#00CEC9','#FFC3A0','#DCEEFB',
   '#F8C8D4','#C3F0CA','#EAD7F7','#FFEAA7',

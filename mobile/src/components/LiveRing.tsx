@@ -12,7 +12,7 @@ interface Props {
 // Anel vivo — um traço em gradiente (do carmim cheio ao quase-transparente) que
 // roda devagar. O brilho parece viajar à volta do avatar: marca quem está no
 // ecrã com vida, sem piscar nem gritar. Rotação por native driver (barata).
-export default function LiveRing({ size, strokeWidth = 3, color = '#CA2851', durationMs = 3800 }: Props) {
+export default function LiveRing({ size, strokeWidth = 3, color = '#FF7A1C', durationMs = 3800 }: Props) {
   const spin = useRef(new Animated.Value(0)).current
 
   useEffect(() => {

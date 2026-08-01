@@ -10,12 +10,12 @@ import { useVoiceRecorder } from './VoiceMessage/useVoiceRecorder'
 import { VoicePhase } from './VoiceMessage/types'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const PRIMARY   = '#CA2851'
+const PRIMARY   = '#FF7A1C'
 const REC_BARS  = 28
 const PREV_BARS = 36
 const BAR_H     = 22
 const BAR_W     = 3
-const GRAD      = ['#CA2851', '#FF6766', '#FFB173']
+const GRAD      = ['#FF7A1C', '#FF6766', '#FFB173']
 
 function fmtMs(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000))

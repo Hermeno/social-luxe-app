@@ -9,7 +9,7 @@ import { fonts } from '../../theme'
 
 const T_C = '#1A1A1A'
 const M   = '#ABABAB'
-const B   = '#CA2851'
+const B   = '#FF7A1C'
 const BD  = '#E5E5EA'
 const BG  = '#FFFFFF'
 const SX  = '#F9F9FB'
@@ -126,7 +126,7 @@ const s = StyleSheet.create({
   pauseTitle:   { fontFamily: fonts.bold, fontSize: 15, color: T_C },
   pauseTitleOn: { color: B },
   pauseSub:     { fontFamily: fonts.medium, fontSize: 12, color: M, marginTop: 2 },
-  pauseSubOn:   { color: '#CA2851AA' },
+  pauseSubOn:   { color: '#FF7A1CAA' },
 
   sectionLabel: { fontFamily: fonts.bold, fontSize: 11, color: M, letterSpacing: 1, textTransform: 'uppercase', paddingLeft: 6, paddingBottom: 8, paddingTop: 2 },
   card:         { backgroundColor: BG, borderWidth: 1, borderColor: CARD_BD, borderRadius: 18, overflow: 'hidden' },

@@ -1,9 +1,9 @@
 export const colors = {
-  primary:      '#CA2851',
+  primary:      '#FF7A1C',
   primaryMid:   '#FF6766',
   primaryLight: '#FFB173',
   secondary:    '#FFB173',
-  accent:       '#CA2851',
+  accent:       '#FF7A1C',
 
   black:        '#000000',
   white:        '#FFFFFF',
@@ -15,7 +15,7 @@ export const colors = {
   gray400: '#ABABAB',
   gray500: '#808080',
   gray600: '#555555',
-  gray800: '#333333',
+  gray800: '#1A1A1A',   // texto principal — preto nítido (era #333, parecia mole)
   dark:    '#000000',
 
   // Anéis à volta de avatares. Preto suave, nunca carmim: o anel emoldura o
@@ -38,7 +38,7 @@ export const colors = {
 }
 
 export const gradients = {
-  brand:      ['#CA2851', '#FF6766', '#FFB173'] as const,
+  brand:      ['#FF7A1C', '#FF6766', '#FFB173'] as const,
   feedBottom: ['transparent', 'rgba(0,0,0,0.92)'] as const,
   feedTop:    ['rgba(0,0,0,0.28)', 'transparent'] as const,
   tabBar:     ['rgba(0,0,0,0.0)', 'rgba(0,0,0,0.92)'] as const,

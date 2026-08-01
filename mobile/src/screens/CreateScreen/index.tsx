@@ -33,7 +33,7 @@ type BgKey =
 const BG: Record<BgKey, { bg: string; fg: string }> = {
   gray:   { bg: '#333333', fg: '#FFFFFF' },
   black:  { bg: '#000000', fg: '#FFFFFF' },
-  red:    { bg: '#CA2851', fg: '#FFFFFF' },
+  red:    { bg: '#FF7A1C', fg: '#FFFFFF' },
   coral:  { bg: '#FF6766', fg: '#FFFFFF' },
   peach:  { bg: '#FFB173', fg: '#FFFFFF' },
   wine:   { bg: '#7A1F3D', fg: '#FFFFFF' },
@@ -434,7 +434,7 @@ export default function CreateScreen() {
               <Ionicons
                 name={includePartner ? 'heart' : 'heart-outline'}
                 size={12}
-                color={includePartner ? '#fff' : textMode ? '#fff' : '#CA2851'}
+                color={includePartner ? '#fff' : textMode ? '#fff' : '#FF7A1C'}
               />
               <Text style={[s.chipTxt, textMode && s.chipTxtLight, includePartner && s.chipTxtOn]}>
                 {otherMember!.name}
@@ -733,7 +733,7 @@ const s = StyleSheet.create({
     borderWidth:       1.5,
     borderColor:       '#E8E8E8',
   },
-  chipOn:      { backgroundColor: '#CA2851', borderColor: '#CA2851' },
+  chipOn:      { backgroundColor: '#FF7A1C', borderColor: '#FF7A1C' },
   chipLight:   { borderColor: 'rgba(255,255,255,0.5)' },
   chipTxt:     { fontFamily: fonts.semiBold, fontSize: 12, color: '#333' },
   chipTxtOn:   { color: '#fff' },

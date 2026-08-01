@@ -23,7 +23,7 @@ import { useT } from '../../i18n'
 type Nav   = StackNavigationProp<AppStackParams>
 type Route = RouteProp<AppStackParams, 'UnionChat'>
 
-const MINE_COLOR   = '#CA2851'
+const MINE_COLOR   = '#FF7A1C'
 const THEIRS_COLOR = '#F0F2F5'
 
 function formatTime(iso: string) {

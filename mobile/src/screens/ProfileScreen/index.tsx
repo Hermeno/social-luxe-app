@@ -152,7 +152,7 @@ function PostThumb({
       {life && (
         elite ? (
           <LinearGradient
-            colors={['#CA2851', '#FF6766']}
+            colors={['#FF7A1C', '#FF6766']}
             start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
             style={g.lifeBadge}
             pointerEvents="none"
@@ -600,7 +600,7 @@ export default function ProfileScreen() {
         {displayUri ? (
           <RNImage source={{ uri: displayUri }} style={StyleSheet.absoluteFill} blurRadius={22} resizeMode="cover" />
         ) : (
-          <LinearGradient colors={['#CA2851', '#FF6766', '#FFB173']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+          <LinearGradient colors={['#FF7A1C', '#FF6766', '#FFB173']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
         )}
         <LinearGradient
           colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.55)', '#ffffff']}
@@ -683,7 +683,7 @@ export default function ProfileScreen() {
             </View>
           )}
           {hasUnion && otherMember && (
-            <LinearGradient colors={['#CA2851', '#FF6766']} style={m.partnerPill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+            <LinearGradient colors={['#FF7A1C', '#FF6766']} style={m.partnerPill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
               <Ionicons name="heart" size={11} color="#fff" />
               <Text style={m.partnerTxt}>Parceiro · {otherMember.name}</Text>
             </LinearGradient>
@@ -817,7 +817,7 @@ export default function ProfileScreen() {
                 }
               </TouchableOpacity>
             ) : (
-              <LinearGradient colors={['#CA2851', '#FF6766']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[m.gradBtn, { flex: 1 }]}>
+              <LinearGradient colors={['#FF7A1C', '#FF6766']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[m.gradBtn, { flex: 1 }]}>
                 <TouchableOpacity onPress={handleFollow} disabled={followLoading} activeOpacity={0.85} style={m.gradBtnInner}>
                   {followLoading
                     ? <ActivityIndicator size="small" color="#fff" />
@@ -1131,7 +1131,7 @@ const m = StyleSheet.create({
     height: 42, borderRadius: 21,
     alignItems: 'center', justifyContent: 'center',
     ...Platform.select({
-      ios: { shadowColor: '#CA2851', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
+      ios: { shadowColor: '#FF7A1C', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
       android: { elevation: 4 },
     }),
   },

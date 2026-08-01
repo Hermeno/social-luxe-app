@@ -39,7 +39,7 @@ function DonationCard({ item, mine, onPress }: { item: Donation; mine: boolean; 
       {photo ? (
         <Image source={{ uri: photo }} style={s.cardImg} />
       ) : (
-        <LinearGradient colors={['#CA2851', '#FF6766']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.cardImg}>
+        <LinearGradient colors={['#FF7A1C', '#FF6766']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.cardImg}>
           <Ionicons name={item.type === 'ITEM' ? 'gift' : 'cash'} size={24} color="#fff" />
         </LinearGradient>
       )}
@@ -151,7 +151,7 @@ export default function DonationsScreen() {
     }
     return (
       <View style={s.empty}>
-        <LinearGradient colors={['#CA2851', '#FF6766', '#FFB173']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.emptyIcon}>
+        <LinearGradient colors={['#FF7A1C', '#FF6766', '#FFB173']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.emptyIcon}>
           <Feather name="heart" size={30} color="#fff" />
         </LinearGradient>
         <Text style={s.emptyTitle}>

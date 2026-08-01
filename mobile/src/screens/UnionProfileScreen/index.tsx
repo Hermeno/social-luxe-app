@@ -127,11 +127,11 @@ export default function UnionProfileScreen() {
 
         {/* Cover / Avatar */}
         <View style={s.coverWrap}>
-          <LinearGradient colors={['#CA2851', '#FF6766', '#FFB173']} style={s.cover} />
+          <LinearGradient colors={['#FF7A1C', '#FF6766', '#FFB173']} style={s.cover} />
           <View style={s.unionAvatarWrap}>
             {union.avatar
               ? <Image source={{ uri: union.avatar }} style={s.unionAvatar} contentFit="cover" />
-              : <LinearGradient colors={['#CA2851', '#FF6766']} style={s.unionAvatar}>
+              : <LinearGradient colors={['#FF7A1C', '#FF6766']} style={s.unionAvatar}>
                   <Text style={s.unionAvatarEmoji}>💑</Text>
                 </LinearGradient>
             }

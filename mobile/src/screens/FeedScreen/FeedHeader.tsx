@@ -235,7 +235,7 @@ const s = StyleSheet.create({
     minWidth: 18, height: 18, borderRadius: 9,
     paddingHorizontal: 5,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#CA2851',
+    backgroundColor: '#FF7A1C',
     borderWidth: 2, borderColor: '#fff',
   },
   halvesBadgeTxt: {
