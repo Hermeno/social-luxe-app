@@ -327,11 +327,11 @@ const s = StyleSheet.create({
   trackFill: { height: '100%', borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.95)' },
   playOverlay: { position: 'absolute', left: 0, right: 0, top: '40%', alignItems: 'center' },
 
-  // Campo de comentário — dark quente (não cinzento default), sem border
+  // Campo de comentário — azul-escuro, pill (radius = metade da altura), sem border
   dock: {
     position: 'absolute', left: 14, right: 14,
     flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12,
-    borderRadius: 18, backgroundColor: 'rgba(255,236,230,0.1)',
+    borderRadius: 25, backgroundColor: '#16294A',
   },
-  dockText: { color: 'rgba(255,255,255,0.52)', fontFamily: fonts.medium, fontSize: 14.5 },
+  dockText: { color: 'rgba(255,255,255,0.6)', fontFamily: fonts.medium, fontSize: 14.5 },
 })
