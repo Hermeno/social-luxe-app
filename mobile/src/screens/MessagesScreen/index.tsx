@@ -37,6 +37,7 @@ import {
 import { FollowUser } from '../../services/follow.service'
 import { API_BASE } from '../../config'
 import FollowSplitButton from '../../components/FollowSplitButton'
+import SuggestionsSheet from '../../components/SuggestionsSheet'
 import { api } from '../../services/api'
 import { getSocket } from '../../socket'
 import { useAuthStore } from '../../store/auth.store'
@@ -461,6 +462,7 @@ export default function MessagesScreen() {
   const [query,          setQuery]          = useState('')
   const [isSearchMode,   setIsSearchMode]   = useState(false)
   const [suggested,      setSuggested]      = useState<UserResult[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
   const [searchResults,  setSearchResults]  = useState<UserResult[]>([])
   const [postResults,    setPostResults]    = useState<Post[]>([])
   const [searchLoading,  setSearchLoading]  = useState(false)
@@ -906,7 +908,8 @@ export default function MessagesScreen() {
   allMsgItems.sort((a, b) => b.ts - a.ts)
 
   const liveTogetherList = myPairing?.status === 'ACTIVE' ? [myPairing] : []
-  const weavableSuggestions = suggested.filter((u) => !followingIds.has(u.id))
+  // Sugestões inline desligadas — agora vivem na folha (botão "Sugestões" no topo).
+  const weavableSuggestions: UserResult[] = []
 
   const feedItems: FeedItem[] = []
   let suggestIdx = 0
@@ -982,10 +985,18 @@ export default function MessagesScreen() {
               )}
             </View>
 
-            {/* Cancelar — sai do modo pesquisa */}
-            {isSearchMode && (
+            {/* Cancelar (pesquisa) OU botão de Sugestões */}
+            {isSearchMode ? (
               <TouchableOpacity onPress={exitSearch} hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }} activeOpacity={0.6}>
                 <Text style={s.searchCancel}>{t.cancel}</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={s.suggestBtn} onPress={() => setShowSuggestions(true)} activeOpacity={0.75}>
+                <Ionicons name="person-add" size={15} color={colors.primary} />
+                <Text style={s.suggestBtnTxt}>Sugestões</Text>
+                {suggested.length > 0 && (
+                  <View style={s.suggestCount}><Text style={s.suggestCountTxt}>{suggested.length}</Text></View>
+                )}
               </TouchableOpacity>
             )}
           </View>
@@ -1332,6 +1343,8 @@ export default function MessagesScreen() {
         )}
 
       </KeyboardAvoidingView>
+
+      {showSuggestions && <SuggestionsSheet onClose={() => setShowSuggestions(false)} />}
     </View>
   )
 }
@@ -1384,6 +1397,18 @@ const s = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderColor: '#E2E2E6',
   },
+  // Botão de sugestões — pill laranja subtil ao lado da pesquisa
+  suggestBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'rgba(255,122,28,0.1)',
+    borderRadius: 13, paddingHorizontal: 12, paddingVertical: 11.5,
+  },
+  suggestBtnTxt: { fontSize: 13.5, fontFamily: fonts.semiBold, color: colors.gray800, letterSpacing: -0.2 },
+  suggestCount: {
+    minWidth: 18, height: 18, borderRadius: 9, backgroundColor: colors.primary,
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5,
+  },
+  suggestCountTxt: { fontSize: 11, fontFamily: fonts.bold, color: '#fff' },
   searchInput: {
     flex: 1,
     fontSize: 15.5,
