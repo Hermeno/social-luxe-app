@@ -331,10 +331,13 @@ const s = StyleSheet.create({
     color: 'rgba(255,255,255,0.62)', fontFamily: fonts.medium, fontSize: 12.5, marginTop: 1,
     textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
   },
-  // Seguir = laranja cheio (cor dos designs); Seguindo = contorno discreto
-  followBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 14, backgroundColor: '#FF7A1C' },
+  // No feed (sobre o vídeo) o Seguir é transparente — só contorno branco.
+  followBtn: {
+    paddingHorizontal: 14, paddingVertical: 6, borderRadius: 14,
+    backgroundColor: 'transparent', borderWidth: 1.4, borderColor: 'rgba(255,255,255,0.9)',
+  },
   followTxt: { color: '#fff', fontFamily: fonts.semiBold, fontSize: 12.5 },
-  followingBtn: { backgroundColor: 'transparent', borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)' },
+  followingBtn: { borderColor: 'rgba(255,255,255,0.5)' },
   followingTxt: { color: 'rgba(255,255,255,0.85)' },
   description: {
     color: 'rgba(255,255,255,0.92)', fontFamily: fonts.medium, fontSize: 14, lineHeight: 19,
