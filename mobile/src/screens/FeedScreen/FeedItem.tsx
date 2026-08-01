@@ -69,13 +69,13 @@ function FeedItem({ post, isActive, liked, onCommentPress, onLikeChange, onExpir
   const isAlbum = !isVideo && !isText && !!post.mediaUrls && post.mediaUrls.length > 1
   const uri     = resolveUrl(post.mediaUrl)
 
-  // ── Geometria da pilha ─────────────────────────────────────────────────────
-  // A fila de ícones da nav fica a safeBottom + 32 (paddingBottom + ícone). O
-  // campo assenta logo por cima dela — colado, sem o vão que sobrava. Valor
-  // estável (não useBottomTabBarHeight, que salta em transições).
+  // ── Geometria da pilha (tudo colado) ───────────────────────────────────────
+  // Os ícones da nav ficam a safeBottom + 32 (paddingBottom + ícone). O campo
+  // assenta mesmo por cima deles, e o vídeo desce até encostar ao campo — sem
+  // vãos. Valor estável (não useBottomTabBarHeight, que salta em transições).
   const DOCK_H     = 44
-  const dockBottom = Math.max(safeBottom, 8) + 34
-  const videoBottom   = dockBottom + DOCK_H + 12             // fundo do vídeo
+  const dockBottom = Math.max(safeBottom, 8) + 32
+  const videoBottom   = dockBottom + DOCK_H                  // vídeo encosta ao campo
   const overlayBottom = videoBottom + 14                     // autor/ações no vídeo
   const videoFrame = { top: safeTop, bottom: videoBottom }
 
