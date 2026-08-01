@@ -7,6 +7,7 @@ import { prisma } from '../config/database'
 import { comparePassword as compareHash, hashPassword } from '../utils/hash'
 import { deleteFromCloudinary } from '../utils/cloudinary.util'
 import { deleteFromR2, isR2Url } from '../utils/r2.util'
+import { usernameOptions as genUsernameOptions } from '../utils/username'
 
 export async function checkPhone(req: AuthRequest, res: Response) {
   try {
@@ -14,6 +15,16 @@ export async function checkPhone(req: AuthRequest, res: Response) {
     if (!phone) return badRequest(res, 'phone required')
     const user = await prisma.user.findUnique({ where: { phone }, select: { id: true } })
     return ok(res, { exists: !!user })
+  } catch (err) { return handleError(res, err) }
+}
+
+// Opções de @handle (base do nome + número) para escolher no registo. Público.
+export async function usernameOptions(req: AuthRequest, res: Response) {
+  try {
+    const name = String(req.query.name ?? '').trim()
+    if (!name) return badRequest(res, 'name required')
+    const result = await genUsernameOptions(name, 6)
+    return ok(res, result)
   } catch (err) { return handleError(res, err) }
 }
 

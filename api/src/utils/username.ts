@@ -43,3 +43,22 @@ export async function generateUsername(
   }
   throw new Error('USERNAME_GEN_FAILED')
 }
+
+/**
+ * Várias opções de @handle únicas (base do nome + número) para o utilizador
+ * escolher no registo. Ex.: herminio4821, herminio7130, herminio0042…
+ */
+export async function usernameOptions(rawName: string, count = 6): Promise<{ base: string; options: string[] }> {
+  const base = slugifyUsername(rawName)
+  const out: string[] = []
+  const seen = new Set<string>()
+
+  for (let guard = 0; out.length < count && guard < count * 10; guard++) {
+    const candidate = base + num4()
+    if (seen.has(candidate)) continue
+    seen.add(candidate)
+    const found = await prisma.user.findUnique({ where: { username: candidate }, select: { id: true } })
+    if (!found) out.push(candidate)
+  }
+  return { base, options: out }
+}

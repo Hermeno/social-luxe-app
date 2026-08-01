@@ -16,6 +16,7 @@ export interface RegisterBody {
   countryCode: string
   password: string
   confirmPassword: string
+  username?: string   // @handle escolhido no registo (base do nome + número)
 }
 
 export interface LoginBody {

@@ -32,7 +32,7 @@ interface AuthState {
   isLoading: boolean
   isAuthenticated: boolean
   login: (phone: string, password: string) => Promise<void>
-  register: (name: string, phone: string, countryCode: string, password: string, confirmPassword: string) => Promise<void>
+  register: (name: string, phone: string, countryCode: string, password: string, confirmPassword: string, username?: string) => Promise<void>
   logout: () => Promise<void>
   loadUser: () => Promise<void>
   refreshUser: () => Promise<void>
@@ -97,8 +97,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ user: result.user, token: result.token, isAuthenticated: true })
   },
 
-  register: async (name, phone, countryCode, password, confirmPassword) => {
-    const result = await authService.register(name, phone, countryCode, password, confirmPassword)
+  register: async (name, phone, countryCode, password, confirmPassword, username) => {
+    const result = await authService.register(name, phone, countryCode, password, confirmPassword, username)
     await saveUserCache(result.user)
     set({ user: result.user, token: result.token, isAuthenticated: true })
   },

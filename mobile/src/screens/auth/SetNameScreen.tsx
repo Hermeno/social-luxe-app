@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, Animated, ActivityIndicator, Alert,
@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { useAuthStore } from '../../store/auth.store'
+import { getUsernameOptions } from '../../services/auth.service'
 import { AuthStackParams } from '../../navigation/AuthNavigator'
 import { fonts } from '../../theme'
 import { useT } from '../../i18n'
@@ -37,8 +38,37 @@ export default function SetNameScreen() {
   const [loading, setLoading] = useState(false)
   const btnScale = useRef(new Animated.Value(1)).current
 
+  // @handle: opções (nome + número) para o utilizador escolher.
+  const [handleOptions, setHandleOptions]   = useState<string[]>([])
+  const [selectedHandle, setSelectedHandle] = useState<string | null>(null)
+  const [loadingHandles, setLoadingHandles] = useState(false)
+
   const trimmed   = name.trim()
   const canCreate = trimmed.length >= 2
+
+  // Busca as opções ~600ms depois de parar de escrever.
+  useEffect(() => {
+    if (trimmed.length < 2) { setHandleOptions([]); setSelectedHandle(null); return }
+    setLoadingHandles(true)
+    const id = setTimeout(async () => {
+      try {
+        const res = await getUsernameOptions(trimmed)
+        setHandleOptions(res.options)
+        setSelectedHandle((prev) => (prev && res.options.includes(prev) ? prev : res.options[0] ?? null))
+      } catch { setHandleOptions([]) } finally { setLoadingHandles(false) }
+    }, 600)
+    return () => clearTimeout(id)
+  }, [trimmed])
+
+  async function refreshHandles() {
+    if (trimmed.length < 2 || loadingHandles) return
+    setLoadingHandles(true)
+    try {
+      const res = await getUsernameOptions(trimmed)
+      setHandleOptions(res.options)
+      setSelectedHandle(res.options[0] ?? null)
+    } catch {} finally { setLoadingHandles(false) }
+  }
 
   function bounce(cb: () => void) {
     Animated.sequence([
@@ -52,7 +82,7 @@ export default function SetNameScreen() {
     bounce(async () => {
       setLoading(true)
       try {
-        await register(trimmed, phone, countryCode, password, password)
+        await register(trimmed, phone, countryCode, password, password, selectedHandle ?? undefined)
       } catch (e: unknown) {
         Alert.alert(t.error, e instanceof Error ? e.message : t.au_name_create_fail)
       } finally { setLoading(false) }
@@ -106,7 +136,29 @@ export default function SetNameScreen() {
               </View>
             </View>
             <Text style={s.previewName}>{trimmed}</Text>
-            <Text style={s.previewSub}>{t.au_name_preview}</Text>
+
+            {/* Escolher o @handle — nome + número, várias opções */}
+            <View style={s.handleHead}>
+              <Text style={s.handleTitle}>Escolhe o teu @</Text>
+              <TouchableOpacity onPress={refreshHandles} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} disabled={loadingHandles}>
+                <Ionicons name="refresh" size={16} color={loadingHandles ? M : S} />
+              </TouchableOpacity>
+            </View>
+
+            {loadingHandles && handleOptions.length === 0 ? (
+              <ActivityIndicator color={B} style={{ marginTop: 6 }} />
+            ) : (
+              <View style={s.chips}>
+                {handleOptions.map((h) => {
+                  const on = h === selectedHandle
+                  return (
+                    <TouchableOpacity key={h} style={[s.chip, on && s.chipOn]} onPress={() => setSelectedHandle(h)} activeOpacity={0.8}>
+                      <Text style={[s.chipTxt, on && s.chipTxtOn]}>@{h}</Text>
+                    </TouchableOpacity>
+                  )
+                })}
+              </View>
+            )}
           </View>
         )}
 
@@ -145,7 +197,7 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
 
-  hero: { marginTop: 44, marginBottom: 48, gap: 12, alignItems: 'center' },
+  hero: { marginTop: 40, marginBottom: 30, gap: 10, alignItems: 'center' },
   heading: {
     fontFamily: fonts.extraBold, fontSize: 30, lineHeight: 36,
     letterSpacing: -0.9, color: T, textAlign: 'center',
@@ -184,6 +236,17 @@ const s = StyleSheet.create({
   previewInitial: { fontFamily: fonts.bold, fontSize: 22, color: B },
   previewName:   { fontFamily: fonts.bold, fontSize: 17, color: T, letterSpacing: -0.3 },
   previewSub:    { fontFamily: fonts.regular, fontSize: 12, color: M },
+
+  handleHead:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14 },
+  handleTitle: { fontFamily: fonts.semiBold, fontSize: 13, color: S, letterSpacing: -0.1 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 10, paddingHorizontal: 8 },
+  chip: {
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12,
+    borderWidth: 1.5, borderColor: BD, backgroundColor: BG,
+  },
+  chipOn:    { borderColor: B, backgroundColor: `${B}12` },
+  chipTxt:   { fontFamily: fonts.semiBold, fontSize: 13.5, color: T, letterSpacing: -0.2 },
+  chipTxtOn: { color: B },
 
   spacer: { flex: 1 },
 

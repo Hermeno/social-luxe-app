@@ -11,7 +11,8 @@ export async function register(
   phone: string,
   countryCode: string,
   password: string,
-  confirmPassword: string
+  confirmPassword: string,
+  username?: string,
 ): Promise<AuthResult> {
   const res = await api.post<ApiResponse<AuthResult>>('/auth/register', {
     name,
@@ -19,8 +20,17 @@ export async function register(
     countryCode,
     password,
     confirmPassword,
+    username,
   })
   await saveToken(res.data.data.token)
+  return res.data.data
+}
+
+// Opções de @handle (nome + número) para escolher no registo.
+export async function getUsernameOptions(name: string): Promise<{ base: string; options: string[] }> {
+  const res = await api.get<ApiResponse<{ base: string; options: string[] }>>('/auth/username-options', {
+    params: { name },
+  })
   return res.data.data
 }
 

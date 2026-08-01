@@ -5,7 +5,7 @@ import { slugifyUsername, generateUsername } from '../utils/username'
 import { RegisterBody, LoginBody } from '../types'
 
 export async function register(body: RegisterBody) {
-  const { name, phone, countryCode, password, confirmPassword } = body
+  const { name, phone, countryCode, password, confirmPassword, username: chosen } = body
 
   if (password !== confirmPassword) throw new Error('Passwords do not match')
   if (password.length < 6) throw new Error('Password must be at least 6 characters')
@@ -16,9 +16,17 @@ export async function register(body: RegisterBody) {
 
   const hashed = await hashPassword(password)
 
-  // @handle: o texto vem do nome (o user pode mudar depois); grátis leva número.
+  // @handle: base do nome + número. Se o utilizador escolheu uma opção válida
+  // (mesma base) e ainda livre, usamos essa; senão geramos uma.
   const usernameBase = slugifyUsername(name)
-  const username = await generateUsername(usernameBase, false)
+  const cleanChosen  = chosen ? slugifyUsername(chosen) : ''
+  let username: string
+  if (cleanChosen && cleanChosen.startsWith(usernameBase)) {
+    const taken = await prisma.user.findUnique({ where: { username: cleanChosen }, select: { id: true } })
+    username = taken ? await generateUsername(usernameBase, false) : cleanChosen
+  } else {
+    username = await generateUsername(usernameBase, false)
+  }
 
   const user = await prisma.user.create({
     data: { name, phone, countryCode, password: hashed, username, usernameBase },
