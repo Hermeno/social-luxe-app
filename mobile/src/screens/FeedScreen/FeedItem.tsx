@@ -248,9 +248,16 @@ function FeedItem({
         <View style={s.authorRow}>
           <AvatarImage uri={resolveUrl(post.user.avatar)} name={post.user.name} size={36} borderWidth={0} borderColor="transparent" />
           <Text style={s.authorName} numberOfLines={1}>{post.user.name}</Text>
-          {!isSelf && !following && (
-            <TouchableOpacity onPress={handleFollow} style={s.followBtn} hitSlop={8} activeOpacity={0.7}>
-              <Text style={s.followTxt}>Seguir</Text>
+          {!isSelf && (
+            <TouchableOpacity
+              onPress={handleFollow}
+              style={[s.followBtn, following && s.followingBtn]}
+              hitSlop={8}
+              activeOpacity={0.7}
+            >
+              <Text style={[s.followTxt, following && s.followingTxt]}>
+                {following ? 'Seguindo' : 'Seguir'}
+              </Text>
             </TouchableOpacity>
           )}
         </View>
@@ -316,6 +323,8 @@ const s = StyleSheet.create({
   },
   followBtn: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.65)' },
   followTxt: { color: '#fff', fontFamily: fonts.semiBold, fontSize: 12.5 },
+  followingBtn: { borderColor: 'rgba(255,255,255,0.32)' },
+  followingTxt: { color: 'rgba(255,255,255,0.7)' },
   description: {
     color: 'rgba(255,255,255,0.92)', fontFamily: fonts.medium, fontSize: 14, lineHeight: 19,
     textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
