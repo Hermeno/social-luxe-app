@@ -80,7 +80,7 @@ function FeedItem({
   const DOCK_H     = 50
   const TRACK_H    = 3
   const GAP        = 8
-  const dockBottom    = Math.max(safeBottom, 8) + 30        // campo, pouco acima da nav
+  const dockBottom    = Math.max(safeBottom, 8) + 32        // campo, pouco acima da nav
   const trackBottom   = dockBottom + DOCK_H + GAP           // traço, com folga do campo
   const videoBottom   = trackBottom + TRACK_H + GAP         // vídeo, com folga do traço
   const overlayBottom = videoBottom + 14                    // autor/ações no vídeo
