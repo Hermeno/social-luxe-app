@@ -646,6 +646,10 @@ export default function ProfileScreen() {
 
           <Text style={m.name} numberOfLines={1}>{profile?.name ?? ''}</Text>
 
+          {!!profile?.username && (
+            <Text style={m.handle} numberOfLines={1}>@{profile.username}</Text>
+          )}
+
           {!!profile?.statusLabel && (
             <View style={m.statusPill}>
               <Text style={m.statusTxt} numberOfLines={1}>{profile.statusLabel}</Text>
@@ -1043,6 +1047,10 @@ const m = StyleSheet.create({
   name: {
     fontSize: 22, fontFamily: fonts.bold, color: colors.dark,
     letterSpacing: -0.5, textAlign: 'center', paddingHorizontal: 24,
+  },
+  handle: {
+    fontSize: 14, fontFamily: fonts.medium, color: colors.gray400,
+    textAlign: 'center', marginTop: 2,
   },
   statusPill: {
     backgroundColor: 'rgba(0,0,0,0.07)',
