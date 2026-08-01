@@ -1,12 +1,9 @@
 import React from 'react'
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import { colors, fonts } from '../theme'
 import { FollowDuration } from '../services/follow.service'
 import { useT } from '../i18n'
-
-const GRAD: [string, string, string] = ['#CA2851', '#FF6766', '#FFB173']
 
 export type { FollowDuration }
 
@@ -63,14 +60,9 @@ export default function FollowSplitButton({ following, loading, onFollow, theme 
 
   return (
     <TouchableOpacity onPress={() => onFollow('forever')} activeOpacity={0.85} disabled={loading}>
-      <LinearGradient
-        colors={GRAD}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={[s.pill, s.pillLight]}
-      >
+      <View style={[s.pill, s.pillLight]}>
         {content}
-      </LinearGradient>
+      </View>
     </TouchableOpacity>
   )
 }
@@ -102,9 +94,10 @@ const s = StyleSheet.create({
   },
 
   pillLight: {
+    backgroundColor: '#FF7A1C',   // laranja dos designs
     paddingHorizontal: 18,
     paddingVertical: 9,
-    shadowColor: colors.primary,
+    shadowColor: '#FF7A1C',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
