@@ -70,12 +70,12 @@ function FeedItem({ post, isActive, liked, onCommentPress, onLikeChange, onExpir
   const uri     = resolveUrl(post.mediaUrl)
 
   // ── Geometria da pilha ─────────────────────────────────────────────────────
-  // Altura estável da navegação (área segura + fila de ícones). Não usamos
-  // useBottomTabBarHeight: ele muda com transições e faz o campo saltar.
-  const DOCK_GAP = 8
-  const DOCK_H   = 44
-  const NAV_H    = safeBottom + 48                             // barra a flutuar
-  const videoBottom   = NAV_H + DOCK_GAP + DOCK_H + 10         // fundo do vídeo
+  // NAV_H = altura EXATA do TabBar (SZ 24 + paddingTop 10 + paddingV 4·2 +
+  // paddingBottom max(safeBottom,8)), para o campo encostar sem vão. Não usamos
+  // useBottomTabBarHeight: muda com transições e faz o campo saltar.
+  const DOCK_H = 44
+  const NAV_H  = Math.max(safeBottom, 8) + 42
+  const videoBottom   = NAV_H + DOCK_H + 12                   // fundo do vídeo
   const overlayBottom = videoBottom + 14                      // autor/ações no vídeo
   const videoFrame = { top: safeTop, bottom: videoBottom }
 
@@ -223,7 +223,7 @@ function FeedItem({ post, isActive, liked, onCommentPress, onLikeChange, onExpir
 
       {/* ── Campo de comentário — por baixo do vídeo, acima da navegação ── */}
       <Pressable
-        style={[s.dock, { bottom: NAV_H + DOCK_GAP, height: DOCK_H }]}
+        style={[s.dock, { bottom: NAV_H, height: DOCK_H }]}
         onPress={() => onCommentPress(post)}
       >
         <AvatarImage uri={resolveUrl(myAvatar)} name={myName} size={26} borderWidth={0} borderColor="transparent" />
