@@ -1,13 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   View, Text, StyleSheet, Dimensions, Pressable, TouchableOpacity, Animated,
-  ActivityIndicator, Share,
+  ActivityIndicator,
 } from 'react-native'
 import { useVideoPlayer, VideoView, VideoPlayerStatus } from 'expo-video'
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
-import { Heart, Forward, Bookmark } from 'lucide-react-native'
 import { useNavigation, useIsFocused } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -18,6 +17,7 @@ import { AppStackParams } from '../../navigation/AppNavigator'
 import { API_BASE } from '../../config'
 import * as postService from '../../services/post.service'
 import AvatarImage from '../../components/AvatarImage'
+import ActionBar from './ActionBar'
 import PostAlbumGrid from './PostAlbumGrid'
 import { useAuthStore } from '../../store/auth.store'
 import { useFollowStore } from '../../store/follow.store'
@@ -53,7 +53,10 @@ interface Props {
 // O vídeo é uma janela entre a status bar e o campo. O autor e as ações
 // flutuam sobre o vídeo; comentar vive no campo por baixo. A célula é a única
 // dona do seu leitor — a FlatList monta/desmonta, sem player partilhado.
-function FeedItem({ post, isActive, liked, onCommentPress, onLikeChange, onExpired }: Props) {
+function FeedItem({
+  post, isActive, liked, reposted, commentCount,
+  onCommentPress, onLikeChange, onRepost, onExpired,
+}: Props) {
   const nav = useNavigation<Nav>()
   const isFocused = useIsFocused()
   const { top: safeTop, bottom: safeBottom } = useSafeAreaInsets()
@@ -70,12 +73,14 @@ function FeedItem({ post, isActive, liked, onCommentPress, onLikeChange, onExpir
   const uri     = resolveUrl(post.mediaUrl)
 
   // ── Geometria da pilha (tudo colado) ───────────────────────────────────────
-  // Os ícones da nav ficam a safeBottom + 32 (paddingBottom + ícone). O campo
-  // assenta mesmo por cima deles, e o vídeo desce até encostar ao campo — sem
-  // vãos. Valor estável (não useBottomTabBarHeight, que salta em transições).
-  const DOCK_H     = 44
-  const dockBottom = Math.max(safeBottom, 8) + 32
-  const videoBottom   = dockBottom + DOCK_H                  // vídeo encosta ao campo
+  // De baixo para cima, sem vãos: navegação · campo · traço do tempo · vídeo.
+  // Os ícones da nav ficam a safeBottom + 32. Valor estável (não
+  // useBottomTabBarHeight, que salta em transições).
+  const DOCK_H     = 50
+  const TRACK_H    = 2
+  const dockBottom    = Math.max(safeBottom, 8) + 32
+  const trackBottom   = dockBottom + DOCK_H                  // traço por cima do campo
+  const videoBottom   = trackBottom + TRACK_H                // vídeo por cima do traço
   const overlayBottom = videoBottom + 14                     // autor/ações no vídeo
   const videoFrame = { top: safeTop, bottom: videoBottom }
 
@@ -101,6 +106,19 @@ function FeedItem({ post, isActive, liked, onCommentPress, onLikeChange, onExpir
     else                       { try { player.pause() } catch {} }
   }, [isActive, isFocused, player, isVideo])
 
+  // ── Traço do tempo do vídeo ─────────────────────────────────────────────────
+  const [progress, setProgress] = useState(0)
+  useEffect(() => {
+    if (!isVideo || !isActive || !isFocused) return
+    const id = setInterval(() => {
+      try {
+        const d = player.duration
+        if (d > 0) setProgress(Math.min(1, player.currentTime / d))
+      } catch {}
+    }, 250)
+    return () => clearInterval(id)
+  }, [isVideo, isActive, isFocused, player])
+
   // ── Vida do momento (efémero) — desaparece quando expira ────────────────────
   useEffect(() => {
     if (!post.expiresAt) return
@@ -110,22 +128,17 @@ function FeedItem({ post, isActive, liked, onCommentPress, onLikeChange, onExpir
     return () => clearTimeout(id)
   }, [post.id])
 
-  // ── Gostar (ícone e duplo toque no vídeo) ───────────────────────────────────
-  const [saved, setSaved] = useState(false)
+  // ── Duplo toque no vídeo para gostar (as ações vivem na coluna direita) ─────
   const lastTap      = useRef(0)
   const heartOpacity = useRef(new Animated.Value(0)).current
   const heartScale   = useRef(new Animated.Value(0.3)).current
 
-  async function like(next: boolean) {
-    onLikeChange(next)
-    if (next) burstHeart()
-    try { const res = await postService.likePost(post.id); onLikeChange(res.liked) }
-    catch { onLikeChange(!next) }
-  }
-  function handleLike() { like(!liked) }
   function handleTapMedia() {
     const now = Date.now()
-    if (now - lastTap.current < 280) { if (!liked) like(true); else burstHeart() }
+    if (now - lastTap.current < 280) {
+      burstHeart()
+      if (!liked) { onLikeChange(true); postService.likePost(post.id).catch(() => {}) }
+    }
     lastTap.current = now
   }
   function burstHeart() {
@@ -139,9 +152,6 @@ function FeedItem({ post, isActive, liked, onCommentPress, onLikeChange, onExpir
     ]).start()
   }
 
-  async function handleShare() {
-    try { await Share.share({ message: post.caption ? `"${post.caption}"` : 'Luxe' }) } catch {}
-  }
   function handleFollow() {
     useFollowStore.getState()
       .toggle(post.user.id, 'forever', { name: post.user.name, avatar: post.user.avatar ?? null })
@@ -208,26 +218,35 @@ function FeedItem({ post, isActive, liked, onCommentPress, onLikeChange, onExpir
         )}
       </View>
 
-      {/* ── Ações — sobre o vídeo, direita (sem contadores) ── */}
-      <View style={[s.actions, { bottom: overlayBottom }]}>
-        <TouchableOpacity onPress={handleLike} style={s.actionBtn} activeOpacity={0.7} hitSlop={6}>
-          <Heart size={30} strokeWidth={1.9} color={liked ? colors.primary : '#fff'} fill={liked ? colors.primary : 'transparent'} />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={handleShare} style={s.actionBtn} activeOpacity={0.7} hitSlop={6}>
-          <Forward size={28} strokeWidth={1.9} color="#fff" />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => setSaved((v) => !v)} style={s.actionBtn} activeOpacity={0.7} hitSlop={6}>
-          <Bookmark size={27} strokeWidth={1.9} color="#fff" fill={saved ? '#fff' : 'transparent'} />
-        </TouchableOpacity>
-      </View>
+      {/* ── Ações — coluna direita sobre o vídeo, com contadores ── */}
+      <ActionBar
+        post={post}
+        liked={liked}
+        onLikeChange={onLikeChange}
+        reposted={reposted}
+        onRepost={onRepost}
+        commentCount={commentCount}
+        onCommentPress={() => onCommentPress(post)}
+        bottomOffset={overlayBottom}
+      />
 
-      {/* ── Campo de comentário — por baixo do vídeo, acima da navegação ── */}
+      {/* ── Traço do tempo do vídeo — por cima do campo ── */}
+      {isVideo && (
+        <View style={[s.track, { bottom: trackBottom, height: TRACK_H }]} pointerEvents="none">
+          <View style={[s.trackFill, { width: `${Math.round(progress * 100)}%` }]} />
+        </View>
+      )}
+
+      {/* ── Campo de comentário — por baixo do vídeo, acima da navegação.
+             Convida a responder à pessoa, não a um vazio. ── */}
       <Pressable
         style={[s.dock, { bottom: dockBottom, height: DOCK_H }]}
         onPress={() => onCommentPress(post)}
       >
-        <AvatarImage uri={resolveUrl(myAvatar)} name={myName} size={26} borderWidth={0} borderColor="transparent" />
-        <Text style={s.dockText}>Escrever um comentário…</Text>
+        <AvatarImage uri={resolveUrl(myAvatar)} name={myName} size={28} borderWidth={0} borderColor="transparent" />
+        <Text style={s.dockText}>
+          {isSelf ? 'Escrever um comentário…' : `Responder a ${post.user.name.split(' ')[0]}…`}
+        </Text>
       </Pressable>
     </View>
   )
@@ -259,15 +278,15 @@ const s = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
   },
 
-  // Ações
-  actions:   { position: 'absolute', right: 10, alignItems: 'center', gap: 24 },
-  actionBtn: { alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.35, shadowRadius: 5 },
+  // Traço do tempo do vídeo — hairline por cima do campo
+  track:     { position: 'absolute', left: 14, right: 14, borderRadius: 2, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.16)' },
+  trackFill: { height: '100%', borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.92)' },
 
-  // Campo de comentário
+  // Campo de comentário — dark quente (não cinzento default), sem border
   dock: {
     position: 'absolute', left: 14, right: 14,
-    flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 9,
-    borderRadius: 22, borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', backgroundColor: 'rgba(255,255,255,0.05)',
+    flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12,
+    borderRadius: 18, backgroundColor: 'rgba(255,236,230,0.1)',
   },
-  dockText: { color: 'rgba(255,255,255,0.5)', fontFamily: fonts.medium, fontSize: 14 },
+  dockText: { color: 'rgba(255,255,255,0.52)', fontFamily: fonts.medium, fontSize: 14.5 },
 })

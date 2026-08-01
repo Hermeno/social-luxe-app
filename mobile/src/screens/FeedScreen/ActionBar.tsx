@@ -28,6 +28,9 @@ interface Props {
   onRepost?: () => void
   newPostsCount?: number
   commentCount?: number
+  /** Distância ao fundo da coluna de ações. Sobrepõe o valor por defeito para
+   *  a coluna assentar sobre o vídeo (que não vai até ao fundo do ecrã). */
+  bottomOffset?: number
 }
 
 type HeartP = {
@@ -47,7 +50,7 @@ function fmt(n: number) {
 export default React.memo(function ActionBar({
   post, onCommentPress, liked: likedProp = false,
   onLikeChange, reposted: repostedProp = false, onRepost,
-  newPostsCount = 0, commentCount: commentCountProp,
+  newPostsCount = 0, commentCount: commentCountProp, bottomOffset,
 }: Props) {
   const { bottom: safeBottom } = useSafeAreaInsets()
   const t          = useT()
@@ -154,7 +157,7 @@ export default React.memo(function ActionBar({
       {/* Coluna direita — ícones a flutuar, sem caixas. Like · Comentar ·
           Partilhar · Guardar · Mais. Contadores discretos por baixo. */}
       {!isAnnouncement && (
-        <View style={[s.rail, { bottom: safeBottom + 96 }]} pointerEvents="box-none">
+        <View style={[s.rail, { bottom: bottomOffset ?? safeBottom + 96 }]} pointerEvents="box-none">
 
           {/* Like */}
           <TouchableOpacity style={s.railBtn} onPress={handleLike} onLongPress={() => setShowReactions(true)} activeOpacity={0.7}>
