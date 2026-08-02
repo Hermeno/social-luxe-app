@@ -89,16 +89,12 @@ export default function ChatHeader({
       </TouchableOpacity>
 
       <View style={s.info}>
-        <Text style={s.name} numberOfLines={1}>{userName}</Text>
+        <Text style={s.name} numberOfLines={1}>{userHandle ? `@${userHandle}` : userName}</Text>
         <View style={s.statusRow}>
           {(isOnline || isTyping) && <View style={s.onlineDot} />}
-          {isTyping ? (
-            <Text style={[s.status, { color: '#22C55E' }]}>{statusText}</Text>
-          ) : userHandle ? (
-            <Text style={s.handle} numberOfLines={1}>@{userHandle}</Text>
-          ) : (
-            <Text style={[s.status, { color: isOnline ? '#22C55E' : colors.gray400 }]}>{statusText}</Text>
-          )}
+          <Text style={[s.status, { color: isOnline || isTyping ? '#22C55E' : colors.gray400 }]}>
+            {statusText}
+          </Text>
         </View>
       </View>
 

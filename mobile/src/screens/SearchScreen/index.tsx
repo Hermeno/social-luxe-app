@@ -48,8 +48,7 @@ interface RowProps {
 
 function UserRow({ user, followed, loadingFollow, onFollow, onPress }: RowProps) {
   const t = useT()
-  const sub = (user.username ? `@${user.username}` : null)
-    || user.bio?.trim()
+  const sub = user.bio?.trim()
     || (user._count?.followers ? `${fmtCount(user._count.followers)} ${t.followers}` : null)
 
   return (
@@ -58,7 +57,7 @@ function UserRow({ user, followed, loadingFollow, onFollow, onPress }: RowProps)
       <TouchableOpacity style={s.rowLeft} onPress={onPress} activeOpacity={0.7}>
         <AvatarImage uri={user.avatar} name={user.name} size={48} />
         <View style={s.rowInfo}>
-          <Text style={s.rowName} numberOfLines={1}>{user.name}</Text>
+          <Text style={s.rowName} numberOfLines={1}>{user.username ? `@${user.username}` : user.name}</Text>
           {!!sub && <Text style={s.rowSub} numberOfLines={1}>{sub}</Text>}
         </View>
       </TouchableOpacity>

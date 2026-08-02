@@ -43,11 +43,8 @@ function Row({ user }: { user: SuggestUser }) {
     <View style={s.row}>
       <AvatarImage uri={user.avatar} name={user.name} size={48} />
       <View style={s.info}>
-        <Text style={s.name} numberOfLines={1}>{user.name}</Text>
-        {user.username
-          ? <Text style={s.handle} numberOfLines={1}>@{user.username}</Text>
-          : <Text style={s.context} numberOfLines={1}>{context}</Text>
-        }
+        <Text style={s.name} numberOfLines={1}>{user.username ? `@${user.username}` : user.name}</Text>
+        <Text style={s.context} numberOfLines={1}>{context}</Text>
       </View>
       <FollowSplitButton
         following={followed}

@@ -101,7 +101,7 @@ function notifColor(type: AppNotification['type']): string {
   }
 }
 
-type SuggestUser = { id: string; name: string; avatar: string | null; bio?: string | null }
+type SuggestUser = { id: string; name: string; username?: string | null; avatar: string | null; bio?: string | null }
 
 function SuggestedRow({ user }: { user: SuggestUser }) {
   const t = useT()
@@ -121,7 +121,7 @@ function SuggestedRow({ user }: { user: SuggestUser }) {
     <View style={s.suggestRow}>
       <AvatarImage uri={user.avatar} name={user.name} size={48} />
       <View style={s.suggestInfo}>
-        <Text style={s.suggestName} numberOfLines={1}>{user.name}</Text>
+        <Text style={s.suggestName} numberOfLines={1}>{user.username ? `@${user.username}` : user.name}</Text>
         <Text style={s.suggestSub} numberOfLines={1}>{user.bio || t.msg_suggestion_one}</Text>
       </View>
       <FollowSplitButton following={false} loading={loading} onFollow={handleFollow} theme="light" followBack />

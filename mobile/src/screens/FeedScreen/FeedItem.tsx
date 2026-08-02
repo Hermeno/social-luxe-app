@@ -248,10 +248,9 @@ function FeedItem({
         <View style={s.authorRow}>
           <AvatarImage uri={resolveUrl(post.user.avatar)} name={post.user.name} size={36} borderWidth={0} borderColor="transparent" />
           <View style={s.authorText}>
-            <Text style={s.authorName} numberOfLines={1}>{post.user.name}</Text>
-            {!!post.user.username && (
-              <Text style={s.authorHandle} numberOfLines={1}>@{post.user.username}</Text>
-            )}
+            <Text style={s.authorName} numberOfLines={1}>
+              {post.user.username ? `@${post.user.username}` : post.user.name}
+            </Text>
           </View>
           {!isSelf && (
             <TouchableOpacity

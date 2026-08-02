@@ -124,11 +124,9 @@ function UserCard({
       </TouchableOpacity>
 
       <TouchableOpacity onPress={onPress} activeOpacity={0.7} style={c.textWrap}>
-        <Text style={c.cardName} numberOfLines={1}>{user.name}</Text>
+        <Text style={c.cardName} numberOfLines={1}>{user.username ? `@${user.username}` : user.name}</Text>
         <Text style={c.cardSub} numberOfLines={1}>
-          {user.username
-            ? `@${user.username}`
-            : `${fmtCount(followers)} ${followers === 1 ? t.follower : t.followers}`}
+          {fmtCount(followers)} {followers === 1 ? t.follower : t.followers}
         </Text>
       </TouchableOpacity>
 
@@ -363,16 +361,7 @@ function SuggestedUserRow({ user, onPress }: { user: UserResult; onPress: () => 
     <TouchableOpacity style={[s.row, sg.row]} onPress={onPress} activeOpacity={0.6}>
       <AvatarImage uri={user.avatar} name={user.name} size={AVA} />
       <View style={s.info}>
-        <Text style={s.name} numberOfLines={1}>{user.name}</Text>
-        {user.username
-          ? <Text style={sg.handle} numberOfLines={1}>@{user.username}</Text>
-          : (
-            <View style={sg.tag}>
-              <Ionicons name="sparkles" size={10} color="#ABABAB" />
-              <Text style={sg.tagTxt}>{t.msg_suggestion_one}</Text>
-            </View>
-          )
-        }
+        <Text style={s.name} numberOfLines={1}>{user.username ? `@${user.username}` : user.name}</Text>
       </View>
       <FollowSplitButton following={followed} loading={loading} onFollow={handleFollow} theme="light" />
     </TouchableOpacity>

@@ -46,8 +46,7 @@ export default function FriendRow({ item, onRenew, onRemove }: Props) {
       </TouchableOpacity>
 
       <TouchableOpacity style={s.info} onPress={goProfile} activeOpacity={0.7}>
-        <Text style={s.name}>{item.friend.name}</Text>
-        {!!item.friend.username && <Text style={s.handle} numberOfLines={1}>@{item.friend.username}</Text>}
+        <Text style={s.name}>{item.friend.username ? `@${item.friend.username}` : item.friend.name}</Text>
         <Text style={s.dur}>{LABELS[item.duration]}</Text>
         {left && <Text style={[s.left, left.includes('h') && s.urgent]}>{left}</Text>}
       </TouchableOpacity>

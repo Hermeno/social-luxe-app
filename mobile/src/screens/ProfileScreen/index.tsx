@@ -644,11 +644,9 @@ export default function ProfileScreen() {
             )}
           </TouchableOpacity>
 
-          <Text style={m.name} numberOfLines={1}>{profile?.name ?? ''}</Text>
-
-          {!!profile?.username && (
-            <Text style={m.handle} numberOfLines={1}>@{profile.username}</Text>
-          )}
+          <Text style={m.name} numberOfLines={1}>
+            {profile?.username ? `@${profile.username}` : (profile?.name ?? '')}
+          </Text>
 
           {!!profile?.statusLabel && (
             <View style={m.statusPill}>
