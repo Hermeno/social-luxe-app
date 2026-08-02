@@ -66,7 +66,7 @@ export default function CommentItem({
       <View style={s.body}>
         {/* Bolha: nome e texto juntos, como uma unidade de leitura */}
         <View style={[s.bubble, pending && s.bubblePending]}>
-          <Text style={s.name} numberOfLines={1}>{comment.user.name}</Text>
+          <Text style={s.name} numberOfLines={1}>{comment.user.username ? `@${comment.user.username}` : comment.user.name}</Text>
 
           {editing ? (
             <TextInput

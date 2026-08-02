@@ -247,7 +247,7 @@ function ConvoRow({ item, viewedIds, onPress, index, myUserId, isQuickOpen, onTo
         {/* Text info */}
         <View style={s.info}>
           <View style={s.topRow}>
-            <Text style={[s.name, unread && s.nameBold]} numberOfLines={1}>{item.user.name}</Text>
+            <Text style={[s.name, unread && s.nameBold]} numberOfLines={1}>{item.user.username ? `@${item.user.username}` : item.user.name}</Text>
             {hasMsg && (
               <Text style={[s.time, unread && s.timeActive]}>
                 {timeAgo(item.lastMessage!.createdAt, t.time_now)}

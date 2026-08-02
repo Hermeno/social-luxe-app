@@ -65,7 +65,7 @@ export interface Comment {
   content: string
   parentId: string | null
   createdAt: string
-  user: Pick<User, 'id' | 'name' | 'avatar'>
+  user: Pick<User, 'id' | 'name' | 'username' | 'avatar'>
   replies?: Comment[]
   likeCount?: number
   likedByMe?: boolean
@@ -93,7 +93,7 @@ export interface Message {
 }
 
 export interface Connection {
-  user: Pick<User, 'id' | 'name' | 'avatar'>
+  user: Pick<User, 'id' | 'name' | 'username' | 'avatar'>
   lastMessage: {
     id: string
     content: string | null
