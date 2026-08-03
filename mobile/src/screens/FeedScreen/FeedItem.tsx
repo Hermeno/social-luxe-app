@@ -7,24 +7,20 @@ import { useVideoPlayer, VideoView, VideoPlayerStatus } from 'expo-video'
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
-import { useNavigation, useIsFocused } from '@react-navigation/native'
-import { StackNavigationProp } from '@react-navigation/stack'
+import { useIsFocused } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Post } from '../../types'
 import { colors, fonts } from '../../theme'
-import { AppStackParams } from '../../navigation/AppNavigator'
 import { API_BASE } from '../../config'
 import * as postService from '../../services/post.service'
 import AvatarImage from '../../components/AvatarImage'
 import ActionBar from './ActionBar'
-import PostAlbumGrid from './PostAlbumGrid'
+import PostAlbumCarousel from './PostAlbumCarousel'
 import { useAuthStore } from '../../store/auth.store'
 import { useFollowStore } from '../../store/follow.store'
 
 const { width } = Dimensions.get('window')
-
-type Nav = StackNavigationProp<AppStackParams>
 
 function resolveUrl(url: string | null | undefined): string {
   if (!url) return ''
@@ -59,7 +55,6 @@ function FeedItem({
   post, isActive, cellHeight, liked, reposted, commentCount,
   onCommentPress, onLikeChange, onRepost, onExpired,
 }: Props) {
-  const nav = useNavigation<Nav>()
   const isFocused = useIsFocused()
   const { top: safeTop, bottom: safeBottom } = useSafeAreaInsets()
 
@@ -209,10 +204,9 @@ function FeedItem({
         </LinearGradient>
       ) : isAlbum ? (
         <View style={[s.media, videoFrame]}>
-          <PostAlbumGrid
+          <PostAlbumCarousel
             urls={post.mediaUrls ?? []}
             overlays={post.albumOverlays}
-            onOpen={() => nav.navigate('PostViewer', { posts: [post], startIndex: 0 })}
           />
         </View>
       ) : isVideo ? (
@@ -226,8 +220,11 @@ function FeedItem({
         <LinearGradient colors={['transparent', 'rgba(0,0,0,0.55)']} style={[s.scrim, { bottom: videoBottom }]} pointerEvents="none" />
       )}
 
-      {/* Camada de toque — duplo toque para gostar */}
-      <Pressable style={[s.tapLayer, videoFrame]} onPress={handleTapMedia} />
+      {/* Camada de toque — duplo toque para gostar.
+             Nos álbuns não a pomos: bloquearia o deslize do carrossel. */}
+      {!isAlbum && (
+        <Pressable style={[s.tapLayer, videoFrame]} onPress={handleTapMedia} />
+      )}
 
       {buffering && (
         <ActivityIndicator style={s.spinner} size="large" color="rgba(255,255,255,0.85)" pointerEvents="none" />
