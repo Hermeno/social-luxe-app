@@ -353,7 +353,7 @@ const s = StyleSheet.create({
   dock: {
     position: 'absolute', left: 14, right: 14,
     flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12,
-    borderRadius: 25, backgroundColor: '#16294A',
+    borderRadius: 25, backgroundColor: '#0E1A33',
   },
   dockText: { color: 'rgba(255,255,255,0.6)', fontFamily: fonts.medium, fontSize: 14.5 },
 })
