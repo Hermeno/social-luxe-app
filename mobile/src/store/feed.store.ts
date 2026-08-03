@@ -15,6 +15,9 @@ interface FeedStore {
   setJumpToPostId: (id: string | null) => void
   openSearch: boolean
   setOpenSearch: (v: boolean) => void
+  // Tocar em Home (já no feed) refresca: incrementa este sinal, o feed reage.
+  homeTap: number
+  bumpHomeTap: () => void
 }
 
 export const useFeedStore = create<FeedStore>((set) => ({
@@ -26,4 +29,6 @@ export const useFeedStore = create<FeedStore>((set) => ({
   setJumpToPostId:  (id)    => set({ jumpToPostId: id }),
   openSearch:       false,
   setOpenSearch:    (v)     => set({ openSearch: v }),
+  homeTap:          0,
+  bumpHomeTap:      ()      => set((s) => ({ homeTap: s.homeTap + 1 })),
 }))

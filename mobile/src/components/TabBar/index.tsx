@@ -2,7 +2,7 @@ import React, { useRef, useEffect } from 'react'
 import { View, TouchableOpacity, StyleSheet, Text, Image, Animated } from 'react-native'
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Search, Home, MessageCircle, User, Circle, Camera } from 'lucide-react-native'
+import { Home, MessageCircle, User, Circle, Camera, Plus } from 'lucide-react-native'
 import { colors, fonts } from '../../theme'
 import { useFeedStore } from '../../store/feed.store'
 import { useAuthStore } from '../../store/auth.store'
@@ -73,7 +73,7 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
   const totalUnread   = useMessageBadgeStore((s) => s.totalUnread)
   const circleInvite  = useNotificationStore((s) => s.circleInvite)
   const openSearch    = useFeedStore((s) => s.openSearch)
-  const setOpenSearch = useFeedStore((s) => s.setOpenSearch)
+  const bumpHomeTap   = useFeedStore((s) => s.bumpHomeTap)
   const avatar        = useAuthStore((s) => s.user?.avatar ?? null)
 
   const activeTab  = state.routes[state.index].name
@@ -88,16 +88,10 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
     if (!event.defaultPrevented) navigation.navigate(tab)
   }
 
-  function handleSearch() {
-    setOpenSearch(true)
-    if (activeTab !== 'Feed') goTo('Feed')
-  }
-
   // Uma folha modal aberta manda na barra: sem isto ela pinta por cima da folha
   // e, no Android, sobe com o teclado até tapar o botão de enviar.
   if (overlayOpen) return null
 
-  const searchActive = activeTab === 'Feed' && openSearch
   const homeActive   = activeTab === 'Feed' && !openSearch
   const msgActive    = activeTab === 'Messages'
   const circActive   = activeTab === 'Circle'
@@ -107,17 +101,8 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
     <View style={s.root}>
       <View style={[s.bar, { paddingBottom: Math.max(bottom, 8) }]}>
 
-        {/* Search */}
-        <TouchableOpacity style={s.btn} onPress={handleSearch} activeOpacity={0.7}>
-          <Search
-            size={SZ}
-            strokeWidth={searchActive ? 2.5 : 2}
-            color={searchActive ? iconActive : iconInactv}
-          />
-        </TouchableOpacity>
-
-        {/* Home → Feed — badge shows unread post count */}
-        <TouchableOpacity style={s.btn} onPress={() => goTo('Feed')} activeOpacity={0.7}>
+        {/* Home → Feed. Tocar já no feed refresca (como as apps grandes). */}
+        <TouchableOpacity style={s.btn} onPress={() => (activeTab === 'Feed' ? bumpHomeTap() : goTo('Feed'))} activeOpacity={0.7}>
           <MessageBadge count={newPostsCount} iconColor={iconInactv} />
           <Home
             size={SZ}
@@ -137,6 +122,13 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
               color={msgActive ? iconActive : iconInactv}
               fill={msgActive ? iconActive : 'transparent'}
             />
+          </View>
+        </TouchableOpacity>
+
+        {/* + Criar — no centro, botão em destaque */}
+        <TouchableOpacity style={s.btn} onPress={() => goTo('Create')} activeOpacity={0.85}>
+          <View style={s.createBtn}>
+            <Plus size={24} strokeWidth={2.6} color="#fff" />
           </View>
         </TouchableOpacity>
 
@@ -196,6 +188,14 @@ const s = StyleSheet.create({
     overflow: 'visible',
   },
   mirrorX: { transform: [{ scaleX: -1 }] },
+  // + central de criar — círculo laranja em destaque
+  createBtn: {
+    width: 46, height: 46, borderRadius: 23,
+    backgroundColor: '#FF7A1C',
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#FF7A1C', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8,
+    elevation: 6,
+  },
   badgeIcon: { marginRight: 5, transform: [{ scaleX: -1 }] },
 
   // Badge — positioned above the icon, centered on the btn

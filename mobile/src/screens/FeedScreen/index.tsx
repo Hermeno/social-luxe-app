@@ -4,7 +4,7 @@ import {
   type ViewToken,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Plus } from 'lucide-react-native'
+import { Search } from 'lucide-react-native'
 import { setStatusBarStyle } from 'expo-status-bar'
 import { useNavigation, useFocusEffect } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
@@ -50,6 +50,7 @@ export default function FeedScreen() {
   const setJumpToPostId  = useFeedStore((s) => s.setJumpToPostId)
   const openSearch       = useFeedStore((s) => s.openSearch)
   const setOpenSearch    = useFeedStore((s) => s.setOpenSearch)
+  const homeTap          = useFeedStore((s) => s.homeTap)
 
   const [currentPostId, setCurrentPostId] = useState<string | null>(null)
   const [commentPost,   setCommentPost]   = useState<Post | null>(null)
@@ -226,6 +227,14 @@ export default function FeedScreen() {
     return () => setStatusBarStyle('dark')
   }, []))
 
+  // ── Tocar em Home (já no feed) → volta ao topo e refresca ───────────────────
+  const firstHomeTap = useRef(true)
+  useEffect(() => {
+    if (firstHomeTap.current) { firstHomeTap.current = false; return }
+    listRef.current?.scrollToOffset({ offset: 0, animated: true })
+    refreshRef.current()
+  }, [homeTap])
+
   // ── Render de cada célula ───────────────────────────────────────────────────
   const renderItem = useCallback(({ item }: { item: Post }) => (
     <FeedItem
@@ -308,11 +317,11 @@ export default function FeedScreen() {
       ) : (
         <TouchableOpacity
           style={[s.createBtn, { top: safeTop + 6 }]}
-          onPress={handleCreatePress}
+          onPress={handleSearchOpen}
           activeOpacity={0.7}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <Plus size={26} strokeWidth={2} color="#fff" />
+          <Search size={25} strokeWidth={2} color="#fff" />
         </TouchableOpacity>
       )}
 
