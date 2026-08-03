@@ -15,7 +15,7 @@ const LANGS: { code: Lang; native: string; sub: string }[] = [
 ]
 
 export default function LanguageOnboardingScreen({ onDone }: { onDone: () => void }) {
-  const { top } = useSafeAreaInsets()
+  const { top, bottom } = useSafeAreaInsets()
   const { height } = useWindowDimensions()
   const setLang = useI18n((s) => s.setLang)
 
@@ -68,8 +68,8 @@ export default function LanguageOnboardingScreen({ onDone }: { onDone: () => voi
         <Text style={s.wordmark}>luxee</Text>
       </Animated.View>
 
-      {/* Seletor — transparente, no meio da página. Uma linha separa os idiomas. */}
-      <Animated.View style={[s.selector, { opacity: selOp }]}>
+      {/* Seletor — transparente, na parte de baixo. Uma linha separa os idiomas. */}
+      <Animated.View style={[s.selector, { opacity: selOp, paddingBottom: bottom + height * 0.12 }]}>
         {LANGS.map((l, i) => (
           <React.Fragment key={l.code}>
             {i > 0 && <View style={s.divider} />}
@@ -101,14 +101,14 @@ const s = StyleSheet.create({
 
   selector: {
     position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
-    alignItems: 'center', justifyContent: 'center',
+    alignItems: 'center', justifyContent: 'flex-end',
   },
-  opt: { paddingVertical: 22, alignItems: 'center' },
+  opt: { paddingVertical: 18, alignItems: 'center' },
   optName: {
-    fontFamily: fonts.bold, fontSize: 30, color: '#FFFFFF', letterSpacing: -0.4,
+    fontFamily: fonts.bold, fontSize: 26, color: '#FFFFFF', letterSpacing: -0.3,
     textShadowColor: 'rgba(0,0,0,0.10)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6,
   },
   optDim: { opacity: 0.4 },
-  optSub: { fontFamily: fonts.regular, fontSize: 13, color: 'rgba(255,255,255,0.82)', marginTop: 4, letterSpacing: 0.2 },
-  divider: { width: 200, height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.55)' },
+  optSub: { fontFamily: fonts.regular, fontSize: 12.5, color: 'rgba(255,255,255,0.8)', marginTop: 3, letterSpacing: 0.3 },
+  divider: { width: 180, height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.5)' },
 })
