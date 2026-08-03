@@ -786,15 +786,17 @@ export default function ProfileScreen() {
         {isOwn ? (
           pendingAvatarUri ? (
             <View style={m.btnRow}>
-              <TouchableOpacity style={m.outlineBtn} onPress={() => setPendingAvatarUri(null)} activeOpacity={0.8}>
+              <TouchableOpacity style={[m.outlineBtn, { flex: 1 }]} onPress={() => setPendingAvatarUri(null)} activeOpacity={0.8}>
                 <Text style={m.outlineBtnTxt}>{t.cancel}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={m.gradBtn} onPress={savePendingAvatar} disabled={savingAvatar} activeOpacity={0.8}>
-                {savingAvatar
-                  ? <ActivityIndicator size="small" color="#fff" />
-                  : <Text style={m.gradBtnTxt}>{t.save}</Text>
-                }
-              </TouchableOpacity>
+              <LinearGradient colors={['#FF7A1C', '#FF6766']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[m.gradBtn, { flex: 1 }]}>
+                <TouchableOpacity onPress={savePendingAvatar} disabled={savingAvatar} activeOpacity={0.85} style={m.gradBtnInner}>
+                  {savingAvatar
+                    ? <ActivityIndicator size="small" color="#fff" />
+                    : <Text style={m.gradBtnTxt}>{t.save}</Text>
+                  }
+                </TouchableOpacity>
+              </LinearGradient>
             </View>
           ) : (
             <View style={m.btnRow}>

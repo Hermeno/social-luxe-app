@@ -34,7 +34,7 @@ function Slide({
       <Image
         source={{ uri: resolve(url) }}
         style={StyleSheet.absoluteFill}
-        contentFit="cover"
+        contentFit="contain"
         cachePolicy="disk"
         recyclingKey={url}
         transition={140}
@@ -52,10 +52,11 @@ interface Props {
   urls: string[]
   overlays?: Overlay[][]   // emojis por foto, paralelo a urls
   onOpen?: (index: number) => void
+  dotsBottom?: number      // distância dos pontinhos ao fundo (limpa a barra do autor)
 }
 
-// Carrossel estilo Instagram — desliza esquerda↔direita, pontinhos no topo.
-export default function PostAlbumCarousel({ urls, overlays, onOpen }: Props) {
+// Carrossel estilo Instagram — desliza esquerda↔direita, pontinhos em baixo.
+export default function PostAlbumCarousel({ urls, overlays, onOpen, dotsBottom = 14 }: Props) {
   const [w, setW]         = useState(0)
   const [index, setIndex] = useState(0)
   const n = urls.length
@@ -81,9 +82,9 @@ export default function PostAlbumCarousel({ urls, overlays, onOpen }: Props) {
         />
       )}
 
-      {/* Pontinhos — topo, centrados, com sombra para lerem em fotos claras */}
+      {/* Pontinhos — em baixo, centrados, com sombra para lerem em fotos claras */}
       {n > 1 && (
-        <View style={s.dots} pointerEvents="none">
+        <View style={[s.dots, { bottom: dotsBottom }]} pointerEvents="none">
           {urls.map((_, i) => (
             <View key={i} style={[s.dot, i === index && s.dotOn]} />
           ))}
@@ -97,7 +98,7 @@ const s = StyleSheet.create({
   root: { ...StyleSheet.absoluteFillObject, backgroundColor: '#000' },
   dots: {
     position: 'absolute',
-    top: 14, left: 0, right: 0,
+    left: 0, right: 0,
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 5,

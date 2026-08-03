@@ -207,6 +207,7 @@ function FeedItem({
           <PostAlbumCarousel
             urls={post.mediaUrls ?? []}
             overlays={post.albumOverlays}
+            dotsBottom={(overlayBottom - videoBottom) + 46 + (post.caption ? 38 : 0)}
           />
         </View>
       ) : isVideo ? (
@@ -243,7 +244,9 @@ function FeedItem({
       {/* ── Autor + descrição — sobre o vídeo, canto inferior esquerdo ── */}
       <View style={[s.meta, { bottom: overlayBottom }]} pointerEvents="box-none">
         <View style={s.authorRow}>
-          <AvatarImage uri={resolveUrl(post.user.avatar)} name={post.user.name} size={36} borderWidth={2} borderColor={colors.ring} />
+          <View style={s.avatarRing}>
+            <AvatarImage uri={resolveUrl(post.user.avatar)} name={post.user.name} size={34} />
+          </View>
           <View style={s.authorText}>
             <Text style={s.authorName} numberOfLines={1}>
               {post.user.username ? `@${post.user.username}` : post.user.name}
@@ -318,6 +321,14 @@ const s = StyleSheet.create({
   // Autor + descrição
   meta:       { position: 'absolute', left: 16, right: 84, gap: 8 },
   authorRow:  { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  // Anel laranja à volta do avatar, com folga (não colado ao avatar)
+  avatarRing: {
+    padding: 2.5,
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    backgroundColor: 'transparent',
+  },
   authorText: { flexShrink: 1 },
   authorName: {
     color: '#fff', fontFamily: fonts.semiBold, fontSize: 15, letterSpacing: -0.2,
