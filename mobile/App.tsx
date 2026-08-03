@@ -6,13 +6,6 @@ import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
 import { useFonts } from 'expo-font'
-import {
-  GoogleSansFlex_400Regular,
-  GoogleSansFlex_500Medium,
-  GoogleSansFlex_600SemiBold,
-  GoogleSansFlex_700Bold,
-  GoogleSansFlex_800ExtraBold,
-} from '@expo-google-fonts/google-sans-flex'
 import * as Notifications from 'expo-notifications'
 import * as Location from 'expo-location'
 import { Image, Platform, StyleSheet, Text, View } from 'react-native'
@@ -238,11 +231,12 @@ function FollowerPoller() {
 
 export default function App() {
   const [fontsLoaded] = useFonts({
-    'Jakarta-Regular':    GoogleSansFlex_400Regular,
-    'Jakarta-Medium':     GoogleSansFlex_500Medium,
-    'Jakarta-SemiBold':   GoogleSansFlex_600SemiBold,
-    'Jakarta-Bold':       GoogleSansFlex_700Bold,
-    'Jakarta-ExtraBold':  GoogleSansFlex_800ExtraBold,
+    'Jakarta-Light':      require('./assets/Plus_Jakarta_Sans/static/PlusJakartaSans-Light.ttf'),
+    'Jakarta-Regular':    require('./assets/Plus_Jakarta_Sans/static/PlusJakartaSans-Regular.ttf'),
+    'Jakarta-Medium':     require('./assets/Plus_Jakarta_Sans/static/PlusJakartaSans-Medium.ttf'),
+    'Jakarta-SemiBold':   require('./assets/Plus_Jakarta_Sans/static/PlusJakartaSans-SemiBold.ttf'),
+    'Jakarta-Bold':       require('./assets/Plus_Jakarta_Sans/static/PlusJakartaSans-Bold.ttf'),
+    'Jakarta-ExtraBold':  require('./assets/Plus_Jakarta_Sans/static/PlusJakartaSans-ExtraBold.ttf'),
   })
 
   const { isLoading: authLoading, isAuthenticated, loadUser } = useAuthStore()
@@ -258,6 +252,13 @@ export default function App() {
       .then((v) => setNeedsLanguage(!(v === 'pt' || v === 'en')))
       .catch(() => setNeedsLanguage(false))
   }, [])
+
+  // Ao terminar sessão, volta sempre ao seletor de idioma (mesmo já tendo usado).
+  const prevAuth = useRef(isAuthenticated)
+  useEffect(() => {
+    if (prevAuth.current && !isAuthenticated) setNeedsLanguage(true)
+    prevAuth.current = isAuthenticated
+  }, [isAuthenticated])
 
   useEffect(() => {
     // Nesta versão a feed é sempre o ecrã inicial (o seletor Feed/Chat está

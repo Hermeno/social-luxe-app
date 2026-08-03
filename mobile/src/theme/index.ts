@@ -1,6 +1,7 @@
 export { colors, gradients } from './colors'
 
 export const fonts = {
+  light: 'Jakarta-Light',
   regular: 'Jakarta-Regular',
   medium: 'Jakarta-Medium',
   semiBold: 'Jakarta-SemiBold',
