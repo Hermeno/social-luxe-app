@@ -94,6 +94,7 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
 
   const homeActive   = activeTab === 'Feed' && !openSearch
   const msgActive    = activeTab === 'Messages'
+  const createActive = activeTab === 'Create'
   const circActive   = activeTab === 'Circle'
   const profActive   = activeTab === 'Profile'
 
@@ -125,11 +126,13 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
           </View>
         </TouchableOpacity>
 
-        {/* + Criar — no centro, botão em destaque */}
-        <TouchableOpacity style={s.btn} onPress={() => goTo('Create')} activeOpacity={0.85}>
-          <View style={s.createBtn}>
-            <Plus size={24} strokeWidth={2.6} color="#fff" />
-          </View>
+        {/* + Criar — no centro, ícone simples como os outros */}
+        <TouchableOpacity style={s.btn} onPress={() => goTo('Create')} activeOpacity={0.7}>
+          <Plus
+            size={SZ}
+            strokeWidth={createActive ? 2.5 : 2}
+            color={createActive ? iconActive : iconInactv}
+          />
         </TouchableOpacity>
 
         {/* Círculo — badge com câmara quando alguém me convida */}
@@ -188,14 +191,6 @@ const s = StyleSheet.create({
     overflow: 'visible',
   },
   mirrorX: { transform: [{ scaleX: -1 }] },
-  // + central de criar — círculo laranja em destaque
-  createBtn: {
-    width: 46, height: 46, borderRadius: 23,
-    backgroundColor: '#FF7A1C',
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#FF7A1C', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8,
-    elevation: 6,
-  },
   badgeIcon: { marginRight: 5, transform: [{ scaleX: -1 }] },
 
   // Badge — positioned above the icon, centered on the btn
