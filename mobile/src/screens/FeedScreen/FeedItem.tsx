@@ -246,7 +246,7 @@ function FeedItem({
       {/* ── Autor + descrição — sobre o vídeo, canto inferior esquerdo ── */}
       <View style={[s.meta, { bottom: overlayBottom }]} pointerEvents="box-none">
         <View style={s.authorRow}>
-          <AvatarImage uri={resolveUrl(post.user.avatar)} name={post.user.name} size={36} borderWidth={0} borderColor="transparent" />
+          <AvatarImage uri={resolveUrl(post.user.avatar)} name={post.user.name} size={36} borderWidth={2} borderColor={colors.ring} />
           <View style={s.authorText}>
             <Text style={s.authorName} numberOfLines={1}>
               {post.user.username ? `@${post.user.username}` : post.user.name}
