@@ -9,6 +9,9 @@ export const colors = {
   white:        '#FFFFFF',
   offWhite:     '#F7F7F7',
 
+  // Campo de comentário na feed
+  commentField: '#8D9F92',
+
   gray100: '#F7F7F7',
   gray200: '#EAEAEA',
   gray300: '#D1D1D6',
