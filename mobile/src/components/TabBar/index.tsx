@@ -2,7 +2,7 @@ import React, { useRef, useEffect } from 'react'
 import { View, TouchableOpacity, StyleSheet, Text, Image, Animated } from 'react-native'
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Home, MessageCircle, User, Circle, Camera, Plus } from 'lucide-react-native'
+import { Home, MessageCircle, User, Circle, Camera, SquarePlus } from 'lucide-react-native'
 import { colors, fonts } from '../../theme'
 import { useFeedStore } from '../../store/feed.store'
 import { useAuthStore } from '../../store/auth.store'
@@ -126,9 +126,9 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
           </View>
         </TouchableOpacity>
 
-        {/* + Criar — no centro, ícone simples como os outros */}
+        {/* Criar — no centro, ícone square-plus */}
         <TouchableOpacity style={s.btn} onPress={() => goTo('Create')} activeOpacity={0.7}>
-          <Plus
+          <SquarePlus
             size={SZ}
             strokeWidth={createActive ? 2.5 : 2}
             color={createActive ? iconActive : iconInactv}
