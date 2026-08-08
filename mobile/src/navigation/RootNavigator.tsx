@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useRef } from 'react'
 import { AppState, AppStateStatus, Platform, Text, StyleSheet, View } from 'react-native'
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native'
 import Toast, { BaseToastProps } from 'react-native-toast-message'
@@ -6,20 +6,24 @@ import { ConfirmHost } from '../components/confirm'
 import { Ionicons } from '@expo/vector-icons'
 import * as Notifications from 'expo-notifications'
 import Constants from 'expo-constants'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { colors, fonts } from '../theme'
 import { useAuthStore } from '../store/auth.store'
 import { useOnlineStore } from '../store/online.store'
 import { useFollowStore } from '../store/follow.store'
 import { connectSocket, disconnectSocket, getSocket } from '../socket'
 import { useSync } from '../hooks/useSync'
-import { getCachedConnections } from '../db/database'
+import { getCachedConnections, updateCachedConnection } from '../db/database'
 import { useMessageBadgeStore } from '../store/messageBadge.store'
 import { useNotificationStore, AppNotification } from '../store/notification.store'
+import { getIncoming as getCircleIncoming } from '../services/circle.service'
 import AuthNavigator from './AuthNavigator'
 import AppNavigator from './AppNavigator'
 import OnboardingScreen from '../screens/OnboardingScreen'
 import { api } from '../services/api'
-import { TogetherLivePayload } from '../types'
+import { Message, TogetherLivePayload } from '../types'
+
+const CHANNEL_ID = 'messages'
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -30,6 +34,60 @@ Notifications.setNotificationHandler({
     shouldShowList:   true,
   }),
 })
+
+async function ensureNotificationChannel() {
+  if (Platform.OS !== 'android') return
+  await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
+    name: 'Mensagens',
+    importance: Notifications.AndroidImportance.MAX,
+    vibrationPattern: [0, 250, 250, 250],
+    lightColor: '#CA2851',
+    sound: 'default',
+    enableVibrate: true,
+    showBadge: true,
+  }).catch(() => {})
+}
+
+async function registerPushToken() {
+  await ensureNotificationChannel()
+
+  const { status: existing } = await Notifications.getPermissionsAsync()
+  const { status } = existing !== 'granted'
+    ? await Notifications.requestPermissionsAsync()
+    : { status: existing }
+  if (status !== 'granted') return
+
+  const projectId =
+    (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas?.projectId ??
+    (Constants as unknown as { easConfig?: { projectId?: string } }).easConfig?.projectId
+  if (!projectId) return
+
+  const { data: pushToken } = await Notifications.getExpoPushTokenAsync({ projectId })
+  await AsyncStorage.setItem('push_token', pushToken).catch(() => {})
+  await api.post('/notifications/token', { token: pushToken, platform: Platform.OS })
+}
+
+function normalizeNotification(payload: Partial<AppNotification> & Record<string, unknown>): AppNotification | null {
+  if (!payload.type || typeof payload.type !== 'string') return null
+  return {
+    id: typeof payload.id === 'string' ? payload.id : String(Date.now()),
+    type: payload.type as AppNotification['type'],
+    message: typeof payload.message === 'string' ? payload.message : '',
+    read: false,
+    createdAt: typeof payload.createdAt === 'string' ? payload.createdAt : new Date().toISOString(),
+    fromUser: payload.fromUser as AppNotification['fromUser'],
+  }
+}
+
+function rememberId(seen: Set<string>, id: string, max = 200) {
+  if (seen.has(id)) return false
+  seen.add(id)
+  if (seen.size > max) {
+    const oldest = seen.values().next().value
+    if (oldest) seen.delete(oldest)
+  }
+  return true
+}
 
 const toastConfig = {
   success: ({ text1, text2 }: BaseToastProps) => (
@@ -117,8 +175,11 @@ interface Props {
 
 export default function RootNavigator({ onboardingDone, setOnboardingDone, defaultTab }: Props) {
   const { isAuthenticated, token } = useAuthStore()
-  const { online } = useSync()
-  const { setTotalUnread } = useMessageBadgeStore()
+  useSync()
+  const { setTotalUnread, increment } = useMessageBadgeStore()
+  const setCircleInvite = useNotificationStore((s) => s.setCircleInvite)
+  const addNotification = useNotificationStore((s) => s.addNotification)
+  const seenMessageIds = useRef<Set<string>>(new Set())
 
   // Reconnect socket and refresh badge when app comes back to foreground
   useEffect(() => {
@@ -143,27 +204,22 @@ export default function RootNavigator({ onboardingDone, setOnboardingDone, defau
   // Register Expo push token when authenticated (physical devices only)
   useEffect(() => {
     if (!isAuthenticated || !token) return
+    registerPushToken().catch(() => {})
+  }, [isAuthenticated, token])
 
-    async function registerPushToken() {
-      try {
-        const { status: existing } = await Notifications.getPermissionsAsync()
-        const { status } = existing !== 'granted'
-          ? await Notifications.requestPermissionsAsync()
-          : { status: existing }
-        if (status !== 'granted') return
-
-        const projectId = (Constants.expoConfig?.extra as any)?.eas?.projectId
-        if (!projectId) return
-
-        const { data: pushToken } = await Notifications.getExpoPushTokenAsync({ projectId })
-        await api.post('/notifications/token', { token: pushToken, platform: Platform.OS })
-      } catch {
-        // Non-critical — push will not work but app continues normally
-      }
-    }
-
-    registerPushToken()
-  }, [isAuthenticated])
+  // Mirror foreground push notifications into the in-app notification list.
+  useEffect(() => {
+    if (!isAuthenticated) return
+    const sub = Notifications.addNotificationReceivedListener((notification) => {
+      const data = notification.request.content.data as Record<string, unknown>
+      const item = normalizeNotification({
+        ...data,
+        message: notification.request.content.body ?? (typeof data.message === 'string' ? data.message : undefined),
+      })
+      if (item) addNotification(item)
+    })
+    return () => sub.remove()
+  }, [isAuthenticated, addNotification])
 
   // Connect socket when authenticated and listen to online/offline events
   useEffect(() => {
@@ -174,21 +230,60 @@ export default function RootNavigator({ onboardingDone, setOnboardingDone, defau
 
     const socket = connectSocket(token)
     const { setOnline, setOffline } = useOnlineStore.getState()
+    const myId = useAuthStore.getState().user?.id
 
     // Load who we follow into the global store (SQLite cache first, then API)
     useFollowStore.getState().load().catch(() => {})
 
-    // Snapshot de quem já está online quando conectamos
-    socket.on('users:online:snapshot', ({ userIds }: { userIds: string[] }) => {
+    api.get('/users/connections')
+      .then((r) => {
+        const connections: { unreadCount: number }[] = r.data.data ?? r.data ?? []
+        setTotalUnread(connections.reduce((s, c) => s + (c.unreadCount ?? 0), 0))
+      })
+      .catch(() => {})
+
+    getCircleIncoming()
+      .then((r) => { if (r.call) setCircleInvite(true) })
+      .catch(() => {})
+
+    const onOnlineSnapshot = ({ userIds }: { userIds: string[] }) => {
       userIds.forEach(id => setOnline(id))
-    })
+    }
 
-    // Eventos em tempo real
-    socket.on('user:online',  ({ userId }: { userId: string }) => setOnline(userId))
-    socket.on('user:offline', ({ userId }: { userId: string }) => setOffline(userId))
+    const onUserOnline  = ({ userId }: { userId: string }) => setOnline(userId)
+    const onUserOffline = ({ userId }: { userId: string }) => setOffline(userId)
 
-    // União ao vivo — notificar seguidores com um toast
-    socket.on('union:together:live', ({ unionName, label, memberAName, memberBName }: TogetherLivePayload) => {
+    const onNewMessage = (msg: Message) => {
+      if (!msg.senderId || msg.senderId === myId) return
+      if (msg.id && !rememberId(seenMessageIds.current, msg.id)) return
+      increment()
+      const lastMessage = {
+        id: msg.id,
+        content: msg.content,
+        senderId: msg.senderId,
+        readAt: msg.readAt,
+        createdAt: msg.createdAt,
+      }
+      getCachedConnections()
+        .then((conns) => {
+          const conn = conns.find((c) => c.user.id === msg.senderId)
+          if (!conn) return
+          return updateCachedConnection(msg.senderId, {
+            lastMessage,
+            unreadCount: conn.unreadCount + 1,
+          }, { user: conn.user, postIds: conn.postIds })
+        })
+        .catch(() => {})
+    }
+
+    const onCircleCalled = () => setCircleInvite(true)
+
+    const onNotification = (payload: Partial<AppNotification> & Record<string, unknown>) => {
+      const item = normalizeNotification(payload)
+      if (item) addNotification(item)
+    }
+
+    const onUnionTogetherLive = ({ unionName, label, memberAName, memberBName }: TogetherLivePayload) => {
       Toast.show({
         type:            'success',
         text1:           `💑 ${unionName} estão juntos agora`,
@@ -196,21 +291,28 @@ export default function RootNavigator({ onboardingDone, setOnboardingDone, defau
         visibilityTime:  5000,
         position:        'top',
       })
-    })
+    }
 
-    // Real-time notifications (new follower, etc.) — feeds the in-app notification list
-    socket.on('notification:new', (n: AppNotification) => {
-      useNotificationStore.getState().addNotification(n)
-    })
+    socket.on('users:online:snapshot', onOnlineSnapshot)
+    socket.on('user:online', onUserOnline)
+    socket.on('user:offline', onUserOffline)
+    socket.on('message:new', onNewMessage)
+    socket.on('circle:called', onCircleCalled)
+    socket.on('notification:new', onNotification)
+    socket.on('notification', onNotification)
+    socket.on('union:together:live', onUnionTogetherLive)
 
     return () => {
-      socket.off('users:online:snapshot')
-      socket.off('user:online')
-      socket.off('user:offline')
-      socket.off('union:together:live')
-      socket.off('notification:new')
+      socket.off('users:online:snapshot', onOnlineSnapshot)
+      socket.off('user:online', onUserOnline)
+      socket.off('user:offline', onUserOffline)
+      socket.off('message:new', onNewMessage)
+      socket.off('circle:called', onCircleCalled)
+      socket.off('notification:new', onNotification)
+      socket.off('notification', onNotification)
+      socket.off('union:together:live', onUnionTogetherLive)
     }
-  }, [isAuthenticated, token])
+  }, [isAuthenticated, token, setTotalUnread, increment, setCircleInvite, addNotification])
 
   return (
     <NavigationContainer theme={{ ...DefaultTheme, colors: { ...DefaultTheme.colors, background: '#0A0A0A' } }}>

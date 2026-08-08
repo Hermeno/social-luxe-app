@@ -46,6 +46,7 @@ import { useOnlineStore } from '../../store/online.store'
 import { isConnected } from '../../services/netinfo.service'
 import { useMessageBadgeStore } from '../../store/messageBadge.store'
 import { useFeedStore } from '../../store/feed.store'
+import { useMessagesStore } from '../../store/messages.store'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { colors, fonts } from '../../theme'
 import { useT } from '../../i18n'
@@ -445,7 +446,7 @@ export default function MessagesScreen() {
   const { top, bottom } = useSafeAreaInsets()
   const { user }        = useAuthStore()
   const inputRef        = useRef<TextInput>(null)
-  const { setTotalUnread, increment } = useMessageBadgeStore()
+  const { setTotalUnread } = useMessageBadgeStore()
   const newPostsCount = useFeedStore((s) => s.newPostsCount)
 
   const [connections,    setConnections]    = useState<Connection[]>([])
@@ -460,6 +461,11 @@ export default function MessagesScreen() {
   const [isSearchMode,   setIsSearchMode]   = useState(false)
   const [suggested,      setSuggested]      = useState<UserResult[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
+  // A TabBar também abre esta folha — o pedido chega por aqui.
+  const suggestionsRequested = useMessagesStore((s) => s.suggestionsRequested)
+  useEffect(() => {
+    if (suggestionsRequested > 0) setShowSuggestions(true)
+  }, [suggestionsRequested])
   const [searchResults,  setSearchResults]  = useState<UserResult[]>([])
   const [postResults,    setPostResults]    = useState<Post[]>([])
   const [searchLoading,  setSearchLoading]  = useState(false)
@@ -671,7 +677,6 @@ export default function MessagesScreen() {
     function onNewMessage(msg: any) {
       const partnerId = msg.senderId === user?.id ? msg.receiverId : msg.senderId
       const newLastMsg = { id: msg.id, content: msg.content, senderId: msg.senderId, readAt: msg.readAt, createdAt: msg.createdAt }
-      if (msg.senderId !== user?.id) increment()
 
       const known = connectionsRef.current.some((c) => c.user.id === partnerId)
 
@@ -684,7 +689,10 @@ export default function MessagesScreen() {
             unreadCount: msg.senderId !== user?.id ? prev[idx].unreadCount + 1 : prev[idx].unreadCount,
           }
           const updated: Connection[] = [{ ...prev[idx], ...update }, ...prev.filter((_, i) => i !== idx)]
-          updateCachedConnection(partnerId, update, { user: prev[idx].user, postIds: prev[idx].postIds }).catch(() => {})
+          const cacheUpdate = msg.senderId !== user?.id
+            ? { lastMessage: newLastMsg }
+            : update
+          updateCachedConnection(partnerId, cacheUpdate, { user: prev[idx].user, postIds: prev[idx].postIds }).catch(() => {})
           return updated
         })
       } else {
@@ -711,7 +719,7 @@ export default function MessagesScreen() {
 
     socket.on('message:new', onNewMessage)
     return () => { socket.off('message:new', onNewMessage) }
-  }, [user?.id, increment])
+  }, [user?.id])
 
   // ── Suggested users ───────────────────────────────────────────────────────
   async function loadSuggested() {

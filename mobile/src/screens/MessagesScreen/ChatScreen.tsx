@@ -593,8 +593,11 @@ export default function ChatScreen() {
 
       listRef.current?.scrollToOffset({ offset: 0, animated: true })
 
-      if (msg.senderId === userId)
+      if (msg.senderId === userId) {
         getSocket()?.emit('message:read', { messageId: msg.id, senderId: userId })
+        useMessageBadgeStore.getState().clearConversation(1)
+        updateCachedConnection(userId, { unreadCount: 0 }).catch(() => {})
+      }
     }
 
     function onTyping({ fromUserId, isTyping: t }: { fromUserId: string; isTyping: boolean }) {

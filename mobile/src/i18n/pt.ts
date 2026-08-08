@@ -58,6 +58,14 @@ export const PT = {
   logout_msg: 'Tens a certeza que queres sair?',
   logout_ok: 'Sair',
   pending: 'Pendente',
+  nav_home: 'Início',
+  nav_chat: 'Chat',
+  nav_profile: 'Perfil',
+  nav_suggestions: 'Sugestões',
+  nav_new_post: 'publicação nova',
+  nav_new_posts: 'publicações novas',
+  nav_unread_message: 'mensagem não lida',
+  nav_unread_messages: 'mensagens não lidas',
 
   // About
   about_title: 'Sobre',

@@ -36,7 +36,7 @@ import { StoryGroup } from '../services/story.service'
 export type AppTabParams = {
   Feed: undefined
   Messages: undefined
-  Create: undefined          // accessed via FeedHeader, not shown in tab bar
+  Create: undefined          // launched from the feed top actions
   Circle: undefined
   Profile: { userId?: string }
 }

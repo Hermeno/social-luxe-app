@@ -4,14 +4,15 @@ import {
   type ViewToken,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Search } from 'lucide-react-native'
+import { Camera, Circle, Plus, Search } from 'lucide-react-native'
+import { LinearGradient } from 'expo-linear-gradient'
 import { setStatusBarStyle } from 'expo-status-bar'
 import { useNavigation, useFocusEffect } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { Post } from '../../types'
 import { useFeed } from '../../hooks/useFeed'
 import { useFeedStore } from '../../store/feed.store'
-import { useAuthStore } from '../../store/auth.store'
+import { useNotificationStore } from '../../store/notification.store'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { markPostViewed, getViewedPostIds, getCache, setCache } from '../../db/database'
 import * as postService from '../../services/post.service'
@@ -22,6 +23,7 @@ import { colors, fonts } from '../../theme'
 import { API_BASE } from '../../config'
 import FeedHeader, { FeedUserGroup as UserGroup } from './FeedHeader'
 import FeedItem from './FeedItem'
+import CommenterStack from './CommenterStack'
 import CommentSheet from '../../components/CommentSheet'
 
 const { height: SCREEN_H } = Dimensions.get('window')
@@ -51,6 +53,10 @@ export default function FeedScreen() {
   const openSearch       = useFeedStore((s) => s.openSearch)
   const setOpenSearch    = useFeedStore((s) => s.setOpenSearch)
   const homeTap          = useFeedStore((s) => s.homeTap)
+  const setActiveCommentTarget = useFeedStore((s) => s.setActiveCommentTarget)
+  const requestedCommentPostId = useFeedStore((s) => s.requestedCommentPostId)
+  const clearCommentRequest    = useFeedStore((s) => s.clearCommentRequest)
+  const circleInvite           = useNotificationStore((s) => s.circleInvite)
 
   const [currentPostId, setCurrentPostId] = useState<string | null>(null)
   const [commentPost,   setCommentPost]   = useState<Post | null>(null)
@@ -104,6 +110,36 @@ export default function FeedScreen() {
   }, [currentPostId, flatPosts])
 
   const activePost = flatPosts[currentIndex]
+
+  const openComments = useCallback((post: Post) => {
+    Keyboard.dismiss()
+    setSearchMode(false)
+    setSearchQuery('')
+    setCommentPost(post)
+  }, [])
+
+  // A TabBar mostra o alvo do post visível, sem guardar o Post inteiro fora da
+  // feed. Ao desmontar, limpamos a ponte para não deixar uma referência antiga.
+  useEffect(() => {
+    setActiveCommentTarget(activePost ? {
+      postId: activePost.id,
+      authorId: activePost.user.id,
+      authorName: activePost.user.name,
+    } : null)
+  }, [activePost?.id, activePost?.user.id, activePost?.user.name, setActiveCommentTarget])
+
+  useEffect(() => () => {
+    useFeedStore.getState().setActiveCommentTarget(null)
+    useFeedStore.getState().clearCommentRequest()
+  }, [])
+
+  // Tocar no campo da navegação continua a abrir a folha que pertence à feed.
+  useEffect(() => {
+    if (!requestedCommentPostId) return
+    const requestedPost = flatPosts.find((post) => post.id === requestedCommentPostId)
+    clearCommentRequest()
+    if (requestedPost) openComments(requestedPost)
+  }, [requestedCommentPostId, flatPosts, clearCommentRequest, openComments])
 
   // Primeiro post assim que a feed carrega
   const initedRef = useRef(false)
@@ -217,6 +253,7 @@ export default function FeedScreen() {
     setSearchMode(false); setSearchQuery('')
   }, [scrollToIndex])
   const handleCreatePress  = useCallback(() => nav.navigate('Tabs', { screen: 'Create' }), [nav])
+  const handleCirclePress  = useCallback(() => nav.navigate('Tabs', { screen: 'Circle' }), [nav])
 
   // ── Foco: refresca e mete a barra de estado clara (média escura no topo) ────
   const refreshRef = useRef(refresh)
@@ -244,10 +281,7 @@ export default function FeedScreen() {
       liked={likedPostIds.has(item.id)}
       reposted={repostedIds.has(item.id)}
       commentCount={(item._count?.comments ?? 0) + (commentDeltas[item.id] ?? 0)}
-      onCommentPress={(p) => {
-        if (searchMode) { Keyboard.dismiss(); setSearchMode(false); setSearchQuery('') }
-        setCommentPost(p)
-      }}
+      onCommentPress={openComments}
       onLikeChange={(liked) => handleLikeChange(item.id, liked)}
       onRepost={() => handleRepost(item.id)}
       onDeleted={(id) => removePost(id)}
@@ -255,7 +289,7 @@ export default function FeedScreen() {
       onExpired={(id) => removePost(id)}
       onBlockingChange={() => {}}
     />
-  ), [currentPostId, listH, likedPostIds, repostedIds, commentDeltas, searchMode, handleLikeChange, handleRepost, removePost, updatePost])
+  ), [currentPostId, listH, likedPostIds, repostedIds, commentDeltas, openComments, handleLikeChange, handleRepost, removePost, updatePost])
 
   const getItemLayout = useCallback((_: unknown, index: number) => (
     { length: listH, offset: listH * index, index }
@@ -300,8 +334,7 @@ export default function FeedScreen() {
         </View>
       )}
 
-      {/* Sem cartão: entra-se direto no momento. Em pesquisa, o painel ocupa o
-          topo. Fora dela, só um + discreto para criar (pesquisar vem da barra). */}
+      {/* Cabeçalho leve: marca à esquerda, ações livres à direita. */}
       {searchMode ? (
         <FeedHeader
           filteredGroups={filteredGroups}
@@ -315,14 +348,63 @@ export default function FeedScreen() {
           onCreatePress={handleCreatePress}
         />
       ) : (
-        <TouchableOpacity
-          style={[s.createBtn, { top: safeTop + 6 }]}
-          onPress={handleSearchOpen}
-          activeOpacity={0.7}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Search size={25} strokeWidth={2} color="#fff" />
-        </TouchableOpacity>
+        <>
+          <LinearGradient
+            colors={['rgba(0,0,0,0.46)', 'rgba(0,0,0,0.16)', 'transparent']}
+            locations={[0, 0.56, 1]}
+            style={[s.topScrim, { height: safeTop + 108 }]}
+            pointerEvents="none"
+          />
+
+          <View style={[s.topBar, { top: safeTop + 2 }]} pointerEvents="box-none">
+            <Text style={s.wordmark} accessibilityRole="header">luxee</Text>
+
+            <View style={s.topRightActions}>
+              <TouchableOpacity
+                style={s.topIconBtn}
+                onPress={handleSearchOpen}
+                activeOpacity={0.65}
+                accessibilityRole="button"
+                accessibilityLabel={t.feed_search_ph}
+              >
+                <Search size={24} strokeWidth={1.9} color="#fff" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={s.topIconBtn}
+                onPress={handleCirclePress}
+                activeOpacity={0.65}
+                accessibilityRole="button"
+                accessibilityLabel={circleInvite ? `${t.circle_errTitle}, ${t.pending}` : t.circle_errTitle}
+              >
+                {circleInvite && (
+                  <View style={s.circleInviteBadge}>
+                    <Camera size={9} strokeWidth={2.5} color="#fff" />
+                  </View>
+                )}
+                <Circle size={24} strokeWidth={1.9} color="#fff" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={s.topIconBtn}
+                onPress={handleCreatePress}
+                activeOpacity={0.65}
+                accessibilityRole="button"
+                accessibilityLabel={t.feed_create}
+              >
+                <Plus size={28} strokeWidth={2} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Quem comentou o post visível — por baixo da marca, canto superior esquerdo. */}
+          <View style={[s.commenters, { top: safeTop + 52 }]} pointerEvents="box-none">
+            <CommenterStack
+              commenters={activePost?.recentCommenters ?? []}
+              onPress={activePost ? () => openComments(activePost) : undefined}
+            />
+          </View>
+        </>
       )}
 
       {commentPost && (
@@ -338,13 +420,64 @@ export default function FeedScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.black },
-  // Criar — único elemento no topo, a flutuar sobre o momento
-  createBtn: {
+  topScrim: {
     position: 'absolute',
-    right: 14,
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 29,
+  },
+  topBar: {
+    position: 'absolute',
+    left: 16,
+    right: 8,
     zIndex: 30,
-    padding: 6,
+    height: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  wordmark: {
+    color: '#fff',
+    fontFamily: fonts.extraBold,
+    fontSize: 25,
+    lineHeight: 32,
+    letterSpacing: -1.25,
+    textShadowColor: 'rgba(0,0,0,0.45)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 5,
+  },
+  topRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  commenters: {
+    position: 'absolute',
+    left: 16,
+    // Sem `right`: a fila mede-se pelo conteúdo e não intercepta toques à direita.
+    zIndex: 30,
+  },
+  topIconBtn: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'visible',
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.35, shadowRadius: 5,
+  },
+  circleInviteBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    zIndex: 2,
+    width: 17,
+    height: 17,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(10,10,12,0.9)',
+    backgroundColor: colors.primary,
   },
   empty:     { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, backgroundColor: colors.black },
   emptyTxt:  { fontFamily: fonts.medium, fontSize: 14, color: 'rgba(255,255,255,0.7)' },

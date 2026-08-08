@@ -19,6 +19,7 @@ import ActionBar from './ActionBar'
 import PostAlbumCarousel from './PostAlbumCarousel'
 import { useAuthStore } from '../../store/auth.store'
 import { useFollowStore } from '../../store/follow.store'
+import { tabBarOccupiedHeight } from '../../components/TabBar/layout'
 
 const { width } = Dimensions.get('window')
 
@@ -47,10 +48,10 @@ interface Props {
 }
 
 // ─── Uma célula do pager: um momento por ecrã ───────────────────────────────
-// Pilha: status bar (livre) · vídeo · campo de comentário · navegação (livre).
-// O vídeo é uma janela entre a status bar e o campo. O autor e as ações
-// flutuam sobre o vídeo; comentar vive no campo por baixo. A célula é a única
-// dona do seu leitor — a FlatList monta/desmonta, sem player partilhado.
+// Pilha: status bar (livre) · vídeo · scrubber · navegação (livre). O campo de
+// comentário agora vive dentro da TabBar e fica ligado a este post pelo store.
+// A célula é a única dona do seu leitor — a FlatList monta/desmonta, sem player
+// partilhado.
 function FeedItem({
   post, isActive, cellHeight, liked, reposted, commentCount,
   onCommentPress, onLikeChange, onRepost, onExpired,
@@ -58,8 +59,6 @@ function FeedItem({
   const isFocused = useIsFocused()
   const { top: safeTop, bottom: safeBottom } = useSafeAreaInsets()
 
-  const myAvatar = useAuthStore((s) => s.user?.avatar ?? null)
-  const myName   = useAuthStore((s) => s.user?.name ?? '')
   const myId     = useAuthStore((s) => s.user?.id)
   const following = useFollowStore((s) => s.followingIds.has(post.user.id))
   const isSelf    = myId === post.user.id
@@ -70,13 +69,12 @@ function FeedItem({
   const uri     = resolveUrl(post.mediaUrl)
 
   // ── Geometria da pilha ──────────────────────────────────────────────────────
-  // De baixo para cima, com folga entre cada peça: navegação · campo · traço do
-  // tempo · vídeo. Valor estável (não useBottomTabBarHeight, que salta).
-  const DOCK_H     = 50
+  // De baixo para cima: navegação (já inclui o campo) · traço do tempo · vídeo.
+  // Partilhamos a geometria com a TabBar para não nascer um vazio entre peças.
   const TRACK_H    = 3
   const GAP        = 8
-  const dockBottom    = Math.max(safeBottom, 8) + 32        // campo, pouco acima da nav
-  const trackBottom   = dockBottom + DOCK_H + GAP           // traço, com folga do campo
+  const navTop        = tabBarOccupiedHeight(safeBottom)
+  const trackBottom   = navTop + GAP                         // traço, acima da navegação
   const videoBottom   = trackBottom + TRACK_H + GAP         // vídeo, com folga do traço
   const overlayBottom = videoBottom + 14                    // autor/ações no vídeo
   const videoFrame = { top: safeTop, bottom: videoBottom }
@@ -195,7 +193,7 @@ function FeedItem({
 
   return (
     <View style={[s.cell, { height: cellHeight }]}>
-      {/* ── Vídeo: janela entre a status bar e o campo de comentário.
+      {/* ── Vídeo: janela entre a status bar e a navegação.
              Média sempre filha direta da célula (não a envolver) para o
              leitor nativo assentar e renderizar. ── */}
       {isText ? (
@@ -219,6 +217,17 @@ function FeedItem({
       {/* Véu — legibilidade do autor/descrição sobre o vídeo */}
       {!isText && (
         <LinearGradient colors={['transparent', 'rgba(0,0,0,0.55)']} style={[s.scrim, { bottom: videoBottom }]} pointerEvents="none" />
+      )}
+
+      {/* Contraste lateral suave para as ações, sem desenhar uma cápsula. */}
+      {!post.isAnnouncement && (
+        <LinearGradient
+          colors={['transparent', 'rgba(0,0,0,0.34)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={[s.actionScrim, { top: safeTop, bottom: videoBottom }]}
+          pointerEvents="none"
+        />
       )}
 
       {/* Camada de toque — duplo toque para gostar.
@@ -291,17 +300,6 @@ function FeedItem({
         </View>
       )}
 
-      {/* ── Campo de comentário — por baixo do vídeo, acima da navegação.
-             Convida a responder à pessoa, não a um vazio. ── */}
-      <Pressable
-        style={[s.dock, { bottom: dockBottom, height: DOCK_H }]}
-        onPress={() => onCommentPress(post)}
-      >
-        <AvatarImage uri={resolveUrl(myAvatar)} name={myName} size={28} borderWidth={0} borderColor="transparent" />
-        <Text style={s.dockText}>
-          {isSelf ? 'Escrever um comentário…' : `Responder a ${post.user.name.split(' ')[0]}…`}
-        </Text>
-      </Pressable>
     </View>
   )
 }
@@ -312,6 +310,7 @@ const s = StyleSheet.create({
   cell:  { width, backgroundColor: '#000' },
   media: { position: 'absolute', left: 0, right: 0, backgroundColor: '#000' },
   scrim: { position: 'absolute', left: 0, right: 0, height: 190 },
+  actionScrim: { position: 'absolute', right: 0, width: 116 },
   tapLayer: { position: 'absolute', left: 0, right: 0 },
   spinner: { position: 'absolute', left: 0, right: 0, top: '42%' },
   bigHeart: { position: 'absolute', left: 0, right: 0, alignItems: 'center', top: '34%' },
@@ -356,12 +355,4 @@ const s = StyleSheet.create({
   track:     { borderRadius: 2, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.18)' },
   trackFill: { height: '100%', borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.95)' },
   playOverlay: { position: 'absolute', left: 0, right: 0, top: '40%', alignItems: 'center' },
-
-  // Campo de comentário — azul-escuro, pill (radius = metade da altura), sem border
-  dock: {
-    position: 'absolute', left: 14, right: 14,
-    flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12,
-    borderRadius: 25, backgroundColor: colors.commentField,
-  },
-  dockText: { color: 'rgba(255,255,255,0.6)', fontFamily: fonts.medium, fontSize: 14.5 },
 })

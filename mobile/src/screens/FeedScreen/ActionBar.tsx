@@ -1,22 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react'
 import {
-  View, Text, TouchableOpacity, StyleSheet, Share, Modal, Animated,
+  View, Text, Pressable, StyleSheet, Share, Modal, Animated,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { LinearGradient } from 'expo-linear-gradient'
 import { Heart, Forward, MessageCircle, Bookmark, MoreHorizontal } from 'lucide-react-native'
 
 import { Post } from '../../types'
-import { fonts } from '../../theme'
-
-// Vidro escuro real: base escura com um brilho no topo (não um gradiente branco
-// lavado). Dá profundidade e faz o ícone branco assentar com contraste.
-const CHIP_GRAD = ['rgba(72,72,80,0.55)', 'rgba(14,14,18,0.5)'] as const
+import { colors, fonts } from '../../theme'
 import * as postService from '../../services/post.service'
 import { updateCachedPost } from '../../db/database'
 import ReactionPicker from '../../components/ReactionPicker'
-import AvatarImage from '../../components/AvatarImage'
-import { useAuthStore } from '../../store/auth.store'
 import { useT } from '../../i18n'
 
 interface Props {
@@ -47,6 +40,68 @@ function fmt(n: number) {
   return String(n)
 }
 
+interface RailActionProps {
+  label: string
+  count?: string
+  selected?: boolean
+  onPress: () => void
+  onLongPress?: () => void
+  children: React.ReactNode
+}
+
+function RailAction({ label, count, selected, onPress, onLongPress, children }: RailActionProps) {
+  const scale = useRef(new Animated.Value(1)).current
+  const halo  = useRef(new Animated.Value(0)).current
+
+  function pressIn() {
+    Animated.parallel([
+      Animated.spring(scale, {
+        toValue: 0.88,
+        speed: 45,
+        bounciness: 4,
+        useNativeDriver: true,
+      }),
+      Animated.timing(halo, { toValue: 1, duration: 80, useNativeDriver: true }),
+    ]).start()
+  }
+
+  function pressOut() {
+    Animated.parallel([
+      Animated.spring(scale, {
+        toValue: 1,
+        speed: 22,
+        bounciness: 10,
+        useNativeDriver: true,
+      }),
+      Animated.timing(halo, { toValue: 0, duration: 180, useNativeDriver: true }),
+    ]).start()
+  }
+
+  return (
+    <Pressable
+      style={s.actionHit}
+      onPress={onPress}
+      onLongPress={onLongPress}
+      onPressIn={pressIn}
+      onPressOut={pressOut}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityValue={count !== undefined ? { text: count } : undefined}
+      accessibilityState={selected !== undefined ? { selected } : undefined}
+    >
+      <Animated.View style={[s.actionVisual, { transform: [{ scale }] }]}>
+        <View style={s.iconStage}>
+          <Animated.View style={[s.pressHalo, { opacity: halo }]} />
+          {children}
+        </View>
+        <View style={s.metricSlot}>
+          {count !== undefined && <Text style={s.railN} maxFontSizeMultiplier={1.3}>{count}</Text>}
+        </View>
+      </Animated.View>
+    </Pressable>
+  )
+}
+
 export default React.memo(function ActionBar({
   post, onCommentPress, liked: likedProp = false,
   onLikeChange, reposted: repostedProp = false, onRepost,
@@ -54,8 +109,6 @@ export default React.memo(function ActionBar({
 }: Props) {
   const { bottom: safeBottom } = useSafeAreaInsets()
   const t          = useT()
-  const myAvatar   = useAuthStore((s) => s.user?.avatar ?? null)
-  const myName     = useAuthStore((s) => s.user?.name ?? '')
 
   const [liked,      setLiked]      = useState(likedProp)
   const [reposted,   setReposted]   = useState(repostedProp)
@@ -150,51 +203,67 @@ export default React.memo(function ActionBar({
   }
 
   const isAnnouncement = post.isAnnouncement ?? false
-  const commenters = post.recentCommenters ?? []
 
   return (
     <>
-      {/* Coluna direita — ícones a flutuar, sem caixas. Like · Comentar ·
-          Partilhar · Guardar · Mais. Contadores discretos por baixo. */}
+      {/* Mesma linguagem do topo: ícones livres, traço leve e microinteração. */}
       {!isAnnouncement && (
         <View style={[s.rail, { bottom: bottomOffset ?? safeBottom + 96 }]} pointerEvents="box-none">
 
           {/* Like */}
-          <TouchableOpacity style={s.railBtn} onPress={handleLike} onLongPress={() => setShowReactions(true)} activeOpacity={0.7}>
-            <Heart size={28} strokeWidth={1.9} color={liked ? '#FF3B5C' : '#fff'} fill={liked ? '#FF3B5C' : 'transparent'} />
-            <Text style={s.railN}>{fmt(likeCount)}</Text>
+          <RailAction
+            label={t.nf_likes}
+            count={fmt(likeCount)}
+            selected={liked}
+            onPress={handleLike}
+            onLongPress={() => setShowReactions(true)}
+          >
+            <Heart
+              size={27}
+              strokeWidth={1.9}
+              color={liked ? colors.heart : '#fff'}
+              fill={liked ? colors.heart : 'transparent'}
+            />
             {hearts.map((h) => (
               <Animated.View
                 key={h.id}
                 pointerEvents="none"
+                accessible={false}
                 style={[s.burstHeart, { opacity: h.o, transform: [{ translateX: h.tx }, { translateY: h.ty }, { scale: h.s }] }]}
               >
-                <Heart size={14} strokeWidth={0} color="#FF3B5C" fill="#FF3B5C" />
+                <Heart size={14} strokeWidth={0} color={colors.heart} fill={colors.heart} />
               </Animated.View>
             ))}
-          </TouchableOpacity>
+          </RailAction>
 
           {/* Comentar */}
-          <TouchableOpacity style={s.railBtn} onPress={onCommentPress} activeOpacity={0.7}>
-            <View style={s.mirrorX}><MessageCircle size={27} strokeWidth={1.9} color="#fff" /></View>
-            <Text style={s.railN}>{fmt(commentCountProp ?? post._count?.comments ?? 0)}</Text>
-          </TouchableOpacity>
+          <RailAction
+            label={t.nf_comments}
+            count={fmt(commentCountProp ?? post._count?.comments ?? 0)}
+            onPress={onCommentPress}
+          >
+            <View style={s.mirrorX}><MessageCircle size={26} strokeWidth={1.9} color="#fff" /></View>
+          </RailAction>
 
           {/* Partilhar */}
-          <TouchableOpacity style={s.railBtn} onPress={handleShare} activeOpacity={0.7}>
-            <Forward size={27} strokeWidth={1.9} color="#fff" />
-            <Text style={s.railN}>{fmt(shareCount)}</Text>
-          </TouchableOpacity>
+          <RailAction label={t.mo_share} count={fmt(shareCount)} onPress={handleShare}>
+            <Forward size={26} strokeWidth={1.9} color="#fff" />
+          </RailAction>
 
           {/* Guardar — visual por agora */}
-          <TouchableOpacity style={s.railBtn} onPress={() => setSaved((v) => !v)} activeOpacity={0.7}>
-            <Bookmark size={26} strokeWidth={1.9} color="#fff" fill={saved ? '#fff' : 'transparent'} />
-          </TouchableOpacity>
+          <RailAction label={t.save} selected={saved} onPress={() => setSaved((v) => !v)}>
+            <Bookmark
+              size={25}
+              strokeWidth={1.9}
+              color={saved ? colors.primary : '#fff'}
+              fill={saved ? colors.primary : 'transparent'}
+            />
+          </RailAction>
 
           {/* Mais */}
-          <TouchableOpacity style={s.railBtn} onPress={handleShare} activeOpacity={0.7}>
+          <RailAction label={t.see_more} onPress={handleShare}>
             <MoreHorizontal size={26} strokeWidth={1.9} color="#fff" />
-          </TouchableOpacity>
+          </RailAction>
 
         </View>
       )}
@@ -209,27 +278,54 @@ export default React.memo(function ActionBar({
 })
 
 const s = StyleSheet.create({
-  // ── Coluna direita — ícones a flutuar, sem caixas ──────────────────────────
+  // Alinhada com o último botão do topo: centro a 32 px da margem direita.
   rail: {
     position: 'absolute',
-    right: 8,
+    right: 0,
+    width: 64,
     alignItems: 'center',
-    gap: 22,          // ritmo vertical constante
+    gap: 4,
     zIndex: 20,
   },
-  // Cada ação: ícone + contador por baixo, centrados. Sombra suave (não caixa)
-  // para o branco ler sobre média clara.
-  railBtn: {
+  actionHit: {
+    width: 64,
+    height: 53,
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 6,
+    justifyContent: 'center',
+  },
+  actionVisual: {
+    height: 53,
+    alignItems: 'center',
+    gap: 2,
+  },
+  iconStage: {
+    width: 44,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'visible',
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.35, shadowRadius: 5,
   },
+  pressHalo: {
+    position: 'absolute',
+    top: -2,
+    left: 2,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.13)',
+  },
+  metricSlot: {
+    height: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   railN: {
-    color: 'rgba(255,255,255,0.9)',
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    letterSpacing: 0.1,
+    color: 'rgba(255,255,255,0.88)',
+    fontFamily: fonts.semiBold,
+    fontSize: 11.5,
+    lineHeight: 15,
+    letterSpacing: 0,
     fontVariant: ['tabular-nums'],
     textShadowColor: 'rgba(0,0,0,0.4)',
     textShadowOffset: { width: 0, height: 1 },
@@ -241,8 +337,8 @@ const s = StyleSheet.create({
   // Centrado sobre o ícone do like (primeiro da coluna)
   burstHeart: {
     position: 'absolute',
-    top: 2,
-    left: 8,
+    top: 11,
+    left: 15,
     zIndex: 30,
   },
 })

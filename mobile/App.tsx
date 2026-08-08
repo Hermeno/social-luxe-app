@@ -6,174 +6,23 @@ import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
 import { useFonts } from 'expo-font'
-import * as Notifications from 'expo-notifications'
 import * as Location from 'expo-location'
-import { Image, Platform, StyleSheet, Text, View } from 'react-native'
+import { Image, StyleSheet, Text, View } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { LinearGradient } from 'expo-linear-gradient'
 import RootNavigator from './src/navigation/RootNavigator'
 import LanguageOnboardingScreen from './src/screens/LanguageOnboardingScreen'
-import { connectSocket, disconnectSocket } from './src/socket'
 import { useAuthStore } from './src/store/auth.store'
 import { useI18n } from './src/i18n'
-import { useNotificationStore } from './src/store/notification.store'
 import { useFriendsStore } from './src/store/friends.store'
-import { useMessageBadgeStore } from './src/store/messageBadge.store'
 import { getMyFollowerCount } from './src/services/follow.service'
-import { getIncoming as getCircleIncoming } from './src/services/circle.service'
 import { api, onTokenExpired } from './src/services/api'
 
 // Hold the native splash screen open until we explicitly release it.
 // Must be called before any rendering occurs.
 SplashScreen.preventAutoHideAsync().catch(() => {})
 
-const CHANNEL_ID  = 'messages'
-const PROJECT_ID  = '19550566-94a8-4992-8d1e-25df68e87569'
 const DARK        = '#0E0E12'
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-})
-
-async function ensureChannel() {
-  if (Platform.OS !== 'android') return
-  await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
-    name: 'Mensagens',
-    importance: Notifications.AndroidImportance.MAX,
-    vibrationPattern: [0, 250, 250, 250],
-    lightColor: '#CA2851',
-    sound: 'default',
-    enableVibrate: true,
-    showBadge: true,
-  }).catch(() => {})
-}
-
-async function registerForPushNotificationsAsync(): Promise<string | null> {
-  try {
-    const { status: existingStatus } = await Notifications.getPermissionsAsync()
-    let finalStatus = existingStatus
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync()
-      finalStatus = status
-    }
-    if (finalStatus !== 'granted') return null
-    const tokenData = await Notifications.getExpoPushTokenAsync({ projectId: PROJECT_ID })
-    return tokenData.data
-  } catch {
-    return null
-  }
-}
-
-function showMessageNotification(senderName: string, body: string, data: Record<string, unknown>) {
-  Notifications.scheduleNotificationAsync({
-    content: {
-      title: senderName,
-      body,
-      data,
-      sound: 'default',
-      ...(Platform.OS === 'android' ? { channelId: CHANNEL_ID } : {}),
-    },
-    trigger: null,
-  }).catch(() => {})
-}
-
-function SocketManager() {
-  const { token, isAuthenticated } = useAuthStore()
-  const { addNotification } = useNotificationStore()
-  const setCircleInvite = useNotificationStore((s) => s.setCircleInvite)
-  const { setTotalUnread, increment } = useMessageBadgeStore()
-  const notifListener = useRef<ReturnType<typeof Notifications.addNotificationReceivedListener> | null>(null)
-
-  useEffect(() => {
-    if (!isAuthenticated || !token) {
-      disconnectSocket()
-      return
-    }
-
-    ensureChannel()
-
-    const socket = connectSocket(token)
-
-    api.get('/users/connections')
-      .then((r) => {
-        const connections: { unreadCount: number }[] = r.data.data ?? r.data ?? []
-        const total = connections.reduce((s, c) => s + (c.unreadCount ?? 0), 0)
-        setTotalUnread(total)
-      })
-      .catch(() => {})
-
-    function onNewMessage(msg: any) {
-      const myId = useAuthStore.getState().user?.id
-      if (!msg.senderId || msg.senderId === myId) return
-      increment()
-      const senderName = msg.sender?.name ?? msg.senderName ?? 'Nova mensagem'
-      const body = msg.content
-        ? (msg.content.length > 80 ? msg.content.slice(0, 80) + '…' : msg.content)
-        : '📎 Enviou um ficheiro'
-      showMessageNotification(senderName, body, {
-        type: 'message',
-        senderId: msg.senderId,
-        senderName,
-        userAvatar: msg.sender?.avatar ?? null,
-      })
-    }
-    socket.on('message:new', onNewMessage)
-
-    // Convite de círculo (alguém chamou-me) → badge na tab da câmara
-    const onCircleCalled = () => setCircleInvite(true)
-    socket.on('circle:called', onCircleCalled)
-    // Seed inicial: já havia uma chamada pendente?
-    getCircleIncoming().then((r) => { if (r.call) setCircleInvite(true) }).catch(() => {})
-
-    socket.on('notification', (payload: any) => {
-      addNotification({
-        id: payload.id ?? String(Date.now()),
-        type: payload.type,
-        message: payload.message,
-        read: false,
-        createdAt: payload.createdAt ?? new Date().toISOString(),
-      })
-    })
-
-    registerForPushNotificationsAsync().then(async (pushToken) => {
-      if (pushToken) {
-        await AsyncStorage.setItem('push_token', pushToken).catch(() => {})
-        const platform = Platform.OS
-        api.post('/notifications/token', { token: pushToken, platform }).catch(() => {})
-      }
-    })
-
-    notifListener.current = Notifications.addNotificationReceivedListener((notification) => {
-      const data = notification.request.content.data as any
-      if (data?.type) {
-        addNotification({
-          id: String(Date.now()),
-          type: data.type,
-          message: notification.request.content.body ?? '',
-          read: false,
-          createdAt: new Date().toISOString(),
-        })
-      }
-    })
-
-    return () => {
-      socket.off('message:new', onNewMessage)
-      socket.off('circle:called', onCircleCalled)
-      socket.off('notification')
-      if (notifListener.current) {
-        notifListener.current.remove()
-      }
-    }
-  }, [isAuthenticated, token])
-
-  return null
-}
 
 function TokenExpiryWatcher() {
   const { logout } = useAuthStore()
@@ -190,7 +39,7 @@ function LocationSync() {
     if (!isAuthenticated) return
     ;(async () => {
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync()
+        const { status } = await Location.getForegroundPermissionsAsync()
         if (status !== 'granted') return
         const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
         await api.put('/users/profile', {
@@ -322,7 +171,6 @@ export default function App() {
           <>
             <LangInit />
             <TokenExpiryWatcher />
-            <SocketManager />
             <FollowerPoller />
             <LocationSync />
             <RootNavigator

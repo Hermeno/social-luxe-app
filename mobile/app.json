@@ -41,7 +41,9 @@
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ],
       "splash": {
         "image": "./assets/files/luxee-splash-icon.png",
@@ -71,6 +73,12 @@
           "photosPermission": "Permite ao luxee mostrar a tua galeria para publicares fotos e vídeos.",
           "savePhotosPermission": "Permite ao luxee guardar fotos na tua galeria.",
           "isAccessMediaLocationEnabled": true
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Permite ao luxee mostrar publicações, doações e círculos próximos de ti."
         }
       ],
       "expo-audio",

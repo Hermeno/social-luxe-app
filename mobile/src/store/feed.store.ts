@@ -1,11 +1,13 @@
 import { create } from 'zustand'
 import { Post } from '../types'
 
-/**
- * Tiny bridge between CreateScreen and FeedScreen.
- * After publishing, CreateScreen pushes the new post here.
- * FeedScreen listens and prepends it immediately.
- */
+export interface FeedCommentTarget {
+  postId: string
+  authorId: string
+  authorName: string
+}
+
+/** Shared signals between the feed and controls rendered outside its screen. */
 interface FeedStore {
   pendingPost: Post | null
   setPendingPost: (post: Post | null) => void
@@ -18,6 +20,12 @@ interface FeedStore {
   // Tocar em Home (já no feed) refresca: incrementa este sinal, o feed reage.
   homeTap: number
   bumpHomeTap: () => void
+  // Ponte mínima entre o post visível e o campo de comentário na TabBar.
+  activeCommentTarget: FeedCommentTarget | null
+  setActiveCommentTarget: (target: FeedCommentTarget | null) => void
+  requestedCommentPostId: string | null
+  requestComments: (postId: string) => void
+  clearCommentRequest: () => void
 }
 
 export const useFeedStore = create<FeedStore>((set) => ({
@@ -31,4 +39,9 @@ export const useFeedStore = create<FeedStore>((set) => ({
   setOpenSearch:    (v)     => set({ openSearch: v }),
   homeTap:          0,
   bumpHomeTap:      ()      => set((s) => ({ homeTap: s.homeTap + 1 })),
+  activeCommentTarget: null,
+  setActiveCommentTarget: (target) => set({ activeCommentTarget: target }),
+  requestedCommentPostId: null,
+  requestComments: (postId) => set({ requestedCommentPostId: postId }),
+  clearCommentRequest: () => set({ requestedCommentPostId: null }),
 }))
