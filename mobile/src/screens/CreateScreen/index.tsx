@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
+import SuggestionsSheet from '../../components/SuggestionsSheet'
+import { useMessagesStore } from '../../store/messages.store'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
-  KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Keyboard, Pressable,
+  KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Keyboard, Pressable, BackHandler,
 } from 'react-native'
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -9,7 +11,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs'
-import { useNavigation, useFocusEffect } from '@react-navigation/native'
+import { useNavigation, useFocusEffect, useIsFocused } from '@react-navigation/native'
 import { fonts } from '../../theme'
 import { createPost, createAlbum } from '../../services/post.service'
 import { createHalf } from '../../services/half.service'
@@ -21,6 +23,13 @@ import { UNION_ENABLED } from '../../config/features'
 import { Union } from '../../types'
 import { useFeedStore } from '../../store/feed.store'
 import { useAuthStore } from '../../store/auth.store'
+import { useOverlayStore } from '../../store/overlay.store'
+import { cachePosts, enqueueSyncOp } from '../../db/database'
+import {
+  buildLocalPost, clearOutboxMedia, makeTempPostId, persistOutboxMedia,
+  type OutboxPost,
+} from '../../db/outbox'
+import { isConnected } from '../../services/netinfo.service'
 import { toast } from '../../utils/toast'
 import { useT } from '../../i18n'
 
@@ -49,6 +58,19 @@ type Media = { uri: string; type: 'image' | 'video' }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function CreateScreen() {
+
+  // A TabBar pede a folha de sugestões; renderiza-se aqui em vez de saltar
+  // para o Chat, para não tirar a pessoa de onde está.
+  const isFocused = useIsFocused()
+  const suggestionsRequested = useMessagesStore((st) => st.suggestionsRequested)
+  const consumedSuggestionsRef = useRef(0)
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  useEffect(() => {
+    if (!isFocused || suggestionsRequested <= consumedSuggestionsRef.current) return
+    consumedSuggestionsRef.current = suggestionsRequested
+    setShowSuggestions(true)
+  }, [isFocused, suggestionsRequested])
+
   const nav            = useNavigation()
   const insets         = useSafeAreaInsets()
   const tabBarHeight   = useBottomTabBarHeight()
@@ -82,11 +104,6 @@ export default function CreateScreen() {
   // Modo texto: sem media → a página inteira fica com a cor selecionada e o texto é branco
   const textMode   = !media && !album
 
-  // Floating close button adapts to the current frame background
-  const isDarkFrame  = !!media || !!album || (textMode && bgKey !== 'peach')
-  const closeIconClr = isDarkFrame ? '#fff' : '#1A1A1A'
-  const closeBgClr   = isDarkFrame ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.07)'
-
   const videoUri = media?.type === 'video' ? media.uri : null
   const player   = useVideoPlayer(videoUri, (p) => { p.loop = true; p.muted = false; if (videoUri) p.play() })
 
@@ -99,13 +116,28 @@ export default function CreateScreen() {
     return () => sub.remove()
   }, [player])
 
-  // Vídeo novo entra sempre a tocar
-  useEffect(() => { if (videoUri) setPlaying(true) }, [videoUri])
+  // Vídeo novo entra sempre a tocar e audível; o estado visual acompanha o
+  // setup do player quando se troca de ficheiro.
+  useEffect(() => {
+    if (!videoUri) return
+    setPlaying(true)
+    setMuted(false)
+  }, [videoUri])
 
   // Nunca deixar som a tocar por baixo de outro ecrã
   useFocusEffect(useCallback(() => {
     return () => { try { player.pause() } catch {} }
   }, [player]))
+
+  // Upload em curso é uma operação atómica: a barra desaparece, o voltar do
+  // Android é consumido e uma camada transparente bloqueia o editor.
+  useEffect(() => {
+    if (!loading) return
+    const { push, pop } = useOverlayStore.getState()
+    push()
+    const back = BackHandler.addEventListener('hardwareBackPress', () => true)
+    return () => { back.remove(); pop() }
+  }, [loading])
 
   function togglePlay() {
     try { playing ? player.pause() : player.play() } catch {}
@@ -135,6 +167,9 @@ export default function CreateScreen() {
       }
       setAlbum(images.slice(0, 10))
       setMedia(null)
+      // O endpoint de álbum não recebe atribuição de parceiro nem anúncio.
+      setIncludePartner(false)
+      setIsAnnouncement(false)
       return
     }
 
@@ -152,7 +187,11 @@ export default function CreateScreen() {
 
   // Publicar sozinho é o caminho normal. A metade é uma escolha a mais — para
   // quem quer que a publicação só exista se outra pessoa entrar nela.
-  const canMakeHalf = !!media && !isAnnouncement
+  //
+  // Escondido a pedido do Herminio (2026-08-11). O fluxo continua inteiro por
+  // baixo — `handleStartHalf`, o ecrã Halves e o serviço não foram tocados;
+  // basta devolver isto a `!!media && !isAnnouncement` para o botão voltar.
+  const canMakeHalf = false
 
   function handlePublish() {
     if (!canPublish || loading) return
@@ -166,8 +205,74 @@ export default function CreateScreen() {
     setPickerOpen(true)
   }
 
+  /**
+   * Publicar sem rede. A publicação entra na feed já, marcada como pendente na
+   * cache, e sai da fila mal a ligação volte. A media é copiada para uma pasta
+   * durável primeiro — o URI da galeria vive na cache do sistema e pode
+   * desaparecer antes do envio.
+   */
+  async function publishOffline(): Promise<boolean> {
+    if (!user) return false
+
+    const tempId = makeTempPostId()
+    const sources = album ?? (media ? [media.uri] : [])
+    const persisted: string[] = []
+    try {
+      for (let i = 0; i < sources.length; i++) {
+        persisted.push(await persistOutboxMedia(sources[i], tempId, i))
+      }
+    } catch {
+      await clearOutboxMedia(persisted)
+      return false
+    }
+
+    const outbox: OutboxPost = {
+      tempId,
+      kind: album ? 'album' : media ? 'media' : 'text',
+      mediaUris: persisted,
+      mediaType: album ? 'IMAGE' : media ? (media.type === 'video' ? 'VIDEO' : 'IMAGE') : 'TEXT',
+      caption: caption.trim() || undefined,
+      bgColor: !media && !album ? `${activeBg.bg}|${activeBg.bg}` : undefined,
+      partnerUserId: hasPartner && includePartner && !isAnnouncement ? otherMember!.id : undefined,
+      isAnnouncement,
+      deviceModel: getDeviceModel(),
+    }
+
+    const localPost = buildLocalPost(outbox, {
+      id: user.id,
+      name: user.name,
+      username: user.username,
+      avatar: user.avatar,
+      viewsPublic: user.viewsPublic,
+      showDevice: user.showDevice,
+      statusLabel: user.statusLabel,
+      lastSeen: user.lastSeen,
+    })
+
+    await cachePosts([localPost], 'pending')
+    await enqueueSyncOp('post', tempId, 'create', outbox as unknown as object)
+    setPendingPost(localPost)
+    return true
+  }
+
   async function publishAsPost() {
     setLoading(true)
+
+    // Sem rede: guarda e sai. Bloquear a publicação por falta de ligação é
+    // exatamente o que uma app offline-first não deve fazer.
+    if (!isConnected()) {
+      const queued = await publishOffline()
+      setLoading(false)
+      if (queued) {
+        resetComposer()
+        toast.success(t.create_queued_title, t.create_queued_sub)
+        nav.navigate('Feed' as never)
+      } else {
+        toast.error(t.error, t.create_queued_fail)
+      }
+      return
+    }
+
     try {
       const partnerId   = hasPartner && includePartner && !isAnnouncement ? otherMember!.id : undefined
       const deviceModel = getDeviceModel()
@@ -214,7 +319,7 @@ export default function CreateScreen() {
     try {
       await createHalf(media.uri, caption.trim() || undefined, targetId ?? undefined)
       resetComposer()
-      toast.success('Metade criada', targetId ? 'Agora falta a outra pessoa.' : 'Aberta — falta quem a complete.')
+      toast.success(t.create_half_created, targetId ? t.create_half_waiting : t.create_half_open_waiting)
       nav.navigate('Halves' as never)
     } catch (e: unknown) {
       toast.error(t.error, publishError(e))
@@ -224,7 +329,7 @@ export default function CreateScreen() {
   }
 
   function publishError(e: unknown): string {
-    if ((e as any)?.response?.status === 413) return 'Vídeo demasiado grande. Máximo 50 MB.'
+    if ((e as any)?.response?.status === 413) return t.create_video_too_large
     return (e as any)?.response?.data?.message ?? (e instanceof Error ? e.message : t.chat_retry)
   }
 
@@ -239,18 +344,54 @@ export default function CreateScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={[s.root, textMode && { backgroundColor: activeBg.bg }]}
+      style={s.root}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      {/* ── Floating close ── */}
-      <TouchableOpacity
-        style={[s.closeBtn, { top: insets.top + 12, backgroundColor: closeBgClr }]}
-        onPress={() => { Keyboard.dismiss(); (nav as any).jumpTo('Feed') }}
-        hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-        activeOpacity={0.8}
+      {/* ── Linear header: no floating controls over the canvas ── */}
+      <View
+        style={[
+          s.header,
+          { paddingTop: insets.top },
+          textMode ? { backgroundColor: activeBg.bg } : s.headerMedia,
+        ]}
       >
-        <Ionicons name="close" size={21} color={closeIconClr} />
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={s.headerAction}
+          onPress={() => { Keyboard.dismiss(); (nav as any).jumpTo('Feed') }}
+          disabled={loading}
+          activeOpacity={0.65}
+          accessibilityRole="button"
+          accessibilityLabel={t.cancel}
+          accessibilityState={{ disabled: loading }}
+        >
+          <Ionicons name="close" size={22} color="#fff" />
+        </TouchableOpacity>
+
+        <View style={s.headerIdentity} pointerEvents="none">
+          <View style={s.brandSignal}>
+            <View style={s.brandSignalLine} />
+            <View style={s.brandSignalDot} />
+          </View>
+          <Text style={s.headerTitle}>{t.feed_create}</Text>
+        </View>
+
+        <TouchableOpacity
+          style={[s.headerAction, s.headerActionEnd]}
+          onPress={pickMedia}
+          disabled={loading}
+          activeOpacity={0.65}
+          accessibilityRole="button"
+          accessibilityLabel={textMode ? t.create_addMedia : t.create_change}
+          accessibilityState={{ disabled: loading }}
+        >
+          <Ionicons
+            name={textMode ? 'image-outline' : album ? 'images-outline' : 'swap-horizontal'}
+            size={18}
+            color="#fff"
+          />
+          <Text style={s.headerActionText}>{textMode ? t.create_media : t.create_change}</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* ── Frame — the live post preview ── */}
       <View style={[s.frame, !media && !album && { backgroundColor: activeBg.bg }]}>
@@ -259,17 +400,29 @@ export default function CreateScreen() {
           <>
             <PostAlbumGrid urls={album} />
             {hasText && (
-              <LinearGradient colors={['transparent', 'rgba(0,0,0,0.62)']} style={s.mediaCaption}>
+              <LinearGradient
+                colors={['transparent', 'rgba(0,0,0,0.62)']}
+                style={s.mediaCaption}
+                pointerEvents="none"
+              >
                 <Text style={s.mediaCaptionTxt} numberOfLines={3}>{caption}</Text>
               </LinearGradient>
             )}
-            <View style={[s.mediaControls, { top: insets.top + 54 }]}>
-              <TouchableOpacity style={s.clearBtn} onPress={() => setAlbum(null)} activeOpacity={0.85}>
-                <Ionicons name="close" size={15} color="#fff" />
-              </TouchableOpacity>
-              <TouchableOpacity style={s.changeBtn} onPress={pickMedia} activeOpacity={0.85}>
-                <Ionicons name="images-outline" size={13} color="#fff" />
-                <Text style={s.changeBtnTxt}>{album.length} {t.create_photos}</Text>
+            <View style={s.canvasRail}>
+              <View style={s.canvasRailMeta}>
+                <View style={s.canvasRailSignal} />
+                <Text style={s.canvasRailText}>{album.length} {t.create_photos}</Text>
+              </View>
+              <TouchableOpacity
+                style={s.canvasRailAction}
+                onPress={() => setAlbum(null)}
+                disabled={loading}
+                activeOpacity={0.65}
+                accessibilityRole="button"
+                accessibilityLabel={t.cancel}
+                accessibilityState={{ disabled: loading }}
+              >
+                <Ionicons name="close" size={19} color="#fff" />
               </TouchableOpacity>
             </View>
           </>
@@ -285,26 +438,22 @@ export default function CreateScreen() {
                   nativeControls={false}
                 />
                 {/* Tocar em qualquer sítio do vídeo pausa — o alvo grande é o próprio vídeo */}
-                <Pressable style={StyleSheet.absoluteFill} onPress={togglePlay} />
+                <Pressable
+                  style={StyleSheet.absoluteFill}
+                  onPress={togglePlay}
+                  disabled={loading}
+                  accessibilityRole="button"
+                  accessibilityLabel={playing ? t.create_pause : t.create_play}
+                  accessibilityState={{ disabled: loading }}
+                />
 
                 {/* Símbolo central: só aparece em pausa, para não tapar o vídeo a tocar */}
                 {!playing && (
                   <View style={s.playOverlay} pointerEvents="none">
-                    <View style={s.playCircle}>
-                      <Ionicons name="play" size={30} color="#fff" style={{ marginLeft: 3 }} />
-                    </View>
+                    <Ionicons name="play" size={38} color="#fff" style={{ marginLeft: 3 }} />
+                    <View style={s.playSignal} />
                   </View>
                 )}
-
-                {/* Pausa e som, canto inferior direito */}
-                <View style={[s.videoCtrls, { bottom: hasText ? 96 : 20 }]}>
-                  <TouchableOpacity style={s.videoBtn} onPress={togglePlay} activeOpacity={0.8}>
-                    <Ionicons name={playing ? 'pause' : 'play'} size={17} color="#fff" />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={s.videoBtn} onPress={toggleMute} activeOpacity={0.8}>
-                    <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={17} color="#fff" />
-                  </TouchableOpacity>
-                </View>
               </>
             ) : (
               <Image
@@ -319,27 +468,54 @@ export default function CreateScreen() {
               <LinearGradient
                 colors={['transparent', 'rgba(0,0,0,0.62)']}
                 style={s.mediaCaption}
+                pointerEvents="none"
               >
                 <Text style={s.mediaCaptionTxt} numberOfLines={3}>{caption}</Text>
               </LinearGradient>
             )}
 
-            {/* Media controls — below the floating close button */}
-            <View style={[s.mediaControls, { top: insets.top + 54 }]}>
+            {/* One continuous utility rail; every action keeps a 48 px target. */}
+            <View style={s.canvasRail}>
+              <View style={s.canvasRailMeta}>
+                <View style={s.canvasRailSignal} />
+                <Text style={s.canvasRailText}>{t.create_media}</Text>
+              </View>
+              {media.type === 'video' && (
+                <>
+                  <TouchableOpacity
+                    style={s.canvasRailAction}
+                    onPress={togglePlay}
+                    disabled={loading}
+                    activeOpacity={0.65}
+                    accessibilityRole="button"
+                    accessibilityLabel={playing ? t.create_pause : t.create_play}
+                    accessibilityState={{ disabled: loading }}
+                  >
+                    <Ionicons name={playing ? 'pause' : 'play'} size={18} color="#fff" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={s.canvasRailAction}
+                    onPress={toggleMute}
+                    disabled={loading}
+                    activeOpacity={0.65}
+                    accessibilityRole="button"
+                    accessibilityLabel={muted ? t.create_unmute : t.create_mute}
+                    accessibilityState={{ disabled: loading }}
+                  >
+                    <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={18} color="#fff" />
+                  </TouchableOpacity>
+                </>
+              )}
               <TouchableOpacity
-                style={s.clearBtn}
+                style={s.canvasRailAction}
                 onPress={() => setMedia(null)}
-                activeOpacity={0.85}
+                disabled={loading}
+                activeOpacity={0.65}
+                accessibilityRole="button"
+                accessibilityLabel={t.cancel}
+                accessibilityState={{ disabled: loading }}
               >
-                <Ionicons name="close" size={15} color="#fff" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={s.changeBtn}
-                onPress={pickMedia}
-                activeOpacity={0.85}
-              >
-                <Ionicons name="swap-horizontal" size={13} color="#fff" />
-                <Text style={s.changeBtnTxt}>{t.create_change}</Text>
+                <Ionicons name="close" size={19} color="#fff" />
               </TouchableOpacity>
             </View>
           </>
@@ -348,12 +524,7 @@ export default function CreateScreen() {
           // Sem media, a área de cor *é* o campo. Não há caixinha para procurar
           // nem botão "escrever": toca em qualquer sítio e escreve. E o que
           // escreves já está com o aspeto que vai ter depois de publicado.
-          <View style={[s.composeArea, { paddingTop: insets.top + 26 }]}>
-            <TouchableOpacity style={s.addMedia} onPress={pickMedia} activeOpacity={0.85}>
-              <Ionicons name="images" size={17} color="#fff" />
-              <Text style={s.addMediaTxt}>{t.create_addMedia}</Text>
-            </TouchableOpacity>
-
+          <View style={s.composeArea}>
             <TextInput
               ref={captionRef}
               style={s.bigInput}
@@ -365,124 +536,158 @@ export default function CreateScreen() {
               maxLength={280}
               textAlign="center"
               selectionColor="#fff"
+              editable={!loading}
             />
+            <View style={s.textCounter} pointerEvents="none">
+              <View style={s.textCounterLine} />
+              <Text style={s.textCounterText}>{caption.length}/280</Text>
+            </View>
           </View>
         )}
       </View>
 
-      {/* ── Panel ── */}
-      <View style={[s.panel, { paddingBottom: tabBarHeight + 8 }, textMode && s.panelText]}>
+      {/* ── Paper panel: a single continuous surface divided by hairlines ── */}
+      <View style={s.panel}>
+        <ScrollView
+          style={s.panelScroll}
+          bounces={false}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          scrollEnabled={!loading}
+        >
+          {!textMode && (
+            <View style={s.captionSection}>
+              <View style={s.sectionHeader}>
+                <Text style={s.sectionLabel}>{t.create_captionPh}</Text>
+                <Text style={s.counter}>{caption.length}/280</Text>
+              </View>
+              <TextInput
+                style={s.captionInput}
+                value={caption}
+                onChangeText={setCaption}
+                multiline
+                maxLength={280}
+                textAlignVertical="top"
+                selectionColor="#FF7A1C"
+                editable={!loading}
+              />
+            </View>
+          )}
 
-        {/* Legenda — só com media. Sem media, o campo é a própria área de cor. */}
-        {!textMode && (
-          <TextInput
-            style={s.captionInput}
-            placeholder={t.create_captionPh}
-            placeholderTextColor="#C4C4C4"
-            value={caption}
-            onChangeText={setCaption}
-            multiline
-            maxLength={280}
-            textAlignVertical="top"
-          />
-        )}
+          {textMode && (
+            <View style={s.paletteSection}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={s.swatchScrollContent}
+                keyboardShouldPersistTaps="handled"
+                scrollEnabled={!loading}
+              >
+                {BG_KEYS.map((key) => {
+                  const selected = bgKey === key
+                  return (
+                    <TouchableOpacity
+                      key={key}
+                      style={s.swatchTarget}
+                      onPress={() => setBgKey(key)}
+                      disabled={loading}
+                      activeOpacity={0.68}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected, disabled: loading }}
+                    >
+                      <View style={[s.swatch, { backgroundColor: BG[key].bg }]} />
+                      <View style={[s.swatchMarker, selected && s.swatchMarkerOn]} />
+                    </TouchableOpacity>
+                  )
+                })}
+              </ScrollView>
+            </View>
+          )}
 
-        {/* Bg swatches + media link — only for text posts */}
-        {textMode && (
-          <View style={s.swatchRow}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={s.swatchScroll}
-              contentContainerStyle={s.swatchScrollContent}
-              keyboardShouldPersistTaps="handled"
-            >
-              {BG_KEYS.map((key) => (
-                <TouchableOpacity
-                  key={key}
-                  style={[s.swatchRing, bgKey === key && s.swatchRingActiveLight]}
-                  onPress={() => setBgKey(key)}
-                  activeOpacity={0.8}
-                >
-                  <View style={[s.swatchDot, { backgroundColor: BG[key].bg }]} />
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            <View style={s.swatchSepLight} />
-
-            <TouchableOpacity style={s.mediaLink} onPress={pickMedia} activeOpacity={0.7}>
-              <Ionicons name="image-outline" size={16} color="rgba(255,255,255,0.85)" />
-              <Text style={s.mediaLinkTxtLight}>{t.create_media}</Text>
-            </TouchableOpacity>
+          <View style={s.optionRow}>
+            <Ionicons name="time-outline" size={19} color="#5C5C63" />
+            <Text style={s.optionText}>{t.feed_visible_24h}</Text>
+            <View style={s.optionMicroSignal}>
+              <View style={s.optionMicroLine} />
+              <View style={s.optionMicroDot} />
+            </View>
           </View>
-        )}
 
-        {/* Options row */}
-        <View style={s.optRow}>
-          <Ionicons name="time-outline" size={13} color={textMode ? 'rgba(255,255,255,0.7)' : '#C8C8C8'} />
-          <Text style={[s.timerTxt, textMode && { color: 'rgba(255,255,255,0.7)' }]}>{t.feed_visible_24h}</Text>
-
-          <View style={{ flex: 1 }} />
-
-          {hasPartner && !isAnnouncement && (
+          {hasPartner && !isAnnouncement && !album && (
             <TouchableOpacity
-              style={[s.chip, textMode && s.chipLight, includePartner && s.chipOn]}
+              style={s.optionRow}
               onPress={() => setIncludePartner((v) => !v)}
-              activeOpacity={0.8}
+              disabled={loading}
+              activeOpacity={0.68}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: includePartner, disabled: loading }}
             >
               <Ionicons
                 name={includePartner ? 'heart' : 'heart-outline'}
-                size={12}
-                color={includePartner ? '#fff' : textMode ? '#fff' : '#FF7A1C'}
+                size={19}
+                color={includePartner ? '#FF7A1C' : '#5C5C63'}
               />
-              <Text style={[s.chipTxt, textMode && s.chipTxtLight, includePartner && s.chipTxtOn]}>
-                {otherMember!.name}
-              </Text>
+              <Text style={s.optionText}>{otherMember!.name}</Text>
+              <View style={[s.stateMark, includePartner && s.stateMarkOn]}>
+                <View style={[s.stateMarkDot, includePartner && s.stateMarkDotOn]} />
+              </View>
             </TouchableOpacity>
           )}
 
-          {isAdmin && (
+          {isAdmin && !album && (
             <TouchableOpacity
-              style={[s.chip, textMode && s.chipLight, isAnnouncement && s.chipOn]}
+              style={s.optionRow}
               onPress={() => setIsAnnouncement((v) => !v)}
-              activeOpacity={0.8}
+              disabled={loading}
+              activeOpacity={0.68}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: isAnnouncement, disabled: loading }}
             >
               <Ionicons
                 name="megaphone-outline"
-                size={12}
-                color={isAnnouncement ? '#fff' : textMode ? '#fff' : '#777'}
+                size={19}
+                color={isAnnouncement ? '#FF7A1C' : '#5C5C63'}
               />
-              <Text style={[s.chipTxt, textMode && s.chipTxtLight, isAnnouncement && s.chipTxtOn]}>{t.create_announce}</Text>
+              <Text style={s.optionText}>{t.create_announce}</Text>
+              <View style={[s.stateMark, isAnnouncement && s.stateMarkOn]}>
+                <View style={[s.stateMarkDot, isAnnouncement && s.stateMarkDotOn]} />
+              </View>
             </TouchableOpacity>
           )}
-        </View>
 
-        {/* Publish */}
-        <TouchableOpacity
-          style={[s.publishBtn, textMode && s.publishBtnLight, (!canPublish || loading) && s.publishBtnOff]}
-          onPress={handlePublish}
-          disabled={!canPublish || loading}
-          activeOpacity={0.88}
-        >
-          {loading
-            ? <ActivityIndicator color={textMode ? '#1A1A1A' : '#fff'} size="small" />
-            : <Text style={[s.publishBtnTxt, textMode && { color: '#1A1A1A' }]}>{t.create_publish}</Text>
-          }
-        </TouchableOpacity>
+          {canMakeHalf && (
+            <TouchableOpacity
+              style={s.optionRow}
+              onPress={handleStartHalf}
+              disabled={loading}
+              activeOpacity={0.68}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: loading }}
+            >
+              <Ionicons name="contrast-outline" size={19} color="#5C5C63" />
+              <Text style={s.optionText}>{t.create_half}</Text>
+              <Ionicons name="chevron-forward" size={17} color="#A8A8AF" />
+            </TouchableOpacity>
+          )}
+        </ScrollView>
 
-        {/* Metade — a publicação só existe se outra pessoa puser a dela */}
-        {canMakeHalf && (
+        <View style={[s.actionArea, { paddingBottom: tabBarHeight + 8 }]}>
           <TouchableOpacity
-            style={[s.halfBtn, textMode && s.halfBtnLight]}
-            onPress={handleStartHalf}
-            disabled={loading}
-            activeOpacity={0.85}
+            style={[s.publishBtn, (!canPublish || loading) && s.publishBtnOff]}
+            onPress={handlePublish}
+            disabled={!canPublish || loading}
+            activeOpacity={0.82}
+            accessibilityRole="button"
+            accessibilityLabel={t.create_publish}
+            accessibilityState={{ disabled: !canPublish || loading, busy: loading }}
           >
-            <Ionicons name="contrast-outline" size={15} color={textMode ? '#fff' : '#1A1A1A'} />
-            <Text style={[s.halfBtnTxt, textMode && { color: '#fff' }]}>Publicar como metade</Text>
+            <View style={s.publishSignal} />
+            {loading
+              ? <ActivityIndicator color="#fff" size="small" />
+              : <Text style={s.publishBtnTxt}>{t.create_publish}</Text>
+            }
           </TouchableOpacity>
-        )}
+        </View>
       </View>
 
       <GalleryPicker
@@ -497,6 +702,10 @@ export default function CreateScreen() {
         onClose={() => setPickerOpen(false)}
         onPick={handlePickTarget}
       />
+
+      {loading && <View style={s.interactionLock} pointerEvents="auto" />}
+
+      {showSuggestions && <SuggestionsSheet onClose={() => setShowSuggestions(false)} />}
     </KeyboardAvoidingView>
   )
 }
@@ -504,264 +713,295 @@ export default function CreateScreen() {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#fff' },
 
-  // Floating close
-  closeBtn: {
-    position:       'absolute',
-    left:           16,
-    zIndex:         20,
-    width:          34,
-    height:         34,
-    borderRadius:   17,
-    alignItems:     'center',
-    justifyContent: 'center',
+  header: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.22)',
   },
-
-  // Frame — fills all space above the panel
-  frame: {
-    flex:     1,
-    overflow: 'hidden',
-  },
-
-  // Área de escrita — sem media, ocupa o frame todo e é ela própria o campo
-  composeArea: {
-    flex:              1,
-    alignItems:        'center',
-    paddingHorizontal: 28,
-    gap:               20,
-  },
-  addMedia: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               8,
+  headerMedia: { backgroundColor: '#050506' },
+  headerAction: {
+    width: 104,
+    height: 52,
     paddingHorizontal: 16,
-    paddingVertical:   10,
-    borderRadius:      22,
-    borderWidth:       1.5,
-    borderColor:       'rgba(255,255,255,0.45)',
-    backgroundColor:   'rgba(255,255,255,0.12)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
   },
-  addMediaTxt: { fontFamily: fonts.semiBold, fontSize: 14, color: '#fff', letterSpacing: -0.2 },
+  headerActionEnd: { justifyContent: 'flex-end' },
+  headerActionText: {
+    color: '#fff',
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    letterSpacing: 0.2,
+  },
+  headerIdentity: {
+    flex: 1,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  brandSignal: { height: 4, flexDirection: 'row', alignItems: 'center', gap: 3 },
+  brandSignalLine: { width: 18, height: 2, backgroundColor: '#FF7A1C' },
+  brandSignalDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: '#FF7A1C' },
+  headerTitle: {
+    color: '#fff',
+    fontFamily: fonts.semiBold,
+    fontSize: 14,
+    letterSpacing: 0.45,
+  },
 
-  // O campo tem o aspeto do post publicado — escrever já é ver o resultado
+  frame: {
+    flex: 1,
+    minHeight: 156,
+    overflow: 'hidden',
+    backgroundColor: '#050506',
+  },
+  composeArea: {
+    flex: 1,
+    paddingHorizontal: 24,
+  },
   bigInput: {
-    flex:          1,
-    alignSelf:     'stretch',
-    fontFamily:    fonts.semiBold,
-    fontSize:      26,
-    lineHeight:    38,
+    flex: 1,
+    alignSelf: 'stretch',
+    fontFamily: fonts.semiBold,
+    fontSize: 26,
+    lineHeight: 38,
     letterSpacing: -0.5,
-    color:         '#fff',
-    padding:       0,
+    color: '#fff',
+    paddingHorizontal: 0,
+    paddingVertical: 24,
+  },
+  textCounter: {
+    position: 'absolute',
+    right: 16,
+    bottom: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  textCounterLine: { width: 16, height: 2, backgroundColor: '#FF7A1C' },
+  textCounterText: {
+    color: 'rgba(255,255,255,0.72)',
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    fontVariant: ['tabular-nums'],
   },
 
-  // Media state — caption overlay
   mediaCaption: {
-    position:          'absolute',
-    bottom:            0,
-    left:              0,
-    right:             0,
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     paddingHorizontal: 22,
-    paddingTop:        72,
-    paddingBottom:     28,
+    paddingTop: 72,
+    paddingBottom: 24,
   },
   mediaCaptionTxt: {
-    fontFamily:       fonts.semiBold,
-    fontSize:         16,
-    color:            '#fff',
-    textAlign:        'center',
-    lineHeight:       24,
-    textShadowColor:  'rgba(0,0,0,0.45)',
+    fontFamily: fonts.semiBold,
+    fontSize: 16,
+    color: '#fff',
+    textAlign: 'center',
+    lineHeight: 24,
+    textShadowColor: 'rgba(0,0,0,0.45)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
+    textShadowRadius: 3,
   },
 
-  // Media controls row (clear + change)
-  mediaControls: {
-    position:      'absolute',
-    right:         14,
+  canvasRail: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 48,
     flexDirection: 'row',
-    alignItems:    'center',
-    gap:           6,
+    alignItems: 'center',
+    backgroundColor: 'rgba(5,5,6,0.54)',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.2)',
   },
-
-  // ── Controlos de vídeo ──
+  canvasRailMeta: {
+    flex: 1,
+    minWidth: 0,
+    height: 48,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  canvasRailSignal: { width: 18, height: 2, backgroundColor: '#FF7A1C' },
+  canvasRailText: {
+    color: '#fff',
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    letterSpacing: 0.2,
+  },
+  canvasRailAction: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: 'rgba(255,255,255,0.2)',
+  },
   playOverlay: {
     ...StyleSheet.absoluteFillObject,
-    alignItems: 'center', justifyContent: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  playCircle: {
-    width: 68, height: 68, borderRadius: 34,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.85)',
-  },
-  videoCtrls: {
-    position: 'absolute', right: 14,
-    flexDirection: 'row', gap: 8,
-  },
-  videoBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  clearBtn: {
-    width:           30,
-    height:          30,
-    borderRadius:    15,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    alignItems:      'center',
-    justifyContent:  'center',
-  },
-  changeBtn: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               5,
-    backgroundColor:   'rgba(0,0,0,0.45)',
-    borderRadius:      20,
-    paddingHorizontal: 12,
-    paddingVertical:   6,
-  },
-  changeBtnTxt: {
-    fontFamily: fonts.semiBold,
-    fontSize:   12,
-    color:      '#fff',
-  },
+  playSignal: { width: 24, height: 2, marginTop: 10, backgroundColor: '#FF7A1C' },
 
-  // Panel
   panel: {
-    backgroundColor:   '#fff',
-    borderTopWidth:    StyleSheet.hairlineWidth,
-    borderTopColor:    '#E8E8E8',
-    paddingTop:        14,
-    paddingHorizontal: 16,
-    gap:               10,
+    maxHeight: '58%',
+    flexShrink: 0,
+    backgroundColor: '#FAFAF8',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#D8D8D5',
   },
-  // Modo texto: painel transparente para mostrar a cor da página, sem risca no topo
-  panelText: { backgroundColor: 'transparent', borderTopColor: 'transparent' },
-
-  // Caption input
+  panelScroll: { flexShrink: 1 },
+  captionSection: {
+    minHeight: 92,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#DEDEDA',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 5,
+  },
+  sectionLabel: {
+    flex: 1,
+    color: '#77777D',
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    letterSpacing: 0.45,
+    textTransform: 'uppercase',
+  },
+  counter: {
+    color: '#8D8D92',
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    fontVariant: ['tabular-nums'],
+  },
   captionInput: {
-    fontFamily:    fonts.medium,
-    fontSize:      15,
-    color:         '#1A1A1A',
-    lineHeight:    22,
-    minHeight:     40,
-    maxHeight:     80,
-    padding:       0,
+    minHeight: 44,
+    maxHeight: 78,
+    padding: 0,
+    fontFamily: fonts.medium,
+    fontSize: 15,
+    color: '#161618',
+    lineHeight: 22,
     letterSpacing: -0.1,
   },
-
-  // Swatch row
-  swatchRow: {
-    flexDirection: 'row',
-    alignItems:    'center',
-    gap:           8,
+  paletteSection: {
+    height: 64,
+    justifyContent: 'center',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#DEDEDA',
   },
-  swatchScroll:        { flex: 1 },
-  swatchScrollContent: { alignItems: 'center', gap: 8, paddingRight: 4 },
-  swatchRing: {
-    width:        28,
-    height:       28,
-    borderRadius: 14,
-    padding:      3,
-    borderWidth:  1.5,
-    borderColor:  'transparent',
+  swatchScrollContent: {
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    gap: 2,
   },
-  swatchRingActive: {
-    borderColor: '#1A1A1A',
+  swatchTarget: {
+    width: 44,
+    height: 63,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
   },
-  swatchRingActiveLight: {
-    borderColor: '#fff',
-  },
-  swatchDot: {
-    flex:         1,
-    borderRadius: 9,
-  },
-  swatchDotBorder: {
+  swatch: {
+    width: 22,
+    height: 22,
+    borderRadius: 2,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#D8D8D8',
+    borderColor: 'rgba(0,0,0,0.18)',
   },
-  swatchSep: {
-    width:            1,
-    height:           18,
-    backgroundColor:  '#E8E8E8',
-    marginHorizontal: 2,
-  },
-  swatchSepLight: {
-    width:            1,
-    height:           18,
-    backgroundColor:  'rgba(255,255,255,0.3)',
-    marginHorizontal: 2,
-  },
-  mediaLink: {
+  swatchMarker: { width: 16, height: 2, backgroundColor: 'transparent' },
+  swatchMarkerOn: { backgroundColor: '#FF7A1C' },
+
+  optionRow: {
+    minHeight: 52,
+    paddingHorizontal: 16,
     flexDirection: 'row',
-    alignItems:    'center',
-    gap:           5,
+    alignItems: 'center',
+    gap: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#DEDEDA',
   },
-  mediaLinkTxt: {
+  optionText: {
+    flex: 1,
+    color: '#202023',
     fontFamily: fonts.medium,
-    fontSize:   13,
-    color:      '#A0A0A0',
+    fontSize: 14,
+    letterSpacing: -0.1,
   },
-  mediaLinkTxtLight: {
-    fontFamily: fonts.medium,
-    fontSize:   13,
-    color:      'rgba(255,255,255,0.85)',
-  },
-
-  // Options row
-  optRow: {
+  optionMicroSignal: {
+    width: 24,
+    height: 12,
     flexDirection: 'row',
-    alignItems:    'center',
-    gap:           6,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 3,
   },
-  timerTxt: {
-    fontFamily: fonts.regular,
-    fontSize:   12,
-    color:      '#C4C4C4',
-    marginLeft: 3,
+  optionMicroLine: { width: 14, height: 2, backgroundColor: '#FF7A1C' },
+  optionMicroDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: '#FF7A1C' },
+  stateMark: {
+    width: 24,
+    height: 12,
+    justifyContent: 'flex-end',
+    borderBottomWidth: 2,
+    borderBottomColor: '#C9C9C6',
   },
+  stateMarkOn: { borderBottomColor: '#FF7A1C' },
+  stateMarkDot: {
+    position: 'absolute',
+    left: 0,
+    bottom: -3,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#C9C9C6',
+  },
+  stateMarkDotOn: { left: 20, backgroundColor: '#FF7A1C' },
 
-  // Chips
-  chip: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               4,
-    paddingHorizontal: 9,
-    paddingVertical:   5,
-    borderRadius:      13,
-    borderWidth:       1.5,
-    borderColor:       '#E8E8E8',
+  actionArea: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    backgroundColor: '#FAFAF8',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#CFCFCC',
   },
-  chipOn:      { backgroundColor: '#FF7A1C', borderColor: '#FF7A1C' },
-  chipLight:   { borderColor: 'rgba(255,255,255,0.5)' },
-  chipTxt:     { fontFamily: fonts.semiBold, fontSize: 12, color: '#333' },
-  chipTxtOn:   { color: '#fff' },
-  chipTxtLight:{ color: '#fff' },
-  chipStar:    { fontSize: 11, color: '#777' },
-  chipStarOn:  { fontSize: 11, color: '#fff' },
-
-  // Publish button
   publishBtn: {
-    height:          52,
-    borderRadius:    26,
+    height: 52,
+    borderRadius: 12,
     backgroundColor: '#1A1A1A',
-    alignItems:      'center',
-    justifyContent:  'center',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  publishBtnLight: { backgroundColor: '#fff' },
-  publishBtnOff: { opacity: 0.25 },
-  halfBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
-    height: 42, borderRadius: 21, marginTop: 8,
-    borderWidth: StyleSheet.hairlineWidth, borderColor: '#DEDEE3',
+  publishSignal: {
+    position: 'absolute',
+    left: 16,
+    width: 18,
+    height: 2,
+    backgroundColor: '#FF7A1C',
   },
-  halfBtnLight: { borderColor: 'rgba(255,255,255,0.45)' },
-  halfBtnTxt: { fontFamily: fonts.semiBold, fontSize: 14, color: '#1A1A1A' },
+  publishBtnOff: { opacity: 0.3 },
   publishBtnTxt: {
-    fontFamily:    fonts.bold,
-    fontSize:      16,
-    color:         '#fff',
+    fontFamily: fonts.bold,
+    fontSize: 16,
+    color: '#fff',
     letterSpacing: -0.3,
+  },
+  interactionLock: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
+    backgroundColor: 'transparent',
   },
 })

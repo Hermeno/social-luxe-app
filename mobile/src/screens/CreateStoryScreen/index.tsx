@@ -63,7 +63,7 @@ export default function CreateStoryScreen() {
         <TouchableOpacity onPress={() => nav.goBack()} style={s.backBtn}>
           <Ionicons name="close" size={26} color={colors.white} />
         </TouchableOpacity>
-        <Text style={s.title}>Novo Story</Text>
+        <Text style={s.title}>{t.story_new}</Text>
         <View style={{ width: 36 }} />
       </View>
 
@@ -72,7 +72,7 @@ export default function CreateStoryScreen() {
           <Image source={{ uri: mediaUri }} style={s.preview} resizeMode="cover" />
           <TouchableOpacity style={s.changeBtn} onPress={pickMedia}>
             <Ionicons name="images-outline" size={20} color={colors.white} />
-            <Text style={s.changeText}>Alterar</Text>
+            <Text style={s.changeText}>{t.create_change}</Text>
           </TouchableOpacity>
         </View>
       ) : (

@@ -1,9 +1,10 @@
 import { Response } from 'express'
 import * as authService from '../services/auth.service'
-import { ok, created, badRequest, serverError, notFound, forbidden, tooManyRequests } from '../utils/response'
+import { ok, created, badRequest, tooManyRequests, serviceUnavailable } from '../utils/response'
 import { handleError } from '../utils/errors'
 import { AuthRequest, RegisterBody, LoginBody } from '../types'
 import { prisma } from '../config/database'
+import { env } from '../config/env'
 import { comparePassword as compareHash, hashPassword } from '../utils/hash'
 import { deleteFromCloudinary } from '../utils/cloudinary.util'
 import { deleteFromR2, isR2Url } from '../utils/r2.util'
@@ -77,6 +78,10 @@ export async function changePassword(req: AuthRequest, res: Response) {
 // ── Request password reset (generates code; delivery via SMS is not wired up yet) ──
 export async function requestPasswordReset(req: AuthRequest, res: Response) {
   try {
+    if (!env.passwordResetEnabled) {
+      return serviceUnavailable(res, 'Password reset by SMS is not configured yet')
+    }
+
     const { phone, countryCode } = req.body
     if (!phone || !countryCode) return badRequest(res, 'phone and countryCode required')
 

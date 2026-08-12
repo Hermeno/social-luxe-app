@@ -1,4 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
+import { useIsFocused } from '@react-navigation/native'
+import SuggestionsSheet from '../../components/SuggestionsSheet'
+import { useMessagesStore } from '../../store/messages.store'
 import {
   View, Text, StyleSheet, TouchableOpacity, Pressable, ScrollView,
   ActivityIndicator, Alert, Animated, PanResponder, Modal, Easing,
@@ -97,6 +100,19 @@ function PlacedEmoji({
 }
 
 export default function CircleScreen() {
+  const isFocused = useIsFocused()
+
+  // A TabBar pede a folha de sugestões; renderiza-se aqui em vez de saltar
+  // para o Chat, para não tirar a pessoa de onde está.
+  const suggestionsRequested = useMessagesStore((st) => st.suggestionsRequested)
+  const consumedSuggestionsRef = useRef(0)
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  useEffect(() => {
+    if (!isFocused || suggestionsRequested <= consumedSuggestionsRef.current) return
+    consumedSuggestionsRef.current = suggestionsRequested
+    setShowSuggestions(true)
+  }, [isFocused, suggestionsRequested])
+
   const { top, bottom } = useSafeAreaInsets()
   const nav  = useNavigation<any>()
   const user = useAuthStore((s) => s.user)
@@ -817,6 +833,8 @@ export default function CircleScreen() {
           </View>
         </View>
       </Modal>
+
+      {showSuggestions && <SuggestionsSheet onClose={() => setShowSuggestions(false)} />}
     </View>
   )
 }

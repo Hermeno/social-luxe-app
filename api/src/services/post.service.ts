@@ -76,7 +76,7 @@ function haversine(lat1: number, lng1: number, lat2: number, lng2: number) {
 
 // ─── Feed meta helpers ────────────────────────────────────────────────────────
 
-// Fetch up to 4 unique non-author commenters and the caller's vote
+// Fetch up to 5 unique non-author commenters and the caller's vote
 // status for each post — all in O(1) round-trips regardless of post count.
 async function attachRecentCommenters(posts: any[], userId?: string): Promise<any[]> {
   const allPostIds      = posts.map((p) => p.id)
@@ -121,7 +121,7 @@ async function attachRecentCommenters(posts: any[], userId?: string): Promise<an
       if (seen.has(c.userId)) continue
       seen.add(c.userId)
       recentCommenters.push(c.user)
-      if (recentCommenters.length >= 4) break
+      if (recentCommenters.length >= 5) break
     }
     return {
       ...p,
@@ -240,8 +240,9 @@ export async function getFeed(userId: string, page = 1, limit = 10) {
   return attachRecentCommenters(withThumbnails(posts), userId)
 }
 
-// Search posts by caption (case-insensitive), excluding blocked users, deleted
-// and expired posts. Same shape as the feed so the client can reuse Post cards.
+// Search posts by caption or author identity (case-insensitive), excluding
+// blocked users, deleted and expired posts. Same shape as the feed so the
+// client can reuse Post cards.
 export async function searchPosts(query: string, userId: string) {
   const now = new Date()
   const [blocksGiven, blocksReceived] = await Promise.all([
@@ -258,7 +259,11 @@ export async function searchPosts(query: string, userId: string) {
       deletedAt: null,
       expiresAt: { gt: now },
       userId: { notIn: blockedIds },
-      caption: { contains: query, mode: 'insensitive' },
+      OR: [
+        { caption: { contains: query, mode: 'insensitive' } },
+        { user: { is: { name: { contains: query, mode: 'insensitive' } } } },
+        { user: { is: { username: { contains: query, mode: 'insensitive' } } } },
+      ],
     },
     include: {
       user:        { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true, isAdmin: true, showDevice: true, statusLabel: true, lastSeen: true } },
@@ -285,13 +290,67 @@ async function extendLife(postId: string, minutes: number) {
 // A expiração nunca encolhe — só cresce.
 const ENGAGE_WEIGHTS = { view: 1, like: 3, reaction: 3, comment: 5, share: 8 }
 const DAY_MS = 24 * 60 * 60 * 1000
+// Os limiares são um botão de afinação, não uma constante: têm de bater certo
+// com o tamanho da rede. Calibrados para a base actual — um post que corra bem
+// (≈20 vistas + 8 likes + 5 comentários = 69) chega aos 30 dias, que é o
+// escalão que abre a feed pública. Sobe-os à medida que a rede cresce.
 const LIFE_TIERS: { minScore: number; lifeMs: number }[] = [
-  { minScore: 2000, lifeMs: 100 * 365 * DAY_MS },  // para sempre (100 anos)
-  { minScore: 600,  lifeMs: 365 * DAY_MS },        // 1 ano
-  { minScore: 150,  lifeMs: 30 * DAY_MS },         // 30 dias
-  { minScore: 50,   lifeMs: 10 * DAY_MS },         // 10 dias
-  { minScore: 15,   lifeMs: 3 * DAY_MS },          // 3 dias
+  { minScore: 800, lifeMs: 100 * 365 * DAY_MS },  // para sempre (100 anos)
+  { minScore: 250, lifeMs: 365 * DAY_MS },        // 1 ano
+  { minScore: 70,  lifeMs: 30 * DAY_MS },         // 30 dias
+  { minScore: 25,  lifeMs: 10 * DAY_MS },         // 10 dias
+  { minScore: 8,   lifeMs: 3 * DAY_MS },          // 3 dias
 ]
+
+// ─── Feed pública (sem sessão) ────────────────────────────────────────────────
+// Não é a feed toda: só os posts que a comunidade manteve vivos até ao escalão
+// de 30 dias. Quem chega sem conta vê a vitrina do que foi merecido, não o
+// quotidiano de toda a gente. Os 25 dias de folga espelham `postLife.ts`.
+//
+// Estes posts já saíram da janela de 48h da feed dos membros — a vida ganha
+// mantinha-os vivos mas sem circulação. É exactamente esse acervo que aqui
+// ganha um segundo uso, sem mexer no que os membros vêem.
+const PUBLIC_MIN_LIFE_DAYS = 25
+
+// Devolve apenas o que é preciso para desenhar o post. `select` explícito e não
+// `include`: nesta rota não há sessão, por isso o que sai daqui é o que o mundo
+// vê — nada de lastSeen, isAdmin, estado de presença ou contagem de quem viu.
+const PUBLIC_SELECT = {
+  id: true,
+  mediaUrl: true,
+  mediaUrls: true,
+  mediaType: true,
+  caption: true,
+  bgColor: true,
+  createdAt: true,
+  user:   { select: { id: true, name: true, username: true, avatar: true } },
+  _count: { select: { likes: true, comments: true, views: true } },
+} as const
+
+export async function getPublicFeed(page = 1, limit = 10) {
+  const skip = (page - 1) * limit
+
+  // O escalão lê-se da diferença entre duas colunas e o Prisma não compara
+  // colunas num `where` — daí o SQL cru só para apurar os ids.
+  const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+    SELECT id
+    FROM "Post"
+    WHERE "deletedAt" IS NULL
+      AND "expiresAt" > NOW()
+      AND "isAnnouncement" = false
+      AND "expiresAt" - "createdAt" >= ${PUBLIC_MIN_LIFE_DAYS}::float * INTERVAL '1 day'
+    ORDER BY ("expiresAt" - "createdAt") DESC, "createdAt" DESC
+    LIMIT ${limit} OFFSET ${skip}
+  `
+  if (rows.length === 0) return []
+
+  const ids = rows.map((r) => r.id)
+  const posts = await prisma.post.findMany({ where: { id: { in: ids } }, select: PUBLIC_SELECT })
+
+  // `findMany` não garante a ordem do `in` — repõe-se a do SQL.
+  const rank = new Map(ids.map((id, i) => [id, i]))
+  return withThumbnails(posts).sort((a, b) => rank.get(a.id)! - rank.get(b.id)!)
+}
 
 export async function recalcPostLife(postId: string) {
   const post = await prisma.post.findUnique({

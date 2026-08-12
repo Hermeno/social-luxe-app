@@ -40,7 +40,7 @@ export default function ProfileTop({
       <View style={s.statsRow}>
         <View style={s.stat}>
           <Text style={s.statNum}>{postsCount}</Text>
-          <Text style={s.statLabel}>Posts</Text>
+          <Text style={s.statLabel}>{t.profile_posts}</Text>
         </View>
         <View style={s.divider} />
         <TouchableOpacity style={s.stat} onPress={onShowFollowers} activeOpacity={0.7}>

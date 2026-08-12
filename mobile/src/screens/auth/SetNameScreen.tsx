@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, Animated, ActivityIndicator, Alert,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Alert, ScrollView,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -12,17 +12,17 @@ import { getUsernameOptions } from '../../services/auth.service'
 import { AuthStackParams } from '../../navigation/AuthNavigator'
 import { fonts } from '../../theme'
 import { useT } from '../../i18n'
+import {
+  AuthFieldFrame,
+  AuthHeader,
+  AuthPrimaryButton,
+  authStyles,
+  authUi,
+} from '../../components/AuthFlow'
 
 type Nav   = StackNavigationProp<AuthStackParams>
 type Route = RouteProp<AuthStackParams, 'SetName'>
 
-const T  = '#1A1A1A'
-const S  = '#6E6E73'
-const M  = '#ABABAB'
-const B  = '#FF7A1C'
-const BD = '#E5E5EA'
-const BG = '#FFFFFF'
-const SX = '#F9F9FB'
 const MAX = 30
 
 export default function SetNameScreen() {
@@ -36,7 +36,6 @@ export default function SetNameScreen() {
   const [name,    setName]    = useState('')
   const [focused, setFocused] = useState(false)
   const [loading, setLoading] = useState(false)
-  const btnScale = useRef(new Animated.Value(1)).current
 
   // @handle: opções (nome + número) para o utilizador escolher.
   const [handleOptions, setHandleOptions]   = useState<string[]>([])
@@ -48,16 +47,33 @@ export default function SetNameScreen() {
 
   // Busca as opções ~600ms depois de parar de escrever.
   useEffect(() => {
-    if (trimmed.length < 2) { setHandleOptions([]); setSelectedHandle(null); return }
+    if (trimmed.length < 2) {
+      setLoadingHandles(false)
+      setHandleOptions([])
+      setSelectedHandle(null)
+      return
+    }
     setLoadingHandles(true)
+    let cancelled = false
     const id = setTimeout(async () => {
       try {
         const res = await getUsernameOptions(trimmed)
+        if (cancelled) return
         setHandleOptions(res.options)
         setSelectedHandle((prev) => (prev && res.options.includes(prev) ? prev : res.options[0] ?? null))
-      } catch { setHandleOptions([]) } finally { setLoadingHandles(false) }
+      } catch {
+        if (!cancelled) {
+          setHandleOptions([])
+          setSelectedHandle(null)
+        }
+      } finally {
+        if (!cancelled) setLoadingHandles(false)
+      }
     }, 600)
-    return () => clearTimeout(id)
+    return () => {
+      cancelled = true
+      clearTimeout(id)
+    }
   }, [trimmed])
 
   async function refreshHandles() {
@@ -70,194 +86,149 @@ export default function SetNameScreen() {
     } catch {} finally { setLoadingHandles(false) }
   }
 
-  function bounce(cb: () => void) {
-    Animated.sequence([
-      Animated.spring(btnScale, { toValue: 0.97, useNativeDriver: true, speed: 80, bounciness: 0 }),
-      Animated.spring(btnScale, { toValue: 1,    useNativeDriver: true, speed: 40, bounciness: 5 }),
-    ]).start(cb)
-  }
-
   async function handleRegister() {
-    if (!canCreate) return
-    bounce(async () => {
-      setLoading(true)
-      try {
-        await register(trimmed, phone, countryCode, password, password, selectedHandle ?? undefined)
-      } catch (e: unknown) {
-        Alert.alert(t.error, e instanceof Error ? e.message : t.au_name_create_fail)
-      } finally { setLoading(false) }
-    })
+    if (!canCreate || loading) return
+    setLoading(true)
+    try {
+      await register(trimmed, phone, countryCode, password, password, selectedHandle ?? undefined)
+    } catch (e: unknown) {
+      Alert.alert(t.error, e instanceof Error ? e.message : t.au_name_create_fail)
+    } finally { setLoading(false) }
   }
-
-  const initial = trimmed[0]?.toUpperCase() ?? ''
 
   return (
-    <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={[s.inner, { paddingTop: top + 14, paddingBottom: bottom + 24 }]}>
+    <KeyboardAvoidingView style={authStyles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <View style={[authStyles.page, { paddingTop: top + 10, paddingBottom: bottom + 18 }]}>
+        <AuthHeader step={3} total={5} stage={t.au_stage_identity} onBack={() => nav.goBack()} />
 
-        {/* Square back button */}
-        <TouchableOpacity onPress={() => nav.goBack()} style={s.backBtn} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-          <Ionicons name="chevron-back" size={20} color={T} />
-        </TouchableOpacity>
-
-        {/* Centered hero */}
-        <View style={s.hero}>
-          <Text style={s.heading}>{t.au_name_heading}</Text>
-          <Text style={s.sub}>{t.au_name_sub}</Text>
-        </View>
-
-        {/* Underline input */}
-        <View style={s.underlineWrap}>
-          <TextInput
-            style={[s.underlineInput, focused && s.underlineFocused]}
-            placeholder={t.au_name_ph}
-            placeholderTextColor={M}
-            value={name}
-            onChangeText={(v) => setName(v.slice(0, MAX))}
-            autoCapitalize="words"
-            autoCorrect={false}
-            autoFocus
-            returnKeyType="go"
-            onSubmitEditing={handleRegister}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            textAlign="center"
-          />
-          <View style={[s.underlineLine, focused && s.underlineLineActive]} />
-          <Text style={s.charCount}>{name.length} / {MAX}</Text>
-        </View>
-
-        {/* Name preview */}
-        {trimmed.length >= 2 && (
-          <View style={s.preview}>
-            <View style={s.previewRing}>
-              <View style={s.previewAvatar}>
-                <Text style={s.previewInitial}>{initial}</Text>
-              </View>
-            </View>
-            <Text style={s.previewName}>{trimmed}</Text>
-
-            {/* Escolher o @handle — nome + número, várias opções */}
-            <View style={s.handleHead}>
-              <Text style={s.handleTitle}>Escolhe o teu @</Text>
-              <TouchableOpacity onPress={refreshHandles} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} disabled={loadingHandles}>
-                <Ionicons name="refresh" size={16} color={loadingHandles ? M : S} />
-              </TouchableOpacity>
-            </View>
-
-            {loadingHandles && handleOptions.length === 0 ? (
-              <ActivityIndicator color={B} style={{ marginTop: 6 }} />
-            ) : (
-              <View style={s.chips}>
-                {handleOptions.map((h) => {
-                  const on = h === selectedHandle
-                  return (
-                    <TouchableOpacity key={h} style={[s.chip, on && s.chipOn]} onPress={() => setSelectedHandle(h)} activeOpacity={0.8}>
-                      <Text style={[s.chipTxt, on && s.chipTxtOn]}>@{h}</Text>
-                    </TouchableOpacity>
-                  )
-                })}
-              </View>
-            )}
+        <ScrollView
+          style={s.scroll}
+          contentContainerStyle={s.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={authStyles.hero}>
+            <Text style={authStyles.heading}>{t.au_name_heading}</Text>
+            <Text style={authStyles.sub}>{t.au_name_sub}</Text>
           </View>
-        )}
 
-        <View style={s.spacer} />
+          <View style={s.formBlock}>
+            <AuthFieldFrame focused={focused}>
+              <TextInput
+                style={s.nameInput}
+                placeholder={t.au_name_ph}
+                placeholderTextColor={authUi.faint}
+                value={name}
+                onChangeText={(value) => setName(value.slice(0, MAX))}
+                autoCapitalize="words"
+                autoCorrect={false}
+                autoFocus
+                returnKeyType="go"
+                onSubmitEditing={handleRegister}
+                onFocus={() => setFocused(true)}
+                onBlur={() => setFocused(false)}
+              />
+              <Text style={s.charCount}>{String(name.length).padStart(2, '0')} / {MAX}</Text>
+            </AuthFieldFrame>
+          </View>
 
-        {/* Full-width CTA */}
-        <Animated.View style={{ transform: [{ scale: btnScale }] }}>
-          <TouchableOpacity
-            style={[s.cta, (!canCreate || loading) && s.ctaOff]}
+          {trimmed.length >= 2 && (
+            <View style={s.handleSection}>
+              <View style={s.handleHead}>
+                <Text style={s.handleTitle}>{t.au_handle_title}</Text>
+                <TouchableOpacity
+                  style={s.refreshButton}
+                  onPress={refreshHandles}
+                  disabled={loadingHandles}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={t.au_handle_refresh}
+                >
+                  <Ionicons name="refresh" size={17} color={loadingHandles ? authUi.faint : authUi.muted} />
+                </TouchableOpacity>
+              </View>
+
+              {loadingHandles && handleOptions.length === 0 ? (
+                <View style={s.handleLoading}>
+                  <ActivityIndicator color={authUi.signal} size="small" />
+                  <Text style={s.loadingLabel}>{t.au_handle_checking}</Text>
+                </View>
+              ) : (
+                <View style={s.handleList}>
+                  {handleOptions.map((handle) => {
+                    const selected = handle === selectedHandle
+                    return (
+                      <TouchableOpacity
+                        key={handle}
+                        style={[s.handleOption, selected && s.handleOptionSelected]}
+                        onPress={() => setSelectedHandle(handle)}
+                        activeOpacity={0.72}
+                        accessibilityRole="radio"
+                        accessibilityState={{ checked: selected }}
+                      >
+                        <Text style={[s.handleText, selected && s.handleTextSelected]}>@{handle}</Text>
+                        {selected ? <Ionicons name="checkmark" size={17} color={authUi.signal} /> : null}
+                      </TouchableOpacity>
+                    )
+                  })}
+                </View>
+              )}
+            </View>
+          )}
+
+          <View style={s.spacer} />
+          <AuthPrimaryButton
+            label={t.au_continue}
             onPress={handleRegister}
-            disabled={!canCreate || loading}
-            activeOpacity={0.88}
-          >
-            {loading
-              ? <ActivityIndicator color="#fff" size="small" />
-              : <>
-                  <Text style={s.ctaTxt}>{t.au_continue}</Text>
-                  <Ionicons name="arrow-forward" size={19} color="#fff" />
-                </>
-            }
-          </TouchableOpacity>
-        </Animated.View>
-
+            disabled={!canCreate}
+            loading={loading}
+            style={s.cta}
+          />
+        </ScrollView>
       </View>
     </KeyboardAvoidingView>
   )
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: BG },
-  inner:  { flex: 1, paddingHorizontal: 24 },
-
-  backBtn: {
-    width: 44, height: 44, borderRadius: 14,
-    borderWidth: 1.5, borderColor: BD, backgroundColor: BG,
-    alignItems: 'center', justifyContent: 'center',
+  scroll: { flex: 1 },
+  scrollContent: { flexGrow: 1, paddingBottom: 2 },
+  formBlock: { marginTop: 30 },
+  nameInput: {
+    flex: 1,
+    height: 58,
+    paddingHorizontal: 13,
+    color: authUi.ink,
+    fontFamily: fonts.semiBold,
+    fontSize: 17,
+    letterSpacing: -0.2,
   },
-
-  hero: { marginTop: 40, marginBottom: 30, gap: 10, alignItems: 'center' },
-  heading: {
-    fontFamily: fonts.extraBold, fontSize: 30, lineHeight: 36,
-    letterSpacing: -0.9, color: T, textAlign: 'center',
+  charCount: {
+    paddingRight: 14,
+    color: authUi.faint,
+    fontFamily: fonts.medium,
+    fontSize: 10.5,
+    fontVariant: ['tabular-nums'],
   },
-  sub: { fontFamily: fonts.regular, fontSize: 15, lineHeight: 22, color: S, textAlign: 'center' },
-
-  underlineWrap: { alignItems: 'center', gap: 8, paddingHorizontal: 8 },
-  underlineInput: {
-    width: '100%',
-    fontFamily: fonts.bold, fontSize: 32, color: T,
-    letterSpacing: -0.5, textAlign: 'center',
-    paddingVertical: 8, paddingHorizontal: 0,
-    backgroundColor: 'transparent',
+  handleSection: { marginTop: 22 },
+  handleHead: { height: 36, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  handleTitle: { color: authUi.muted, fontFamily: fonts.medium, fontSize: 13, lineHeight: 17 },
+  refreshButton: { width: 44, height: 44, marginRight: -10, alignItems: 'center', justifyContent: 'center' },
+  handleLoading: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  loadingLabel: { color: authUi.muted, fontFamily: fonts.regular, fontSize: 12.5 },
+  handleList: { marginTop: 4, gap: 8 },
+  handleOption: {
+    minHeight: 46,
+    paddingHorizontal: 13,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: authUi.line,
+    backgroundColor: authUi.surface,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  underlineFocused: {},
-  underlineLine: {
-    width: '60%', height: 2, borderRadius: 1,
-    backgroundColor: BD,
-  },
-  underlineLineActive: { backgroundColor: B },
-  charCount: { fontSize: 12, fontFamily: fonts.regular, color: M },
-
-  preview: { alignItems: 'center', marginTop: 32, gap: 10 },
-  previewRing: {
-    width: 72, height: 72, borderRadius: 36,
-    borderWidth: 1.5, borderColor: `${B}50`,
-    borderStyle: 'dashed',
-    padding: 3,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  previewAvatar: {
-    width: 60, height: 60, borderRadius: 30,
-    backgroundColor: `${B}15`,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  previewInitial: { fontFamily: fonts.bold, fontSize: 22, color: B },
-  previewName:   { fontFamily: fonts.bold, fontSize: 17, color: T, letterSpacing: -0.3 },
-  previewSub:    { fontFamily: fonts.regular, fontSize: 12, color: M },
-
-  handleHead:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14 },
-  handleTitle: { fontFamily: fonts.semiBold, fontSize: 13, color: S, letterSpacing: -0.1 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 10, paddingHorizontal: 8 },
-  chip: {
-    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12,
-    borderWidth: 1.5, borderColor: BD, backgroundColor: BG,
-  },
-  chipOn:    { borderColor: B, backgroundColor: `${B}12` },
-  chipTxt:   { fontFamily: fonts.semiBold, fontSize: 13.5, color: T, letterSpacing: -0.2 },
-  chipTxtOn: { color: B },
-
-  spacer: { flex: 1 },
-
-  cta: {
-    height: 52, borderRadius: 16, backgroundColor: B,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    ...Platform.select({
-      ios: { shadowColor: B, shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.65, shadowRadius: 18 },
-      android: { elevation: 8 },
-    }),
-  },
-  ctaOff: { opacity: 0.35 },
-  ctaTxt: { fontFamily: fonts.bold, fontSize: 17, color: '#fff', letterSpacing: -0.2 },
+  handleOptionSelected: { borderColor: authUi.signal, backgroundColor: '#FFF8F2' },
+  handleText: { color: authUi.muted, fontFamily: fonts.semiBold, fontSize: 14 },
+  handleTextSelected: { color: authUi.ink },
+  spacer: { flex: 1, minHeight: 28 },
+  cta: { marginTop: 8 },
 })

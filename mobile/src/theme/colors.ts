@@ -9,8 +9,13 @@ export const colors = {
   white:        '#FFFFFF',
   offWhite:     '#F7F7F7',
 
-  // Campo de comentário na feed
-  commentField: '#151716',
+  // Campo de comentário embutido na navigation
+  commentField: '#18242E',
+
+  // Fundo da feed principal — e SÓ da feed. É o que se vê por trás dos posts,
+  // nas faixas acima e abaixo de imagens que não enchem a altura, e na tab bar
+  // enquanto a feed está aberta. O resto da app continua branco.
+  feedSurface: '#1C252C',
 
   gray100: '#F7F7F7',
   gray200: '#EAEAEA',

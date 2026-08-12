@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react'
+import React, { useState, useCallback, useRef, useEffect, useLayoutEffect } from 'react'
 import {
   View, Text, TouchableOpacity, FlatList, ScrollView,
   RefreshControl, StyleSheet, Alert, Dimensions,
@@ -10,14 +10,16 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native'
-import { StackNavigationProp } from '@react-navigation/stack'
+import { useNavigation, useRoute, useFocusEffect, useIsFocused } from '@react-navigation/native'
+import type { RouteProp } from '@react-navigation/native'
+import type { StackNavigationProp } from '@react-navigation/stack'
 import { useAuthStore } from '../../store/auth.store'
 import { api } from '../../services/api'
-import { Post, User } from '../../types'
-import { AppStackParams } from '../../navigation/AppNavigator'
+import type { Post, User } from '../../types'
+import type { AppStackParams } from '../../navigation/AppNavigator'
 import { colors, fonts } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
+import AvatarStack from '../../components/AvatarStack'
 import SegmentedRing from '../../components/SegmentedRing'
 import FollowersSheet from './FollowersSheet'
 import BusinessBlock from './BusinessBlock'
@@ -32,13 +34,14 @@ import { API_BASE } from '../../config'
 import { getCache, setCache } from '../../db/database'
 import { isConnected } from '../../services/netinfo.service'
 import { useFeedStore } from '../../store/feed.store'
+import { useProfileUiStore } from '../../store/profileUi.store'
 import { useFollowStore } from '../../store/follow.store'
 import { deletePost as apiDeletePost, updatePost as apiUpdatePost } from '../../services/post.service'
 import { toast } from '../../utils/toast'
 import { lifeTier, lifeLabel, isEliteTier } from '../../utils/postLife'
 import { getMyUnions, getPendingInvites, respondToInvite } from '../../services/union.service'
 import { UNION_ENABLED } from '../../config/features'
-import { Union, UnionInvite, Pairing } from '../../types'
+import type { Union, UnionInvite, Pairing } from '../../types'
 import * as pairingService from '../../services/pairing.service'
 import { useT } from '../../i18n'
 
@@ -68,6 +71,14 @@ function resolveUrl(url: string | null | undefined): string | null {
   if (!url) return null
   if (url.startsWith('http') || url.startsWith('file://')) return url
   return `${API_BASE}${url}`
+}
+
+function openProfileOnStack(navigation: Nav, userId: string) {
+  const stack = navigation.getState().type === 'stack'
+    ? navigation
+    : navigation.getParent<Nav>()
+  if (stack?.getState().type !== 'stack') return
+  stack.push('Profile', { userId })
 }
 
 function fmtStat(n: number): string {
@@ -209,7 +220,9 @@ export default function ProfileScreen() {
   const { user: me, logout, refreshUser } = useAuthStore()
   const nav   = useNavigation<Nav>()
   const route = useRoute<Route>()
+  const isFocused = useIsFocused()
   const { bottom, top } = useSafeAreaInsets()
+  const connectionsRequested = useProfileUiStore((s) => s.connectionsRequested)
 
   const viewingId = route.params?.userId && route.params.userId !== me?.id ? route.params.userId : null
   const isOwn     = !viewingId
@@ -239,8 +252,85 @@ export default function ProfileScreen() {
   const [blockBusy,        setBlockBusy]        = useState(false)
   const [mutuals,          setMutuals]          = useState<MutualConnections | null>(null)
   const [followingList,    setFollowingList]    = useState<followService.FollowUser[]>([])
+  const [followersList,    setFollowersList]    = useState<followService.FollowUser[]>([])
   const [showUserMenu,     setShowUserMenu]     = useState(false)
   const userMenuSlide = useRef(new Animated.Value(300)).current
+  const handledConnectionsRequest = useRef(connectionsRequested)
+  const activeTargetRef = useRef(targetId)
+  const activeOwnerRef = useRef(me?.id ?? null)
+  const profileLifecycleGeneration = useRef(0)
+  const refreshRequestGeneration = useRef(0)
+  const followRequestGeneration = useRef(0)
+  const followRequestBusy = useRef(false)
+
+  function isCurrentProfileRequest(targetAtStart: string, ownerAtStart: string | null, lifecycleAtStart: number) {
+    return profileLifecycleGeneration.current === lifecycleAtStart
+      && activeTargetRef.current === targetAtStart
+      && activeOwnerRef.current === ownerAtStart
+      && (useAuthStore.getState().user?.id ?? null) === ownerAtStart
+  }
+
+  // A mesma instância pode mudar de pessoa quando os parâmetros da rota mudam.
+  // Limpar em layout effect impede que dados do perfil anterior cheguem ao ecrã
+  // enquanto cache/rede do novo alvo ainda estão a ser consultados.
+  useLayoutEffect(() => {
+    const lifecycle = ++profileLifecycleGeneration.current
+    activeTargetRef.current = targetId
+    activeOwnerRef.current = me?.id ?? null
+    refreshRequestGeneration.current += 1
+    followRequestGeneration.current += 1
+    followRequestBusy.current = false
+    setProfile(isOwn ? useAuthStore.getState().user : null)
+    setPosts([])
+    setRefreshing(false)
+    setFollowerCount(0)
+    setFollowingCount(0)
+    setTheyFollowMe(false)
+    setFollowLoading(false)
+    setShowQR(false)
+    setFollowSheetMode('followers')
+    setShowFollowSheet(false)
+    setMyUnion(null)
+    setUnionInvites([])
+    setProfilePairing(null)
+    setMenuPost(null)
+    setEditEditing(false)
+    setEditCaption('')
+    setEditLoading(false)
+    setPendingAvatarUri(null)
+    setSavingAvatar(false)
+    setIsBlocked(false)
+    setBlockBusy(false)
+    setMutuals(null)
+    setFollowingList([])
+    setFollowersList([])
+    setShowUserMenu(false)
+    userMenuSlide.setValue(300)
+    handledConnectionsRequest.current = connectionsRequested
+    return () => {
+      if (profileLifecycleGeneration.current !== lifecycle) return
+      profileLifecycleGeneration.current += 1
+      refreshRequestGeneration.current += 1
+      followRequestGeneration.current += 1
+      followRequestBusy.current = false
+    }
+  }, [targetId, me?.id])
+
+  // A folha pertence ao perfil que está realmente visível. Perfis montados por
+  // baixo de outra rota ignoram o sinal, em vez de abrirem um modal escondido.
+  useEffect(() => {
+    if (!isFocused || !isOwn) {
+      handledConnectionsRequest.current = connectionsRequested
+      return
+    }
+    if (connectionsRequested <= handledConnectionsRequest.current) {
+      handledConnectionsRequest.current = connectionsRequested
+      return
+    }
+    handledConnectionsRequest.current = connectionsRequested
+    setFollowSheetMode(followingCount > 0 || followerCount === 0 ? 'following' : 'followers')
+    setShowFollowSheet(true)
+  }, [connectionsRequested, followerCount, followingCount, isFocused, isOwn])
 
   type ProfileCache = {
     user: User; followerCount: number; followingCount: number
@@ -254,7 +344,7 @@ export default function ProfileScreen() {
         !isOwn ? getCache<ProfileCache>(`profile:${targetId}`) : null,
         getCache<Post[]>(`profile_posts:${targetId}`),
         !isOwn ? getCache<MutualConnections>(`mutuals:${targetId}`) : null,
-        isOwn ? getCache<followService.FollowUser[]>(`following:${targetId}`) : null,
+        isOwn ? getCache<followService.FollowUser[]>('my_following') : null,
       ])
       const latestMe = useAuthStore.getState().user
       if (!cancelled) {
@@ -271,6 +361,7 @@ export default function ProfileScreen() {
       }
       if (!isConnected()) { setRefreshing(false); return }
       try {
+        const followRevisionAtStart = useFollowStore.getState().getRevision()
         const [userRes, postsRes, followStatus] = await Promise.all([
           isOwn
             ? Promise.resolve({ data: { data: latestMe } })
@@ -278,7 +369,7 @@ export default function ProfileScreen() {
           api.get(`/users/${targetId}/posts`),
           isOwn
             ? Promise.resolve(null)
-            : followService.getFollowStatus(targetId).catch(() => ({ following: false, followsMe: false })),
+            : followService.getFollowStatus(targetId).catch(() => null),
         ])
         if (cancelled) return
         const p = userRes.data.data as User
@@ -300,11 +391,13 @@ export default function ProfileScreen() {
         }
         if (!isOwn && followStatus) {
           setTheyFollowMe(followStatus.followsMe)
-          // Reconcile store with the API's definitive answer (handles expiry edge cases)
-          const { followingIds, syncAll } = useFollowStore.getState()
-          const next = new Set(followingIds)
-          followStatus.following ? next.add(targetId) : next.delete(targetId)
-          syncAll([...next])
+          // Uma resposta de status só pode reconciliar este perfil. Nunca deve
+          // cancelar toggles pendentes das restantes relações.
+          useFollowStore.getState().reconcileOne(
+            targetId,
+            followStatus.following,
+            followRevisionAtStart,
+          )
         }
         if (!isOwn) {
           const cachedFollowerCount  = cachedMeta?.followerCount  ?? 0
@@ -316,27 +409,61 @@ export default function ProfileScreen() {
             followService.getUserFollowing(targetId),
           ]).then(([followersRes, followingRes]) => {
             if (cancelled) return
-            setFollowerCount(followersRes.length)
+            const followerSnapshotIsCurrent = useFollowStore
+              .getState()
+              .isRevisionCurrent(followRevisionAtStart)
+            if (followerSnapshotIsCurrent) {
+              setFollowerCount(followersRes.length)
+              setFollowersList(followersRes)
+              setCache(`profile:${targetId}`, {
+                user: p, followerCount: followersRes.length,
+                followingCount: followingRes.length,
+                isFollowing: followStatus?.following ?? useFollowStore.getState().followingIds.has(targetId),
+                theyFollowMe: followStatus?.followsMe ?? cachedMeta?.theyFollowMe ?? false,
+              } as ProfileCache).catch(() => {})
+              setCache(`followers:${targetId}`, followersRes).catch(() => {})
+            }
             setFollowingCount(followingRes.length)
-            setCache(`profile:${targetId}`, {
-              user: p, followerCount: followersRes.length,
-              followingCount: followingRes.length,
-              isFollowing: followStatus?.following ?? false,
-              theyFollowMe: followStatus?.followsMe ?? false,
-            } as ProfileCache).catch(() => {})
+            setCache(`following:${targetId}`, followingRes).catch(() => {})
           }).catch(() => {})
         }
         // O meu próprio perfil também precisa de contar seguidores/seguindo frescos
         if (isOwn) {
+          const followStoreAtStart = useFollowStore.getState()
+          const followingRevisionAtStart = followStoreAtStart.getRevision()
+          const followingStateWasStable = followStoreAtStart.isRevisionCurrent(followingRevisionAtStart)
           Promise.all([
             followService.getUserFollowers(targetId),
             followService.getUserFollowing(targetId),
           ]).then(([followersRes, followingRes]) => {
             if (cancelled) return
             setFollowerCount(followersRes.length)
+            setFollowersList(followersRes)
+            setCache('my_followers', followersRes).catch(() => {})
+
+            const followStore = useFollowStore.getState()
+            followStore.reconcileSnapshot(
+              followingRes.map((user) => user.id),
+              followingRevisionAtStart,
+            )
+            const snapshotCanReplaceLocalState = followingStateWasStable
+              && followStore.isRevisionCurrent(followingRevisionAtStart)
+            if (!snapshotCanReplaceLocalState) {
+              const currentIds = useFollowStore.getState().followingIds
+              setFollowingCount(currentIds.size)
+              setFollowingList((current) => {
+                const serverUsers = followingRes.filter((user) => currentIds.has(user.id))
+                const serverIds = new Set(serverUsers.map((user) => user.id))
+                return [
+                  ...serverUsers,
+                  ...current.filter((user) => currentIds.has(user.id) && !serverIds.has(user.id)),
+                ]
+              })
+              return
+            }
             setFollowingCount(followingRes.length)
             setFollowingList(followingRes)
-            setCache(`following:${targetId}`, followingRes).catch(() => {})
+            setCache('my_following', followingRes).catch(() => {})
           }).catch(() => {})
         }
       } catch {}
@@ -381,48 +508,146 @@ export default function ProfileScreen() {
   }, [targetId]))
 
   async function handleRefresh() {
+    const targetAtStart = targetId
+    const ownerAtStart = useAuthStore.getState().user?.id ?? null
+    const ownProfileAtStart = isOwn
+    const lifecycleAtStart = profileLifecycleGeneration.current
+    const requestGeneration = ++refreshRequestGeneration.current
+    const followStoreAtStart = useFollowStore.getState()
+    const followingRevisionAtStart = followStoreAtStart.getRevision()
+    const followingStateWasStable = followStoreAtStart.isRevisionCurrent(followingRevisionAtStart)
+    const requestIsCurrent = () => (
+      refreshRequestGeneration.current === requestGeneration
+      && isCurrentProfileRequest(targetAtStart, ownerAtStart, lifecycleAtStart)
+    )
+
     setRefreshing(true)
-    if (!isConnected()) { setRefreshing(false); return }
+    if (!isConnected()) {
+      if (requestIsCurrent()) setRefreshing(false)
+      return
+    }
     try {
       const latestMe = useAuthStore.getState().user
       const [userRes, postsRes] = await Promise.all([
-        isOwn ? Promise.resolve({ data: { data: latestMe } }) : api.get(`/users/${targetId}`),
-        api.get(`/users/${targetId}/posts`),
+        ownProfileAtStart ? Promise.resolve({ data: { data: latestMe } }) : api.get(`/users/${targetAtStart}`),
+        api.get(`/users/${targetAtStart}/posts`),
       ])
+      if (!requestIsCurrent()) return
       const p = userRes.data.data as User
       if (!p) return
       const freshPosts: Post[] = postsRes.data.data ?? []
       setProfile(p)
       setPosts(freshPosts)
-      setCache(`profile_posts:${targetId}`, freshPosts).catch(() => {})
-      if (isOwn) {
+      setCache(`profile_posts:${targetAtStart}`, freshPosts).catch(() => {})
+      if (ownProfileAtStart) {
         await refreshUser()
+        if (!requestIsCurrent()) return
         const refreshedMe = useAuthStore.getState().user
         if (refreshedMe) setProfile(refreshedMe)
       }
-      Promise.all([
-        followService.getUserFollowers(targetId),
-        followService.getUserFollowing(targetId),
-      ]).then(([f, fo]) => { setFollowerCount(f.length); setFollowingCount(fo.length) }).catch(() => {})
-    } catch {}
-    setRefreshing(false)
+
+      const [followersRes, followingRes] = await Promise.all([
+        followService.getUserFollowers(targetAtStart),
+        followService.getUserFollowing(targetAtStart),
+      ])
+      if (!requestIsCurrent()) return
+
+      const followStore = useFollowStore.getState()
+      const snapshotCanReplaceLocalState = followingStateWasStable
+        && followStore.isRevisionCurrent(followingRevisionAtStart)
+
+      if (!ownProfileAtStart) {
+        // O meu toggle deste perfil altera apenas a lista/contagem de seguidores.
+        // Não deixe um GET iniciado antes desse toggle desfazer o valor otimista.
+        if (snapshotCanReplaceLocalState) {
+          setFollowerCount(followersRes.length)
+          setCache(`followers:${targetAtStart}`, followersRes).catch(() => {})
+        }
+        setFollowingCount(followingRes.length)
+        setCache(`following:${targetAtStart}`, followingRes).catch(() => {})
+        return
+      }
+
+      setFollowerCount(followersRes.length)
+      setCache('my_followers', followersRes).catch(() => {})
+      followStore.reconcileSnapshot(
+        followingRes.map((user) => user.id),
+        followingRevisionAtStart,
+      )
+      if (!snapshotCanReplaceLocalState) {
+        const currentIds = useFollowStore.getState().followingIds
+        setFollowingCount(currentIds.size)
+        setFollowingList((current) => {
+          const serverUsers = followingRes.filter((user) => currentIds.has(user.id))
+          const serverIds = new Set(serverUsers.map((user) => user.id))
+          return [
+            ...serverUsers,
+            ...current.filter((user) => currentIds.has(user.id) && !serverIds.has(user.id)),
+          ]
+        })
+        return
+      }
+      setFollowingCount(followingRes.length)
+      setFollowingList(followingRes)
+      setCache('my_following', followingRes).catch(() => {})
+    } catch {
+      // O perfil continua com os dados já apresentados; o refresh pode ser repetido.
+    } finally {
+      if (requestIsCurrent()) setRefreshing(false)
+    }
   }
 
   async function handleFollow() {
-    if (followLoading) return
+    if (followRequestBusy.current) return
+    const targetAtStart = targetId
+    const ownerAtStart = useAuthStore.getState().user?.id ?? null
+    const lifecycleAtStart = profileLifecycleGeneration.current
+    if (!ownerAtStart || !isCurrentProfileRequest(targetAtStart, ownerAtStart, lifecycleAtStart)) return
+
+    const requestGeneration = ++followRequestGeneration.current
+    const requestIsCurrent = () => (
+      followRequestGeneration.current === requestGeneration
+      && isCurrentProfileRequest(targetAtStart, ownerAtStart, lifecycleAtStart)
+    )
+    const profileAtStart = profile?.id === targetAtStart
+      ? { name: profile.name, avatar: profile.avatar ?? null }
+      : undefined
+    const wasFollowing = useFollowStore.getState().followingIds.has(targetAtStart)
+    const optimisticDelta = wasFollowing ? -1 : 1
+
+    followRequestBusy.current = true
     setFollowLoading(true)
-    const wasFollowing = isFollowing
-    setFollowerCount((c) => wasFollowing ? c - 1 : c + 1)
+    setFollowerCount((count) => Math.max(0, count + optimisticDelta))
     try {
-      await useFollowStore.getState().toggle(targetId, undefined,
-        profile ? { name: profile.name, avatar: profile.avatar ?? null } : undefined
+      const nowFollowing = await useFollowStore.getState().toggle(
+        targetAtStart,
+        undefined,
+        profileAtStart,
       )
+      if (!requestIsCurrent()) return
+      if (nowFollowing === wasFollowing) {
+        setFollowerCount((count) => Math.max(0, count - optimisticDelta))
+      }
     } catch {
-      setFollowerCount((c) => wasFollowing ? c + 1 : c - 1)
+      if (!requestIsCurrent()) return
+      setFollowerCount((count) => Math.max(0, count - optimisticDelta))
       toast.error(t.follow_err)
+    } finally {
+      if (followRequestGeneration.current === requestGeneration) followRequestBusy.current = false
+      if (requestIsCurrent()) setFollowLoading(false)
     }
-    setFollowLoading(false)
   }
+
+  const handleOwnFollowingChange = useCallback((users: followService.FollowUser[]) => {
+    if (!isOwn) return
+    setFollowingList(users)
+    setFollowingCount(useFollowStore.getState().followingIds.size)
+  }, [isOwn])
+
+  const handleConnectionCountChange = useCallback((mode: 'followers' | 'following', count: number) => {
+    if (mode === 'followers') setFollowerCount(count)
+    else setFollowingCount(count)
+  }, [])
 
   // ── Menu do utilizador (bloquear / denunciar / partilhar) ──────────────────
   useEffect(() => {
@@ -517,9 +742,9 @@ export default function ProfileScreen() {
     } finally { setSavingAvatar(false) }
   }
 
-  const setJumpToPostId = useFeedStore((s) => s.setJumpToPostId)
+  const showPostInFeed = useFeedStore((s) => s.showPostInFeed)
   function openPost(post: Post) {
-    setJumpToPostId(post.id)
+    showPostInFeed(post)
     nav.navigate('Tabs', { screen: 'Feed' })
   }
 
@@ -663,16 +888,51 @@ export default function ProfileScreen() {
           <Text style={m.statLbl}>{t.profile_posts}</Text>
         </View>
         <View style={m.statDivider} />
-        <TouchableOpacity style={m.statCol} onPress={() => { setFollowSheetMode('followers'); setShowFollowSheet(true) }} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={m.statCol}
+          onPress={() => { setFollowSheetMode('followers'); setShowFollowSheet(true) }}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={`${followerCount} ${t.profile_followers}`}
+          accessibilityState={{ expanded: showFollowSheet && followSheetMode === 'followers' }}
+        >
           <Text style={m.statNum}>{fmtStat(followerCount)}</Text>
           <Text style={m.statLbl}>{t.profile_followers}</Text>
         </TouchableOpacity>
         <View style={m.statDivider} />
-        <TouchableOpacity style={m.statCol} onPress={() => { setFollowSheetMode('following'); setShowFollowSheet(true) }} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={m.statCol}
+          onPress={() => { setFollowSheetMode('following'); setShowFollowSheet(true) }}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={`${followingCount} ${t.profile_following}`}
+          accessibilityState={{ expanded: showFollowSheet && followSheetMode === 'following' }}
+        >
           <Text style={m.statNum}>{fmtStat(followingCount)}</Text>
           <Text style={m.statLbl}>{t.profile_following}</Text>
         </TouchableOpacity>
       </View>
+
+      {/* ── Pilha de seguidores → página de seguidores ──
+             O número acima abre a folha; esta linha leva à página inteira. ── */}
+      {followersList.length > 0 && (
+        <TouchableOpacity
+          style={m.networkBar}
+          onPress={() => nav.push('Followers', {
+            userId: isOwn ? undefined : targetId,
+            name: isOwn ? undefined : profile?.name,
+            mode: 'followers',
+          })}
+          activeOpacity={0.72}
+          accessibilityRole="button"
+          accessibilityLabel={`${followerCount} ${t.profile_followers}`}
+        >
+          <AvatarStack users={followersList} max={5} size={32} />
+          <View style={{ flex: 1 }} />
+          <Text style={m.networkLink}>{t.profile_followers}</Text>
+          <Ionicons name="chevron-forward" size={15} color={colors.gray400} />
+        </TouchableOpacity>
+      )}
 
       {/* ── Bio card ── */}
       {(profile?.bio || buildInfoLine(profile, hasUnion ? myUnion : null) || hasUnion) && (
@@ -734,7 +994,7 @@ export default function ProfileScreen() {
               <TouchableOpacity
                 key={u.id}
                 style={m.followingItem}
-                onPress={() => nav.push('Profile', { userId: u.id })}
+                onPress={() => openProfileOnStack(nav, u.id)}
                 activeOpacity={0.75}
               >
                 <AvatarImage uri={u.avatar} name={u.name} size={52} />
@@ -948,7 +1208,16 @@ export default function ProfileScreen() {
       />
 
       {isOwn && profile && <QRModal visible={showQR} userId={profile.id} userName={profile.name} onClose={() => setShowQR(false)} />}
-      <FollowersSheet visible={showFollowSheet} mode={followSheetMode} userId={targetId} onClose={() => setShowFollowSheet(false)} />
+      <FollowersSheet
+        visible={showFollowSheet}
+        mode={followSheetMode}
+        userId={targetId}
+        followerCount={followerCount}
+        followingCount={followingCount}
+        onClose={() => setShowFollowSheet(false)}
+        onOwnFollowingChange={handleOwnFollowingChange}
+        onCountChange={handleConnectionCountChange}
+      />
 
       {/* Post options sheet */}
       <Modal visible={!!menuPost && !editEditing} transparent animationType="fade" onRequestClose={() => setMenuPost(null)}>
@@ -1069,6 +1338,17 @@ const m = StyleSheet.create({
   statNum:     { fontSize: 20, fontFamily: fonts.bold, color: colors.dark, letterSpacing: -0.4 },
   statLbl:     { fontSize: 11, fontFamily: fonts.regular, color: colors.gray500, letterSpacing: 0.1 },
   statDivider: { width: 1, height: 28, backgroundColor: colors.gray200 },
+
+  // Pilha de seguidores + atalho para a página inteira.
+  networkBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    marginHorizontal: 18, marginTop: 14,
+    paddingVertical: 11,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.gray200,
+  },
+  networkLink: {
+    fontSize: 13.5, fontFamily: fonts.semiBold, color: colors.gray800, letterSpacing: -0.2,
+  },
 
   // ── Bio card ─────────────────────────────────────────────────────────────────
   bioCard: {

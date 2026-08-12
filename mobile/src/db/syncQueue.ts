@@ -15,8 +15,13 @@ import {
   getPendingSyncOps,
   removeSyncOp,
   incrementSyncRetry,
+  cachePosts,
+  deleteCachedPost,
 } from './database'
+import { clearOutboxMedia, type OutboxPost } from './outbox'
+import { createPost, createAlbum } from '../services/post.service'
 import { isConnected } from '../services/netinfo.service'
+import { toggleFollow } from '../services/follow.service'
 
 let processing = false
 
@@ -44,10 +49,18 @@ async function flushLikes(): Promise<void> {
 
   for (const { postId, liked } of pending) {
     try {
-      await api.post(`/posts/${postId}/like`, { liked })
+      // `/like` é um ALTERNADOR sem corpo — não aceita o estado desejado. Por
+      // isso alterna, lê o que ficou, e alterna outra vez se não bater certo.
+      // (Mesma abordagem já usada em `commentLike:update` mais abaixo.)
+      const res = await api.post<any>(`/posts/${postId}/like`)
+      const got = res.data?.data?.liked ?? res.data?.liked
+      if (got !== liked) await api.post(`/posts/${postId}/like`)
       await removePendingLike(postId)
-    } catch {
-      // Keep in queue for next sync
+    } catch (err: any) {
+      const status: number | undefined = err?.response?.status
+      // 4xx não melhora com repetição — o post pode ter sido apagado.
+      if (status && status >= 400 && status < 500) await removePendingLike(postId)
+      // Erro de rede ou 5xx: fica para a próxima sincronização.
     }
   }
 }
@@ -63,9 +76,28 @@ async function flushGenericQueue(): Promise<void> {
   for (const op of ops) {
     try {
       switch (`${op.entity}:${op.operation}`) {
-        case 'post:create':
-          // Posts are sent via CreateScreen directly — nothing to do, discard
+        // Publicação feita sem rede. O post local já está na cache com o id
+        // temporário; aqui envia-se a sério e troca-se o temporário pelo real.
+        case 'post:create': {
+          const out = op.payload as unknown as OutboxPost
+          const real = out.kind === 'album'
+            ? await createAlbum(out.mediaUris, out.caption, out.deviceModel)
+            : await createPost(
+                out.mediaUris[0] ?? null,
+                out.mediaType,
+                out.caption,
+                out.bgColor,
+                out.partnerUserId,
+                out.isAnnouncement,
+                out.deviceModel,
+              )
+          // Ordem importa: primeiro grava o real, só depois apaga o temporário.
+          // Ao contrário, uma falha a meio deixava a feed sem post nenhum.
+          if (real) await cachePosts([real], 'synced')
+          await deleteCachedPost(out.tempId)
+          await clearOutboxMedia(out.mediaUris)
           break
+        }
         case 'post:update':
           await api.patch(`/posts/${op.entityId}`, op.payload)
           break
@@ -93,6 +125,17 @@ async function flushGenericQueue(): Promise<void> {
         case 'comment:delete':
           await api.delete(`/posts/comments/${op.entityId}`)
           break
+        // Seguir também é alternável — mesma leitura de volta que o gosto.
+        // `entityId` é o utilizador; `payload.following` é o estado pretendido.
+        case 'follow:update': {
+          const want = (op.payload as any).following as boolean
+          const duration = (op.payload as any).duration
+          // Pelo serviço, não pela API em cru: só ele sabe que 'forever' não
+          // leva corpo. Duplicar essa regra aqui era garantir que divergiam.
+          const first = await toggleFollow(op.entityId, duration)
+          if (first.following !== want) await toggleFollow(op.entityId, duration)
+          break
+        }
         // Gosto de comentário é alternável: reenviamos só se o estado no
         // servidor ainda não bate certo com o que o utilizador escolheu.
         case 'commentLike:update': {
@@ -111,6 +154,13 @@ async function flushGenericQueue(): Promise<void> {
       const status: number | undefined = err?.response?.status
       if (status && status >= 400 && status < 500) {
         // Client error (404, 403, 409…) — won't succeed on retry, discard immediately
+        // Uma publicação recusada tem de levar consigo o post local e os
+        // ficheiros copiados, senão ficam a ocupar disco e a feed para sempre.
+        if (op.entity === 'post' && op.operation === 'create') {
+          const out = op.payload as unknown as OutboxPost
+          await deleteCachedPost(out.tempId).catch(() => {})
+          await clearOutboxMedia(out.mediaUris ?? []).catch(() => {})
+        }
         await removeSyncOp(op.id)
         console.log(`[SyncQueue] ✗ Discarded ${op.entity}:${op.operation} — HTTP ${status}`)
       } else {

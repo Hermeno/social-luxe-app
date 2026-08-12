@@ -63,7 +63,7 @@ export function useComments(postId: string) {
   }, [postId, persist])
 
   const send = useCallback(async (content: string, parentId?: string) => {
-    if (!content.trim()) return
+    if (!content.trim()) return false
     const { user } = useAuthStore.getState()
     setSending(true)
 
@@ -85,15 +85,18 @@ export function useComments(postId: string) {
     if (!isConnected()) {
       await enqueueSyncOp('comment', tempId, 'create', { postId, content, parentId }).catch(() => {})
       setSending(false)
-      return
+      return true
     }
     try {
       const confirmed = await postService.addComment(postId, content, parentId)
       apply((prev) => prev.map((c) => (c.id === tempId ? confirmed : c)))
+      setSending(false)
+      return true
     } catch {
       apply((prev) => prev.filter((c) => c.id !== tempId))
+      setSending(false)
+      return false
     }
-    setSending(false)
   }, [postId, apply])
 
   // ── Gosto ───────────────────────────────────────────────────────────────────

@@ -4,20 +4,22 @@ import AvatarImage from '../../components/AvatarImage'
 
 export type CommenterThumb = { id: string; name: string; avatar: string | null }
 
-const SIZE = 26
-const OVERLAP = 9      // quanto cada avatar entra por cima do anterior
-const MAX = 5
+const SIZE = 22
+const OVERLAP = 7      // compacto: contexto social, não uma segunda navegação
+const MAX = 3
 
 /**
- * Quem comentou o post visível — avatares redondos sobrepostos, no topo da feed.
- * O primeiro fica por cima: lê-se da esquerda para a direita como uma fila.
+ * Contexto social compacto junto à legenda do momento.
+ * O primeiro avatar fica por cima, lendo-se da esquerda para a direita.
  */
 export default function CommenterStack({
   commenters,
   onPress,
+  accessibilityLabel,
 }: {
   commenters: CommenterThumb[]
   onPress?: () => void
+  accessibilityLabel?: string
 }) {
   const shown = commenters.slice(0, MAX)
   if (shown.length === 0) return null
@@ -27,9 +29,10 @@ export default function CommenterStack({
       style={s.row}
       onPress={onPress}
       disabled={!onPress}
+      hitSlop={8}
       activeOpacity={0.75}
       accessibilityRole="button"
-      accessibilityLabel={`${commenters.length} a comentar: ${shown.map((c) => c.name).join(', ')}`}
+      accessibilityLabel={accessibilityLabel ?? shown.map((c) => c.name).join(', ')}
     >
       {shown.map((c, i) => (
         <View

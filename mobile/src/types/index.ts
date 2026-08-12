@@ -58,6 +58,25 @@ export interface Post {
   userLiked?: boolean
 }
 
+/**
+ * Post servido a quem ainda não tem conta (`GET /public/feed`).
+ * Deliberadamente mais pobre que `Post`: sem expiração, sem estado de presença
+ * do autor, sem o que o utilizador fez. Não é um `Post` incompleto — é outra
+ * coisa, e o tipo separado impede que se cole um destes onde se espera sessão.
+ */
+export interface PublicPost {
+  id: string
+  mediaUrl: string | null
+  mediaUrls?: string[]
+  thumbnailUrl: string
+  mediaType: 'IMAGE' | 'VIDEO' | 'TEXT'
+  caption: string | null
+  bgColor: string | null
+  createdAt: string
+  user: { id: string; name: string; username: string | null; avatar: string | null }
+  _count: { likes: number; comments: number; views: number }
+}
+
 export interface Comment {
   id: string
   userId: string

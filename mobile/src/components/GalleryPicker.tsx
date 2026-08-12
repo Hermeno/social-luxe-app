@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Modal, View, Text, StyleSheet, TouchableOpacity, FlatList,
-  Pressable, ActivityIndicator, Dimensions, Platform, ScrollView,
+  Pressable, ActivityIndicator, Dimensions, ScrollView,
 } from 'react-native'
 import { Image } from 'expo-image'
 import * as MediaLibrary from 'expo-media-library'
@@ -18,6 +18,10 @@ const CELL = Math.floor((W - GAP * (COLS - 1)) / COLS)
 const PAGE = 60
 
 export interface PickedAsset { uri: string; type: 'image' | 'video' }
+
+type GalleryGridItem =
+  | { kind: 'camera'; id: '__camera__' }
+  | { kind: 'asset'; id: string; asset: MediaLibrary.Asset }
 
 interface Props {
   visible: boolean
@@ -46,10 +50,14 @@ export default function GalleryPicker({ visible, onClose, onDone, maxSelection =
   const [resolving, setResolving] = useState(false)
   const [albums,   setAlbums]   = useState<MediaLibrary.Album[]>([])
   const [albumId,  setAlbumId]  = useState<string | null>(null)   // null = Recentes (tudo)
+  const loadGeneration = useRef(0)
+  const loadingRef = useRef(false)
+  const selectedAssetsRef = useRef<Map<string, MediaLibrary.Asset>>(new Map())
 
   const load = useCallback(async (reset = false) => {
-    if (loading) return
-    if (!reset && !hasMore) return
+    if (!reset && (loadingRef.current || !hasMore)) return
+    const generation = reset ? ++loadGeneration.current : loadGeneration.current
+    loadingRef.current = true
     setLoading(true)
     try {
       const page = await MediaLibrary.getAssetsAsync({
@@ -59,12 +67,18 @@ export default function GalleryPicker({ visible, onClose, onDone, maxSelection =
         mediaType: [MediaLibrary.MediaType.photo, MediaLibrary.MediaType.video],
         sortBy:    [MediaLibrary.SortBy.creationTime],
       })
+      if (generation !== loadGeneration.current) return
       setAssets((prev) => reset ? page.assets : [...prev, ...page.assets])
       setCursor(page.endCursor)
       setHasMore(page.hasNextPage)
     } catch {}
-    setLoading(false)
-  }, [loading, hasMore, cursor, albumId])
+    finally {
+      if (generation === loadGeneration.current) {
+        loadingRef.current = false
+        setLoading(false)
+      }
+    }
+  }, [hasMore, cursor, albumId])
 
   // Pede permissão ao abrir
   useEffect(() => {
@@ -116,14 +130,40 @@ export default function GalleryPicker({ visible, onClose, onDone, maxSelection =
   }, [visible, perm?.status, albumId])
 
   useEffect(() => {
-    if (!visible) { setSelected([]); setAlbumId(null) }
+    if (!visible) {
+      loadGeneration.current += 1
+      loadingRef.current = false
+      selectedAssetsRef.current.clear()
+      setLoading(false)
+      setSelected([])
+      setAlbumId(null)
+    }
   }, [visible])
 
   function toggle(asset: MediaLibrary.Asset) {
+    if (resolving) return
     setSelected((prev) => {
-      if (prev.includes(asset.id)) return prev.filter((id) => id !== asset.id)
-      if (prev.length >= maxSelection) return prev
-      return [...prev, asset.id]
+      if (prev.includes(asset.id)) {
+        selectedAssetsRef.current.delete(asset.id)
+        return prev.filter((id) => id !== asset.id)
+      }
+
+      // O compositor aceita um vídeo isolado ou um álbum só de fotografias.
+      // Substituir explicitamente a seleção mantém o contador fiel ao resultado.
+      if (asset.mediaType === MediaLibrary.MediaType.video) {
+        selectedAssetsRef.current.clear()
+        selectedAssetsRef.current.set(asset.id, asset)
+        return [asset.id]
+      }
+
+      const hadVideo = prev.some((id) => (
+        selectedAssetsRef.current.get(id)?.mediaType === MediaLibrary.MediaType.video
+      ))
+      const base = hadVideo ? [] : prev
+      if (base.length >= maxSelection) return prev
+      if (hadVideo) selectedAssetsRef.current.clear()
+      selectedAssetsRef.current.set(asset.id, asset)
+      return [...base, asset.id]
     })
   }
 
@@ -131,10 +171,9 @@ export default function GalleryPicker({ visible, onClose, onDone, maxSelection =
     if (selected.length === 0 || resolving) return
     setResolving(true)
     try {
-      const byId = new Map(assets.map((a) => [a.id, a]))
       const picked: PickedAsset[] = []
       for (const id of selected) {
-        const a = byId.get(id)
+        const a = selectedAssetsRef.current.get(id) ?? assets.find((candidate) => candidate.id === id)
         if (!a) continue
         // localUri (file://) é o que dá para publicar — o uri cru pode ser ph:// ou content://
         const info = await MediaLibrary.getAssetInfoAsync(a)
@@ -149,6 +188,7 @@ export default function GalleryPicker({ visible, onClose, onDone, maxSelection =
   }
 
   async function openCamera() {
+    if (resolving) return
     const cam = await ImagePicker.requestCameraPermissionsAsync()
     if (cam.status !== 'granted') return
     const res = await ImagePicker.launchCameraAsync({ mediaTypes: ['images', 'videos'], quality: 0.85, videoMaxDuration: 90 })
@@ -158,24 +198,55 @@ export default function GalleryPicker({ visible, onClose, onDone, maxSelection =
   }
 
   const granted = perm?.status === 'granted'
+  const gridItems: GalleryGridItem[] = [
+    { kind: 'camera', id: '__camera__' },
+    ...assets.map((asset) => ({ kind: 'asset' as const, id: asset.id, asset })),
+  ]
+  const close = () => { if (!resolving) onClose() }
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose} presentationStyle="fullScreen">
+    <Modal visible={visible} animationType="slide" onRequestClose={close} presentationStyle="fullScreen">
       <View style={s.screen}>
-        {/* ── Cabeçalho ── */}
-        <View style={[s.header, { paddingTop: top + 10 }]}>
-          <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+        <View style={[s.header, { paddingTop: top }]}>
+          <TouchableOpacity
+            style={s.headerSide}
+            onPress={close}
+            disabled={resolving}
+            activeOpacity={0.65}
+            accessibilityRole="button"
+            accessibilityLabel={t.cancel}
+            accessibilityState={{ disabled: resolving }}
+          >
             <Text style={s.cancel}>{t.cancel}</Text>
           </TouchableOpacity>
-          <Text style={s.title}>
-            {selected.length > 0
-              ? `${selected.length} ${selected.length > 1 ? t.gal_selectedPl : t.gal_selected}`
-              : t.gal_title}
-          </Text>
-          <View style={{ width: 64 }} />
+          <View style={s.headerIdentity} pointerEvents="none">
+            <View style={s.brandSignal}>
+              <View style={s.brandSignalLine} />
+              <View style={s.brandSignalDot} />
+            </View>
+            <Text style={s.title}>
+              {selected.length > 0
+                ? `${selected.length} ${selected.length > 1 ? t.gal_selectedPl : t.gal_selected}`
+                : t.gal_title}
+            </Text>
+          </View>
+          {selected.length > 0 ? (
+            <TouchableOpacity
+              style={[s.headerSide, s.headerSideEnd]}
+              onPress={confirm}
+              disabled={resolving}
+              activeOpacity={0.65}
+              accessibilityRole="button"
+              accessibilityLabel={t.gal_add}
+              accessibilityState={{ disabled: resolving, busy: resolving }}
+            >
+              {resolving
+                ? <ActivityIndicator color="#FF7A1C" size="small" />
+                : <Text style={s.doneTxt}>{t.gal_add}</Text>}
+            </TouchableOpacity>
+          ) : <View style={s.headerSide} />}
         </View>
 
-        {/* ── Pastas (álbuns) — filtra a grelha por pasta ── */}
         {granted && (
           <View style={s.albumBarWrap}>
             <ScrollView
@@ -183,25 +254,35 @@ export default function GalleryPicker({ visible, onClose, onDone, maxSelection =
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={s.albumBar}
               keyboardShouldPersistTaps="handled"
+              scrollEnabled={!resolving}
             >
               <TouchableOpacity
-                style={[s.albumChip, albumId === null && s.albumChipOn]}
+                style={s.albumTab}
                 onPress={() => setAlbumId(null)}
-                activeOpacity={0.8}
+                disabled={resolving}
+                activeOpacity={0.68}
+                accessibilityRole="button"
+                accessibilityState={{ selected: albumId === null, disabled: resolving }}
               >
-                <Ionicons name="time-outline" size={13} color={albumId === null ? '#fff' : colors.gray600} />
+                <Ionicons name="time-outline" size={14} color={albumId === null ? '#FF7A1C' : '#77777D'} />
                 <Text style={[s.albumTxt, albumId === null && s.albumTxtOn]}>{t.gal_recent}</Text>
+                <View style={[s.albumMarker, albumId === null && s.albumMarkerOn]} />
               </TouchableOpacity>
               {albums.map((a) => (
                 <TouchableOpacity
                   key={a.id}
-                  style={[s.albumChip, albumId === a.id && s.albumChipOn]}
+                  style={s.albumTab}
                   onPress={() => setAlbumId(a.id)}
-                  activeOpacity={0.8}
+                  disabled={resolving}
+                  activeOpacity={0.68}
+                  accessibilityRole="button"
+                  accessibilityLabel={a.title}
+                  accessibilityState={{ selected: albumId === a.id, disabled: resolving }}
                 >
-                  <Ionicons name="folder-outline" size={13} color={albumId === a.id ? '#fff' : colors.gray600} />
+                  <Ionicons name="folder-outline" size={14} color={albumId === a.id ? '#FF7A1C' : '#77777D'} />
                   <Text style={[s.albumTxt, albumId === a.id && s.albumTxtOn]} numberOfLines={1}>{a.title}</Text>
-                  <Text style={[s.albumCount, albumId === a.id && s.albumTxtOn]}>{a.assetCount}</Text>
+                  <Text style={s.albumCount}>{a.assetCount}</Text>
+                  <View style={[s.albumMarker, albumId === a.id && s.albumMarkerOn]} />
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -210,40 +291,68 @@ export default function GalleryPicker({ visible, onClose, onDone, maxSelection =
 
         {!granted ? (
           <View style={s.permWrap}>
-            <View style={s.permIcon}><Ionicons name="images-outline" size={30} color={colors.primary} /></View>
+            <View style={s.permSignal}>
+              <View style={s.permSignalLine} />
+              <View style={s.permSignalDot} />
+            </View>
+            <Ionicons name="images-outline" size={32} color="#FF7A1C" />
             <Text style={s.permTitle}>{t.gal_permTitle}</Text>
             <Text style={s.permSub}>{t.gal_permSub}</Text>
-            <TouchableOpacity style={s.permBtn} onPress={() => requestPerm()} activeOpacity={0.85}>
+            <TouchableOpacity
+              style={s.permBtn}
+              onPress={() => requestPerm()}
+              activeOpacity={0.82}
+              accessibilityRole="button"
+              accessibilityLabel={t.gal_permBtn}
+            >
+              <View style={s.permBtnSignal} />
               <Text style={s.permBtnTxt}>{t.gal_permBtn}</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <FlatList
-            data={assets}
-            keyExtractor={(a) => a.id}
+            data={gridItems}
+            keyExtractor={(item) => item.id}
             numColumns={COLS}
-            contentContainerStyle={{ paddingBottom: bottom + 90 }}
+            contentContainerStyle={{ paddingBottom: bottom + 16 }}
             columnWrapperStyle={{ gap: GAP }}
             ItemSeparatorComponent={() => <View style={{ height: GAP }} />}
             onEndReached={() => load(false)}
             onEndReachedThreshold={0.6}
             showsVerticalScrollIndicator={false}
-            ListHeaderComponent={
-              <View style={{ flexDirection: 'row', gap: GAP, marginBottom: GAP }}>
-                <TouchableOpacity style={s.cameraTile} onPress={openCamera} activeOpacity={0.85}>
-                  <Ionicons name="camera" size={26} color="#fff" />
-                  <Text style={s.cameraTxt}>{t.gal_camera}</Text>
-                </TouchableOpacity>
-              </View>
-            }
+            scrollEnabled={!resolving}
             renderItem={({ item }) => {
-              const idx = selected.indexOf(item.id)
-              const isVideo = item.mediaType === MediaLibrary.MediaType.video
+              if (item.kind === 'camera') {
+                return (
+                  <TouchableOpacity
+                    style={s.cameraTile}
+                    onPress={openCamera}
+                    disabled={resolving}
+                    activeOpacity={0.72}
+                    accessibilityRole="button"
+                    accessibilityLabel={t.gal_camera}
+                    accessibilityState={{ disabled: resolving }}
+                  >
+                    <View style={s.cameraSignal} />
+                    <Ionicons name="camera" size={26} color="#fff" />
+                    <Text style={s.cameraTxt}>{t.gal_camera}</Text>
+                  </TouchableOpacity>
+                )
+              }
+              const asset = item.asset
+              const idx = selected.indexOf(asset.id)
+              const isVideo = asset.mediaType === MediaLibrary.MediaType.video
               return (
-                <Pressable style={s.cell} onPress={() => toggle(item)}>
-                  <Image source={{ uri: item.uri }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" recyclingKey={item.id} />
+                <Pressable
+                  style={s.cell}
+                  onPress={() => toggle(asset)}
+                  disabled={resolving}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: idx >= 0, disabled: resolving }}
+                >
+                  <Image source={{ uri: asset.uri }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" recyclingKey={asset.id} />
                   {isVideo && (
-                    <View style={s.durBadge}><Ionicons name="play" size={9} color="#fff" /><Text style={s.durTxt}>{fmtDur(item.duration)}</Text></View>
+                    <View style={s.durBadge}><Ionicons name="play" size={9} color="#fff" /><Text style={s.durTxt}>{fmtDur(asset.duration)}</Text></View>
                   )}
                   {idx >= 0 && <View style={s.selDim} />}
                   <View style={[s.selBadge, idx >= 0 && s.selBadgeOn]}>
@@ -255,76 +364,129 @@ export default function GalleryPicker({ visible, onClose, onDone, maxSelection =
             ListFooterComponent={loading ? <ActivityIndicator color={colors.primary} style={{ paddingVertical: 20 }} /> : null}
           />
         )}
-
-        {/* ── Confirmar ── */}
-        {granted && selected.length > 0 && (
-          <View style={[s.footer, { paddingBottom: bottom + 12 }]}>
-            <TouchableOpacity style={s.doneBtn} onPress={confirm} disabled={resolving} activeOpacity={0.88}>
-              {resolving
-                ? <ActivityIndicator color="#fff" size="small" />
-                : <Text style={s.doneTxt}>{t.gal_add}{selected.length > 1 ? ` ${selected.length} ${t.gal_addPhotos}` : ''}</Text>}
-            </TouchableOpacity>
-          </View>
-        )}
       </View>
     </Modal>
   )
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.white },
+  screen: { flex: 1, backgroundColor: '#FAFAF8' },
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(0,0,0,0.08)',
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#D8D8D5',
   },
-  cancel: { fontFamily: fonts.medium, fontSize: 15, color: colors.gray600, width: 64 },
-  title:  { fontFamily: fonts.bold, fontSize: 16, color: colors.black, letterSpacing: -0.3 },
+  headerSide: {
+    width: 92,
+    height: 52,
+    paddingHorizontal: 16,
+    justifyContent: 'center',
+  },
+  headerSideEnd: { alignItems: 'flex-end' },
+  headerIdentity: {
+    flex: 1,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  brandSignal: { height: 4, flexDirection: 'row', alignItems: 'center', gap: 3 },
+  brandSignalLine: { width: 18, height: 2, backgroundColor: '#FF7A1C' },
+  brandSignalDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: '#FF7A1C' },
+  cancel: { fontFamily: fonts.medium, fontSize: 14, color: '#5C5C63' },
+  title: { fontFamily: fonts.semiBold, fontSize: 15, color: '#1A1A1A', letterSpacing: -0.2 },
+  doneTxt: { color: '#FF7A1C', fontFamily: fonts.semiBold, fontSize: 14 },
 
-  albumBarWrap: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(0,0,0,0.06)' },
-  albumBar:     { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingVertical: 10 },
-  albumChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18,
-    backgroundColor: '#F2F2F5', maxWidth: 180,
+  albumBarWrap: {
+    height: 52,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#D8D8D5',
   },
-  albumChipOn: { backgroundColor: colors.primary },
-  albumTxt:    { fontFamily: fonts.semiBold, fontSize: 13, color: colors.gray600, flexShrink: 1 },
-  albumTxtOn:  { color: '#fff' },
-  albumCount:  { fontFamily: fonts.medium, fontSize: 11, color: colors.gray400 },
+  albumBar: { flexDirection: 'row', alignItems: 'stretch', paddingHorizontal: 4 },
+  albumTab: {
+    height: 51,
+    maxWidth: 200,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    position: 'relative',
+  },
+  albumTxt: { fontFamily: fonts.medium, fontSize: 13, color: '#77777D', flexShrink: 1 },
+  albumTxtOn: { color: '#1A1A1A', fontFamily: fonts.semiBold },
+  albumCount: { fontFamily: fonts.medium, fontSize: 11, color: '#A0A0A5' },
+  albumMarker: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 0,
+    height: 2,
+    backgroundColor: 'transparent',
+  },
+  albumMarkerOn: { backgroundColor: '#FF7A1C' },
 
   cameraTile: {
-    width: CELL, height: CELL, backgroundColor: '#1A1A1A',
-    alignItems: 'center', justifyContent: 'center', gap: 4,
+    width: CELL,
+    height: CELL,
+    backgroundColor: '#1A1A1A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  cameraSignal: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    width: 18,
+    height: 2,
+    backgroundColor: '#FF7A1C',
   },
   cameraTxt: { color: '#fff', fontFamily: fonts.semiBold, fontSize: 12 },
 
   cell: { width: CELL, height: CELL, backgroundColor: '#EDEDED' },
   durBadge: {
     position: 'absolute', bottom: 5, right: 5, flexDirection: 'row', alignItems: 'center', gap: 2,
-    backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1,
+    backgroundColor: 'rgba(0,0,0,0.62)', borderRadius: 2, paddingHorizontal: 4, paddingVertical: 1,
   },
   durTxt: { color: '#fff', fontSize: 9.5, fontFamily: fonts.semiBold },
   selDim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.35)' },
   selBadge: {
-    position: 'absolute', top: 6, right: 6, width: 22, height: 22, borderRadius: 11,
+    position: 'absolute', top: 6, right: 6, width: 22, height: 22, borderRadius: 2,
     borderWidth: 1.5, borderColor: '#fff', backgroundColor: 'rgba(0,0,0,0.18)',
     alignItems: 'center', justifyContent: 'center',
   },
-  selBadgeOn: { backgroundColor: colors.primary, borderColor: '#fff' },
+  selBadgeOn: { backgroundColor: '#FF7A1C', borderColor: '#fff' },
   selNum: { color: '#fff', fontSize: 11, fontFamily: fonts.bold },
 
-  footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 16, paddingTop: 8, backgroundColor: colors.white },
-  doneBtn: {
-    height: 52, borderRadius: 26, backgroundColor: colors.primary,
-    alignItems: 'center', justifyContent: 'center',
+  permWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    gap: 10,
   },
-  doneTxt: { color: '#fff', fontFamily: fonts.bold, fontSize: 16, letterSpacing: -0.3 },
-
-  permWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 44, gap: 8 },
-  permIcon: { width: 76, height: 76, borderRadius: 38, borderWidth: 1.6, borderColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  permSignal: { height: 4, flexDirection: 'row', alignItems: 'center', gap: 3, marginBottom: 8 },
+  permSignalLine: { width: 24, height: 2, backgroundColor: '#FF7A1C' },
+  permSignalDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: '#FF7A1C' },
   permTitle: { fontFamily: fonts.bold, fontSize: 18, color: colors.black },
   permSub: { fontFamily: fonts.regular, fontSize: 13.5, color: colors.gray500, textAlign: 'center', lineHeight: 20 },
-  permBtn: { marginTop: 14, backgroundColor: colors.primary, paddingHorizontal: 28, paddingVertical: 13, borderRadius: 24 },
+  permBtn: {
+    width: '100%',
+    maxWidth: 320,
+    height: 48,
+    marginTop: 14,
+    borderRadius: 12,
+    backgroundColor: '#1A1A1A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  permBtnSignal: {
+    position: 'absolute',
+    left: 16,
+    width: 18,
+    height: 2,
+    backgroundColor: '#FF7A1C',
+  },
   permBtnTxt: { color: '#fff', fontFamily: fonts.bold, fontSize: 14.5 },
 })

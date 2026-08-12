@@ -14,6 +14,7 @@ import AvatarImage from '../../components/AvatarImage'
 import { toast } from '../../utils/toast'
 import { fonts } from '../../theme'
 import { API_BASE } from '../../config'
+import { useT } from '../../i18n'
 
 function resolveMedia(url: string) {
   return url.startsWith('http') ? url : `${API_BASE}${url}`
@@ -40,6 +41,7 @@ function timeLeft(expiresAt: string): string {
 }
 
 export default function HalvesScreen() {
+  const t = useT()
   const nav = useNavigation<any>()
   const { top, bottom } = useSafeAreaInsets()
 
@@ -69,7 +71,7 @@ export default function HalvesScreen() {
     if (busy) return
     const perm = await ImagePicker.requestCameraPermissionsAsync()
     if (!perm.granted) {
-      Alert.alert('Câmara', 'Precisas de dar acesso à câmara para completar uma metade.')
+      Alert.alert(t.gal_camera, t.hv_cam_msg)
       return
     }
     const shot = await ImagePicker.launchCameraAsync({ quality: 0.8 })
@@ -79,11 +81,11 @@ export default function HalvesScreen() {
     try {
       const post = await completeHalf(half.id, shot.assets[0].uri)
       setIncoming((prev) => prev.filter((h) => h.id !== half.id))
-      toast.success('Ficou inteira', `Tu e ${half.creator.name.split(' ')[0]} publicaram.`)
+      toast.success(t.hv_whole_title, t.hv_whole_msg.replace('{name}', half.creator.name.split(' ')[0]))
       nav.navigate('PostViewer', { posts: [post], startIndex: 0 })
     } catch (e: unknown) {
       const msg = (e as any)?.response?.data?.message ?? 'Não foi possível completar.'
-      toast.error('Erro', msg)
+      toast.error(t.error, msg)
       load()
     }
     setBusy(null)
@@ -96,7 +98,7 @@ export default function HalvesScreen() {
       await deleteHalf(half.id)
       setMine((prev) => prev.filter((h) => h.id !== half.id))
     } catch {
-      toast.error('Erro', 'Não foi possível apagar.')
+      toast.error(t.error, t.hv_delete_fail)
     }
     setBusy(null)
   }
@@ -122,7 +124,7 @@ export default function HalvesScreen() {
           <TouchableOpacity style={s.cta} onPress={() => handleComplete(item)} activeOpacity={0.85} disabled={busy === item.id}>
             {busy === item.id
               ? <ActivityIndicator size="small" color="#fff" />
-              : <><Ionicons name="camera" size={14} color="#fff" /><Text style={s.ctaTxt}>Completar</Text></>}
+              : <><Ionicons name="camera" size={14} color="#fff" /><Text style={s.ctaTxt}>{t.hv_complete}</Text></>}
           </TouchableOpacity>
         </View>
       </View>
@@ -144,9 +146,9 @@ export default function HalvesScreen() {
             </View>
           </View>
           {item.caption ? <Text style={s.caption} numberOfLines={2}>{item.caption}</Text> : null}
-          <Text style={s.hint}>Se ninguém completar, isto nunca foi publicado.</Text>
+          <Text style={s.hint}>{t.hv_hint}</Text>
           <TouchableOpacity style={s.ghost} onPress={() => handleDelete(item)} activeOpacity={0.8} disabled={busy === item.id}>
-            <Text style={s.ghostTxt}>Desistir</Text>
+            <Text style={s.ghostTxt}>{t.hv_give_up}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -167,7 +169,7 @@ export default function HalvesScreen() {
         <TouchableOpacity onPress={() => nav.goBack()} style={s.backBtn} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
           <Ionicons name="chevron-back" size={20} color={T_C} />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>Metades</Text>
+        <Text style={s.headerTitle}>{t.hv_title}</Text>
       </View>
 
       <View style={s.tabs}>

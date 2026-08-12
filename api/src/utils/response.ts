@@ -31,3 +31,7 @@ export function serverError(res: Response, message = 'Internal server error') {
 export function tooManyRequests(res: Response, message = 'Too many requests') {
   return res.status(429).json({ success: false, message })
 }
+
+export function serviceUnavailable(res: Response, message = 'Service unavailable') {
+  return res.status(503).json({ success: false, message })
+}

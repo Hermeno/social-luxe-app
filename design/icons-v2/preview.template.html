@@ -1,0 +1,513 @@
+<title>Luxee Icons v2 — pacote para revisão</title>
+<style>
+  :root {
+    --ground: #0A0A0F;
+    --panel: #131420;
+    --raised: #1C1D28;
+    --hairline: #262838;
+    --ink: #F0F1F6;
+    --muted: #767E92;
+    --slate: #3A4250;
+    --rose: #F5274F;
+    --magenta: #C238E8;
+    --violet: #8B5CF6;
+    --azure: #2A9BE8;
+    --teal: #2FD4B6;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --gap: clamp(20px, 4vw, 44px);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 var(--gap) 96px; }
+
+  /* ── Micro-rótulo mono: o motivo tipográfico da folha ─────────────────── */
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0;
+  }
+
+  h1 {
+    font-size: clamp(34px, 6.5vw, 56px);
+    line-height: 1.02;
+    letter-spacing: -.035em;
+    font-weight: 760;
+    margin: 14px 0 0;
+    text-wrap: balance;
+  }
+  h2 {
+    font-size: clamp(21px, 3vw, 27px);
+    line-height: 1.15;
+    letter-spacing: -.025em;
+    font-weight: 700;
+    margin: 0;
+    text-wrap: balance;
+  }
+  h3 { font-size: 16px; letter-spacing: -.01em; font-weight: 650; margin: 0; }
+
+  .lede { max-width: 62ch; color: #B9BECD; margin: 18px 0 0; font-size: 17px; }
+  p { margin: 0; }
+  .note { color: var(--muted); font-size: 14px; max-width: 68ch; }
+
+  /* ── Cabeçalho ────────────────────────────────────────────────────────── */
+  header { padding: clamp(48px, 9vw, 92px) 0 0; }
+
+  .specs {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    margin: 30px 0 0; padding: 0; list-style: none;
+  }
+  .specs li {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .04em;
+    color: #A7AEC0; background: var(--raised);
+    border: 1px solid var(--hairline); border-radius: 999px;
+    padding: 6px 13px;
+  }
+  .specs b { color: var(--ink); font-weight: 600; }
+
+  section { margin-top: clamp(52px, 8vw, 88px); }
+  .sec-head { display: flex; flex-direction: column; gap: 10px; margin-bottom: 26px; }
+
+  /* ── Barra de controlo fixa ───────────────────────────────────────────── */
+  .controls {
+    position: sticky; top: 0; z-index: 20;
+    display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center;
+    padding: 14px 0; margin-top: clamp(40px, 6vw, 64px);
+    background: rgba(10, 10, 15, .93);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--hairline);
+  }
+  .ctl { display: flex; align-items: center; gap: 9px; }
+  .ctl > .eyebrow { font-size: 10px; }
+  .seg { display: flex; gap: 3px; background: var(--raised); border: 1px solid var(--hairline); border-radius: 9px; padding: 3px; }
+  .seg button {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .02em;
+    color: var(--muted); background: none; border: 0; border-radius: 6px;
+    padding: 5px 10px; cursor: pointer; transition: color .15s, background .15s;
+  }
+  .seg button:hover { color: var(--ink); }
+  .seg button[aria-pressed="true"] { color: #fff; background: #33364a; }
+  .seg button:focus-visible, .swatch:focus-visible { outline: 2px solid var(--azure); outline-offset: 2px; }
+
+  .swatches { display: flex; gap: 6px; }
+  .swatch {
+    width: 24px; height: 24px; border-radius: 7px; cursor: pointer;
+    border: 1px solid var(--hairline); padding: 0;
+    transition: transform .15s, box-shadow .15s;
+  }
+  .swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--ground), 0 0 0 3.5px currentColor; }
+  .swatch:hover { transform: translateY(-1px); }
+
+  /* ── Grelha de ícones ─────────────────────────────────────────────────── */
+  .kit { --sz: 32px; --sw: 1.75; --tint: #F0F1F6; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+    gap: 10px;
+  }
+  .cell {
+    display: flex; flex-direction: column; align-items: center; gap: 12px;
+    padding: 18px 8px 13px;
+    background: var(--panel); border: 1px solid var(--hairline); border-radius: 13px;
+    transition: border-color .15s, background .15s;
+  }
+  .cell:hover { border-color: #39405c; background: #171827; }
+  .glyph {
+    display: grid; place-items: center;
+    width: 100%; height: 62px; border-radius: 9px;
+    color: var(--tint);
+    transition: background .2s;
+  }
+  .glyph svg { width: var(--sz); height: var(--sz); display: block; }
+  .glyph svg * { stroke-width: var(--sw); }
+  .cap {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .01em;
+    color: var(--muted); text-align: center; word-break: break-word; line-height: 1.35;
+  }
+  .kit[data-ground="light"] .glyph { background: #FFFFFF; }
+  .kit[data-ground="light"] .cell { background: #EDEFF4; border-color: #D5D9E3; }
+  .kit[data-ground="light"] .cell:hover { background: #E4E7EF; border-color: #C2C8D6; }
+  .kit[data-ground="light"] .cap { color: #5A6274; }
+
+  /* ── Pedidos específicos ──────────────────────────────────────────────── */
+  .asks { display: grid; grid-template-columns: repeat(auto-fit, minmax(268px, 1fr)); gap: 12px; }
+  .ask {
+    display: flex; gap: 18px; align-items: center;
+    padding: 22px; border-radius: 15px;
+    background: linear-gradient(150deg, #1A1530, var(--panel) 62%);
+    border: 1px solid #35306a;
+  }
+  .ask .demo {
+    flex: none; width: 76px; height: 76px; display: grid; place-items: center;
+    background: #0C0C14; border: 1px solid var(--hairline); border-radius: 13px;
+    color: var(--violet);
+  }
+  .ask .demo svg { width: 42px; height: 42px; }
+  .ask .demo svg * { stroke-width: 1.75; }
+  .ask p { margin-top: 6px; }
+
+  /* ── Anatomia ─────────────────────────────────────────────────────────── */
+  .anatomy { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: clamp(22px, 4vw, 46px); align-items: center; }
+  .anatomy figure { margin: 0; background: var(--panel); border: 1px solid var(--hairline); border-radius: 16px; padding: 18px; }
+  .anatomy svg { width: 100%; height: auto; display: block; }
+  .rules { display: flex; flex-direction: column; gap: 14px; margin: 0; padding: 0; list-style: none; }
+  .rules li { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 16px; align-items: baseline; padding-bottom: 14px; border-bottom: 1px solid var(--hairline); }
+  .rules li:last-child { border-bottom: 0; padding-bottom: 0; }
+  .rules dt, .rules .k {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .13em;
+    text-transform: uppercase; color: var(--violet);
+  }
+  .rules .v { color: #B9BECD; font-size: 14.5px; }
+
+  /* ── Estados ──────────────────────────────────────────────────────────── */
+  .states { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 10px; }
+  .state {
+    display: flex; flex-direction: column; align-items: center; gap: 12px;
+    padding: 22px 12px 16px; border-radius: 13px;
+    background: var(--panel); border: 1px solid var(--hairline);
+  }
+  .state svg { width: 34px; height: 34px; display: block; }
+  .state .lbl { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; }
+  .state .hex { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+
+  /* ── Paleta ───────────────────────────────────────────────────────────── */
+  .pal { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 10px; }
+  .chip { border-radius: 13px; overflow: hidden; border: 1px solid var(--hairline); background: var(--panel); }
+  .chip .fill { height: 66px; }
+  .chip .meta { padding: 11px 13px 13px; display: flex; flex-direction: column; gap: 2px; }
+  .chip .nm { font-size: 13.5px; font-weight: 600; letter-spacing: -.005em; }
+  .chip .hx { font-family: var(--mono); font-size: 11px; color: var(--muted); text-transform: uppercase; }
+
+  /* ── Adoção ───────────────────────────────────────────────────────────── */
+  .changes { display: flex; flex-direction: column; gap: 0; margin: 0; padding: 0; list-style: none; }
+  .changes li {
+    display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 18px;
+    padding: 15px 0; border-top: 1px solid var(--hairline); align-items: baseline;
+  }
+  .changes li:last-child { border-bottom: 1px solid var(--hairline); }
+  .changes code, .inline-code {
+    font-family: var(--mono); font-size: 12.5px;
+    background: var(--raised); border: 1px solid var(--hairline);
+    border-radius: 5px; padding: 1.5px 6px; color: #CFD4E2;
+  }
+  .changes .what { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--teal); }
+  .changes .why { color: #B9BECD; font-size: 14.5px; }
+
+  .callout {
+    margin-top: 26px; padding: 20px 22px; border-radius: 14px;
+    background: #1A1220; border: 1px solid #4A2740;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .callout .eyebrow { color: var(--rose); }
+
+  .term { display: block; overflow-x: auto; margin-top: 18px; padding: 16px 18px; border-radius: 12px; background: #08080D; border: 1px solid var(--hairline); }
+  .term code { font-family: var(--mono); font-size: 12.5px; color: #9BE7D2; white-space: pre; background: none; border: 0; padding: 0; }
+
+  footer { margin-top: clamp(56px, 8vw, 88px); padding-top: 24px; border-top: 1px solid var(--hairline); }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+  @media (max-width: 720px) {
+    .anatomy { grid-template-columns: 1fr; }
+    .rules li, .changes li { grid-template-columns: 1fr; gap: 4px; }
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Luxee · sistema de ícones · v2 · 10 ago 2026</p>
+    <h1>Um traço, sem enchimento.</h1>
+    <p class="lede">
+      Pacote redesenhado a partir do teu kit de referência. Todos os glifos são vazados
+      por dentro — o estado de um ícone resolve-se com <strong>cor</strong> e espessura,
+      nunca fechando a forma. É esta regra que dá coerência ao conjunto todo.
+    </p>
+    <ul class="specs">
+      <li><b id="count">—</b> glifos</li>
+      <li>grelha <b>24×24</b></li>
+      <li>área viva <b>3–21</b></li>
+      <li>traço <b>1.75</b></li>
+      <li>pontas <b>redondas</b></li>
+      <li>interior <b>vazado</b></li>
+    </ul>
+  </header>
+
+  <div class="controls" role="group" aria-label="Controlos de pré-visualização">
+    <div class="ctl">
+      <span class="eyebrow">Tamanho</span>
+      <div class="seg" id="seg-size"></div>
+    </div>
+    <div class="ctl">
+      <span class="eyebrow">Traço</span>
+      <div class="seg" id="seg-stroke"></div>
+    </div>
+    <div class="ctl">
+      <span class="eyebrow">Fundo</span>
+      <div class="seg" id="seg-ground"></div>
+    </div>
+    <div class="ctl">
+      <span class="eyebrow">Tinta</span>
+      <div class="swatches" id="seg-tint"></div>
+    </div>
+  </div>
+
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">Os teus dois pedidos</p>
+      <h2>Confirmados no desenho</h2>
+    </div>
+    <div class="asks" id="asks"></div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">Anatomia</p>
+      <h2>Porque é que o conjunto parece uma família</h2>
+    </div>
+    <div class="anatomy">
+      <figure id="anatomy-fig"></figure>
+      <ul class="rules">
+        <li><span class="k">Grelha</span><span class="v">Todos os glifos vivem numa caixa de 24×24. Nada toca a margem: a área viva é 3–21, o que dá 3 unidades de ar em volta e impede que um ícone pareça maior que o vizinho.</span></li>
+        <li><span class="k">Traço</span><span class="v">1.75 em repouso, 2.25 quando ativo. Uma só espessura por ícone — nunca linhas finas a competir com grossas dentro do mesmo desenho.</span></li>
+        <li><span class="k">Terminais</span><span class="v">Todas as pontas e junções são redondas. É o detalhe que faz o conjunto ler como desenhado à mão em vez de gerado.</span></li>
+        <li><span class="k">Interior</span><span class="v">Vazado, sempre. A única exceção são os três pontos do «Mais», que são marcas e não formas — não têm interior para vazar.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="sections"></section>
+
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">Modelo de estado</p>
+      <h2>O mesmo glifo, cinco estados</h2>
+    </div>
+    <p class="note">
+      Um único desenho serve o ciclo inteiro. Não há versão «cheia» do coração para o gosto:
+      o coração fica vazado e passa a carmim, com o traço a engrossar. Isto corta o pacote
+      a meio em número de ficheiros e garante que a animação entre estados nunca salta de forma.
+    </p>
+    <div class="states" id="states" style="margin-top:22px"></div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">Paleta</p>
+      <h2>Sete cores, cada uma com um trabalho</h2>
+    </div>
+    <div class="pal" id="pal"></div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <p class="eyebrow">Adoção</p>
+      <h2>O que muda na app</h2>
+    </div>
+    <ul class="changes">
+      <li>
+        <span class="what">Sólidos caem</span>
+        <span class="why"><code>play</code> era preenchido e passa a triângulo vazado. O ponto sólido da <code>camera</code> sai.</span>
+      </li>
+      <li>
+        <span class="what">Mais → vertical</span>
+        <span class="why">O «Mais» do feed passa a usar <code>more-vertical</code>. O <code>more-horizontal</code> fica no pacote antigo para quem ainda o chama.</span>
+      </li>
+      <li>
+        <span class="what">Balão novo</span>
+        <span class="why"><code>comment</code> substitui <code>message</code> no feed — mesma função, setinha à direita.</span>
+      </li>
+      <li>
+        <span class="what">Partilha divide-se</span>
+        <span class="why"><code>share</code> passa a ser a seta curva (Compartilhar). A caixa-com-seta que tinha esse nome passa a <code>invite</code> (Convidar).</span>
+      </li>
+      <li>
+        <span class="what">Nove glifos novos</span>
+        <span class="why"><code>heart-plus</code> · <code>remix</code> · <code>music</code> · <code>user-check</code> · <code>user-minus</code> · <code>verified</code> · <code>pause</code> · <code>volume</code> · <code>volume-off</code> · <code>fullscreen</code> · <code>pip</code> · <code>speed</code> · <code>rewind-10</code> · <code>forward-10</code> · <code>live</code></span>
+      </li>
+      <li>
+        <span class="what">Ponte Ionicons</span>
+        <span class="why">67 ficheiros ainda chamam Ionicons. O mapa <code>ION</code> em <code>components/Icon/aliases.ts</code> absorve a troca sem mexer ecrã a ecrã.</span>
+      </li>
+    </ul>
+
+    <div class="term"><code>cp design/icons-v2/svg/*.svg mobile/src/assets/icons/
+cd mobile && npm run icons     # regenera paths.ts</code></div>
+
+    <div class="callout">
+      <p class="eyebrow">Uma decisão é tua</p>
+      <p>
+        O kit de referência vive sobre preto. A app está em branco puro <span class="inline-code">#FFFFFF</span>,
+        e a regra que me deste é para nunca mexer no fundo dos ecrãs. Por isso deixei os fundos
+        em paz e trouxe só os ícones e a paleta de acentos. Carrega em <strong>Fundo → Claro</strong>
+        aqui em cima para veres o conjunto sobre branco antes de decidires.
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    <p class="eyebrow">Ficheiros em design/icons-v2 · svg/ · tokens.ts · nada ligado à app até dizeres que sim</p>
+  </footer>
+</div>
+
+<script>
+/*__ICON_DATA__*/
+
+const kitRoot = document.createElement('div');
+
+const CATEGORIES = [
+  { title: 'Feed', desc: 'Ações sobre o vídeo e sobre o post.', names: ['heart','heart-plus','comment','share','bookmark','remix','more-vertical','music'] },
+  { title: 'Navegação', desc: 'A barra inferior. Cinco destinos, nunca mais.', names: ['home','search','plus','bell','user'] },
+  { title: 'Perfil e social', desc: 'Relação entre pessoas — o núcleo da Luxee.', names: ['user-plus','user-check','user-minus','invite','send','users','verified'] },
+  { title: 'Vídeo', desc: 'Controlos do leitor.', names: ['play','pause','volume','volume-off','fullscreen','pip','speed','rewind-10','forward-10'] },
+  { title: 'Captura e sistema', desc: 'Entrada de conteúdo e definições.', names: ['camera','video','image','live','settings'] },
+];
+
+const PALETTE = [
+  { nm: 'Rosa',    hx: '#F5274F', job: 'gosto · ao vivo' },
+  { nm: 'Violeta', hx: '#8B5CF6', job: 'acento primário' },
+  { nm: 'Azul',    hx: '#2A9BE8', job: 'ligação · gradiente' },
+  { nm: 'Teal',    hx: '#2FD4B6', job: 'confirmado' },
+  { nm: 'Magenta', hx: '#C238E8', job: 'destaque raro' },
+  { nm: 'Tinta',   hx: '#F0F1F6', job: 'ícone em repouso' },
+  { nm: 'Mudo',    hx: '#767E92', job: 'inativo' },
+  { nm: 'Base',    hx: '#0A0A0F', job: 'fundo escuro' },
+];
+
+const STATES = [
+  { lbl: 'Repouso',   color: '#767E92', sw: 1.75 },
+  { lbl: 'Foco',      color: '#F0F1F6', sw: 1.75 },
+  { lbl: 'Ativo',     color: '#8B5CF6', sw: 2.25 },
+  { lbl: 'Gostado',   color: '#F5274F', sw: 2.25 },
+  { lbl: 'Desativado',color: '#3A4250', sw: 1.75 },
+];
+
+const svgOf = (name, px, sw, color) => {
+  const raw = ICONS[name];
+  if (!raw) return '';
+  return '<svg viewBox="0 0 24 24" width="' + px + '" height="' + px + '" fill="none" stroke="currentColor" ' +
+    'stroke-width="' + sw + '" stroke-linecap="round" stroke-linejoin="round"' +
+    (color ? ' style="color:' + color + '"' : '') + ' aria-hidden="true">' + raw + '</svg>';
+};
+
+/* ── Grelha por categoria ───────────────────────────────────────────────── */
+const sections = document.getElementById('sections');
+let html = '';
+for (const cat of CATEGORIES) {
+  html += '<div class="sec-head" style="margin-top:44px">' +
+    '<p class="eyebrow">' + cat.names.length + ' glifos</p>' +
+    '<h2>' + cat.title + '</h2>' +
+    '<p class="note">' + cat.desc + '</p></div>' +
+    '<div class="kit grid" data-kit>' +
+    cat.names.map(n => '<div class="cell"><span class="glyph">' + svgOf(n, 32, 1.75) + '</span><span class="cap">' + n + '</span></div>').join('') +
+    '</div>';
+}
+sections.innerHTML = html;
+document.getElementById('count').textContent = Object.keys(ICONS).length;
+
+/* ── Pedidos específicos ────────────────────────────────────────────────── */
+document.getElementById('asks').innerHTML = [
+  { n: 'more-vertical', t: 'Mais, na vertical', d: 'Os três pontos passam a empilhar-se. Encosta melhor à direita do post e deixa de colidir com o texto da legenda.' },
+  { n: 'comment', t: 'Balão com a setinha à direita', d: 'A cauda sai do canto inferior direito e aponta para fora. Dá direção à ação em vez de ser um balão neutro.' },
+].map(a => '<div class="ask"><span class="demo">' + svgOf(a.n, 42, 1.75) + '</span>' +
+  '<div><h3>' + a.t + '</h3><p class="note">' + a.d + '</p></div></div>').join('');
+
+/* ── Anatomia: grelha 24×24 com o balão por cima ────────────────────────── */
+(function () {
+  const S = 24, unit = 100 / S;
+  let g = '<svg viewBox="0 0 100 100" role="img" aria-label="Grelha de 24 por 24 com a área viva de 3 a 21 e o ícone de comentário sobreposto">';
+  for (let i = 0; i <= S; i++) {
+    const p = (i * unit).toFixed(3);
+    const strong = i === 0 || i === S;
+    const col = strong ? '#3A4250' : '#1E2030';
+    g += '<line x1="' + p + '" y1="0" x2="' + p + '" y2="100" stroke="' + col + '" stroke-width="' + (strong ? .6 : .35) + '"/>';
+    g += '<line x1="0" y1="' + p + '" x2="100" y2="' + p + '" stroke="' + col + '" stroke-width="' + (strong ? .6 : .35) + '"/>';
+  }
+  const a = (3 * unit).toFixed(3), b = (18 * unit).toFixed(3);
+  g += '<rect x="' + a + '" y="' + a + '" width="' + b + '" height="' + b + '" fill="none" stroke="#8B5CF6" stroke-width=".7" stroke-dasharray="2.4 2.4" opacity=".85"/>';
+  g += '<g transform="scale(' + (100 / 24) + ')" fill="none" stroke="#F0F1F6" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' + ICONS['comment'] + '</g>';
+  g += '</svg>';
+  document.getElementById('anatomy-fig').innerHTML = g;
+})();
+
+/* ── Estados ────────────────────────────────────────────────────────────── */
+document.getElementById('states').innerHTML = STATES.map(s =>
+  '<div class="state">' + svgOf('heart', 34, s.sw, s.color) +
+  '<span class="lbl" style="color:' + s.color + '">' + s.lbl + '</span>' +
+  '<span class="hex">' + s.color + ' · ' + s.sw.toFixed(2) + '</span></div>').join('');
+
+/* ── Paleta ─────────────────────────────────────────────────────────────── */
+document.getElementById('pal').innerHTML = PALETTE.map(c =>
+  '<div class="chip"><div class="fill" style="background:' + c.hx + '"></div>' +
+  '<div class="meta"><span class="nm">' + c.nm + '</span><span class="hx">' + c.hx + '</span>' +
+  '<span class="hx" style="text-transform:none">' + c.job + '</span></div></div>').join('');
+
+/* ── Controlos ──────────────────────────────────────────────────────────── */
+const kits = () => document.querySelectorAll('[data-kit]');
+const state = { size: 32, stroke: '1.75', ground: 'dark', tint: 'auto' };
+
+const TINTS = [
+  { key: 'auto',   dark: '#F0F1F6', light: '#12131A', sw: '#F0F1F6' },
+  { key: 'rose',   dark: '#F5274F', light: '#F5274F', sw: '#F5274F' },
+  { key: 'violet', dark: '#8B5CF6', light: '#8B5CF6', sw: '#8B5CF6' },
+  { key: 'azure',  dark: '#2A9BE8', light: '#2A9BE8', sw: '#2A9BE8' },
+  { key: 'teal',   dark: '#2FD4B6', light: '#2FD4B6', sw: '#2FD4B6' },
+];
+
+function apply() {
+  const tint = TINTS.find(t => t.key === state.tint);
+  const color = state.ground === 'light' ? tint.light : tint.dark;
+  kits().forEach(k => {
+    k.style.setProperty('--sz', state.size + 'px');
+    k.style.setProperty('--sw', state.stroke);
+    k.style.setProperty('--tint', color);
+    k.dataset.ground = state.ground;
+  });
+}
+
+function segment(host, items, key, fmt) {
+  host.innerHTML = items.map(v =>
+    '<button type="button" data-v="' + v + '" aria-pressed="' + (String(state[key]) === String(v)) + '">' +
+    (fmt ? fmt(v) : v) + '</button>').join('');
+  host.addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    state[key] = key === 'size' ? Number(btn.dataset.v) : btn.dataset.v;
+    host.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === btn)));
+    apply();
+  });
+}
+
+segment(document.getElementById('seg-size'), [16, 20, 24, 32, 48], 'size', v => v + 'px');
+segment(document.getElementById('seg-stroke'), ['1.5', '1.75', '2.25'], 'stroke');
+segment(document.getElementById('seg-ground'), ['dark', 'light'], 'ground', v => v === 'dark' ? 'Escuro' : 'Claro');
+
+const tintHost = document.getElementById('seg-tint');
+tintHost.innerHTML = TINTS.map(t =>
+  '<button type="button" class="swatch" data-v="' + t.key + '" title="' + t.key + '" aria-label="Tinta ' + t.key + '"' +
+  ' style="background:' + t.sw + ';color:' + t.sw + '" aria-pressed="' + (t.key === state.tint) + '"></button>').join('');
+tintHost.addEventListener('click', e => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  state.tint = btn.dataset.v;
+  tintHost.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === btn)));
+  apply();
+});
+
+apply();
+</script>

@@ -65,6 +65,7 @@ export default function PostViewerScreen() {
   const [index, setIndex]             = useState(startIndex)
   const [liked, setLiked]             = useState(false)
   const [commentPost, setCommentPost] = useState<Post | null>(null)
+  const [optionsOpen, setOptionsOpen] = useState(false)
   // Measured container size for reliable native clipping
   const [containerW, setContainerW] = useState(SCREEN_W)
   const [containerH, setContainerH] = useState(SCREEN_H) // starts at full screen; refined by onLayout
@@ -111,7 +112,7 @@ export default function PostViewerScreen() {
   // Resume from current progress position
   function resumeFromCurrent() {
     const p = postRef.current
-    if (!p || commentPost) return
+    if (!p || commentPost || optionsOpen) return
     if (p.mediaType === 'VIDEO') safePlayer(() => player.play())
     const totalDur = p.mediaType === 'VIDEO' ? VIDEO_DURATION : IMAGE_DURATION
     const remaining = Math.max(400, (1 - progressValueRef.current) * totalDur)
@@ -129,7 +130,7 @@ export default function PostViewerScreen() {
     progressValueRef.current = 0
 
     markPostViewed(post.id).catch(() => {})
-    if (commentPost) return
+    if (commentPost || optionsOpen) return
 
     if (post.mediaType === 'VIDEO') {
       safePlayer(() => player.replace({ uri: resolveMedia(post.mediaUrl ?? '') }))
@@ -145,15 +146,15 @@ export default function PostViewerScreen() {
     return () => { progressRef.current?.stop(); safePlayer(() => player.pause()) }
   }, [index])
 
-  // Pause when comment sheet opens, resume when it closes
+  // Folhas de comentários/opções mandam no player e na linha de progresso.
   useEffect(() => {
-    if (commentPost) {
+    if (commentPost || optionsOpen) {
       progressRef.current?.stop()
       safePlayer(() => player.pause())
     } else {
       resumeFromCurrent()
     }
-  }, [!!commentPost])
+  }, [!!commentPost, optionsOpen])
 
   // Hold-to-pause
   function handlePressIn() {
@@ -230,13 +231,19 @@ export default function PostViewerScreen() {
         onPressOut={() => handlePressOut(goNext)}
       />
 
-      <PostInfo key={`info-${post.id}`} post={post} isActive />
+      <PostInfo
+        key={`info-${post.id}`}
+        post={post}
+        isActive
+      />
       <ActionBar
         key={`bar-${post.id}`}
         post={post}
         onCommentPress={() => setCommentPost(post)}
         liked={liked}
         onLikeChange={setLiked}
+        onOptionsBlockingChange={setOptionsOpen}
+        onProfileBlocked={() => nav.goBack()}
       />
 
       {commentPost && (

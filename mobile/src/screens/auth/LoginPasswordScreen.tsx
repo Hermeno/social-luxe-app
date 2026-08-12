@@ -1,28 +1,35 @@
-import React, { useState, useRef } from 'react'
+import React, { useRef, useState } from 'react'
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, Animated, ActivityIndicator,
+  Animated,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
+import { RouteProp, useNavigation, useRoute } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
-import { useAuthStore } from '../../store/auth.store'
-import { AuthStackParams } from '../../navigation/AuthNavigator'
-import { fonts } from '../../theme'
+
+import {
+  AuthFieldFrame,
+  AuthHeader,
+  AuthPrimaryButton,
+  authStyles,
+  authUi,
+} from '../../components/AuthFlow'
+import Icon from '../../components/Icon'
+import useReducedMotionPreference from '../../hooks/useReducedMotionPreference'
 import { useT } from '../../i18n'
+import { AuthStackParams } from '../../navigation/AuthNavigator'
+import { useAuthStore } from '../../store/auth.store'
+import { fonts } from '../../theme'
 
-type Nav   = StackNavigationProp<AuthStackParams>
+type Nav = StackNavigationProp<AuthStackParams>
 type Route = RouteProp<AuthStackParams, 'LoginPassword'>
-
-const T  = '#1A1A1A'
-const S  = '#6E6E73'
-const M  = '#ABABAB'
-const B  = '#FF7A1C'
-const E  = '#FF3B30'
-const BD = '#E5E5EA'
-const BG = '#FFFFFF'
-const SX = '#F9F9FB'
 
 function maskPhone(phone: string): string {
   if (phone.length < 6) return phone
@@ -32,194 +39,212 @@ function maskPhone(phone: string): string {
 }
 
 export default function LoginPasswordScreen() {
-  const nav    = useNavigation<Nav>()
-  const route  = useRoute<Route>()
-  const t      = useT()
+  const nav = useNavigation<Nav>()
+  const route = useRoute<Route>()
+  const t = useT()
   const { top, bottom } = useSafeAreaInsets()
   const { login } = useAuthStore()
+  const reduceMotion = useReducedMotionPreference()
   const { phone } = route.params
 
   const [password, setPassword] = useState('')
-  const [secure,   setSecure]   = useState(true)
-  const [focused,  setFocused]  = useState(false)
-  const [error,    setError]    = useState(false)
-  const [loading,  setLoading]  = useState(false)
-  const btnScale  = useRef(new Animated.Value(1)).current
+  const [secure, setSecure] = useState(true)
+  const [focused, setFocused] = useState(false)
+  const [error, setError] = useState(false)
+  const [loading, setLoading] = useState(false)
   const shakeAnim = useRef(new Animated.Value(0)).current
 
-  function bounce(cb: () => void) {
-    Animated.sequence([
-      Animated.spring(btnScale, { toValue: 0.97, useNativeDriver: true, speed: 80, bounciness: 0 }),
-      Animated.spring(btnScale, { toValue: 1,    useNativeDriver: true, speed: 40, bounciness: 5 }),
-    ]).start(cb)
-  }
-
   function shake() {
+    shakeAnim.stopAnimation()
+    if (reduceMotion) {
+      shakeAnim.setValue(0)
+      return
+    }
     Animated.sequence([
-      Animated.timing(shakeAnim, { toValue: 8,  duration: 55, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 8, duration: 55, useNativeDriver: true }),
       Animated.timing(shakeAnim, { toValue: -8, duration: 55, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: 5,  duration: 45, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 5, duration: 45, useNativeDriver: true }),
       Animated.timing(shakeAnim, { toValue: -5, duration: 45, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: 0,  duration: 35, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 35, useNativeDriver: true }),
     ]).start()
   }
 
   async function handleLogin() {
-    if (!password) return
-    bounce(async () => {
-      setLoading(true); setError(false)
-      try {
-        await login(phone, password)
-      } catch {
-        setError(true); shake()
-      } finally { setLoading(false) }
-    })
+    if (!password || loading) return
+    setLoading(true)
+    setError(false)
+    try {
+      await login(phone, password)
+    } catch {
+      setError(true)
+      shake()
+    } finally {
+      setLoading(false)
+    }
   }
 
-  // Avatar initials from phone last 2 digits
-  const avatarLabel = phone.replace(/\D/g, '').slice(-2) || '••'
+  function handlePasswordChange(value: string) {
+    setPassword(value)
+    setError(false)
+    if (reduceMotion) shakeAnim.setValue(0)
+  }
 
   return (
-    <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={[s.inner, { paddingTop: top + 14, paddingBottom: bottom + 24 }]}>
+    <KeyboardAvoidingView
+      style={authStyles.screen}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView
+        style={authStyles.screen}
+        contentContainerStyle={[
+          s.page,
+          { paddingTop: top + 10, paddingBottom: Math.max(bottom, 14) + 10 },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+      >
+        <AuthHeader
+          step={2}
+          total={2}
+          stage={t.au_stage_security}
+          onBack={() => nav.goBack()}
+        />
 
-        {/* Square back button */}
-        <TouchableOpacity onPress={() => nav.goBack()} style={s.backBtn} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-          <Ionicons name="chevron-back" size={20} color={T} />
-        </TouchableOpacity>
-
-        {/* Avatar + greeting */}
-        <View style={s.hero}>
-          {/* Dashed ring + avatar */}
-          <View style={s.avatarArea}>
-            <View style={s.avatarRing}>
-              <View style={s.avatar}>
-                <Ionicons name="person" size={44} color={B} />
-              </View>
-            </View>
-          </View>
-
-          <Text style={s.greeting}>{t.au_login_greeting}</Text>
-          <Text style={s.phoneTxt}>{maskPhone(phone)}</Text>
+        <View style={[authStyles.hero, s.hero]}>
+          <Text style={authStyles.heading}>{t.au_login_greeting}</Text>
+          <Text style={s.accountPhone} accessible accessibilityLabel={phone}>{maskPhone(phone)}</Text>
         </View>
 
-        {/* Password input */}
         <Animated.View style={{ transform: [{ translateX: shakeAnim }] }}>
-          <View style={[s.inputWrap, focused && s.inputFocused, error && s.inputError]}>
-            <TextInput
-              style={s.input}
-              placeholder={t.au_login_ph}
-              placeholderTextColor={M}
-              value={password}
-              onChangeText={(v) => { setPassword(v); setError(false) }}
-              secureTextEntry={secure}
-              autoFocus
-              returnKeyType="go"
-              onSubmitEditing={handleLogin}
-              onFocus={() => setFocused(true)}
-              onBlur={() => setFocused(false)}
-            />
-            <TouchableOpacity onPress={() => setSecure(!secure)} hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}>
-              <Ionicons name={secure ? 'eye-off-outline' : 'eye-outline'} size={20} color={M} />
-            </TouchableOpacity>
+          <View style={s.fieldGroup}>
+            <AuthFieldFrame focused={focused} error={error}>
+              <TextInput
+                style={s.input}
+                placeholder={t.au_login_ph}
+                placeholderTextColor={authUi.faint}
+                value={password}
+                onChangeText={handlePasswordChange}
+                secureTextEntry={secure}
+                autoFocus
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType="password"
+                returnKeyType="go"
+                onSubmitEditing={handleLogin}
+                onFocus={() => setFocused(true)}
+                onBlur={() => setFocused(false)}
+              />
+              <TouchableOpacity
+                style={s.eyeButton}
+                onPress={() => setSecure((value) => !value)}
+                activeOpacity={0.65}
+                accessibilityRole="button"
+                accessibilityLabel={secure ? t.au_password_show : t.au_password_hide}
+                hitSlop={4}
+              >
+                <View style={s.eyeGlyph}>
+                  <Icon name="eye" size={21} color={error ? authUi.danger : authUi.muted} strokeWidth={1.75} />
+                  {secure && <View style={[s.eyeSlash, error && s.eyeSlashError]} />}
+                </View>
+              </TouchableOpacity>
+            </AuthFieldFrame>
           </View>
-          {error && <Text style={s.errorTxt}>{t.au_login_wrong}</Text>}
+
+          {error && (
+            <Text style={s.errorText} accessibilityRole="alert">
+              {t.au_login_wrong}
+            </Text>
+          )}
         </Animated.View>
 
-        {/* Forgot password — right-aligned, disabled in v1 */}
-        <TouchableOpacity style={s.forgotRow} disabled activeOpacity={0.6}>
-          <Text style={s.forgotTxt}>{t.au_login_forgot}</Text>
+        <View style={authStyles.spacer} />
+
+        <AuthPrimaryButton
+          label={t.au_login_enter}
+          onPress={handleLogin}
+          disabled={!password}
+          loading={loading}
+          style={s.primary}
+        />
+
+        <TouchableOpacity
+          style={s.switchRow}
+          onPress={() => nav.goBack()}
+          activeOpacity={0.65}
+          accessibilityRole="button"
+          accessibilityLabel={t.au_login_switch}
+        >
+          <Text style={s.switchText}>{t.au_login_not_you}</Text>
+          <Text style={s.switchLink}>{t.au_login_switch}</Text>
         </TouchableOpacity>
-
-        <View style={s.spacer} />
-
-        {/* Full-width CTA */}
-        <Animated.View style={{ transform: [{ scale: btnScale }] }}>
-          <TouchableOpacity
-            style={[s.cta, (!password || loading) && s.ctaOff]}
-            onPress={handleLogin}
-            disabled={!password || loading}
-            activeOpacity={0.88}
-          >
-            {loading
-              ? <ActivityIndicator color="#fff" size="small" />
-              : <Text style={s.ctaTxt}>{t.au_login_enter}</Text>
-            }
-          </TouchableOpacity>
-        </Animated.View>
-
-        {/* Switch account */}
-        <TouchableOpacity style={s.switchRow} onPress={() => nav.goBack()} activeOpacity={0.6}>
-          <Text style={s.switchTxt}>{t.au_login_not_you} <Text style={s.switchLink}>{t.au_login_switch}</Text></Text>
-        </TouchableOpacity>
-
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   )
 }
 
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: BG },
-  inner:  { flex: 1, paddingHorizontal: 24 },
-
-  backBtn: {
-    width: 44, height: 44, borderRadius: 14,
-    borderWidth: 1.5, borderColor: BD, backgroundColor: BG,
-    alignItems: 'center', justifyContent: 'center',
+  page: { flexGrow: 1, paddingHorizontal: 24, backgroundColor: authUi.paper },
+  hero: { marginBottom: 28 },
+  accountPhone: {
+    color: authUi.muted,
+    fontFamily: fonts.regular,
+    fontSize: 14.5,
+    lineHeight: 20,
+    fontVariant: ['tabular-nums'],
   },
-
-  hero: { alignItems: 'center', marginTop: 44, marginBottom: 36, gap: 10 },
-
-  avatarArea: { marginBottom: 6 },
-  avatarRing: {
-    width: 112, height: 112, borderRadius: 56,
-    borderWidth: 2, borderColor: BD,
-    borderStyle: 'dashed',
-    padding: 4,
-    alignItems: 'center', justifyContent: 'center',
+  fieldGroup: { gap: 0 },
+  input: {
+    flex: 1,
+    height: 54,
+    paddingLeft: 14,
+    paddingRight: 8,
+    paddingVertical: 0,
+    color: authUi.ink,
+    fontFamily: fonts.medium,
+    fontSize: 16,
+    letterSpacing: -0.12,
   },
-  avatar: {
-    width: 100, height: 100, borderRadius: 50,
-    backgroundColor: `${B}12`,
-    alignItems: 'center', justifyContent: 'center',
+  eyeButton: {
+    width: 52,
+    height: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-
-  greeting: { fontFamily: fonts.regular, fontSize: 15, color: S, marginTop: 4 },
-  phoneTxt:  { fontFamily: fonts.bold, fontSize: 20, color: T, letterSpacing: -0.4 },
-
-  inputWrap: {
-    flexDirection: 'row', alignItems: 'center',
-    height: 56, borderRadius: 16,
-    borderWidth: 1.5, borderColor: BD,
-    backgroundColor: SX, paddingHorizontal: 18,
+  eyeGlyph: { width: 23, height: 23, alignItems: 'center', justifyContent: 'center' },
+  eyeSlash: {
+    position: 'absolute',
+    width: 23,
+    height: 1.5,
+    borderRadius: 0.75,
+    backgroundColor: authUi.muted,
+    transform: [{ rotate: '42deg' }],
   },
-  inputFocused: {
-    borderColor: B, backgroundColor: BG,
-    ...Platform.select({
-      ios: { shadowColor: B, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.12, shadowRadius: 10 },
-    }),
+  eyeSlashError: { backgroundColor: authUi.danger },
+  errorText: {
+    marginTop: 9,
+    paddingLeft: 10,
+    color: authUi.danger,
+    fontFamily: fonts.medium,
+    fontSize: 12.5,
+    lineHeight: 17,
   },
-  inputError: { borderColor: E },
-  input:      { flex: 1, fontFamily: fonts.medium, fontSize: 17, color: T, paddingVertical: 0 },
-  errorTxt:   { marginTop: 8, fontSize: 13, fontFamily: fonts.regular, color: E },
-
-  forgotRow: { alignItems: 'flex-end', marginTop: 12 },
-  forgotTxt: { fontSize: 13, fontFamily: fonts.semiBold, color: M },
-
-  spacer: { flex: 1 },
-
-  cta: {
-    height: 52, borderRadius: 16, backgroundColor: B,
-    alignItems: 'center', justifyContent: 'center',
-    ...Platform.select({
-      ios: { shadowColor: B, shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.65, shadowRadius: 18 },
-      android: { elevation: 8 },
-    }),
+  primary: { marginTop: 18 },
+  switchRow: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
   },
-  ctaOff: { opacity: 0.35 },
-  ctaTxt: { fontFamily: fonts.bold, fontSize: 17, color: '#fff', letterSpacing: -0.2 },
-
-  switchRow: { marginTop: 14, alignItems: 'center' },
-  switchTxt: { fontSize: 13, fontFamily: fonts.regular, color: M },
-  switchLink:{ color: S, fontFamily: fonts.semiBold },
+  switchText: {
+    color: authUi.faint,
+    fontFamily: fonts.regular,
+    fontSize: 12.5,
+  },
+  switchLink: {
+    color: authUi.ink,
+    fontFamily: fonts.semiBold,
+    fontSize: 12.5,
+  },
 })

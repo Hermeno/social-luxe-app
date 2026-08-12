@@ -13,19 +13,33 @@ interface Props {
   onFollow: (duration: FollowDuration) => void
   theme?: 'dark' | 'light'
   followBack?: boolean  // true when they follow you but you don't follow them yet
+  variant?: 'default' | 'list'
 }
 
-export default function FollowSplitButton({ following, loading, onFollow, theme = 'light', followBack = false }: Props) {
+export default function FollowSplitButton({
+  following,
+  loading,
+  onFollow,
+  theme = 'light',
+  followBack = false,
+  variant = 'default',
+}: Props) {
   const isDark = theme === 'dark'
+  const isList = variant === 'list'
   const t = useT()
+  const followLabel = followBack ? t.profile_follow_back : t.follow
 
   if (following) {
     return (
       <TouchableOpacity
-        style={[s.pill, isDark ? s.pillDarkFollowing : s.pillLightFollowing]}
+        style={[s.pill, isDark ? s.pillDarkFollowing : s.pillLightFollowing, isList && s.pillListFollowing]}
         onPress={() => onFollow('forever')}
         activeOpacity={0.7}
         disabled={loading}
+        hitSlop={isList ? 4 : undefined}
+        accessibilityRole="button"
+        accessibilityLabel={t.following}
+        accessibilityState={{ busy: loading, disabled: loading, selected: true }}
       >
         {loading
           ? <ActivityIndicator size="small" color={isDark ? 'rgba(255,255,255,0.7)' : colors.gray500} />
@@ -42,7 +56,7 @@ export default function FollowSplitButton({ following, loading, onFollow, theme 
 
   const content = loading
     ? <ActivityIndicator size="small" color={colors.white} />
-    : <Text style={s.labelFollow}>{followBack ? t.profile_follow_back : t.follow}</Text>
+    : <Text style={s.labelFollow}>{followLabel}</Text>
 
   if (isDark) {
     // No feed o Seguir é sempre transparente — só o contorno, sobre o vídeo.
@@ -52,6 +66,9 @@ export default function FollowSplitButton({ following, loading, onFollow, theme 
         onPress={() => onFollow('forever')}
         activeOpacity={0.75}
         disabled={loading}
+        accessibilityRole="button"
+        accessibilityLabel={followLabel}
+        accessibilityState={{ busy: loading, disabled: loading, selected: false }}
       >
         {content}
       </TouchableOpacity>
@@ -59,8 +76,16 @@ export default function FollowSplitButton({ following, loading, onFollow, theme 
   }
 
   return (
-    <TouchableOpacity onPress={() => onFollow('forever')} activeOpacity={0.85} disabled={loading}>
-      <View style={[s.pill, s.pillLight]}>
+    <TouchableOpacity
+      onPress={() => onFollow('forever')}
+      activeOpacity={0.85}
+      disabled={loading}
+      hitSlop={isList ? 4 : undefined}
+      accessibilityRole="button"
+      accessibilityLabel={followLabel}
+      accessibilityState={{ busy: loading, disabled: loading, selected: false }}
+    >
+      <View style={[s.pill, s.pillLight, isList && s.pillListFollow]}>
         {content}
       </View>
     </TouchableOpacity>
@@ -108,6 +133,25 @@ const s = StyleSheet.create({
     borderRadius: 22,
     paddingHorizontal: 15,
     paddingVertical: 9,
+  },
+  pillListFollow: {
+    width: 120,
+    height: 36,
+    paddingHorizontal: 10,
+    paddingVertical: 0,
+    borderRadius: 12,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  pillListFollowing: {
+    width: 120,
+    height: 36,
+    paddingHorizontal: 10,
+    paddingVertical: 0,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#D8D8D3',
+    backgroundColor: '#FFFFFF',
   },
 
   followingRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },

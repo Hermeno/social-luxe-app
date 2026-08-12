@@ -56,6 +56,8 @@
     <string>Allow $(PRODUCT_NAME) to access your microphone</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>Allow Luxe to access your photos.</string>
+    <key>NSPhotoLibraryAddUsageDescription</key>
+    <string>Allow luxee to save photos and videos to your library.</string>
     <key>RCTNewArchEnabled</key>
     <true/>
     <key>UILaunchStoryboardName</key>

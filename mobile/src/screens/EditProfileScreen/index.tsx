@@ -434,7 +434,7 @@ export default function EditProfileScreen() {
               <View style={[s.tabCardIcon, defaultTab === 'Feed' && s.tabCardIconActive]}>
                 <Ionicons name="home-outline" size={22} color={defaultTab === 'Feed' ? BG : S} />
               </View>
-              <Text style={[s.tabCardLabel, defaultTab === 'Feed' && s.tabCardLabelActive]}>Feed</Text>
+              <Text style={[s.tabCardLabel, defaultTab === 'Feed' && s.tabCardLabelActive]}>{t.nav_feed}</Text>
               <Text style={s.tabCardSub}>{t.ep_posts}</Text>
               {defaultTab === 'Feed' && (
                 <View style={s.tabCardCheck}>
@@ -451,7 +451,7 @@ export default function EditProfileScreen() {
               <View style={[s.tabCardIcon, defaultTab === 'Messages' && s.tabCardIconActive]}>
                 <Ionicons name="chatbubble-outline" size={22} color={defaultTab === 'Messages' ? BG : S} />
               </View>
-              <Text style={[s.tabCardLabel, defaultTab === 'Messages' && s.tabCardLabelActive]}>Chat</Text>
+              <Text style={[s.tabCardLabel, defaultTab === 'Messages' && s.tabCardLabelActive]}>{t.nav_chat}</Text>
               <Text style={s.tabCardSub}>{t.ep_messages}</Text>
               {defaultTab === 'Messages' && (
                 <View style={s.tabCardCheck}>

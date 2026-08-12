@@ -1,9 +1,12 @@
 import React from 'react'
 import { createStackNavigator } from '@react-navigation/stack'
+import { StatusBar } from 'expo-status-bar'
 import PhoneScreen          from '../screens/auth/PhoneScreen'
 import LoginPasswordScreen  from '../screens/auth/LoginPasswordScreen'
 import CreatePasswordScreen from '../screens/auth/CreatePasswordScreen'
 import SetNameScreen        from '../screens/auth/SetNameScreen'
+import { authUi }           from '../components/AuthFlow'
+import useReducedMotionPreference from '../hooks/useReducedMotionPreference'
 // OTP screen — built but not reachable in v1, enabled post-investment
 import OTPScreen            from '../screens/auth/OTPScreen'
 
@@ -18,33 +21,24 @@ export type AuthStackParams = {
 const Stack = createStackNavigator<AuthStackParams>()
 
 export default function AuthNavigator() {
+  const reduceMotion = useReducedMotionPreference()
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerShown: false,
-        cardStyle: { backgroundColor: '#fff' },
-        cardStyleInterpolator: ({ current, layouts }) => ({
-          cardStyle: {
-            transform: [{
-              translateX: current.progress.interpolate({
-                inputRange: [0, 1],
-                outputRange: [layouts.screen.width * 0.1, 0],
-              }),
-            }],
-            opacity: current.progress.interpolate({
-              inputRange: [0, 0.4, 1],
-              outputRange: [0, 0.8, 1],
-            }),
-          },
-        }),
-      }}
-    >
-      <Stack.Screen name="Phone"          component={PhoneScreen} />
-      <Stack.Screen name="LoginPassword"  component={LoginPasswordScreen} />
-      <Stack.Screen name="CreatePassword" component={CreatePasswordScreen} />
-      <Stack.Screen name="SetName"        component={SetNameScreen} />
-      {/* OTP — registered but not reachable in v1 */}
-      <Stack.Screen name="OTP"            component={OTPScreen} />
-    </Stack.Navigator>
+    <>
+      <StatusBar style="dark" />
+      <Stack.Navigator
+        screenOptions={{
+          headerShown: false,
+          animationEnabled: !reduceMotion,
+          cardStyle: { backgroundColor: authUi.paper },
+        }}
+      >
+        <Stack.Screen name="Phone"          component={PhoneScreen} />
+        <Stack.Screen name="LoginPassword"  component={LoginPasswordScreen} />
+        <Stack.Screen name="CreatePassword" component={CreatePasswordScreen} />
+        <Stack.Screen name="SetName"        component={SetNameScreen} />
+        {/* OTP — registered but not reachable in v1 */}
+        <Stack.Screen name="OTP"            component={OTPScreen} />
+      </Stack.Navigator>
+    </>
   )
 }

@@ -1070,7 +1070,7 @@ export default function ChatScreen() {
               {userName.split(' ')[0]} {tr.chat_pair_and} {user?.name?.split(' ')[0] ?? tr.chat_you} {tr.chat_pair_are} {pairingService.pairingLabel(pairing)}
             </Text>
             <TouchableOpacity onPress={handleEndPairing} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={t.pairingBannerAction}>Desfazer</Text>
+              <Text style={t.pairingBannerAction}>{tr.chat_undo}</Text>
             </TouchableOpacity>
           </View>
         )}

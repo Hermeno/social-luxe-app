@@ -10,6 +10,7 @@ import {
 import { reactToPost, ReactionType } from '../services/reaction.service'
 import { colors, fonts, radius, spacing } from '../theme'
 import { useT } from '../i18n'
+import useReducedMotionPreference from '../hooks/useReducedMotionPreference'
 
 interface Props {
   postId: string
@@ -28,32 +29,60 @@ const REACTIONS: { type: ReactionType; emoji: string; label: string }[] = [
 
 export default function ReactionPicker({ postId, onClose, currentReaction }: Props) {
   const t = useT()
+  const reduceMotion = useReducedMotionPreference()
   const scaleAnim = useRef(new Animated.Value(0.5)).current
   const opacityAnim = useRef(new Animated.Value(0)).current
   const [anonymous, setAnonymous] = useState(false)
   const bounceAnims = useRef(REACTIONS.map(() => new Animated.Value(1))).current
+  const itemEntries = useRef(REACTIONS.map(() => new Animated.Value(0))).current
+  const closing = useRef(false)
 
   useEffect(() => {
+    if (reduceMotion) {
+      scaleAnim.setValue(1)
+      opacityAnim.setValue(1)
+      itemEntries.forEach((value) => value.setValue(1))
+      return
+    }
+    scaleAnim.setValue(0.72)
+    opacityAnim.setValue(0)
+    itemEntries.forEach((value) => value.setValue(0))
     Animated.parallel([
       Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 20, bounciness: 12 }),
       Animated.timing(opacityAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+      Animated.stagger(38, itemEntries.map((value) => (
+        Animated.spring(value, { toValue: 1, speed: 22, bounciness: 12, useNativeDriver: true })
+      ))),
     ]).start()
-  }, [])
+  }, [reduceMotion])
+
+  function close() {
+    if (closing.current) return
+    closing.current = true
+    if (reduceMotion) { onClose(); return }
+    Animated.parallel([
+      Animated.timing(opacityAnim, { toValue: 0, duration: 140, useNativeDriver: true }),
+      Animated.timing(scaleAnim, { toValue: 0.9, duration: 140, useNativeDriver: true }),
+    ]).start(onClose)
+  }
 
   async function handleReact(type: ReactionType, bounceAnim: Animated.Value) {
-    Animated.sequence([
-      Animated.spring(bounceAnim, { toValue: 1.4, useNativeDriver: true, speed: 40, bounciness: 12 }),
-      Animated.spring(bounceAnim, { toValue: 1,   useNativeDriver: true, speed: 20, bounciness: 4  }),
-    ]).start()
+    if (!reduceMotion) {
+      Animated.sequence([
+        Animated.spring(bounceAnim, { toValue: 1.4, useNativeDriver: true, speed: 40, bounciness: 12 }),
+        Animated.spring(bounceAnim, { toValue: 1,   useNativeDriver: true, speed: 20, bounciness: 4  }),
+      ]).start()
+    }
     try {
       await reactToPost(postId, type, anonymous)
     } catch {}
-    setTimeout(onClose, 180)
+    if (reduceMotion) close()
+    else setTimeout(close, 180)
   }
 
   return (
-    <TouchableWithoutFeedback onPress={onClose}>
-      <View style={s.overlay}>
+    <TouchableWithoutFeedback onPress={close}>
+      <Animated.View style={[s.overlay, { opacity: opacityAnim }]}>
         <TouchableWithoutFeedback>
           <Animated.View
             style={[
@@ -63,19 +92,27 @@ export default function ReactionPicker({ postId, onClose, currentReaction }: Pro
           >
             <View style={s.emojisRow}>
               {REACTIONS.map(({ type, emoji, label }, i) => (
-                <TouchableOpacity
+                <Animated.View
                   key={type}
-                  onPress={() => handleReact(type, bounceAnims[i])}
-                  style={[s.emojiBtn, currentReaction === type && s.emojiActive]}
-                  activeOpacity={0.75}
+                  style={!reduceMotion ? {
+                    opacity: itemEntries[i],
+                    transform: [
+                      { translateY: itemEntries[i].interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) },
+                      { scale: itemEntries[i].interpolate({ inputRange: [0, 1], outputRange: [0.72, 1] }) },
+                    ],
+                  } : undefined}
                 >
-                  <Animated.Text
-                    style={[s.emoji, { transform: [{ scale: bounceAnims[i] }] }]}
+                  <TouchableOpacity
+                    onPress={() => handleReact(type, bounceAnims[i])}
+                    style={[s.emojiBtn, currentReaction === type && s.emojiActive]}
+                    activeOpacity={0.75}
                   >
-                    {emoji}
-                  </Animated.Text>
-                  <Text style={s.emojiLabel}>{label}</Text>
-                </TouchableOpacity>
+                    <Animated.Text style={[s.emoji, { transform: [{ scale: bounceAnims[i] }] }]}>
+                      {emoji}
+                    </Animated.Text>
+                    <Text style={s.emojiLabel}>{label}</Text>
+                  </TouchableOpacity>
+                </Animated.View>
               ))}
             </View>
 
@@ -91,7 +128,7 @@ export default function ReactionPicker({ postId, onClose, currentReaction }: Pro
             </TouchableOpacity>
           </Animated.View>
         </TouchableWithoutFeedback>
-      </View>
+      </Animated.View>
     </TouchableWithoutFeedback>
   )
 }

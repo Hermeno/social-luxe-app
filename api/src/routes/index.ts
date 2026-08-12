@@ -13,10 +13,13 @@ import unionRoutes from './union.routes'
 import pairingRoutes from './pairing.routes'
 import circleRoutes from './circle.routes'
 import halfRoutes from './half.routes'
+import publicRoutes from './public.routes'
 
 const router = Router()
 
 router.use('/auth', authRoutes)
+// Sem sessão — ver public.routes.ts
+router.use('/public', publicRoutes)
 router.use('/posts', postRoutes)
 router.use('/users', userRoutes)
 router.use('/messages', messageRoutes)

@@ -15,6 +15,7 @@ import LanguageOnboardingScreen from './src/screens/LanguageOnboardingScreen'
 import { useAuthStore } from './src/store/auth.store'
 import { useI18n } from './src/i18n'
 import { useFriendsStore } from './src/store/friends.store'
+import { useGuestStore } from './src/store/guest.store'
 import { getMyFollowerCount } from './src/services/follow.service'
 import { api, onTokenExpired } from './src/services/api'
 
@@ -123,11 +124,24 @@ export default function App() {
       .catch(() => setOnboardingDone(true))
   }, [isAuthenticated])
 
+  // Quem chega sem sessão: perguntar se há acervo público. Uma vez por arranque
+  // — ao terminar sessão mais tarde a porta é sempre a entrada normal. Fica
+  // aqui, e não no RootNavigator, para a splash esperar por isto em vez de
+  // piscar o ecrã de login antes de saltar para a vitrina.
+  const guestMode = useGuestStore((g) => g.mode)
+  const guestAsked = useRef(false)
+  useEffect(() => {
+    if (authLoading || isAuthenticated || guestAsked.current) return
+    guestAsked.current = true
+    useGuestStore.getState().bootstrap()
+  }, [authLoading, isAuthenticated])
+
   const ready =
     fontsLoaded &&
     !authLoading &&
     defaultTab !== null &&
     needsLanguage !== null &&
+    (isAuthenticated || guestMode !== 'checking') &&
     (!isAuthenticated || onboardingDone !== null)
 
   // Release the native splash only after the full app tree is painted.

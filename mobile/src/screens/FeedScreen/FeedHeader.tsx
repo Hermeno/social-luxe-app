@@ -6,7 +6,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
-import { Search } from 'lucide-react-native'
+import FeedIcon from '../../components/FeedIcon'
 import { LinearGradient } from 'expo-linear-gradient'
 import { colors, fonts } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
@@ -19,6 +19,7 @@ import { useFocusEffect } from '@react-navigation/native'
 import { getIncomingHalves } from '../../services/half.service'
 import { Post } from '../../types'
 import { API_BASE } from '../../config'
+import useReducedMotionPreference from '../../hooks/useReducedMotionPreference'
 
 export interface FeedUserGroup {
   user: Post['user']
@@ -73,6 +74,7 @@ export default memo(function FeedHeader({
   const { top } = useSafeAreaInsets()
   const nav = useNavigation<any>()
   const t = useT()
+  const reduceMotion = useReducedMotionPreference()
   const isSocketOnline = useOnlineStore((s) => s.isOnline)
   const currentUser    = useAuthStore((s) => s.user)
   const [halvesCount, setHalvesCount] = React.useState(0)
@@ -81,6 +83,11 @@ export default memo(function FeedHeader({
   // parecer morto. Loop suave por native driver.
   const breathe = useRef(new Animated.Value(0)).current
   useEffect(() => {
+    if (reduceMotion) {
+      breathe.stopAnimation()
+      breathe.setValue(0)
+      return
+    }
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(breathe, { toValue: 1, duration: 1900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
@@ -89,7 +96,7 @@ export default memo(function FeedHeader({
     )
     loop.start()
     return () => loop.stop()
-  }, [breathe])
+  }, [breathe, reduceMotion])
   const breatheScale = breathe.interpolate({ inputRange: [0, 1], outputRange: [1, 1.05] })
 
   // Quantas metades esperam por mim — recontado a cada volta ao feed
@@ -102,27 +109,41 @@ export default memo(function FeedHeader({
   /* ── Search panel — replaces the rail in-flow, post card stays below ─────── */
   if (searchMode) {
     return (
-      <View style={[s.wrapper, { paddingTop: top + 8 }]}>
+      <View style={[s.wrapper, { paddingTop: top }]}>
         <View style={s.searchRow}>
           <View style={s.searchField}>
-            <Search size={14} strokeWidth={2} color="rgba(0,0,0,0.40)" />
+            <FeedIcon name="search" size={18} color="#6F6F73" />
             <TextInput
               autoFocus
               placeholder={t.feed_search_ph}
-              placeholderTextColor="rgba(0,0,0,0.35)"
+              placeholderTextColor="#929297"
               value={searchQuery}
               onChangeText={onSearchChange}
               style={s.searchInput}
               returnKeyType="search"
               autoCapitalize="none"
+              autoCorrect={false}
+              selectionColor={colors.primary}
+              accessibilityLabel={t.feed_search_ph}
             />
             {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => onSearchChange('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Ionicons name="close-circle" size={17} color="rgba(0,0,0,0.30)" />
+              <TouchableOpacity
+                onPress={() => onSearchChange('')}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityRole="button"
+                accessibilityLabel={t.cancel}
+              >
+                <Ionicons name="close" size={18} color="#77777C" />
               </TouchableOpacity>
             )}
           </View>
-          <TouchableOpacity onPress={onSearchClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <TouchableOpacity
+            style={s.cancelButton}
+            onPress={onSearchClose}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel={t.cancel}
+          >
             <Text style={s.cancelText}>{t.cancel}</Text>
           </TouchableOpacity>
         </View>
@@ -143,11 +164,17 @@ export default memo(function FeedHeader({
               const isActive = g.user.id === activeUserId
               return (
                 <TouchableOpacity key={g.user.id} style={s.bubble}
-                  onPress={() => { onBubblePress(g); onSearchChange('') }} activeOpacity={0.78}>
+                  onPress={() => { onBubblePress(g); onSearchChange('') }}
+                  activeOpacity={0.78}
+                  accessibilityRole="button"
+                  accessibilityLabel={g.user.name}
+                  accessibilityState={{ selected: isActive }}
+                >
                   <View style={[s.bubbleRing, isActive && s.bubbleRingActive]}>
                     <AvatarImage uri={g.user.avatar} name={g.user.name} size={BUBBLE_SIZE} borderWidth={0} borderColor="transparent" />
                   </View>
                   <Text style={s.bubbleName} numberOfLines={1}>{g.user.name.split(' ')[0]}</Text>
+                  <View style={[s.bubbleMarker, isActive && s.bubbleMarkerActive]} />
                 </TouchableOpacity>
               )
             })
@@ -191,7 +218,7 @@ export default memo(function FeedHeader({
               </View>
               <View style={s.halvesBadge}><Text style={s.halvesBadgeTxt}>{halvesCount > 9 ? '9+' : halvesCount}</Text></View>
             </View>
-            <Text style={s.glassTileName} numberOfLines={1}>Metades</Text>
+            <Text style={s.glassTileName} numberOfLines={1}>{t.hv_title}</Text>
           </TouchableOpacity>
         )}
 
@@ -250,7 +277,7 @@ const s = StyleSheet.create({
     position: 'absolute',
     top: 0, left: 0, right: 0,
     zIndex: 45,
-    backgroundColor: colors.white,
+    backgroundColor: '#FCFCFA',
   },
   railContent: {
     paddingHorizontal: 14,
@@ -262,7 +289,7 @@ const s = StyleSheet.create({
   },
   divider: {
     height:          StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(0,0,0,0.10)',
+    backgroundColor: '#DADAD6',
   },
 
   // ── Barra de vidro fosco (overlay sobre o vídeo) ──────────────────────────
@@ -392,37 +419,54 @@ const s = StyleSheet.create({
 
   /* ── Search panel ─────────────────────────────────────────────────────────── */
   searchRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, marginBottom: 12, gap: 12,
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    gap: 16,
   },
   searchField: {
-    flex: 1, flexDirection: 'row', alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    borderRadius: 12, borderWidth: 1, borderColor: 'rgba(0,0,0,0.10)',
-    paddingHorizontal: 12, paddingVertical: 9, gap: 8,
+    flex: 1,
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#AFAFAE',
   },
   searchInput: {
-    flex: 1, fontFamily: fonts.regular, fontSize: 15, color: colors.black, padding: 0,
+    flex: 1,
+    height: 44,
+    fontFamily: fonts.regular,
+    fontSize: 16,
+    letterSpacing: -0.2,
+    color: '#111114',
+    padding: 0,
   },
+  cancelButton: { minHeight: 44, justifyContent: 'center' },
   cancelText: {
-    fontFamily: fonts.semiBold, fontSize: 15, color: colors.black,
+    fontFamily: fonts.semiBold, fontSize: 14, color: '#111114',
   },
 
   /* ── Bubbles row (search mode) ─────────────────────────────────────────────── */
   bubbleScroll:  { flexGrow: 0 },
-  bubbleContent: { paddingHorizontal: 16, gap: 14, alignItems: 'flex-start', paddingBottom: 12 },
+  bubbleContent: { paddingHorizontal: 16, paddingTop: 10, gap: 14, alignItems: 'flex-start', paddingBottom: 13 },
   bubble: { alignItems: 'center', gap: 5, width: BUBBLE_SIZE + 14 },
   // Mesmo peso da fila do feed — os anéis da pesquisa tinham 1.6 e o activo
   // 2.2, o que fazia a fila parecer irregular consoante quem estava no ecrã.
   bubbleRing: {
-    borderRadius: (BUBBLE_SIZE + 6) / 2, borderWidth: RING_STROKE,
-    borderColor: RING_COLOR, padding: 2,
+    borderRadius: (BUBBLE_SIZE + 6) / 2,
+    borderWidth: 1.5,
+    borderColor: '#D2D2CF',
+    padding: 2,
   },
-  bubbleRingActive: { borderWidth: RING_STROKE },
+  bubbleRingActive: { borderWidth: 2, borderColor: colors.primary },
   bubbleName: {
-    color: 'rgba(0,0,0,0.75)', fontFamily: fonts.medium,
+    color: '#3A3A3E', fontFamily: fonts.medium,
     fontSize: 11, textAlign: 'center', maxWidth: BUBBLE_SIZE + 12,
   },
+  bubbleMarker: { width: 10, height: 2, borderRadius: 1, backgroundColor: 'transparent' },
+  bubbleMarkerActive: { backgroundColor: colors.primary },
   emptyWrap: {
     paddingVertical: 18, paddingHorizontal: 12,
     alignItems: 'center', justifyContent: 'center', width: 280,

@@ -16,11 +16,29 @@ export async function getAllUsers(currentUserId: string) {
 }
 
 export async function searchUsers(query: string, currentUserId: string) {
+  // Search must obey the same privacy boundary as the feed/post search: a
+  // blocked relationship in either direction removes the account completely.
+  const [blocksGiven, blocksReceived] = await Promise.all([
+    prisma.block.findMany({ where: { blockerId: currentUserId }, select: { blockedId: true } }),
+    prisma.block.findMany({ where: { blockedId: currentUserId }, select: { blockerId: true } }),
+  ])
+  const hiddenIds = [
+    currentUserId,
+    ...blocksGiven.map((block) => block.blockedId),
+    ...blocksReceived.map((block) => block.blockerId),
+  ]
+
   return prisma.user.findMany({
     where: {
       AND: [
-        { id: { not: currentUserId } },
-        { OR: [{ name: { contains: query, mode: 'insensitive' } }, { phone: { contains: query } }] },
+        { id: { notIn: hiddenIds } },
+        {
+          OR: [
+            { name: { contains: query, mode: 'insensitive' } },
+            { username: { contains: query, mode: 'insensitive' } },
+            { phone: { contains: query } },
+          ],
+        },
       ],
     },
     select: USER_SELECT,
@@ -162,4 +180,3 @@ export async function getMutualConnections(viewerId: string, targetId: string, l
 
   return { total: ids.length, users }
 }
-

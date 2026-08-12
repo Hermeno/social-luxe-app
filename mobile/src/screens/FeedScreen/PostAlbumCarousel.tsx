@@ -5,6 +5,7 @@ import {
 } from 'react-native'
 import { Image } from 'expo-image'
 import { API_BASE } from '../../config'
+import { colors } from '../../theme'
 
 const EMOJI_FRAC = 0.14
 
@@ -95,7 +96,7 @@ export default function PostAlbumCarousel({ urls, overlays, onOpen, dotsBottom =
 }
 
 const s = StyleSheet.create({
-  root: { ...StyleSheet.absoluteFillObject, backgroundColor: '#000' },
+  root: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.feedSurface },
   dots: {
     position: 'absolute',
     left: 0, right: 0,

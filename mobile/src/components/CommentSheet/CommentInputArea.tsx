@@ -1,6 +1,6 @@
-import React from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Animated,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { Comment } from '../../types'
@@ -8,6 +8,7 @@ import { colors, fonts } from '../../theme'
 import { useT } from '../../i18n'
 import { useAuthStore } from '../../store/auth.store'
 import AvatarImage from '../AvatarImage'
+import useReducedMotionPreference from '../../hooks/useReducedMotionPreference'
 
 interface Props {
   text: string
@@ -18,15 +19,43 @@ interface Props {
   onCancelReply: () => void
   bottomInset?: number
   inputRef?: React.RefObject<TextInput | null>
+  sentSignal?: number
 }
 
 export default function CommentInputArea({
   text, onChange, onSend, sending, replyTo, onCancelReply,
-  bottomInset = 0, inputRef,
+  bottomInset = 0, inputRef, sentSignal = 0,
 }: Props) {
   const t  = useT()
   const me = useAuthStore((s) => s.user)
+  const reduceMotion = useReducedMotionPreference()
   const canSend = text.trim().length > 0 && !sending
+  const [showSent, setShowSent] = useState(false)
+  const sendScale = useRef(new Animated.Value(1)).current
+  const fieldFocus = useRef(new Animated.Value(0)).current
+
+  useEffect(() => {
+    if (sentSignal === 0) return
+    setShowSent(true)
+    sendScale.stopAnimation()
+    if (reduceMotion) sendScale.setValue(1)
+    else {
+      sendScale.setValue(0.72)
+      Animated.spring(sendScale, { toValue: 1, speed: 24, bounciness: 12, useNativeDriver: true }).start()
+    }
+    const timer = setTimeout(() => setShowSent(false), 720)
+    return () => clearTimeout(timer)
+  }, [reduceMotion, sendScale, sentSignal])
+
+  function animateFocus(focused: boolean) {
+    if (reduceMotion) { fieldFocus.setValue(focused ? 1 : 0); return }
+    Animated.spring(fieldFocus, {
+      toValue: focused ? 1 : 0,
+      speed: 25,
+      bounciness: 3,
+      useNativeDriver: true,
+    }).start()
+  }
 
   return (
     <View style={[s.wrap, { paddingBottom: Math.max(bottomInset, 10) }]}>
@@ -46,7 +75,12 @@ export default function CommentInputArea({
       <View style={s.row}>
         <AvatarImage uri={me?.avatar ?? null} name={me?.name ?? ''} size={30} />
 
-        <View style={s.field}>
+        <Animated.View
+          style={[
+            s.field,
+            { transform: [{ scaleX: fieldFocus.interpolate({ inputRange: [0, 1], outputRange: [1, 1.018] }) }] },
+          ]}
+        >
           <TextInput
             ref={inputRef as any}
             style={s.input}
@@ -56,19 +90,25 @@ export default function CommentInputArea({
             onChangeText={onChange}
             multiline
             maxLength={500}
+            onFocus={() => animateFocus(true)}
+            onBlur={() => animateFocus(false)}
           />
-        </View>
+        </Animated.View>
 
         {/* O botão só ganha cor quando há algo para enviar */}
         <TouchableOpacity
-          style={[s.send, canSend ? s.sendOn : s.sendOff]}
+          style={[s.send, (canSend || showSent) ? s.sendOn : s.sendOff]}
           onPress={onSend}
           disabled={!canSend}
           activeOpacity={0.8}
         >
-          {sending
-            ? <ActivityIndicator size="small" color="#fff" />
-            : <Ionicons name="arrow-up" size={18} color={canSend ? '#fff' : 'rgba(0,0,0,0.3)'} />}
+          <Animated.View style={{ transform: [{ scale: sendScale }] }}>
+            {sending
+              ? <ActivityIndicator size="small" color="#fff" />
+              : showSent
+                ? <Ionicons name="checkmark" size={19} color="#fff" />
+                : <Ionicons name="arrow-up" size={18} color={canSend ? '#fff' : 'rgba(0,0,0,0.3)'} />}
+          </Animated.View>
         </TouchableOpacity>
       </View>
     </View>

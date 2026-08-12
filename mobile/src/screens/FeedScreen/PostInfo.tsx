@@ -20,7 +20,6 @@ import * as pairingService from '../../services/pairing.service'
 import { API_BASE } from '../../config'
 import AvatarImage from '../../components/AvatarImage'
 import FollowSplitButton, { FollowDuration } from '../../components/FollowSplitButton'
-import PostOptionsMenu from './PostOptionsMenu'
 import { AppStackParams } from '../../navigation/AppNavigator'
 
 const MAX_COMMENTERS = 4
@@ -65,14 +64,10 @@ interface Props {
    *  autor (topo branco e imersivo) não a repete. */
   hideCaption?: boolean
   onExpired?: () => void
-  onDeleted?: (id: string) => void
-  onEdited?: (id: string, caption: string) => void
-  onBlockingChange?: (open: boolean) => void
 }
 
 export default function PostInfo({
-  post, isActive, commentCount: commentCountProp, light = false, hideCaption = false, onExpired,
-  onDeleted, onEdited, onBlockingChange,
+  post, isActive, commentCount: commentCountProp, light = false, hideCaption = false, onExpired
 }: Props) {
   const { user }    = useAuthStore()
   const nav         = useNavigation<Nav>()
@@ -340,14 +335,6 @@ export default function PostInfo({
               theme="dark"
             />
           ))}
-          {isSelf && (
-            <PostOptionsMenu
-              post={post}
-              onDeleted={onDeleted}
-              onEdited={onEdited}
-              onBlockingChange={onBlockingChange}
-            />
-          )}
         </View>
       </View>
 
@@ -387,9 +374,6 @@ const s = StyleSheet.create({
   username: {
     color: colors.white, fontFamily: fonts.semiBold, fontSize: 13,
     letterSpacing: -0.2, flexShrink: 1,
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
   },
 
   metaLine: { flexDirection: 'row', alignItems: 'center', gap: 4 },
@@ -426,7 +410,6 @@ const s = StyleSheet.create({
   pairingDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: colors.primary },
   pairingRowTxt: {
     color: 'rgba(255,255,255,0.75)', fontFamily: fonts.medium, fontSize: 11.5, letterSpacing: -0.1,
-    textShadowColor: 'rgba(0,0,0,0.4)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2,
   },
 
   extBadge:     { backgroundColor: colors.primary, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
@@ -449,9 +432,9 @@ const s = StyleSheet.create({
   timerDying: { color: '#FF3B30' },
 
   // ── Variante clara (feed): texto escuro sobre a faixa branca, sem sombras ──
-  usernameLight:      { color: '#111114', fontSize: 15, letterSpacing: -0.3, textShadowRadius: 0, textShadowColor: 'transparent' },
+  usernameLight:      { color: '#111114', fontSize: 15, letterSpacing: -0.3 },
   metaLightTxt:       { color: 'rgba(0,0,0,0.42)' },
-  pairingRowTxtLight: { color: 'rgba(0,0,0,0.55)', textShadowRadius: 0, textShadowColor: 'transparent' },
+  pairingRowTxtLight: { color: 'rgba(0,0,0,0.55)' },
   captionWrapLight:   { marginLeft: 0, marginTop: 6 },
   captionLight:       { color: '#2A2A2E', fontSize: 13.5, lineHeight: 19 },
   seeMoreLight:       { color: 'rgba(0,0,0,0.4)' },
@@ -486,8 +469,5 @@ const s = StyleSheet.create({
     fontSize: 11,
     marginLeft: 6,
     letterSpacing: -0.1,
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
+  }
 })

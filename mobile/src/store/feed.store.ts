@@ -13,8 +13,14 @@ interface FeedStore {
   setPendingPost: (post: Post | null) => void
   newPostsCount: number
   setNewPostsCount: (count: number) => void
-  jumpToPostId: string | null
-  setJumpToPostId: (id: string | null) => void
+  /**
+   * Post aberto a partir de outro ecrã. Fica apenas em memória: a Feed mostra-o
+   * no topo sem o misturar com o cache offline.
+   */
+  focusedPost: Post | null
+  focusedPostRequest: number
+  showPostInFeed: (post: Post) => void
+  clearFocusedPost: () => void
   openSearch: boolean
   setOpenSearch: (v: boolean) => void
   // Tocar em Home (já no feed) refresca: incrementa este sinal, o feed reage.
@@ -26,22 +32,43 @@ interface FeedStore {
   requestedCommentPostId: string | null
   requestComments: (postId: string) => void
   clearCommentRequest: () => void
+  reset: () => void
 }
 
-export const useFeedStore = create<FeedStore>((set) => ({
-  pendingPost:      null,
-  setPendingPost:   (post)  => set({ pendingPost: post }),
-  newPostsCount:    0,
-  setNewPostsCount: (count) => set({ newPostsCount: count }),
-  jumpToPostId:     null,
-  setJumpToPostId:  (id)    => set({ jumpToPostId: id }),
-  openSearch:       false,
-  setOpenSearch:    (v)     => set({ openSearch: v }),
-  homeTap:          0,
-  bumpHomeTap:      ()      => set((s) => ({ homeTap: s.homeTap + 1 })),
+const initialFeedState = {
+  pendingPost: null,
+  newPostsCount: 0,
+  focusedPost: null,
+  focusedPostRequest: 0,
+  openSearch: false,
+  homeTap: 0,
   activeCommentTarget: null,
-  setActiveCommentTarget: (target) => set({ activeCommentTarget: target }),
   requestedCommentPostId: null,
+} satisfies Pick<
+  FeedStore,
+  | 'pendingPost'
+  | 'newPostsCount'
+  | 'focusedPost'
+  | 'focusedPostRequest'
+  | 'openSearch'
+  | 'homeTap'
+  | 'activeCommentTarget'
+  | 'requestedCommentPostId'
+>
+
+export const useFeedStore = create<FeedStore>((set) => ({
+  ...initialFeedState,
+  setPendingPost:   (post)  => set({ pendingPost: post }),
+  setNewPostsCount: (count) => set({ newPostsCount: count }),
+  showPostInFeed: (post) => set((s) => ({
+    focusedPost: post,
+    focusedPostRequest: s.focusedPostRequest + 1,
+  })),
+  clearFocusedPost: () => set({ focusedPost: null }),
+  setOpenSearch:    (v)     => set({ openSearch: v }),
+  bumpHomeTap:      ()      => set((s) => ({ homeTap: s.homeTap + 1 })),
+  setActiveCommentTarget: (target) => set({ activeCommentTarget: target }),
   requestComments: (postId) => set({ requestedCommentPostId: postId }),
   clearCommentRequest: () => set({ requestedCommentPostId: null }),
+  reset: () => set(initialFeedState),
 }))

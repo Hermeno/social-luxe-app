@@ -14,6 +14,11 @@ import CommentInputArea from './CommentInputArea'
 import { colors, fonts } from '../../theme'
 import { useT } from '../../i18n'
 import { useOverlayStore } from '../../store/overlay.store'
+import useReducedMotionPreference from '../../hooks/useReducedMotionPreference'
+import AvatarImage from '../AvatarImage'
+import FollowSplitButton, { type FollowDuration } from '../FollowSplitButton'
+import { useAuthStore } from '../../store/auth.store'
+import { useFollowStore } from '../../store/follow.store'
 
 // ─── CommentSheet ─────────────────────────────────────────────────────────────
 // Folha branca de comentários.
@@ -31,8 +36,41 @@ interface Props {
   onCommentAdded?: () => void
 }
 
+function AnimatedCommentRow({
+  children, order, reduceMotion,
+}: {
+  children: React.ReactNode
+  order: number
+  reduceMotion: boolean
+}) {
+  const entry = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current
+
+  useEffect(() => {
+    if (reduceMotion) { entry.setValue(1); return }
+    entry.setValue(0)
+    Animated.sequence([
+      Animated.delay(Math.min(order, 7) * 34),
+      Animated.parallel([
+        Animated.timing(entry, { toValue: 1, duration: 210, useNativeDriver: true }),
+      ]),
+    ]).start()
+  }, [entry, order, reduceMotion])
+
+  return (
+    <Animated.View
+      style={!reduceMotion ? {
+        opacity: entry,
+        transform: [{ translateY: entry.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }],
+      } : undefined}
+    >
+      {children}
+    </Animated.View>
+  )
+}
+
 export default function CommentSheet({ post, onClose, onCommentAdded }: Props) {
   const t = useT()
+  const reduceMotion = useReducedMotionPreference()
   const { bottom: safeBottom, top: safeTop } = useSafeAreaInsets()
   const { height: winH } = useWindowDimensions()
 
@@ -40,11 +78,15 @@ export default function CommentSheet({ post, onClose, onCommentAdded }: Props) {
 
   const [text,    setText]    = useState('')
   const [replyTo, setReplyTo] = useState<Comment | null>(null)
+  const [sentTick, setSentTick] = useState(0)
+  const [followBusy, setFollowBusy] = useState(false)
   const inputRef = useRef<TextInput>(null)
+  const myId = useAuthStore((st) => st.user?.id)
 
   // ── Entrada ────────────────────────────────────────────────────────────────
   const slide   = useRef(new Animated.Value(1)).current   // 1 = fora, 0 = no sítio
   const fade    = useRef(new Animated.Value(0)).current
+  const sheetScale = useRef(new Animated.Value(0.86)).current
 
   // Enquanto a folha existir, a barra de separadores desaparece — senão pinta
   // por cima do campo de escrever (e no Android sobe com o teclado).
@@ -56,17 +98,29 @@ export default function CommentSheet({ post, onClose, onCommentAdded }: Props) {
 
   useEffect(() => {
     load()
+  }, [load])
+
+  useEffect(() => {
+    if (reduceMotion) {
+      slide.setValue(0)
+      fade.setValue(1)
+      sheetScale.setValue(1)
+      return
+    }
     Animated.parallel([
       Animated.spring(slide, { toValue: 0, useNativeDriver: true, damping: 22, stiffness: 220 }),
       Animated.timing(fade,  { toValue: 1, duration: 180, useNativeDriver: true }),
+      Animated.spring(sheetScale, { toValue: 1, useNativeDriver: true, damping: 24, stiffness: 240 }),
     ]).start()
-  }, [])
+  }, [fade, reduceMotion, sheetScale, slide])
 
   function close() {
     Keyboard.dismiss()
+    if (reduceMotion) { onClose(); return }
     Animated.parallel([
       Animated.timing(slide, { toValue: 1, duration: 200, useNativeDriver: true }),
       Animated.timing(fade,  { toValue: 0, duration: 160, useNativeDriver: true }),
+      Animated.timing(sheetScale, { toValue: 0.92, duration: 190, useNativeDriver: true }),
     ]).start(onClose)
   }
 
@@ -94,9 +148,16 @@ export default function CommentSheet({ post, onClose, onCommentAdded }: Props) {
   async function handleSend() {
     const body = text.trim()
     if (!body) return
-    onCommentAdded?.()
-    setText(''); setReplyTo(null)
-    await send(body, replyTo?.id)
+    const parentId = replyTo?.id
+    setText('')
+    const sent = await send(body, parentId)
+    if (sent) {
+      setReplyTo(null)
+      setSentTick((value) => value + 1)
+      onCommentAdded?.()
+    } else {
+      setText(body)
+    }
   }
 
   function handleReply(c: Comment) {
@@ -108,6 +169,21 @@ export default function CommentSheet({ post, onClose, onCommentAdded }: Props) {
   const title = total > 0
     ? `${total >= 1000 ? `${(total / 1000).toFixed(1)}K` : total} ${t.comments_title}`
     : t.comments_title
+
+  // Quem publicou — fica no topo da folha para se saber de quem se está a falar
+  // sem ter de fechar e voltar ao post.
+  const author   = post.user
+  const isMine   = myId === author?.id
+  const following = useFollowStore((st) => (author ? st.followingIds.has(author.id) : false))
+
+  async function handleFollowAuthor(duration: FollowDuration) {
+    if (!author || followBusy) return
+    setFollowBusy(true)
+    try {
+      await useFollowStore.getState().toggle(author.id, duration, { name: author.name, avatar: author.avatar })
+    } catch {}
+    setFollowBusy(false)
+  }
 
   return (
     <View style={s.overlay}>
@@ -122,7 +198,10 @@ export default function CommentSheet({ post, onClose, onCommentAdded }: Props) {
             s.sheet,
             {
               height: sheetH,
-              transform: [{ translateY: slide.interpolate({ inputRange: [0, 1], outputRange: [0, winH] }) }],
+              transform: [
+                { translateY: slide.interpolate({ inputRange: [0, 1], outputRange: [0, winH] }) },
+                { scaleX: sheetScale },
+              ],
             },
           ]}
         >
@@ -134,6 +213,28 @@ export default function CommentSheet({ post, onClose, onCommentAdded }: Props) {
             <Ionicons name="close" size={21} color="rgba(0,0,0,0.45)" />
           </TouchableOpacity>
         </View>
+
+        {/* Quem publicou. Só aparece se não for o teu próprio post — seguir-te
+            a ti mesmo não existe, e o avatar sozinho não valia a linha. */}
+        {!!author && !isMine && (
+          <View style={s.authorBar}>
+            <AvatarImage uri={author.avatar} name={author.name} size={34} />
+            <View style={s.authorInfo}>
+              <Text style={s.authorName} numberOfLines={1}>{author.name}</Text>
+              {!!author.username && (
+                <Text style={s.authorHandle} numberOfLines={1}>@{author.username}</Text>
+              )}
+            </View>
+            <FollowSplitButton
+              following={following}
+              loading={followBusy}
+              onFollow={handleFollowAuthor}
+              theme="light"
+              variant="list"
+            />
+          </View>
+        )}
+
         <View style={s.rule} />
 
         {/* Lista */}
@@ -151,15 +252,17 @@ export default function CommentSheet({ post, onClose, onCommentAdded }: Props) {
           <FlatList
             data={comments}
             keyExtractor={(c) => c.id}
-            renderItem={({ item }) => (
-              <CommentItem
-                comment={item}
-                postOwnerId={post.userId}
-                onReply={handleReply}
-                onToggleLike={toggleLike}
-                onEdit={edit}
-                onDelete={remove}
-              />
+            renderItem={({ item, index }) => (
+              <AnimatedCommentRow order={index} reduceMotion={reduceMotion}>
+                <CommentItem
+                  comment={item}
+                  postOwnerId={post.userId}
+                  onReply={handleReply}
+                  onToggleLike={toggleLike}
+                  onEdit={edit}
+                  onDelete={remove}
+                />
+              </AnimatedCommentRow>
             )}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={s.listContent}
@@ -177,6 +280,7 @@ export default function CommentSheet({ post, onClose, onCommentAdded }: Props) {
           onCancelReply={() => setReplyTo(null)}
           bottomInset={inputPad}
           inputRef={inputRef}
+          sentSignal={sentTick}
         />
         </Animated.View>
       </KeyboardAvoidingView>
@@ -208,6 +312,15 @@ const s = StyleSheet.create({
   title: { fontFamily: fonts.semiBold, fontSize: 15.5, color: colors.black, letterSpacing: -0.2 },
 
   rule: { height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(0,0,0,0.09)' },
+
+  // Barra do autor do post, entre o título e a lista de comentários.
+  authorBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 18, paddingBottom: 12,
+  },
+  authorInfo:   { flex: 1, minWidth: 0 },
+  authorName:   { fontSize: 14.5, fontFamily: fonts.semiBold, color: colors.gray800, letterSpacing: -0.2 },
+  authorHandle: { fontSize: 12, fontFamily: fonts.regular, color: colors.gray400, marginTop: 1 },
 
   listContent: { paddingVertical: 6 },
 

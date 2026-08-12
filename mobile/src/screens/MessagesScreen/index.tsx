@@ -2,24 +2,23 @@ import React, { useState, useCallback, useEffect, useRef } from 'react'
 import {
   View, Text, FlatList, StyleSheet, TextInput,
   TouchableOpacity, Animated, ActivityIndicator, KeyboardAvoidingView,
-  Dimensions, Keyboard, LayoutAnimation, Platform, UIManager,
+  Keyboard, LayoutAnimation, Platform, UIManager,
 } from 'react-native'
 import { Image } from 'expo-image'
-import { LinearGradient } from 'expo-linear-gradient'
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true)
 }
-import { useNavigation } from '@react-navigation/native'
-import { StackNavigationProp } from '@react-navigation/stack'
+import { useFocusEffect, useIsFocused, useNavigation } from '@react-navigation/native'
+import type { StackNavigationProp } from '@react-navigation/stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useFocusEffect } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
 import Toast from 'react-native-toast-message'
 import * as msgService from '../../services/message.service'
 import * as unionService from '../../services/union.service'
-import { getConnections, FollowDuration } from '../../services/follow.service'
-import { Connection, Union, UnionMessage, TogetherLivePayload, Pairing, Post } from '../../types'
+import { getConnections } from '../../services/follow.service'
+import type { FollowDuration } from '../../services/follow.service'
+import type { Connection, Union, UnionMessage, TogetherLivePayload, Pairing, Post } from '../../types'
 import { searchPosts as searchPostsApi } from '../../services/post.service'
 import * as pairingService from '../../services/pairing.service'
 import { useUnionStore } from '../../store/union.store'
@@ -34,7 +33,7 @@ import {
   getSyncMeta,
   setSyncMeta,
 } from '../../db/database'
-import { FollowUser } from '../../services/follow.service'
+import type { FollowUser } from '../../services/follow.service'
 import { API_BASE } from '../../config'
 import FollowSplitButton from '../../components/FollowSplitButton'
 import SuggestionsSheet from '../../components/SuggestionsSheet'
@@ -47,19 +46,21 @@ import { isConnected } from '../../services/netinfo.service'
 import { useMessageBadgeStore } from '../../store/messageBadge.store'
 import { useFeedStore } from '../../store/feed.store'
 import { useMessagesStore } from '../../store/messages.store'
-import { AppStackParams } from '../../navigation/AppNavigator'
+import type { AppStackParams } from '../../navigation/AppNavigator'
 import { colors, fonts } from '../../theme'
 import { useT } from '../../i18n'
 import AvatarImage from '../../components/AvatarImage'
 import DuoAvatar from '../../components/DuoAvatar'
-import DiscoveryRow from '../../components/DiscoveryRow'
 
 type Nav = StackNavigationProp<AppStackParams>
 
-const { width: W } = Dimensions.get('window')
-const CARD_GAP   = 12
-const CARD_H_PAD = 16
-const CARD_W     = (W - CARD_H_PAD * 2 - CARD_GAP) / 2
+function openProfileOnStack(navigation: Nav, userId: string) {
+  const stack = navigation.getState().type === 'stack'
+    ? navigation
+    : navigation.getParent<Nav>()
+  if (stack?.getState().type !== 'stack') return
+  stack.push('Profile', { userId })
+}
 
 const RING = 64
 const AVA  = 54
@@ -82,6 +83,12 @@ function fmtCount(n: number): string {
   return String(n)
 }
 
+function resolveMediaUri(uri: string | null | undefined): string | null {
+  if (!uri) return null
+  if (uri.startsWith('http') || uri.startsWith('file://')) return uri
+  return `${API_BASE}${uri.startsWith('/') ? '' : '/'}${uri}`
+}
+
 interface UserResult {
   id: string
   name: string
@@ -91,14 +98,9 @@ interface UserResult {
   _count?: { followers: number; posts: number }
 }
 
-// ── User card (search results) ────────────────────────────────────────────────
+// ── Person row (search results) ───────────────────────────────────────────────
 
-function resolveUri(uri: string | null | undefined): string | null {
-  if (!uri) return null
-  return uri.startsWith('http') || uri.startsWith('file://') ? uri : `${API_BASE}${uri}`
-}
-
-function UserCard({
+function UserRow({
   user, followed, followBack, loadingFollow, onFollow, onPress,
 }: {
   user: UserResult
@@ -110,36 +112,33 @@ function UserCard({
 }) {
   const t         = useT()
   const followers = user._count?.followers ?? 0
-  const photoUri  = resolveUri(user.avatar)
+  const account   = user.username ? `@${user.username}` : null
+  const audience  = `${fmtCount(followers)} ${followers === 1 ? t.follower : t.followers}`
 
   return (
-    <View style={c.card}>
-      {/* Round avatar — tap opens profile */}
-      <TouchableOpacity onPress={onPress} activeOpacity={0.85}>
-        {photoUri
-          ? <Image source={{ uri: photoUri }} style={c.avatar} contentFit="cover" cachePolicy="memory-disk" />
-          : <View style={[c.avatar, c.photoFallback]}>
-              <Ionicons name="person" size={30} color={colors.gray400} />
-            </View>
-        }
+    <View style={c.row}>
+      <TouchableOpacity
+        style={c.person}
+        onPress={onPress}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={account ? `${user.name}, ${account}, ${audience}` : `${user.name}, ${audience}`}
+      >
+        <AvatarImage uri={user.avatar} name={user.name} size={50} />
+        <View style={c.textWrap}>
+          <Text style={c.name} numberOfLines={1}>{user.name}</Text>
+          <Text style={c.meta} numberOfLines={1}>
+            {account ? `${account} · ${audience}` : audience}
+          </Text>
+        </View>
       </TouchableOpacity>
-
-      <TouchableOpacity onPress={onPress} activeOpacity={0.7} style={c.textWrap}>
-        <Text style={c.cardName} numberOfLines={1}>{user.username ? `@${user.username}` : user.name}</Text>
-        <Text style={c.cardSub} numberOfLines={1}>
-          {fmtCount(followers)} {followers === 1 ? t.follower : t.followers}
-        </Text>
-      </TouchableOpacity>
-
-      <View style={c.followWrap}>
-        <FollowSplitButton
-          following={followed}
-          followBack={followBack}
-          loading={loadingFollow}
-          onFollow={onFollow}
-          theme="light"
-        />
-      </View>
+      <FollowSplitButton
+        following={followed}
+        followBack={followBack}
+        loading={loadingFollow}
+        onFollow={onFollow}
+        theme="light"
+      />
     </View>
   )
 }
@@ -340,35 +339,6 @@ function UnionConvoRow({ item, myUnion, liveUnions, onPress }: {
   )
 }
 
-// ── Suggested user row — a single, quiet suggestion woven into the list ──────
-
-function SuggestedUserRow({ user, onPress }: { user: UserResult; onPress: () => void }) {
-  const t = useT()
-  const followed = useFollowStore((s) => s.followingIds.has(user.id))
-  const [loading, setLoading] = useState(false)
-
-  async function handleFollow(duration: FollowDuration) {
-    if (loading) return
-    setLoading(true)
-    try {
-      await useFollowStore.getState().toggle(user.id, duration, { name: user.name, avatar: user.avatar })
-    } catch {
-      Toast.show({ type: 'error', text1: t.error, text2: t.msg_follow_err, visibilityTime: 2500 })
-    }
-    setLoading(false)
-  }
-
-  return (
-    <TouchableOpacity style={[s.row, sg.row]} onPress={onPress} activeOpacity={0.6}>
-      <AvatarImage uri={user.avatar} name={user.name} size={AVA} />
-      <View style={s.info}>
-        <Text style={s.name} numberOfLines={1}>{user.username ? `@${user.username}` : user.name}</Text>
-      </View>
-      <FollowSplitButton following={followed} loading={loading} onFollow={handleFollow} theme="light" />
-    </TouchableOpacity>
-  )
-}
-
 // ── Pairing card — vertical card in the horizontal carousel ──────────────────
 
 function PairingCard({ data, onPress }: { data: Pairing; onPress: () => void }) {
@@ -443,18 +413,17 @@ const so = StyleSheet.create({
 export default function MessagesScreen() {
   const t               = useT()
   const nav             = useNavigation<Nav>()
+  const isFocused       = useIsFocused()
   const { top, bottom } = useSafeAreaInsets()
   const { user }        = useAuthStore()
   const inputRef        = useRef<TextInput>(null)
   const { setTotalUnread } = useMessageBadgeStore()
-  const newPostsCount = useFeedStore((s) => s.newPostsCount)
 
   const [connections,    setConnections]    = useState<Connection[]>([])
   const [connsLoading,   setConnsLoading]   = useState(false)
   const [connsError,     setConnsError]     = useState(false)
   const [viewedIds,      setViewedIds]      = useState<Set<string>>(new Set())
   const [quickReplyId,   setQuickReplyId]   = useState<string | null>(null)
-  const [showDiscovery,  setShowDiscovery]  = useState(true)
   const [myHasPosts,     setMyHasPosts]     = useState(false)
 
   const [query,          setQuery]          = useState('')
@@ -463,9 +432,12 @@ export default function MessagesScreen() {
   const [showSuggestions, setShowSuggestions] = useState(false)
   // A TabBar também abre esta folha — o pedido chega por aqui.
   const suggestionsRequested = useMessagesStore((s) => s.suggestionsRequested)
+  const consumedSuggestionsRef = useRef(0)
   useEffect(() => {
-    if (suggestionsRequested > 0) setShowSuggestions(true)
-  }, [suggestionsRequested])
+    if (!isFocused || suggestionsRequested <= consumedSuggestionsRef.current) return
+    consumedSuggestionsRef.current = suggestionsRequested
+    setShowSuggestions(true)
+  }, [isFocused, suggestionsRequested])
   const [searchResults,  setSearchResults]  = useState<UserResult[]>([])
   const [postResults,    setPostResults]    = useState<Post[]>([])
   const [searchLoading,  setSearchLoading]  = useState(false)
@@ -477,6 +449,7 @@ export default function MessagesScreen() {
   const [justFollowed,   setJustFollowed]   = useState<Record<string, number>>({})
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const searchRequestRef = useRef(0)
 
   // ── Uniões tab ────────────────────────────────────────────────────────────
   const [unionConvos,     setUnionConvos]     = useState<UnionMessage[]>([])
@@ -490,13 +463,6 @@ export default function MessagesScreen() {
   // Hydrate from cache on first mount (offline-first)
   useEffect(() => {
     hydrateFromCache()
-  }, [])
-
-  // Preload suggested profiles + follow state — used both by search mode and
-  // by the empty-chat-list state (suggestions shown when there's no one to talk to yet)
-  useEffect(() => {
-    loadSuggested()
-    loadFollowersState()
   }, [])
 
   useFocusEffect(useCallback(() => {
@@ -734,15 +700,27 @@ export default function MessagesScreen() {
 
   // ── Search with debounce ──────────────────────────────────────────────────
   useEffect(() => {
-    if (!isSearchMode) return
+    const requestId = ++searchRequestRef.current
+    if (!isSearchMode) {
+      setSearchLoading(false)
+      return
+    }
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    if (!query.trim()) { setSearchResults([]); setPostResults([]); return }
+    const requestQuery = query.trim()
+    if (!requestQuery) {
+      setSearchResults([])
+      setPostResults([])
+      setSearchLoading(false)
+      return
+    }
     debounceRef.current = setTimeout(async () => {
+      if (requestId !== searchRequestRef.current) return
       setSearchLoading(true)
       const [users, posts] = await Promise.allSettled([
-        api.get(`/users/search?q=${encodeURIComponent(query)}`),
-        searchPostsApi(query),
+        api.get(`/users/search?q=${encodeURIComponent(requestQuery)}`),
+        searchPostsApi(requestQuery),
       ])
+      if (requestId !== searchRequestRef.current) return
       setSearchResults(users.status === 'fulfilled' ? (users.value.data.data ?? []) : [])
       setPostResults(posts.status === 'fulfilled' ? posts.value : [])
       setSearchLoading(false)
@@ -779,12 +757,14 @@ export default function MessagesScreen() {
   }
 
   function exitSearch() {
+    searchRequestRef.current += 1
     Keyboard.dismiss()
     LayoutAnimation.configureNext(LayoutAnimation.create(260, LayoutAnimation.Types.easeInEaseOut, LayoutAnimation.Properties.opacity))
     setIsSearchMode(false)
     setQuery('')
     setSearchResults([])
     setPostResults([])
+    setSearchLoading(false)
   }
 
   // ── Follow / unfollow ─────────────────────────────────────────────────────
@@ -792,7 +772,7 @@ export default function MessagesScreen() {
     if (followPending.has(userId)) return
     setFollowPending((prev) => new Set([...prev, userId]))
     try {
-      const followedUser = displayCards.find((u) => u.id === userId)
+      const followedUser = (query.trim() ? searchResults : suggested).find((u) => u.id === userId)
       const profile = followedUser
         ? { name: followedUser.name, avatar: followedUser.avatar ?? null }
         : undefined
@@ -839,7 +819,7 @@ export default function MessagesScreen() {
         return next
       })
     }
-  }, [followPending])
+  }, [followPending, query, searchResults, suggested])
 
   // ── Quick reply ───────────────────────────────────────────────────────────
   function toggleQuickReply(userId: string) {
@@ -894,12 +874,8 @@ export default function MessagesScreen() {
   type FeedItem =
     | { kind: 'personal';   c: Connection; idx: number }
     | { kind: 'union';      m: UnionMessage }
-    | { kind: 'suggestion'; user: UserResult }
-    | { kind: 'discovery' }
 
-  const INJECT_AT = 3
-  const SUGGEST_EVERY = 7
-  const allMsgItems: { item: Exclude<FeedItem, { kind: 'discovery' } | { kind: 'suggestion'; user: UserResult }>; ts: number }[] = [
+  const allMsgItems: { item: FeedItem; ts: number }[] = [
     ...connections.map((c, i) => ({
       item: { kind: 'personal' as const, c, idx: i },
       // Sem mensagens: se acabei de seguir, sobe ao topo; senão fica em baixo
@@ -913,27 +889,7 @@ export default function MessagesScreen() {
   allMsgItems.sort((a, b) => b.ts - a.ts)
 
   const liveTogetherList = myPairing?.status === 'ACTIVE' ? [myPairing] : []
-  // Sugestões inline desligadas — agora vivem na folha (botão "Sugestões" no topo).
-  const weavableSuggestions: UserResult[] = []
-
-  const feedItems: FeedItem[] = []
-  let suggestIdx = 0
-  allMsgItems.forEach(({ item }, i) => {
-    if (i === INJECT_AT && showDiscovery) feedItems.push({ kind: 'discovery' })
-    feedItems.push(item as FeedItem)
-
-    // Weave in one quiet suggestion every few real conversations — never
-    // right at the very end, and only once the list is long enough that it
-    // doesn't compete with the empty-state / top discovery row.
-    const isLastItem = i === allMsgItems.length - 1
-    if (!isLastItem && (i + 1) % SUGGEST_EVERY === 0 && weavableSuggestions.length > 0) {
-      feedItems.push({ kind: 'suggestion', user: weavableSuggestions[suggestIdx % weavableSuggestions.length] })
-      suggestIdx++
-    }
-  })
-  if (showDiscovery && allMsgItems.length > 0 && allMsgItems.length <= INJECT_AT) {
-    feedItems.push({ kind: 'discovery' })
-  }
+  const feedItems = allMsgItems.map(({ item }) => item)
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -990,18 +946,9 @@ export default function MessagesScreen() {
               )}
             </View>
 
-            {/* Cancelar (pesquisa) OU botão de Sugestões */}
-            {isSearchMode ? (
+            {isSearchMode && (
               <TouchableOpacity onPress={exitSearch} hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }} activeOpacity={0.6}>
                 <Text style={s.searchCancel}>{t.cancel}</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity style={s.suggestBtn} onPress={() => setShowSuggestions(true)} activeOpacity={0.6}>
-                <Ionicons name="person-add-outline" size={16} color={colors.gray800} />
-                <Text style={s.suggestBtnTxt}>Sugestões</Text>
-                {suggested.length > 0 && (
-                  <View style={s.suggestCount}><Text style={s.suggestCountTxt}>{suggested.length}</Text></View>
-                )}
               </TouchableOpacity>
             )}
           </View>
@@ -1015,7 +962,7 @@ export default function MessagesScreen() {
           <>
             <View style={s.sectionRow}>
               <Text style={s.sectionLabel}>
-                {query.trim() ? t.msg_results : t.msg_suggested}
+                {query.trim() ? t.msg_people_section : t.msg_suggested}
               </Text>
               {query.trim() && !searchLoading && (
                 <View style={s.countPill}>
@@ -1042,22 +989,21 @@ export default function MessagesScreen() {
 
             {!isCardLoading && (displayCards.length > 0 || postResults.length > 0) && (
               <FlatList
-                key="search-grid"
+                key="search-results"
                 data={displayCards}
                 keyExtractor={(u) => u.id}
-                numColumns={2}
-                columnWrapperStyle={displayCards.length > 0 ? s.cardRow : undefined}
-                contentContainerStyle={s.cardGrid}
+                contentContainerStyle={s.searchResults}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
+                ItemSeparatorComponent={() => <View style={s.peopleSeparator} />}
                 renderItem={({ item }) => (
-                  <UserCard
+                  <UserRow
                     user={item}
                     followed={followingIds.has(item.id)}
                     followBack={followers.has(item.id) && !followingIds.has(item.id)}
                     loadingFollow={followPending.has(item.id)}
                     onFollow={(duration) => handleFollow(item.id, duration)}
-                    onPress={() => { exitSearch(); nav.navigate('Profile', { userId: item.id }) }}
+                    onPress={() => { exitSearch(); openProfileOnStack(nav, item.id) }}
                   />
                 )}
                 ListFooterComponent={
@@ -1069,31 +1015,42 @@ export default function MessagesScreen() {
                           <Text style={s.countPillTxt}>{postResults.length}</Text>
                         </View>
                       </View>
-                      {postResults.map((p, i) => (
-                        <TouchableOpacity
-                          key={p.id}
-                          style={s.postRow}
-                          activeOpacity={0.7}
-                          onPress={() => { exitSearch(); nav.navigate('PostViewer', { posts: postResults, startIndex: i }) }}
-                        >
-                          {p.mediaUrl ? (
-                            <Image source={{ uri: p.mediaUrl }} style={s.postThumb} contentFit="cover" />
-                          ) : (
-                            <View style={[s.postThumb, { backgroundColor: p.bgColor || '#111114', alignItems: 'center', justifyContent: 'center' }]}>
-                              <Ionicons name="text" size={18} color="#fff" />
+                      {postResults.map((p) => {
+                        const previewUri = resolveMediaUri(p.thumbnailUrl ?? p.mediaUrl)
+                        const textBackground = p.bgColor?.split('|')[0] ?? '#111114'
+                        const postSummary = p.caption?.trim() || t.msg_post_no_caption
+                        return (
+                          <TouchableOpacity
+                            key={p.id}
+                            style={s.postRow}
+                            activeOpacity={0.7}
+                            accessibilityRole="button"
+                            accessibilityLabel={`${p.user.name}. ${postSummary}`}
+                            onPress={() => {
+                              useFeedStore.getState().showPostInFeed(p)
+                              exitSearch()
+                              nav.navigate('Tabs', { screen: 'Feed' })
+                            }}
+                          >
+                            {previewUri ? (
+                              <Image source={{ uri: previewUri }} style={s.postThumb} contentFit="cover" />
+                            ) : (
+                              <View style={[s.postThumb, { backgroundColor: textBackground, alignItems: 'center', justifyContent: 'center' }]}>
+                                <Ionicons name="text" size={18} color="#fff" />
+                              </View>
+                            )}
+                            <View style={s.postRowBody}>
+                              <Text style={s.postCaption} numberOfLines={2}>
+                                {postSummary}
+                              </Text>
+                              <Text style={s.postAuthor} numberOfLines={1}>{p.user.name}</Text>
                             </View>
-                          )}
-                          <View style={s.postRowBody}>
-                            <Text style={s.postCaption} numberOfLines={2}>
-                              {p.caption?.trim() || t.msg_post_no_caption}
-                            </Text>
-                            <Text style={s.postAuthor} numberOfLines={1}>{p.user.name}</Text>
-                          </View>
-                          {p.mediaType === 'VIDEO' && (
-                            <Ionicons name="play-circle" size={18} color={colors.gray400} />
-                          )}
-                        </TouchableOpacity>
-                      ))}
+                            {p.mediaType === 'VIDEO' && (
+                              <Ionicons name="play-circle" size={18} color={colors.gray400} />
+                            )}
+                          </TouchableOpacity>
+                        )
+                      })}
                     </View>
                   ) : null
                 }
@@ -1129,58 +1086,31 @@ export default function MessagesScreen() {
             )}
             {!connsLoading && !connsError && feedItems.length === 0 && (
               <View style={s.chatEmptyWrap}>
-                <LinearGradient
-                  colors={['#FF7A1C', '#FF6766']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={s.chatEmptyIcon}
-                >
-                  <Ionicons name="chatbubbles" size={28} color="#fff" />
-                </LinearGradient>
+                <View style={s.chatEmptyIcon}>
+                  <Ionicons name="chatbubble-ellipses-outline" size={30} color={colors.gray500} />
+                </View>
                 <Text style={s.emptyTitle}>{t.msg_start_convo}</Text>
                 <Text style={s.emptySub}>{t.msg_empty_follow}</Text>
-
-                {suggested.length > 0 && (
-                  <>
-                    <Text style={s.chatEmptySuggestLabel}>{t.msg_suggestions_title}</Text>
-                    <FlatList
-                      data={suggested.slice(0, 10)}
-                      keyExtractor={(u) => u.id}
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      style={s.chatEmptySuggestList}
-                      contentContainerStyle={s.chatEmptySuggestContent}
-                      ItemSeparatorComponent={() => <View style={{ width: CARD_GAP }} />}
-                      renderItem={({ item }) => (
-                        <UserCard
-                          user={item}
-                          followed={followingIds.has(item.id)}
-                          followBack={followers.has(item.id) && !followingIds.has(item.id)}
-                          loadingFollow={followPending.has(item.id)}
-                          onFollow={(duration) => handleFollow(item.id, duration)}
-                          onPress={() => nav.navigate('Profile', { userId: item.id })}
-                        />
-                      )}
-                    />
-                  </>
-                )}
+                <TouchableOpacity
+                  style={s.chatEmptyCta}
+                  onPress={() => setShowSuggestions(true)}
+                  activeOpacity={0.78}
+                  accessibilityRole="button"
+                  accessibilityLabel={t.follow}
+                >
+                  <Ionicons name="person-add-outline" size={18} color={colors.white} />
+                  <Text style={s.chatEmptyCtaText}>{t.follow}</Text>
+                </TouchableOpacity>
               </View>
             )}
             {(!connsLoading || connections.length > 0 || unionConvos.length > 0) && !connsError && feedItems.length > 0 && (
               <FlatList
                 key="feed-list"
                 data={feedItems}
-                keyExtractor={(item) =>
-                  item.kind === 'discovery'  ? '__discovery__'
-                  : item.kind === 'union'     ? `union_${item.m.id}`
-                  : item.kind === 'suggestion' ? `suggest_${item.user.id}`
-                  : item.c.user.id
-                }
+                keyExtractor={(item) => item.kind === 'union' ? `union_${item.m.id}` : item.c.user.id}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={[s.list, { paddingBottom: Math.max(bottom, 8) + 66 }]}
-                ItemSeparatorComponent={({ leadingItem }) =>
-                  (leadingItem as FeedItem).kind === 'discovery' ? null : <View style={s.sep} />
-                }
+                ItemSeparatorComponent={() => <View style={s.sep} />}
                 ListHeaderComponent={
                   <>
                     <StoriesRow
@@ -1197,7 +1127,7 @@ export default function MessagesScreen() {
                     />
                     {liveTogetherList.length > 0 && (
                       <View style={g.section}>
-                        <Text style={g.sectionLabel}>Em par</Text>
+                        <Text style={g.sectionLabel}>{t.msg_paired}</Text>
                         <FlatList
                           data={liveTogetherList}
                           keyExtractor={(d) => d.id}
@@ -1227,7 +1157,7 @@ export default function MessagesScreen() {
                           <View style={s.invitesBadge}>
                             <Text style={s.invitesBadgeTxt}>{pendingInvites.length}</Text>
                           </View>
-                          <Text style={s.invitesSectionTitle}>Convites Pendentes</Text>
+                          <Text style={s.invitesSectionTitle}>{t.msg_pending_invites}</Text>
                         </View>
                         {pendingInvites.map((invite) => {
                           const isResponding = respondingId === invite.id
@@ -1263,7 +1193,7 @@ export default function MessagesScreen() {
                                 >
                                   {isResponding
                                     ? <ActivityIndicator size="small" color={colors.gray500} />
-                                    : <Text style={s.inviteBtnRejectTxt}>Recusar</Text>
+                                    : <Text style={s.inviteBtnRejectTxt}>{t.decline}</Text>
                                   }
                                 </TouchableOpacity>
                                 <TouchableOpacity
@@ -1274,7 +1204,7 @@ export default function MessagesScreen() {
                                 >
                                   {isResponding
                                     ? <ActivityIndicator size="small" color="#fff" />
-                                    : <Text style={s.inviteBtnAcceptTxt}>Aceitar</Text>
+                                    : <Text style={s.inviteBtnAcceptTxt}>{t.pair_accept}</Text>
                                   }
                                 </TouchableOpacity>
                               </View>
@@ -1286,17 +1216,6 @@ export default function MessagesScreen() {
                   </>
                 }
                 renderItem={({ item }) => {
-                  if (item.kind === 'discovery') {
-                    return <DiscoveryRow onDismiss={() => setShowDiscovery(false)} />
-                  }
-                  if (item.kind === 'suggestion') {
-                    return (
-                      <SuggestedUserRow
-                        user={item.user}
-                        onPress={() => nav.navigate('Profile', { userId: item.user.id })}
-                      />
-                    )
-                  }
                   if (item.kind === 'union') {
                     const myUnion = myUnions.find((u) => u.id === item.m.toUnionId || u.id === item.m.fromUnionId)
                     return (
@@ -1402,19 +1321,6 @@ const s = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderColor: '#E2E2E6',
   },
-  // Botão de sugestões — só border (sem fundo), mesma altura da barra; só o nº tem cor
-  suggestBtn: {
-    alignSelf: 'stretch',
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    paddingHorizontal: 13,
-    borderRadius: 13, borderWidth: 1.5, borderColor: '#E2E2E6',
-  },
-  suggestBtnTxt: { fontSize: 13.5, fontFamily: fonts.semiBold, color: colors.gray800, letterSpacing: -0.2 },
-  suggestCount: {
-    minWidth: 18, height: 18, borderRadius: 9, backgroundColor: colors.primary,
-    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5,
-  },
-  suggestCountTxt: { fontSize: 11, fontFamily: fonts.bold, color: '#fff' },
   searchInput: {
     flex: 1,
     fontSize: 15.5,
@@ -1471,22 +1377,25 @@ const s = StyleSheet.create({
 
   spinnerWrap: { flex: 1, alignItems: 'center', paddingTop: 60 },
 
-  /* ── Empty chat list — suggestions to start a conversation ── */
-  chatEmptyWrap:          { flex: 1, alignItems: 'center', paddingTop: 84, gap: 10 },
+  /* ── Empty chat list ── */
+  chatEmptyWrap: { flex: 1, alignItems: 'center', paddingTop: 84, paddingHorizontal: 42, gap: 10 },
   chatEmptyIcon: {
-    width: 64, height: 64, borderRadius: 32,
+    width: 64, height: 64, borderRadius: 32, backgroundColor: colors.gray100,
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 4,
-    shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 14, shadowOffset: { width: 0, height: 6 },
   },
-  chatEmptySuggestLabel: {
-    alignSelf: 'flex-start',
-    fontSize: 12, fontFamily: fonts.bold, color: '#8E8E93',
-    letterSpacing: 0.6, textTransform: 'uppercase',
-    marginTop: 22, marginBottom: 12, paddingHorizontal: CARD_H_PAD,
+  chatEmptyCta: {
+    minHeight: 48,
+    marginTop: 12,
+    paddingHorizontal: 20,
+    borderRadius: 24,
+    backgroundColor: colors.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
-  chatEmptySuggestList:   { width: '100%' },
-  chatEmptySuggestContent:{ paddingHorizontal: CARD_H_PAD },
+  chatEmptyCtaText: { fontSize: 14, fontFamily: fonts.semiBold, color: colors.white },
 
   /* ── Conversations list ── */
   list: { paddingTop: 4 },
@@ -1534,9 +1443,9 @@ const s = StyleSheet.create({
   emptyTitle:  { fontSize: 17, fontFamily: fonts.bold, color: '#1A1A1A' },
   emptySub:    { fontSize: 14, fontFamily: fonts.regular, color: '#8E8E93', textAlign: 'center', lineHeight: 21 },
 
-  /* ── Card grid (search) ── */
-  cardGrid: { paddingHorizontal: CARD_H_PAD, paddingBottom: 40, paddingTop: 4 },
-  cardRow:  { gap: CARD_GAP, marginBottom: CARD_GAP },
+  /* ── People results ── */
+  searchResults: { paddingBottom: 40, paddingTop: 2 },
+  peopleSeparator: { height: StyleSheet.hairlineWidth, backgroundColor: '#EEEEF2', marginLeft: 82 },
 
   /* ── Post results ── */
   postsSection: { paddingBottom: 40 },
@@ -1662,55 +1571,37 @@ const q = StyleSheet.create({
   sendBtnOff: { opacity: 0.35 },
 })
 
-// ── User card styles ──────────────────────────────────────────────────────────
+// ── People result styles ──────────────────────────────────────────────────────
 
 /* ── União tab styles injected into s ── */
 // (appended below the main StyleSheet)
 
 const c = StyleSheet.create({
-  // Instagram-style: avatar redondo em cima, nome, botão seguir — card branco limpo
-  card: {
-    width:        CARD_W,
-    borderRadius: 18,
-    backgroundColor: '#fff',
-    borderWidth:  1,
-    borderColor:  '#ECECEF',
-    paddingVertical:   18,
-    paddingHorizontal: 12,
-    alignItems:   'center',
+  row: {
+    minHeight: 70,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: colors.white,
   },
-  avatar: {
-    width:        76,
-    height:       76,
-    borderRadius: 38,
-    backgroundColor: colors.gray100,
-  },
-  photoFallback: {
-    alignItems:     'center',
-    justifyContent: 'center',
-  },
+  person: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12 },
   textWrap: {
-    alignItems: 'center',
-    marginTop:  12,
-    marginBottom: 12,
-    alignSelf:  'stretch',
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
   },
-  cardName: {
-    fontSize:    14.5,
-    fontFamily:  fonts.semiBold,
-    color:       colors.gray800,
+  name: {
+    fontSize: 15,
+    fontFamily: fonts.semiBold,
+    color: colors.gray800,
     letterSpacing: -0.2,
-    textAlign:   'center',
   },
-  cardSub: {
-    fontSize:   12,
+  meta: {
+    fontSize: 12.5,
     fontFamily: fonts.regular,
-    color:      colors.gray400,
-    marginTop:  2,
-    textAlign:  'center',
-  },
-  followWrap: {
-    alignItems: 'center',
+    color: colors.gray400,
   },
 })
 
@@ -1741,12 +1632,4 @@ const g = StyleSheet.create({
   liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.primary },
   names: { fontSize: 13, fontFamily: fonts.bold, color: '#0A0A0A', letterSpacing: -0.1 },
   title: { fontSize: 11.5, fontFamily: fonts.regular, color: '#8E8E93' },
-})
-
-// ── Suggested user row ────────────────────────────────────────────────────────
-const sg = StyleSheet.create({
-  row: { backgroundColor: colors.white },
-  tag: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  tagTxt: { fontSize: 12, fontFamily: fonts.medium, color: '#6E6E73' },
-  handle: { fontSize: 12.5, fontFamily: fonts.regular, color: colors.gray400, marginTop: 2 },
 })

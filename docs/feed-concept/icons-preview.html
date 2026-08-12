@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="pt">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Luxee — Ícones da feed e navegação</title>
+  <style>
+    :root {
+      --ink: #111114;
+      --muted: #77777f;
+      --paper: #f5f5f7;
+      --orange: #ff7a1c;
+      --coral: #ff6766;
+      --heart: #ff4b6e;
+      --line: rgba(17, 17, 20, .09);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 92% 0, rgba(255, 122, 28, .15), transparent 30rem),
+        radial-gradient(circle at 6% 42%, rgba(255, 103, 102, .10), transparent 26rem),
+        var(--paper);
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .symbols {
+      position: absolute;
+      width: 0;
+      height: 0;
+      overflow: hidden;
+    }
+
+    .page {
+      width: min(1180px, calc(100% - 36px));
+      margin: 0 auto;
+      padding: 42px 0 64px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(370px, .82fr);
+      gap: 48px;
+      align-items: center;
+      min-height: 430px;
+      padding: 50px;
+      color: white;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, .1);
+      border-radius: 36px;
+      background:
+        radial-gradient(circle at 82% 28%, rgba(255, 122, 28, .32), transparent 32%),
+        radial-gradient(circle at 26% 120%, rgba(255, 75, 110, .18), transparent 42%),
+        #09090b;
+      box-shadow: 0 34px 90px rgba(19, 13, 11, .22);
+    }
+
+    .eyebrow {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 20px;
+      color: #ffab70;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      width: 30px;
+      height: 2px;
+      content: "";
+      border-radius: 2px;
+      background: linear-gradient(90deg, var(--orange), var(--coral));
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(46px, 6.4vw, 78px);
+      line-height: .94;
+      letter-spacing: -.065em;
+    }
+
+    h1 span { color: var(--orange); }
+
+    .lead {
+      max-width: 580px;
+      margin: 24px 0 0;
+      color: rgba(255, 255, 255, .64);
+      font-size: 15px;
+      line-height: 1.65;
+    }
+
+    .stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px;
+      margin-top: 28px;
+    }
+
+    .stat {
+      padding: 8px 12px;
+      border: 1px solid rgba(255, 255, 255, .13);
+      border-radius: 999px;
+      color: rgba(255, 255, 255, .76);
+      background: rgba(255, 255, 255, .055);
+      font-size: 11px;
+    }
+
+    .context {
+      position: relative;
+      min-height: 330px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 34px;
+      background:
+        linear-gradient(180deg, rgba(0,0,0,.02), rgba(0,0,0,.72)),
+        radial-gradient(circle at 58% 28%, #e08c5d, #6c3b3c 34%, #17171b 68%);
+      box-shadow: 0 32px 65px rgba(0,0,0,.42);
+    }
+
+    .context-top {
+      position: absolute;
+      top: 20px;
+      right: 18px;
+      left: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .wordmark { font-size: 22px; font-weight: 780; letter-spacing: -.06em; }
+    .wordmark i { color: var(--orange); font-style: normal; }
+
+    .top-icons, .nav-icons { display: flex; align-items: center; gap: 6px; }
+
+    .round {
+      display: grid;
+      width: 40px;
+      height: 40px;
+      place-items: center;
+      border-radius: 50%;
+      background: rgba(0,0,0,.25);
+    }
+
+    .context .icon { width: 22px; height: 22px; }
+
+    .rail {
+      position: absolute;
+      right: 16px;
+      bottom: 85px;
+      display: grid;
+      gap: 4px;
+      padding: 8px 6px;
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 25px;
+      background: rgba(0,0,0,.25);
+    }
+
+    .rail .round { background: transparent; }
+    .rail .heart { color: var(--heart); }
+
+    .context-nav {
+      position: absolute;
+      right: 12px;
+      bottom: 12px;
+      left: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      height: 62px;
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 26px;
+      background: rgba(8,8,10,.72);
+    }
+
+    .context-nav .active { background: rgba(255,255,255,.12); }
+    .context-nav .create { background: linear-gradient(145deg, var(--orange), var(--coral)); }
+
+    .section-head {
+      margin: 58px 0 22px;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: clamp(32px, 4.5vw, 48px);
+      letter-spacing: -.055em;
+    }
+
+    .section-head p {
+      margin: 9px 0 0;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 15px;
+    }
+
+    .card {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: rgba(255,255,255,.9);
+      box-shadow: 0 12px 36px rgba(18, 15, 13, .045);
+      break-inside: avoid;
+    }
+
+    .samples {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      min-height: 114px;
+      background: var(--line);
+      gap: 1px;
+    }
+
+    .sample {
+      position: relative;
+      display: grid;
+      place-items: center;
+      color: #111114;
+      background: #fff;
+    }
+
+    .sample.dark { color: #fff; background: #101012; }
+    .sample.brand { color: var(--orange); background: #fff3e9; }
+
+    .sample small {
+      position: absolute;
+      right: 7px;
+      bottom: 6px;
+      color: currentColor;
+      opacity: .34;
+      font-size: 7px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .icon {
+      width: 30px;
+      height: 30px;
+      overflow: visible;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.9;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 15px 17px 17px;
+    }
+
+    .meta strong { display: block; font-size: 13px; letter-spacing: -.02em; }
+    .meta small { display: block; margin-top: 4px; color: var(--muted); font-size: 9px; }
+
+    .tag {
+      flex: none;
+      padding: 6px 8px;
+      border-radius: 999px;
+      color: #9a4b12;
+      background: #fff0e4;
+      font-size: 8px;
+      font-weight: 800;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    footer {
+      margin-top: 30px;
+      padding-top: 20px;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+      font-size: 11px;
+      line-height: 1.65;
+    }
+
+    code {
+      padding: 3px 6px;
+      color: #8a410d;
+      border-radius: 6px;
+      background: #ffe8d7;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    @media (max-width: 920px) {
+      .hero { grid-template-columns: 1fr; }
+      .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 680px) {
+      .page { width: min(100% - 20px, 1180px); padding-top: 10px; }
+      .hero { padding: 30px 22px; border-radius: 28px; }
+      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .samples { min-height: 100px; }
+    }
+
+    @media (max-width: 430px) { .grid { grid-template-columns: 1fr; } }
+
+    @page { size: A4 landscape; margin: 10mm; }
+
+    @media print {
+      body { background: #fff; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      .page { width: 100%; padding: 0; }
+      .hero { min-height: 300px; padding: 34px; box-shadow: none; }
+      h1 { font-size: 56px; }
+      .lead { font-size: 12px; }
+      .context { min-height: 330px; }
+      .section-head { margin: 28px 0 14px; }
+      h2 { font-size: 32px; }
+      .grid { grid-template-columns: repeat(6, 1fr); gap: 8px; }
+      .samples { min-height: 82px; }
+      .icon { width: 25px; height: 25px; }
+      .meta { padding: 10px 12px 12px; }
+      .meta strong { font-size: 11px; }
+      .tag { display: none; }
+      footer { margin-top: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Biblioteca embutida: não depende de JavaScript, rede ou caminhos locais. -->
+  <svg class="symbols" aria-hidden="true">
+    <defs>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.6" cy="10.6" r="6.85"/><path d="m15.65 15.65 4.85 4.85"/></symbol>
+      <symbol id="i-camera" viewBox="0 0 24 24"><rect x="2.75" y="3.75" width="18.5" height="16.5" rx="4.5"/><circle cx="12" cy="12" r="4.05"/><circle cx="17.45" cy="7.65" r="1" fill="currentColor" stroke="none"/></symbol>
+      <symbol id="i-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.75"/><path d="M12 3.25c-2.2 2.35-3.35 5.25-3.35 8.75S9.8 18.4 12 20.75"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 4.25v15.5M4.25 12h15.5"/></symbol>
+      <symbol id="i-close-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.75"/><path d="m8.75 8.75 6.5 6.5m0-6.5-6.5 6.5"/></symbol>
+      <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20.75S3.15 15.7 3.15 9.45c0-2.9 2.15-5.1 5-5.1 1.7 0 3.12.82 3.85 2.18.73-1.36 2.15-2.18 3.85-2.18 2.85 0 5 2.2 5 5.1 0 6.25-8.85 11.3-8.85 11.3Z"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="m8.35 5.15 11.3 6.85-11.3 6.85Z" fill="currentColor" stroke="none"/></symbol>
+      <symbol id="i-message" viewBox="0 0 24 24"><path d="M20.65 11.65c0 4.5-3.85 8.05-8.65 8.05-1.12 0-2.2-.2-3.17-.55l-4.35 1.48a.8.8 0 0 1-1.02-1.02l1.48-4.13a7.42 7.42 0 0 1-1.59-3.83C3.35 7.15 7.2 3.6 12 3.6s8.65 3.55 8.65 8.05Z"/></symbol>
+      <symbol id="i-forward" viewBox="0 0 24 24"><path d="m21.05 3.45-6.6 17.1a.72.72 0 0 1-1.34.03l-2.72-6.03-6.03-2.72a.72.72 0 0 1 .03-1.34Z"/><path d="m20.65 3.85-10.26 10.7"/></symbol>
+      <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6.5 3.25h11a2.1 2.1 0 0 1 2.1 2.1v15.4L12 16.2l-7.6 4.55V5.35a2.1 2.1 0 0 1 2.1-2.1Z"/></symbol>
+      <symbol id="i-more-horizontal" viewBox="0 0 24 24"><circle cx="5.25" cy="12" r="1.45" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.45" fill="currentColor" stroke="none"/><circle cx="18.75" cy="12" r="1.45" fill="currentColor" stroke="none"/></symbol>
+      <symbol id="i-close" viewBox="0 0 24 24"><path d="m5.9 5.9 12.2 12.2m0-12.2L5.9 18.1"/></symbol>
+      <symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="M12 20V4"/><path d="m5.75 10.25 6.25-6.25 6.25 6.25"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3.6 6.35h16.8"/><path d="M9 6.35V4.9a1.65 1.65 0 0 1 1.65-1.65h2.7A1.65 1.65 0 0 1 15 4.9v1.45"/><path d="m6.2 6.35.85 12.3a2.2 2.2 0 0 0 2.2 2.05h5.5a2.2 2.2 0 0 0 2.2-2.05l.85-12.3"/><path d="M10 10.4v6.2m4-6.2v6.2"/></symbol>
+      <symbol id="i-home" viewBox="0 0 24 24"><path d="m3.25 10.45 8.75-7.2 8.75 7.2v8.1a2.2 2.2 0 0 1-2.2 2.2H5.45a2.2 2.2 0 0 1-2.2-2.2Z"/></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4.1 20.75c0-4.25 3.45-7.15 7.9-7.15s7.9 2.9 7.9 7.15Z"/></symbol>
+      <symbol id="i-user-plus" viewBox="0 0 24 24"><circle cx="8.75" cy="8" r="3.65"/><path d="M2.45 20.75c0-4 2.75-6.8 6.3-6.8s6.3 2.8 6.3 6.8Z"/><path d="M18.75 5.35v5.8m2.9-2.9h-5.8"/></symbol>
+    </defs>
+  </svg>
+
+  <main class="page">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Luxee design system</p>
+        <h1>Feed icons<br><span>com pulso.</span></h1>
+        <p class="lead">Um conjunto social expressivo, arredondado e legível. Construído numa grelha de 24 px, com confiança visual e identidade própria.</p>
+        <div class="stats"><span class="stat">17 ícones essenciais</span><span class="stat">Grelha 24 × 24</span><span class="stat">Traço 1.9</span><span class="stat">SVG editável</span></div>
+      </div>
+
+      <div class="context" aria-label="Ícones aplicados numa feed">
+        <div class="context-top">
+          <div class="wordmark">luxee<i>.</i></div>
+          <div class="top-icons">
+            <span class="round"><svg class="icon"><use href="#i-search"/></svg></span>
+            <span class="round"><svg class="icon"><use href="#i-circle"/></svg></span>
+            <span class="round"><svg class="icon"><use href="#i-plus"/></svg></span>
+          </div>
+        </div>
+        <div class="rail">
+          <span class="round heart"><svg class="icon"><use href="#i-heart"/></svg></span>
+          <span class="round"><svg class="icon"><use href="#i-message"/></svg></span>
+          <span class="round"><svg class="icon"><use href="#i-forward"/></svg></span>
+          <span class="round"><svg class="icon"><use href="#i-bookmark"/></svg></span>
+          <span class="round"><svg class="icon"><use href="#i-more-horizontal"/></svg></span>
+        </div>
+        <nav class="context-nav">
+          <span class="round active"><svg class="icon"><use href="#i-home"/></svg></span>
+          <span class="round"><svg class="icon"><use href="#i-message"/></svg></span>
+          <span class="round create"><svg class="icon"><use href="#i-plus"/></svg></span>
+          <span class="round"><svg class="icon"><use href="#i-circle"/></svg></span>
+          <span class="round"><svg class="icon"><use href="#i-user"/></svg></span>
+        </nav>
+      </div>
+    </section>
+
+    <header class="section-head"><h2>Galeria completa</h2><p>Cada desenho é mostrado em fundo claro, escuro e na cor principal da Luxee.</p></header>
+
+    <section class="grid" aria-label="Galeria dos 17 ícones">
+      <article class="card"><div class="samples"><span class="sample"><svg class="icon"><use href="#i-search"/></svg><small>light</small></span><span class="sample dark"><svg class="icon"><use href="#i-search"/></svg><small>dark</small></span><span class="sample brand"><svg class="icon"><use href="#i-search"/></svg><small>brand</small></span></div><div class="meta"><div><strong>Pesquisar</strong><small>search.svg</small></div><span class="tag">Topo</span></div></article>
+      <article class="card"><div class="samples"><span class="sample"><svg class="icon"><use href="#i-camera"/></svg><small>light</small></span><span class="sample dark"><svg class="icon"><use href="#i-camera"/></svg><small>dark</small></span><span class="sample brand"><svg class="icon"><use href="#i-camera"/></svg><small>brand</small></span></div><div class="meta"><div><strong>Convite / câmara</strong><small>camera.svg</small></div><span class="tag">Topo</span></div></article>
+      <article class="card"><div class="samples"><span class="sample"><svg class="icon"><use href="#i-circle"/></svg><small>light</small></span><span class="sample dark"><svg class="icon"><use href="#i-circle"/></svg><small>dark</small></span><span class="sample brand"><svg class="icon"><use href="#i-circle"/></svg><small>brand</small></span></div><div class="meta"><div><strong>Circle</strong><small>circle.svg</small></div><span class="tag">Topo</span></div></article>
+      <article class="card"><div class="samples"><span class="sample"><svg class="icon"><use href="#i-plus"/></svg><small>light</small></span><span class="sample dark"><svg class="icon"><use href="#i-plus"/></svg><small>dark</small></span><span class="sample brand"><svg class="icon"><use href="#i-plus"/></svg><small>brand</small></span></div><div class="meta"><div><strong>Criar</strong><small>plus.svg</small></div><span class="tag">Topo</span></div></article>
+      <article class="card"><div class="samples"><span class="sample"><svg class="icon"><use href="#i-close-circle"/></svg><small>light</small></span><span class="sample dark"><svg class="icon"><use href="#i-close-circle"/></svg><small>dark</small></span><span class="sample brand"><svg class="icon"><use href="#i-close-circle"/></svg><small>brand</small></span></div><div class="meta"><div><strong>Limpar pesquisa</strong><small>close-circle.svg</small></div><span class="tag">Pesquisa</span></div></article>
+      <article class="card"><div class="samples"><span class="sample"><svg class="icon"><use href="#i-heart"/></svg><small>light</small></span><span class="sample dark"><svg class="icon"><use href="#i-heart"/></svg><small>dark</small></span><span class="sample brand"><svg class="icon"><use href="#i-heart"/></svg><small>brand</small></span></div><div class="meta"><div><strong>Gostar</strong><small>heart.svg</small></div><span class="tag">Post</span></div></article>
+      <article class="card"><div class="samples"><span class="sample"><svg class="icon"><use href="#i-play"/></svg><small>light</small></span><span class="sample dark"><svg class="icon"><use href="#i-play"/></svg><small>dark</small></span><span class="sample brand"><svg class="icon"><use href="#i-play"/></svg><small>brand</small></span></div><div class="meta"><div><strong>Reproduzir</strong><small>play.svg</small></div><span class="tag">Post</span></div></article>
+      <article class="card"><div class="samples"><span class="sample"><svg class="icon"><use href="#i-message"/></svg><small>light</small></span><span class="sample dark"><svg class="icon"><use href="#i-message"/></svg><small>dark</small></span><span class="sample brand"><svg class="icon"><use href="#i-message"/></svg><small>brand</small></span></div><div class="meta"><div><strong>Comentários</strong><small>message.svg</small></div><span class="tag">Post</span></div></article>
+      <article class="card"><div class="samples"><span class="sample"><svg class="icon"><use href="#i-forward"/></svg><small>light</small></span><span class="sample dark"><svg class="icon"><use href="#i-forward"/></svg><small>dark</small></span><span class="sample brand"><svg class="icon"><use href="#i-forward"/></svg><small>brand</small></span></div><div class="meta"><div><strong>Partilhar</strong><small>forward.svg</small></div><span class="tag">Post</span></div></article>
+      <article class="card"><div class="samples"><span class="sample"><svg class="icon"><use href="#i-bookmark"/></svg><small>light</small></span><span class="sample dark"><svg class="icon"><use href="#i-bookmark"/></svg><small>dark</small></span><span class="sample brand"><svg class="icon"><use href="#i-bookmark"/></svg><small>brand</small></span></div><div class="meta"><div><strong>Guardar</strong><small>bookmark.svg</small></div><span class="tag">Post</span></div></article>
+      <article class="card"><div class="samples"><span class="sample"><svg class="icon"><use href="#i-more-horizontal"/></svg><small>light</small></span><span class="sample dark"><svg class="icon"><use href="#i-more-horizontal"/></svg><small>dark</small></span><span class="sample brand"><svg class="icon"><use href="#i-more-horizontal"/></svg><small>brand</small></span></div><div class="meta"><div><strong>Mais opções</strong><small>more-horizontal.svg</small></div><span class="tag">Post</span></div></article>
+      <article class="card"><div class="samples"><span class="sample"><svg class="icon"><use href="#i-close"/></svg><small>light</small></span><span class="sample dark"><svg class="icon"><use href="#i-close"/></svg><small>dark</small></span><span class="sample brand"><svg class="icon"><use href="#i-close"/></svg><small>brand</small></span></div><div class="meta"><div><strong>Fechar</strong><small>close.svg</small></div><span class="tag">Comentários</span></div></article>
+      <article class="card"><div class="samples"><span class="sample"><svg class="icon"><use href="#i-arrow-up"/></svg><small>light</small></span><span class="sample dark"><svg class="icon"><use href="#i-arrow-up"/></svg><small>dark</small></span><span class="sample brand"><svg class="icon"><use href="#i-arrow-up"/></svg><small>brand</small></span></div><div class="meta"><div><strong>Enviar comentário</strong><small>arrow-up.svg</small></div><span class="tag">Comentários</span></div></article>
+      <article class="card"><div class="samples"><span class="sample"><svg class="icon"><use href="#i-trash"/></svg><small>light</small></span><span class="sample dark"><svg class="icon"><use href="#i-trash"/></svg><small>dark</small></span><span class="sample brand"><svg class="icon"><use href="#i-trash"/></svg><small>brand</small></span></div><div class="meta"><div><strong>Apagar</strong><small>trash.svg</small></div><span class="tag">Comentários</span></div></article>
+      <article class="card"><div class="samples"><span class="sample"><svg class="icon"><use href="#i-home"/></svg><small>light</small></span><span class="sample dark"><svg class="icon"><use href="#i-home"/></svg><small>dark</small></span><span class="sample brand"><svg class="icon"><use href="#i-home"/></svg><small>brand</small></span></div><div class="meta"><div><strong>Início</strong><small>home.svg</small></div><span class="tag">Navegação</span></div></article>
+      <article class="card"><div class="samples"><span class="sample"><svg class="icon"><use href="#i-user"/></svg><small>light</small></span><span class="sample dark"><svg class="icon"><use href="#i-user"/></svg><small>dark</small></span><span class="sample brand"><svg class="icon"><use href="#i-user"/></svg><small>brand</small></span></div><div class="meta"><div><strong>Perfil</strong><small>user.svg</small></div><span class="tag">Navegação</span></div></article>
+      <article class="card"><div class="samples"><span class="sample"><svg class="icon"><use href="#i-user-plus"/></svg><small>light</small></span><span class="sample dark"><svg class="icon"><use href="#i-user-plus"/></svg><small>dark</small></span><span class="sample brand"><svg class="icon"><use href="#i-user-plus"/></svg><small>brand</small></span></div><div class="meta"><div><strong>Sugestões</strong><small>user-plus.svg</small></div><span class="tag">Navegação</span></div></article>
+    </section>
+
+    <footer>Este documento é autocontido: os 17 desenhos estão embutidos no HTML e aparecem sem JavaScript, internet ou acesso a outros arquivos. Os SVGs editáveis continuam em <code>mobile/src/assets/icons</code>.</footer>
+  </main>
+</body>
+</html>

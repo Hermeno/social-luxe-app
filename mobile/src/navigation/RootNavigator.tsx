@@ -20,6 +20,8 @@ import { getIncoming as getCircleIncoming } from '../services/circle.service'
 import AuthNavigator from './AuthNavigator'
 import AppNavigator from './AppNavigator'
 import OnboardingScreen from '../screens/OnboardingScreen'
+import GuestFeedScreen from '../screens/GuestFeedScreen'
+import { useGuestStore } from '../store/guest.store'
 import { api } from '../services/api'
 import { Message, TogetherLivePayload } from '../types'
 
@@ -176,10 +178,18 @@ interface Props {
 export default function RootNavigator({ onboardingDone, setOnboardingDone, defaultTab }: Props) {
   const { isAuthenticated, token } = useAuthStore()
   useSync()
+  const guestMode  = useGuestStore((g) => g.mode)
+  const leaveGuest = useGuestStore((g) => g.leaveGuest)
   const { setTotalUnread, increment } = useMessageBadgeStore()
   const setCircleInvite = useNotificationStore((s) => s.setCircleInvite)
   const addNotification = useNotificationStore((s) => s.addNotification)
   const seenMessageIds = useRef<Set<string>>(new Set())
+
+  // O arranque decide-se no App.tsx (a splash espera por ele). Aqui só se larga
+  // o acervo depois de haver sessão — não fica média pública em memória.
+  useEffect(() => {
+    if (isAuthenticated) leaveGuest()
+  }, [isAuthenticated, leaveGuest])
 
   // Reconnect socket and refresh badge when app comes back to foreground
   useEffect(() => {
@@ -317,7 +327,13 @@ export default function RootNavigator({ onboardingDone, setOnboardingDone, defau
   return (
     <NavigationContainer theme={{ ...DefaultTheme, colors: { ...DefaultTheme.colors, background: '#0A0A0A' } }}>
       {!isAuthenticated
-        ? <AuthNavigator />
+        ? guestMode === 'guest'
+          // Vitrina pública: vê-se sem conta, participa-se com ela.
+          ? <GuestFeedScreen />
+          // 'checking' passa direto para a entrada normal — sem ecrã de espera:
+          // se houver acervo, a troca é quase imediata; se não houver, não se
+          // perdeu tempo nenhum a olhar para um spinner.
+          : <AuthNavigator />
         : !onboardingDone
           ? <OnboardingScreen onDone={() => setOnboardingDone(true)} />
           : <AppNavigator defaultTab={defaultTab} />

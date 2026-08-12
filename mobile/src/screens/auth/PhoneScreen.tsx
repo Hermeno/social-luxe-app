@@ -1,17 +1,24 @@
-import React, { useState, useRef, useMemo } from 'react'
+import React, { useState, useMemo } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, Animated, ActivityIndicator,
-  Modal, FlatList, SafeAreaView, Keyboard,
+  KeyboardAvoidingView, Platform,
+  Alert, Modal, FlatList, SafeAreaView, Keyboard, ScrollView,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { AuthStackParams } from '../../navigation/AuthNavigator'
 import * as authService from '../../services/auth.service'
 import { fonts } from '../../theme'
 import { useI18n, useT } from '../../i18n'
+import Icon from '../../components/Icon'
+import {
+  AuthFieldFrame,
+  AuthHeader,
+  AuthPrimaryButton,
+  authStyles,
+  authUi,
+} from '../../components/AuthFlow'
 
 const COUNTRIES = [
   { code: '+244', flag: '🇦🇴', name: 'Angola',              iso: 'AO' },
@@ -91,15 +98,18 @@ function detectCountryEntry(): Country {
 // ─── Country picker modal ─────────────────────────────────────────────────────
 function CountryPickerModal({
   visible,
+  selectedIso,
   onSelect,
   onClose,
 }: {
   visible:  boolean
+  selectedIso: string
   onSelect: (c: Country) => void
   onClose:  () => void
 }) {
   const t = useT()
   const [query, setQuery] = useState('')
+  const [searchFocused, setSearchFocused] = useState(false)
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -117,49 +127,83 @@ function CountryPickerModal({
       onRequestClose={onClose}
     >
       <SafeAreaView style={pm.container}>
-        {/* Header */}
         <View style={pm.header}>
           <Text style={pm.title}>{t.au_indicative}</Text>
-          <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Ionicons name="close" size={24} color="#333" />
+          <TouchableOpacity
+            style={pm.closeBtn}
+            onPress={onClose}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={t.cancel}
+          >
+            <Icon name="close" size={20} color={authUi.ink} strokeWidth={1.9} />
           </TouchableOpacity>
         </View>
 
-        {/* Search */}
-        <View style={pm.searchWrap}>
-          <Ionicons name="search" size={17} color="#ABABAB" style={pm.searchIcon} />
-          <TextInput
-            style={pm.searchInput}
-            placeholder={t.au_search_country}
-            placeholderTextColor="#ABABAB"
-            value={query}
-            onChangeText={setQuery}
-            autoCorrect={false}
-            clearButtonMode="while-editing"
-          />
+        <View style={pm.searchBlock}>
+          <AuthFieldFrame focused={searchFocused} style={pm.searchFrame}>
+            <View style={pm.searchIconBox}>
+              <Icon name="search" size={18} color={searchFocused ? authUi.ink : authUi.faint} strokeWidth={1.8} />
+            </View>
+            <TextInput
+              style={pm.searchInput}
+              placeholder={t.au_search_country}
+              placeholderTextColor={authUi.faint}
+              value={query}
+              onChangeText={setQuery}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+            {query.length > 0 && (
+              <TouchableOpacity
+                style={pm.clearBtn}
+                onPress={() => setQuery('')}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={t.cancel}
+              >
+                <Icon name="close" size={16} color={authUi.muted} strokeWidth={1.9} />
+              </TouchableOpacity>
+            )}
+          </AuthFieldFrame>
         </View>
 
-        {/* List */}
         <FlatList
           data={filtered}
           keyExtractor={item => item.iso}
           keyboardShouldPersistTaps="handled"
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={pm.row}
-              activeOpacity={0.7}
-              onPress={() => {
-                onSelect(item)
-                setQuery('')
-                onClose()
-              }}
-            >
-              <Text style={pm.rowFlag}>{item.flag}</Text>
-              <Text style={pm.rowName} numberOfLines={1}>{item.name}</Text>
-              <Text style={pm.rowCode}>{item.code}</Text>
-            </TouchableOpacity>
-          )}
+          keyboardDismissMode="on-drag"
+          contentContainerStyle={pm.listContent}
+          renderItem={({ item }) => {
+            const active = item.iso === selectedIso
+            return (
+              <TouchableOpacity
+                style={[pm.row, active && pm.rowActive]}
+                activeOpacity={0.72}
+                accessibilityRole="button"
+                accessibilityLabel={`${item.name}, ${item.code}`}
+                accessibilityState={{ selected: active }}
+                onPress={() => {
+                  onSelect(item)
+                  setQuery('')
+                  onClose()
+                }}
+              >
+                <Text style={pm.rowFlag}>{item.flag}</Text>
+                <Text style={[pm.rowName, active && pm.rowNameActive]} numberOfLines={1}>{item.name}</Text>
+                <Text style={[pm.rowCode, active && pm.rowCodeActive]}>{item.code}</Text>
+                {active ? <Icon name="check" size={18} color={authUi.signal} strokeWidth={2.2} /> : null}
+              </TouchableOpacity>
+            )
+          }}
           ItemSeparatorComponent={() => <View style={pm.sep} />}
+          ListEmptyComponent={(
+            <View style={pm.empty}>
+              <Text style={pm.emptyTitle}>{t.au_no_country}</Text>
+            </View>
+          )}
         />
       </SafeAreaView>
     </Modal>
@@ -180,80 +224,89 @@ export default function PhoneScreen() {
   const [loading,  setLoading]  = useState(false)
   const [focused,  setFocused]  = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
-  const btnScale = useRef(new Animated.Value(1)).current
 
   const canGo = phone.replace(/\D/g, '').length >= 7
 
-  function bounce(cb: () => void) {
-    Animated.sequence([
-      Animated.spring(btnScale, { toValue: 0.97, useNativeDriver: true, speed: 60, bounciness: 0 }),
-      Animated.spring(btnScale, { toValue: 1,    useNativeDriver: true, speed: 40, bounciness: 5 }),
-    ]).start(cb)
-  }
-
   async function handleContinue() {
-    if (!canGo) return
-    bounce(async () => {
-      setLoading(true)
-      try {
-        const full = `${selected.code}${phone.replace(/\D/g, '')}`
-        const { exists } = await authService.checkPhone(full)
-        nav.navigate(exists ? 'LoginPassword' : 'CreatePassword', { phone: full, countryCode: selected.code })
-      } catch {
-        const full = `${selected.code}${phone.replace(/\D/g, '')}`
-        nav.navigate('LoginPassword', { phone: full, countryCode: selected.code })
-      } finally { setLoading(false) }
-    })
+    if (!canGo || loading) return
+    setLoading(true)
+    const full = `${selected.code}${phone.replace(/\D/g, '')}`
+    try {
+      const { exists } = await authService.checkPhone(full)
+      nav.navigate(exists ? 'LoginPassword' : 'CreatePassword', { phone: full, countryCode: selected.code })
+    } catch {
+      Alert.alert(t.error, t.dn_load_fail_sub)
+    } finally { setLoading(false) }
   }
 
   return (
-    <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={[s.inner, { paddingTop: top + 18, paddingBottom: bottom + 14 }]}>
+    <KeyboardAvoidingView style={authStyles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView
+        style={authStyles.screen}
+        contentContainerStyle={[s.page, { paddingTop: top + 10, paddingBottom: bottom + 14 }]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+      >
+        <AuthHeader
+          step={1}
+          total={5}
+          stage={t.au_stage_contact}
+          right={(
+            <View style={s.langToggle} accessibilityRole="radiogroup">
+              <TouchableOpacity
+                onPress={() => setLang('en')}
+                style={[s.langOpt, lang === 'en' && s.langOptOn]}
+                activeOpacity={0.72}
+                accessibilityRole="radio"
+                accessibilityLabel="English"
+                accessibilityState={{ checked: lang === 'en' }}
+                hitSlop={6}
+              >
+                <Text style={[s.langTxt, lang === 'en' && s.langTxtOn]}>EN</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setLang('pt')}
+                style={[s.langOpt, lang === 'pt' && s.langOptOn]}
+                activeOpacity={0.72}
+                accessibilityRole="radio"
+                accessibilityLabel="Português"
+                accessibilityState={{ checked: lang === 'pt' }}
+                hitSlop={6}
+              >
+                <Text style={[s.langTxt, lang === 'pt' && s.langTxtOn]}>PT</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        />
 
-        {/* Language toggle */}
-        <View style={s.langToggle}>
-          <TouchableOpacity onPress={() => setLang('en')} style={[s.langOpt, lang === 'en' && s.langOptOn]} activeOpacity={0.8}>
-            <Text style={[s.langTxt, lang === 'en' && s.langTxtOn]}>EN</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setLang('pt')} style={[s.langOpt, lang === 'pt' && s.langOptOn]} activeOpacity={0.8}>
-            <Text style={[s.langTxt, lang === 'pt' && s.langTxtOn]}>PT</Text>
-          </TouchableOpacity>
+        <View style={[authStyles.hero, s.hero]}>
+          <Text style={authStyles.heading}>{t.au_phone_heading}</Text>
+          <Text style={authStyles.sub}>{t.au_phone_sub}</Text>
         </View>
 
-        {/* Brand + tagline */}
-        <View style={s.brandRow}>
-          <Text style={s.brand}>luxee</Text>
-          <View style={s.brandDot} />
-          <Text style={s.tagline}>{t.au_tagline}</Text>
-        </View>
-
-        {/* Heading */}
-        <View style={s.hero}>
-          <Text style={s.heading}>{t.au_phone_heading}</Text>
-          <Text style={s.sub}>{t.au_phone_sub}</Text>
-        </View>
-
-        {/* Phone inputs */}
-        <View style={s.inputRow}>
-          {/* Country code selector */}
-          <TouchableOpacity
-            style={s.countryBtn}
-            activeOpacity={0.75}
-            onPress={() => { Keyboard.dismiss(); setPickerOpen(true) }}
-          >
-            <Text style={s.countryFlag}>{selected.flag}</Text>
-            <Text style={s.countryCode}>{selected.code}</Text>
-            <Ionicons name="chevron-down" size={18} color="#ABABAB" />
-          </TouchableOpacity>
-
-          {/* Number field */}
-          <View style={[s.phoneWrap, focused && s.phoneWrapFocused]}>
+        <View style={s.fieldBlock}>
+          <AuthFieldFrame focused={focused || pickerOpen} style={s.phoneFrame}>
+            <TouchableOpacity
+              style={s.countryBtn}
+              activeOpacity={0.72}
+              onPress={() => { Keyboard.dismiss(); setPickerOpen(true) }}
+              accessibilityRole="button"
+              accessibilityLabel={`${selected.name}, ${selected.code}`}
+              accessibilityHint={t.au_indicative}
+            >
+              <Text style={s.countryFlag}>{selected.flag}</Text>
+              <Text style={s.countryCode}>{selected.code}</Text>
+              <Icon name="chevron-down" size={16} color={authUi.muted} strokeWidth={1.8} />
+            </TouchableOpacity>
+            <View style={s.fieldDivider} />
             <TextInput
               style={s.phoneInput}
               placeholder="923 456 789"
-              placeholderTextColor="#ABABAB"
+              placeholderTextColor={authUi.faint}
               value={phone}
               onChangeText={setPhone}
+              accessibilityLabel={t.au_phone_label}
               keyboardType="phone-pad"
               returnKeyType="done"
               onSubmitEditing={handleContinue}
@@ -261,42 +314,31 @@ export default function PhoneScreen() {
               onBlur={() => setFocused(false)}
               autoFocus
             />
-          </View>
+          </AuthFieldFrame>
         </View>
 
         <View style={s.spacer} />
 
-        {/* CTA */}
-        <Animated.View style={{ transform: [{ scale: btnScale }] }}>
-          <TouchableOpacity
-            style={[s.cta, (!canGo || loading) && s.ctaOff]}
-            onPress={handleContinue}
-            disabled={!canGo || loading}
-            activeOpacity={0.88}
-          >
-            {loading
-              ? <ActivityIndicator color="#fff" size="small" />
-              : <>
-                  <Text style={s.ctaTxt}>{t.au_continue}</Text>
-                  <Ionicons name="arrow-forward" size={19} color="#fff" />
-                </>
-            }
-          </TouchableOpacity>
-        </Animated.View>
+        <AuthPrimaryButton
+          label={t.au_continue}
+          onPress={handleContinue}
+          disabled={!canGo}
+          loading={loading}
+        />
 
-        {/* Legal */}
         <Text style={s.legal}>
-          Ao continuar, aceitas os{' '}
-          <Text style={s.legalLink}>Termos</Text>
-          {' '}e a{' '}
-          <Text style={s.legalLink}>Política de Privacidade</Text>
-          {' '}da luxee.
+          {t.au_legal_prefix}{' '}
+          <Text style={s.legalLink}>{t.au_terms}</Text>
+          {' '}{t.au_legal_middle}{' '}
+          <Text style={s.legalLink}>{t.au_privacy}</Text>
+          {' '}{t.au_legal_suffix}
         </Text>
 
-      </View>
+      </ScrollView>
 
       <CountryPickerModal
         visible={pickerOpen}
+        selectedIso={selected.iso}
         onSelect={c => setSelected(c)}
         onClose={() => setPickerOpen(false)}
       />
@@ -304,109 +346,171 @@ export default function PhoneScreen() {
   )
 }
 
-const B  = '#FF7A1C'
-const T  = '#1A1A1A'
-const S  = '#6E6E73'
-const M  = '#ABABAB'
-const BD = '#E5E5EA'
-const BG = '#FFFFFF'
-const SX = '#F9F9FB'
-
 const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: BG },
-  inner:  { flex: 1, paddingHorizontal: 24 },
-
-  langToggle: { flexDirection: 'row', alignSelf: 'flex-end', backgroundColor: '#F2F2F5', borderRadius: 14, padding: 3, marginBottom: 6 },
-  langOpt:    { paddingHorizontal: 13, paddingVertical: 5, borderRadius: 11 },
-  langOptOn:  { backgroundColor: '#fff', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 4, shadowOffset: { width: 0, height: 1 } },
-  langTxt:    { fontFamily: fonts.bold, fontSize: 12.5, color: '#8E8E93', letterSpacing: 0.3 },
-  langTxtOn:  { color: '#1A1A1A' },
-
-  brandRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 7, marginBottom: 0 },
-  brand:    { fontFamily: fonts.bold, fontSize: 22, color: T, letterSpacing: -0.6 },
-  brandDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: B, marginTop: 9 },
-  tagline:  { marginLeft: 6, fontFamily: fonts.medium, fontSize: 13, color: M, letterSpacing: -0.1, marginTop: 6 },
-
-  hero:    { marginTop: 48, gap: 14 },
-  heading: { fontFamily: fonts.extraBold, fontSize: 34, lineHeight: 40, letterSpacing: -1, color: T },
-  sub:     { fontFamily: fonts.regular, fontSize: 15, lineHeight: 22, color: S },
-
-  inputRow: { marginTop: 34, flexDirection: 'row', gap: 10 },
-
+  page: { flexGrow: 1, paddingHorizontal: 24, backgroundColor: authUi.paper },
+  langToggle: {
+    height: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  langOpt: {
+    minWidth: 27,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  langOptOn: {},
+  langTxt: {
+    color: authUi.muted,
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  langTxtOn: { color: authUi.ink, fontFamily: fonts.bold },
+  hero: { marginTop: 46, gap: 10 },
+  fieldBlock: { marginTop: 32 },
+  phoneFrame: { height: 56 },
   countryBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    height: 56, borderRadius: 16,
-    borderWidth: 1.5, borderColor: BD,
-    backgroundColor: SX, paddingHorizontal: 14,
+    height: 54,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingLeft: 10,
+    paddingRight: 12,
     flexShrink: 0,
   },
-  countryFlag: { fontSize: 22, lineHeight: 26 },
-  countryCode: { fontFamily: fonts.semiBold, fontSize: 17, color: T },
-
-  phoneWrap: {
-    flex: 1, height: 56, borderRadius: 16,
-    borderWidth: 1.5, borderColor: BD,
-    backgroundColor: SX,
-    paddingHorizontal: 16, justifyContent: 'center',
+  countryFlag: { width: 28, fontSize: 21, lineHeight: 26, textAlign: 'center' },
+  countryCode: {
+    color: authUi.ink,
+    fontFamily: fonts.semiBold,
+    fontSize: 16,
+    lineHeight: 20,
+    fontVariant: ['tabular-nums'],
   },
-  phoneWrapFocused: {
-    borderColor: B, backgroundColor: BG,
-    ...Platform.select({
-      ios: { shadowColor: B, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.15, shadowRadius: 12 },
-    }),
+  fieldDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: 30,
+    backgroundColor: authUi.line,
   },
   phoneInput: {
-    fontFamily: fonts.medium, fontSize: 17,
-    color: T, letterSpacing: 0.3,
+    flex: 1,
+    height: 54,
+    paddingHorizontal: 14,
     paddingVertical: 0,
+    color: authUi.ink,
+    fontFamily: fonts.medium,
+    fontSize: 16,
+    lineHeight: 22,
+    letterSpacing: 0.25,
+    fontVariant: ['tabular-nums'],
   },
-
-  spacer: { flex: 1 },
-
-  cta: {
-    height: 52, borderRadius: 16,
-    backgroundColor: B,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    ...Platform.select({
-      ios: { shadowColor: B, shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.65, shadowRadius: 18 },
-      android: { elevation: 8 },
-    }),
+  spacer: { flex: 1, minHeight: 22 },
+  legal: {
+    marginTop: 14,
+    paddingHorizontal: 8,
+    color: authUi.muted,
+    fontFamily: fonts.regular,
+    fontSize: 11.5,
+    lineHeight: 17,
+    textAlign: 'center',
   },
-  ctaOff: { opacity: 0.45 },
-  ctaTxt: { fontFamily: fonts.bold, fontSize: 17, color: '#fff', letterSpacing: -0.2 },
-
-  legal:     { marginTop: 16, fontSize: 12, fontFamily: fonts.regular, color: M, textAlign: 'center', lineHeight: 18, paddingHorizontal: 6 },
-  legalLink: { color: S, fontFamily: fonts.semiBold },
+  legalLink: { color: authUi.ink, fontFamily: fonts.semiBold },
 })
 
 // ─── Picker styles ────────────────────────────────────────────────────────────
 const pm = StyleSheet.create({
-  container: { flex: 1, backgroundColor: BG },
+  container: { flex: 1, backgroundColor: authUi.paper },
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingVertical: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: BD,
+    minHeight: 60,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: authUi.line,
   },
-  title: { fontFamily: fonts.bold, fontSize: 18, color: T },
-
-  searchWrap: {
-    flexDirection: 'row', alignItems: 'center',
-    margin: 16, paddingHorizontal: 14,
-    height: 44, borderRadius: 12,
-    backgroundColor: SX, borderWidth: 1, borderColor: BD,
+  title: {
+    color: authUi.ink,
+    fontFamily: fonts.bold,
+    fontSize: 18,
+    lineHeight: 23,
+    letterSpacing: -0.3,
   },
-  searchIcon:  { marginRight: 8 },
+  closeBtn: {
+    width: 44,
+    height: 44,
+    marginRight: -11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchBlock: { paddingHorizontal: 16, paddingVertical: 12 },
+  searchFrame: { height: 48 },
+  searchIconBox: {
+    width: 38,
+    height: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   searchInput: {
-    flex: 1, fontFamily: fonts.regular, fontSize: 15,
-    color: T, paddingVertical: 0,
+    flex: 1,
+    height: 46,
+    paddingVertical: 0,
+    color: authUi.ink,
+    fontFamily: fonts.regular,
+    fontSize: 15,
+    lineHeight: 20,
   },
-
+  clearBtn: {
+    width: 44,
+    height: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  listContent: { paddingBottom: 22 },
   row: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 20, paddingVertical: 14, gap: 14,
+    minHeight: 54,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 18,
   },
-  rowFlag: { fontSize: 24, width: 32, textAlign: 'center' },
-  rowName: { flex: 1, fontFamily: fonts.medium, fontSize: 15, color: T },
-  rowCode: { fontFamily: fonts.semiBold, fontSize: 15, color: S },
-  sep:     { height: StyleSheet.hairlineWidth, backgroundColor: BD, marginLeft: 66 },
+  rowActive: { backgroundColor: '#FAFAFA' },
+  rowFlag: { width: 36, fontSize: 23, lineHeight: 28, textAlign: 'center' },
+  rowName: {
+    flex: 1,
+    marginLeft: 12,
+    color: authUi.ink,
+    fontFamily: fonts.medium,
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  rowNameActive: { fontFamily: fonts.bold },
+  rowCode: {
+    marginLeft: 12,
+    color: authUi.muted,
+    fontFamily: fonts.semiBold,
+    fontSize: 14,
+    lineHeight: 18,
+    fontVariant: ['tabular-nums'],
+  },
+  rowCodeActive: { color: authUi.ink },
+  sep: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 82,
+    marginRight: 22,
+    backgroundColor: authUi.line,
+  },
+  empty: {
+    paddingHorizontal: 22,
+    paddingVertical: 44,
+    alignItems: 'center',
+  },
+  emptyTitle: {
+    color: authUi.muted,
+    fontFamily: fonts.medium,
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+  },
 })

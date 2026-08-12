@@ -200,6 +200,30 @@ export async function deleteCachedPost(postId: string): Promise<void> {
   )
 }
 
+/**
+ * Remove apenas a cópia local dos posts de um perfil bloqueado.
+ * Não cria operação de sync nem chama DELETE /posts: as publicações continuam
+ * a pertencer ao autor e voltam a poder ser sincronizadas se ele for desbloqueado.
+ */
+export async function deleteCachedPostsByUser(userId: string): Promise<void> {
+  if (!userId) return
+  const database = await getDb()
+  const rows = await database.getAllAsync<{ id: string; data: string }>(
+    'SELECT id, data FROM posts_cache',
+  )
+  const ids = rows.flatMap((row) => {
+    try {
+      const post = JSON.parse(row.data) as Post
+      return post.userId === userId || post.user?.id === userId ? [row.id] : []
+    } catch {
+      return []
+    }
+  })
+  if (ids.length === 0) return
+  const placeholders = ids.map(() => '?').join(',')
+  await database.runAsync(`DELETE FROM posts_cache WHERE id IN (${placeholders})`, ids)
+}
+
 export async function getPendingLocalPostIds(): Promise<Set<string>> {
   const database = await getDb()
   const rows = await database.getAllAsync<{ id: string }>(

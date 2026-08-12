@@ -8,7 +8,8 @@
     "test": "jest --runInBand",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "backfill:usernames": "node dist/scripts/backfillUsernames.js"
+    "backfill:usernames": "node dist/scripts/backfillUsernames.js",
+    "backfill:post-life": "ts-node --transpile-only src/scripts/recalcAllPostLife.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1072.0",

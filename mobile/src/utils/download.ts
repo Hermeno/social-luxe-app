@@ -16,21 +16,43 @@ function nameFromUrl(url: string, fallback = 'luxee-file'): string {
   return clean.split('/').pop() || fallback
 }
 
-// Guarda uma imagem/vídeo na galeria do telemóvel
-export async function saveMediaToGallery(url: string, fileName?: string): Promise<void> {
+interface MediaDownload {
+  url: string
+  fileName?: string
+}
+
+async function saveMediaDownloadsToGallery(downloads: MediaDownload[]): Promise<void> {
   const t = tr()
   try {
-    const perm = await MediaLibrary.requestPermissionsAsync()
+    const validDownloads = downloads.filter(({ url }) => url.trim().length > 0)
+    if (validDownloads.length === 0) throw new Error('no media to save')
+
+    // O download só precisa adicionar ficheiros; não pede acesso de leitura à
+    // biblioteca inteira do utilizador.
+    const perm = await MediaLibrary.requestPermissionsAsync(true)
     if (!perm.granted) { toast.error(t.dl_perm_title, t.dl_perm_msg); return }
 
-    const name  = fileName ?? nameFromUrl(url)
-    const local = `${FileSystem.cacheDirectory}${Date.now()}-${name}`
-    const { uri } = await FileSystem.downloadAsync(url, local)
-    await MediaLibrary.saveToLibraryAsync(uri)
+    for (const [index, download] of validDownloads.entries()) {
+      const name = download.fileName ?? nameFromUrl(download.url)
+      const local = `${FileSystem.cacheDirectory}${Date.now()}-${index}-${name}`
+      const { uri } = await FileSystem.downloadAsync(download.url, local)
+      await MediaLibrary.saveToLibraryAsync(uri)
+    }
+
     toast.success(t.dl_saved_title, t.dl_saved_msg)
   } catch {
     toast.error(t.error, t.dl_fail)
   }
+}
+
+// Guarda uma imagem/vídeo na galeria do telemóvel
+export async function saveMediaToGallery(url: string, fileName?: string): Promise<void> {
+  return saveMediaDownloadsToGallery([{ url, fileName }])
+}
+
+// Guarda uma lista de imagens/vídeos, pedindo permissão e notificando uma só vez
+export async function saveMediaListToGallery(urls: string[]): Promise<void> {
+  return saveMediaDownloadsToGallery(urls.map((url) => ({ url })))
 }
 
 // Abre/descarrega um documento (pdf, doc, zip…) — o sistema trata do download

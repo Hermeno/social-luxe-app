@@ -4,8 +4,8 @@ import {
   type ViewToken,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Camera, Circle, Plus, Search } from 'lucide-react-native'
-import { LinearGradient } from 'expo-linear-gradient'
+import FeedIcon from '../../components/FeedIcon'
+import Icon from '../../components/Icon'
 import { setStatusBarStyle } from 'expo-status-bar'
 import { useNavigation, useFocusEffect } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
@@ -16,15 +16,14 @@ import { useNotificationStore } from '../../store/notification.store'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { markPostViewed, getViewedPostIds, getCache, setCache } from '../../db/database'
 import * as postService from '../../services/post.service'
-import { toast } from '../../utils/toast'
 import { useT } from '../../i18n'
 import { prefetchMedia } from '../../db/mediaCache'
 import { colors, fonts } from '../../theme'
 import { API_BASE } from '../../config'
 import FeedHeader, { FeedUserGroup as UserGroup } from './FeedHeader'
 import FeedItem from './FeedItem'
-import CommenterStack from './CommenterStack'
 import CommentSheet from '../../components/CommentSheet'
+import useReducedMotionPreference from '../../hooks/useReducedMotionPreference'
 
 const { height: SCREEN_H } = Dimensions.get('window')
 
@@ -38,18 +37,20 @@ function resolveMedia(url: string | null | undefined): string {
 // ─── Feed ──────────────────────────────────────────────────────────────────
 // Pager vertical: uma FlatList paginada onde cada célula é um post em ecrã
 // inteiro (FeedItem). A célula é dona do seu vídeo — aqui só se gere o estado
-// partilhado (likes, reposts, vistas), o agrupamento do topo e a folha de
+// partilhado (likes, vistas), o agrupamento do topo e a folha de
 // comentários. O deslize suave vem da própria FlatList.
 export default function FeedScreen() {
   const { posts, loading, refresh, loadMore, prependPost, removePost, updatePost, incrementView, updatePostCounts } = useFeed()
   const t   = useT()
   const nav = useNavigation<Nav>()
+  const reduceMotion = useReducedMotionPreference()
 
   const setNewPostsCount = useFeedStore((s) => s.setNewPostsCount)
   const pendingPost      = useFeedStore((s) => s.pendingPost)
   const setPendingPost   = useFeedStore((s) => s.setPendingPost)
-  const jumpToPostId     = useFeedStore((s) => s.jumpToPostId)
-  const setJumpToPostId  = useFeedStore((s) => s.setJumpToPostId)
+  const focusedPost      = useFeedStore((s) => s.focusedPost)
+  const focusedPostRequest = useFeedStore((s) => s.focusedPostRequest)
+  const clearFocusedPost = useFeedStore((s) => s.clearFocusedPost)
   const openSearch       = useFeedStore((s) => s.openSearch)
   const setOpenSearch    = useFeedStore((s) => s.setOpenSearch)
   const homeTap          = useFeedStore((s) => s.homeTap)
@@ -65,7 +66,7 @@ export default function FeedScreen() {
   const [searchQuery,   setSearchQuery]   = useState('')
   const [commentDeltas, setCommentDeltas] = useState<Record<string, number>>({})
   const [likedPostIds,  setLikedPostIds]  = useState<Set<string>>(new Set())
-  const [repostedIds,   setRepostedIds]   = useState<Set<string>>(new Set())
+  const [blockedAuthorIds, setBlockedAuthorIds] = useState<Set<string>>(new Set())
 
   const listRef = useRef<FlatList<Post>>(null)
   const { top: safeTop } = useSafeAreaInsets()
@@ -74,15 +75,24 @@ export default function FeedScreen() {
   // podia não bater certo e desalinhava os posts a partir do 2.º).
   const [listH, setListH] = useState(SCREEN_H)
 
-  // ── Dados: agrupar por autor (topo) e achatar (pager) ──────────────────────
+  // Um post aberto pela pesquisa/perfil vive apenas nesta composição. Nunca é
+  // enviado a `prependPost`, portanto não entra no cache offline da feed.
+  const displayedPosts = useMemo(() => {
+    const base = focusedPost
+      ? [focusedPost, ...posts.filter((post) => post.id !== focusedPost.id)]
+      : posts
+    return base.filter((post) => !blockedAuthorIds.has(post.user.id))
+  }, [blockedAuthorIds, focusedPost, posts])
+
+  // ── Dados: autores para o cabeçalho; ordem original para o pager ───────────
   const userGroups = useMemo<UserGroup[]>(() => {
     const map = new Map<string, UserGroup>()
-    posts.forEach((p) => {
+    displayedPosts.forEach((p) => {
       if (!map.has(p.user.id)) map.set(p.user.id, { user: p.user, posts: [] })
       map.get(p.user.id)!.posts.push(p)
     })
     return Array.from(map.values())
-  }, [posts])
+  }, [displayedPosts])
 
   const filteredGroups = useMemo(() => {
     const base = searchQuery.trim()
@@ -97,8 +107,8 @@ export default function FeedScreen() {
 
   const flatPosts = useMemo(() => {
     const seen = new Set<string>()
-    return userGroups.flatMap((g) => g.posts).filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)))
-  }, [userGroups])
+    return displayedPosts.filter((post) => (seen.has(post.id) ? false : (seen.add(post.id), true)))
+  }, [displayedPosts])
 
   const flatPostsRef = useRef(flatPosts)
   flatPostsRef.current = flatPosts
@@ -173,25 +183,32 @@ export default function FeedScreen() {
   }, [activePost?.id])
 
   const newPostsCount = useMemo(
-    () => flatPosts.filter((p) => !viewedIds.has(p.id)).length,
-    [flatPosts, viewedIds],
+    () => posts.filter((post) => !blockedAuthorIds.has(post.user.id) && !viewedIds.has(post.id)).length,
+    [blockedAuthorIds, posts, viewedIds],
   )
   useEffect(() => { setNewPostsCount(newPostsCount) }, [newPostsCount])
 
-  // Post publicado/repostado → prepend e sobe ao topo
+  // Post publicado → prepend e sobe ao topo
   useEffect(() => {
     if (!pendingPost) return
+    clearFocusedPost()
     prependPost(pendingPost)
     setPendingPost(null)
     requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated: false }))
-  }, [pendingPost])
+  }, [pendingPost, clearFocusedPost, prependPost, setPendingPost])
 
-  // Saltar para um post pedido de outro ecrã (grelha do perfil → feed)
+  // Um pedido novo leva o pager ao alvo uma única vez. O post continua no topo
+  // depois disso, para que o utilizador possa deslizar normalmente pela feed.
+  const handledFocusedPostRequest = useRef(0)
   useEffect(() => {
-    if (!jumpToPostId || flatPosts.length === 0) return
-    const idx = flatPosts.findIndex((p) => p.id === jumpToPostId)
-    if (idx >= 0) { scrollToIndex(idx); setJumpToPostId(null) }
-  }, [jumpToPostId, flatPosts])
+    if (!focusedPost || flatPosts.length === 0) return
+    if (handledFocusedPostRequest.current === focusedPostRequest) return
+    const idx = flatPosts.findIndex((post) => post.id === focusedPost.id)
+    if (idx < 0) return
+    handledFocusedPostRequest.current = focusedPostRequest
+    setCurrentPostId(focusedPost.id)
+    requestAnimationFrame(() => scrollToIndex(idx))
+  }, [focusedPost, focusedPostRequest, flatPosts, scrollToIndex])
 
   // Prefetch dos próximos vídeos para o armazenamento
   useEffect(() => {
@@ -222,22 +239,38 @@ export default function FeedScreen() {
   // Vistas persistidas
   useEffect(() => { getViewedPostIds().then(setViewedIds).catch(() => {}) }, [])
 
-  // ── Repostar ────────────────────────────────────────────────────────────────
-  const handleRepost = useCallback((postId: string) => {
-    setRepostedIds((prev) => new Set(prev).add(postId))
-    postService.repostPost(postId)
-      .then((newPost) => { setPendingPost(newPost); toast.success(t.feed_reposted, t.feed_reposted_sub) })
-      .catch(() => {
-        setRepostedIds((prev) => { const s = new Set(prev); s.delete(postId); return s })
-        toast.error(t.error, t.feed_repost_fail)
-      })
-  }, [t, setPendingPost])
-
   const handleLikeChange = useCallback((postId: string, liked: boolean) => {
     setLikedPostIds((prev) => { const n = new Set(prev); liked ? n.add(postId) : n.delete(postId); return n })
     const base = flatPostsRef.current.find((p) => p.id === postId)?._count?.likes ?? 0
     updatePostCounts(postId, { likes: Math.max(0, base + (liked ? 1 : -1)) })
   }, [updatePostCounts])
+
+  const handlePostDeleted = useCallback((postId: string) => {
+    if (useFeedStore.getState().focusedPost?.id === postId) clearFocusedPost()
+    removePost(postId)
+  }, [clearFocusedPost, removePost])
+
+  const handlePostExpired = useCallback((postId: string) => {
+    const wasFocused = useFeedStore.getState().focusedPost?.id === postId
+    if (wasFocused) clearFocusedPost()
+    // Um alvo externo não pertence necessariamente à feed/cache. Nesse caso,
+    // basta removê-lo da ponte; os posts normais mantêm o fluxo já existente.
+    if (!wasFocused || posts.some((post) => post.id === postId)) removePost(postId)
+  }, [clearFocusedPost, posts, removePost])
+
+  const handleProfileBlocked = useCallback((userId: string) => {
+    const remaining = flatPostsRef.current.filter((post) => post.user.id !== userId)
+    setBlockedAuthorIds((current) => {
+      if (current.has(userId)) return current
+      const next = new Set(current)
+      next.add(userId)
+      return next
+    })
+    if (useFeedStore.getState().focusedPost?.user.id === userId) clearFocusedPost()
+    setCurrentPostId(remaining[0]?.id ?? null)
+    requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated: false }))
+    refresh().catch(() => {})
+  }, [clearFocusedPost, refresh])
 
   // ── Pesquisa / topo ─────────────────────────────────────────────────────────
   useFocusEffect(useCallback(() => {
@@ -248,6 +281,7 @@ export default function FeedScreen() {
   const handleSearchClose  = useCallback(() => { Keyboard.dismiss(); setSearchMode(false); setSearchQuery('') }, [])
   const handleSearchChange = useCallback((q: string) => setSearchQuery(q), [])
   const handleBubblePress  = useCallback((group: UserGroup) => {
+    Keyboard.dismiss()
     const idx = flatPostsRef.current.findIndex((p) => p.user.id === group.user.id)
     if (idx >= 0) scrollToIndex(idx)
     setSearchMode(false); setSearchQuery('')
@@ -255,11 +289,11 @@ export default function FeedScreen() {
   const handleCreatePress  = useCallback(() => nav.navigate('Tabs', { screen: 'Create' }), [nav])
   const handleCirclePress  = useCallback(() => nav.navigate('Tabs', { screen: 'Circle' }), [nav])
 
-  // ── Foco: refresca e mete a barra de estado clara (média escura no topo) ────
+  // ── Foco: a status bar fica fora da mídia, sobre o papel claro da Feed ──────
   const refreshRef = useRef(refresh)
   refreshRef.current = refresh
   useFocusEffect(useCallback(() => {
-    setStatusBarStyle('light')
+    setStatusBarStyle('dark')
     refreshRef.current()
     return () => setStatusBarStyle('dark')
   }, []))
@@ -268,28 +302,29 @@ export default function FeedScreen() {
   const firstHomeTap = useRef(true)
   useEffect(() => {
     if (firstHomeTap.current) { firstHomeTap.current = false; return }
+    clearFocusedPost()
     listRef.current?.scrollToOffset({ offset: 0, animated: true })
     refreshRef.current()
-  }, [homeTap])
+  }, [homeTap, clearFocusedPost])
 
   // ── Render de cada célula ───────────────────────────────────────────────────
   const renderItem = useCallback(({ item }: { item: Post }) => (
     <FeedItem
       post={item}
+      reduceMotion={reduceMotion}
       isActive={item.id === currentPostId}
       cellHeight={listH}
       liked={likedPostIds.has(item.id)}
-      reposted={repostedIds.has(item.id)}
       commentCount={(item._count?.comments ?? 0) + (commentDeltas[item.id] ?? 0)}
       onCommentPress={openComments}
       onLikeChange={(liked) => handleLikeChange(item.id, liked)}
-      onRepost={() => handleRepost(item.id)}
-      onDeleted={(id) => removePost(id)}
+      onDeleted={handlePostDeleted}
       onEdited={(id, caption) => updatePost(id, caption)}
-      onExpired={(id) => removePost(id)}
+      onProfileBlocked={handleProfileBlocked}
+      onExpired={handlePostExpired}
       onBlockingChange={() => {}}
     />
-  ), [currentPostId, listH, likedPostIds, repostedIds, commentDeltas, openComments, handleLikeChange, handleRepost, removePost, updatePost])
+  ), [currentPostId, listH, likedPostIds, commentDeltas, openComments, handleLikeChange, handlePostDeleted, handlePostExpired, handleProfileBlocked, updatePost, reduceMotion])
 
   const getItemLayout = useCallback((_: unknown, index: number) => (
     { length: listH, offset: listH * index, index }
@@ -306,6 +341,7 @@ export default function FeedScreen() {
       {flatPosts.length > 0 ? (
         <FlatList
           ref={listRef}
+          style={s.pager}
           data={flatPosts}
           keyExtractor={(p) => p.id}
           renderItem={renderItem}
@@ -315,6 +351,10 @@ export default function FeedScreen() {
           snapToAlignment="start"
           decelerationRate="fast"
           disableIntervalMomentum
+          bounces={false}
+          alwaysBounceVertical={false}
+          overScrollMode="never"
+          contentInsetAdjustmentBehavior="never"
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
           onEndReached={loadMore}
@@ -349,15 +389,14 @@ export default function FeedScreen() {
         />
       ) : (
         <>
-          <LinearGradient
-            colors={['rgba(0,0,0,0.46)', 'rgba(0,0,0,0.16)', 'transparent']}
-            locations={[0, 0.56, 1]}
-            style={[s.topScrim, { height: safeTop + 108 }]}
-            pointerEvents="none"
-          />
-
           <View style={[s.topBar, { top: safeTop + 2 }]} pointerEvents="box-none">
-            <Text style={s.wordmark} accessibilityRole="header">luxee</Text>
+            <View style={s.brandLockup}>
+              <Text style={s.wordmark} accessibilityRole="header">luxee</Text>
+              <View style={s.brandSignal} pointerEvents="none">
+                <View style={s.brandSignalLine} />
+                <View style={s.brandSignalDot} />
+              </View>
+            </View>
 
             <View style={s.topRightActions}>
               <TouchableOpacity
@@ -367,7 +406,7 @@ export default function FeedScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={t.feed_search_ph}
               >
-                <Search size={24} strokeWidth={1.9} color="#fff" />
+                <FeedIcon name="search" size={24} color="#fff" />
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -379,10 +418,11 @@ export default function FeedScreen() {
               >
                 {circleInvite && (
                   <View style={s.circleInviteBadge}>
-                    <Camera size={9} strokeWidth={2.5} color="#fff" />
+                    {/* Não veio `camera` no pacote — fica o ícone da Luxee. */}
+                    <Icon name="camera" size={9} strokeWidth={2.5} color="#fff" />
                   </View>
                 )}
-                <Circle size={24} strokeWidth={1.9} color="#fff" />
+                <FeedIcon name="circle" size={24} color="#fff" />
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -392,18 +432,11 @@ export default function FeedScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={t.feed_create}
               >
-                <Plus size={28} strokeWidth={2} color="#fff" />
+                <FeedIcon name="baseline-plus" size={24} color="#fff" />
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* Quem comentou o post visível — por baixo da marca, canto superior esquerdo. */}
-          <View style={[s.commenters, { top: safeTop + 52 }]} pointerEvents="box-none">
-            <CommenterStack
-              commenters={activePost?.recentCommenters ?? []}
-              onPress={activePost ? () => openComments(activePost) : undefined}
-            />
-          </View>
         </>
       )}
 
@@ -419,14 +452,8 @@ export default function FeedScreen() {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.black },
-  topScrim: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 29,
-  },
+  container: { flex: 1, backgroundColor: colors.feedSurface },
+  pager: { flex: 1, backgroundColor: colors.feedSurface },
   topBar: {
     position: 'absolute',
     left: 16,
@@ -443,19 +470,20 @@ const s = StyleSheet.create({
     fontSize: 25,
     lineHeight: 32,
     letterSpacing: -1.25,
-    textShadowColor: 'rgba(0,0,0,0.45)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 5,
   },
-  topRightActions: {
+  brandLockup: { flexDirection: 'row', alignItems: 'flex-end', gap: 7 },
+  brandSignal: {
+    height: 10,
+    paddingBottom: 3,
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 3
   },
-  commenters: {
-    position: 'absolute',
-    left: 16,
-    // Sem `right`: a fila mede-se pelo conteúdo e não intercepta toques à direita.
-    zIndex: 30,
+  brandSignalLine: { width: 12, height: 2, borderRadius: 1, backgroundColor: colors.primary },
+  brandSignalDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: colors.primary },
+  topRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center'
   },
   topIconBtn: {
     width: 48,
@@ -463,7 +491,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'visible',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.35, shadowRadius: 5,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.46, shadowRadius: 2
   },
   circleInviteBadge: {
     position: 'absolute',
@@ -479,6 +507,6 @@ const s = StyleSheet.create({
     borderColor: 'rgba(10,10,12,0.9)',
     backgroundColor: colors.primary,
   },
-  empty:     { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, backgroundColor: colors.black },
-  emptyTxt:  { fontFamily: fonts.medium, fontSize: 14, color: 'rgba(255,255,255,0.7)' },
+  empty:     { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, backgroundColor: colors.feedSurface },
+  emptyTxt:  { fontFamily: fonts.medium, fontSize: 14, color: colors.gray600 }
 })

@@ -6,6 +6,7 @@ import FeedScreen from '../screens/FeedScreen'
 import MessagesScreen from '../screens/MessagesScreen'
 import CreateScreen from '../screens/CreateScreen'
 import ProfileScreen from '../screens/ProfileScreen'
+import FollowersScreen from '../screens/FollowersScreen'
 import ChatScreen from '../screens/MessagesScreen/ChatScreen'
 import TabBar from '../components/TabBar'
 import NotificationsScreen from '../screens/NotificationsScreen'
@@ -44,6 +45,8 @@ export type AppTabParams = {
 export type AppStackParams = {
   Tabs: NavigatorScreenParams<AppTabParams>
   Profile: { userId?: string }
+  /** Sem `userId` mostra a tua própria rede. `mode` escolhe o separador de entrada. */
+  Followers: { userId?: string; name?: string; mode?: 'followers' | 'following' } | undefined
   Chat: { userId: string; userName: string; userAvatar: string | null; partnerHasPosts?: boolean }
   About: undefined
   Verified: undefined
@@ -118,6 +121,7 @@ export default function AppNavigator({ defaultTab }: { defaultTab: 'Feed' | 'Mes
     >
       <Stack.Screen name="Tabs">{() => <Tabs defaultTab={defaultTab} />}</Stack.Screen>
       <Stack.Screen name="Profile" component={ProfileScreen} />
+      <Stack.Screen name="Followers" component={FollowersScreen} />
       <Stack.Screen name="Chat" component={ChatScreen} />
       <Stack.Screen name="Halves" component={HalvesScreen} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />

@@ -3,11 +3,13 @@ import {
   View, Text, StyleSheet, Dimensions, Pressable, TouchableOpacity, Animated,
   ActivityIndicator, PanResponder,
 } from 'react-native'
+import type { TextLayoutEvent } from 'react-native'
 import { useVideoPlayer, VideoView, VideoPlayerStatus } from 'expo-video'
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
 import { Ionicons } from '@expo/vector-icons'
-import { useIsFocused } from '@react-navigation/native'
+import { useIsFocused, useNavigation } from '@react-navigation/native'
+import { StackNavigationProp } from '@react-navigation/stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Post } from '../../types'
@@ -17,11 +19,18 @@ import * as postService from '../../services/post.service'
 import AvatarImage from '../../components/AvatarImage'
 import ActionBar from './ActionBar'
 import PostAlbumCarousel from './PostAlbumCarousel'
+import CommenterStack from './CommenterStack'
+import LiveRing from '../../components/LiveRing'
+import FeedIcon from '../../components/FeedIcon'
 import { useAuthStore } from '../../store/auth.store'
 import { useFollowStore } from '../../store/follow.store'
 import { tabBarOccupiedHeight } from '../../components/TabBar/layout'
+import { AppStackParams } from '../../navigation/AppNavigator'
+import { useT } from '../../i18n'
 
 const { width } = Dimensions.get('window')
+const DESCRIPTION_MAX_LINES = 2
+type Nav = StackNavigationProp<AppStackParams>
 
 function resolveUrl(url: string | null | undefined): string {
   if (!url) return ''
@@ -31,32 +40,34 @@ function resolveUrl(url: string | null | undefined): string {
 
 interface Props {
   post: Post
+  reduceMotion: boolean
   /** Só a célula visível toca o vídeo e corre a contagem de vida. */
   isActive: boolean
   /** Altura real da lista (medida no FeedScreen) — todas as células iguais. */
   cellHeight: number
   liked: boolean
-  reposted: boolean
   commentCount: number
   onCommentPress: (post: Post) => void
   onLikeChange: (liked: boolean) => void
-  onRepost: () => void
   onDeleted: (id: string) => void
   onEdited: (id: string, caption: string) => void
+  onProfileBlocked: (userId: string) => void
   onExpired: (id: string) => void
   onBlockingChange: (open: boolean) => void
 }
 
 // ─── Uma célula do pager: um momento por ecrã ───────────────────────────────
-// Pilha: status bar (livre) · vídeo · scrubber · navegação (livre). O campo de
-// comentário agora vive dentro da TabBar e fica ligado a este post pelo store.
+// Pilha: status bar livre · mídia · scrubber · navegação. O campo de comentário
+// vive dentro da TabBar e fica ligado a este post pelo store.
 // A célula é a única dona do seu leitor — a FlatList monta/desmonta, sem player
 // partilhado.
 function FeedItem({
-  post, isActive, cellHeight, liked, reposted, commentCount,
-  onCommentPress, onLikeChange, onRepost, onExpired,
+  post, reduceMotion, isActive, cellHeight, liked, commentCount,
+  onCommentPress, onLikeChange, onDeleted, onEdited, onProfileBlocked, onExpired, onBlockingChange
 }: Props) {
   const isFocused = useIsFocused()
+  const nav = useNavigation<Nav>()
+  const t = useT()
   const { top: safeTop, bottom: safeBottom } = useSafeAreaInsets()
 
   const myId     = useAuthStore((s) => s.user?.id)
@@ -69,16 +80,84 @@ function FeedItem({
   const uri     = resolveUrl(post.mediaUrl)
 
   // ── Geometria da pilha ──────────────────────────────────────────────────────
-  // De baixo para cima: navegação (já inclui o campo) · traço do tempo · vídeo.
-  // Partilhamos a geometria com a TabBar para não nascer um vazio entre peças.
+  // A mídia respeita a status bar. Em baixo, o scrubber tem uma faixa própria
+  // entre o fim do post e o início da navegação.
   const TRACK_H    = 3
   const GAP        = 8
   const navTop        = tabBarOccupiedHeight(safeBottom)
   const trackBottom   = navTop + GAP                         // traço, acima da navegação
-  const videoBottom   = trackBottom + TRACK_H + GAP         // vídeo, com folga do traço
-  const overlayBottom = videoBottom + 14                    // autor/ações no vídeo
+  const videoBottom   = trackBottom + TRACK_H + GAP          // post termina antes do traço
+  const overlayBottom = videoBottom + 14                     // autor/ações dentro do post
   const videoFrame = { top: safeTop, bottom: videoBottom }
   const trackWidth = width - 28                             // left/right 14
+
+  // Conteúdo do post entra depois do cartão assentar; o avatar mantém um pulso
+  // lento enquanto o post for o único ativo.
+  const metaEntry = useRef(new Animated.Value(0)).current
+  const ambient   = useRef(new Animated.Value(0)).current
+  const [clockNow, setClockNow] = useState(Date.now)
+
+  useEffect(() => {
+    metaEntry.stopAnimation()
+    if (!isActive || reduceMotion) {
+      metaEntry.setValue(isActive ? 1 : 0)
+      return
+    }
+    metaEntry.setValue(0)
+    Animated.sequence([
+      Animated.delay(70),
+      Animated.timing(metaEntry, { toValue: 1, duration: 240, useNativeDriver: true }),
+    ]).start()
+  }, [isActive, reduceMotion, metaEntry])
+
+  useEffect(() => {
+    ambient.stopAnimation()
+    if (!isActive || reduceMotion) {
+      ambient.setValue(0)
+      return
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(ambient, { toValue: 1, duration: 1900, useNativeDriver: true }),
+        Animated.timing(ambient, { toValue: 0, duration: 1900, useNativeDriver: true }),
+      ]),
+    )
+    loop.start()
+    return () => loop.stop()
+  }, [isActive, reduceMotion, ambient])
+
+  // Só o momento visível atualiza o relógio. O traço não é decorativo: mostra
+  // quanta vida ainda resta à publicação e torna a efemeridade uma assinatura.
+  useEffect(() => {
+    if (!isActive || post.isAnnouncement) return
+    setClockNow(Date.now())
+    const id = setInterval(() => setClockNow(Date.now()), 60_000)
+    return () => clearInterval(id)
+  }, [isActive, post.id, post.isAnnouncement])
+
+  const momentState = useMemo(() => {
+    if (post.isAnnouncement) {
+      return { label: t.feed_official, time: '', progress: 1 }
+    }
+
+    const startsAt = new Date(post.createdAt).getTime()
+    const endsAt = new Date(post.expiresAt).getTime()
+    const lifetime = Math.max(1, endsAt - startsAt)
+    const remaining = Math.max(0, endsAt - clockNow)
+    const progress = Math.max(0, Math.min(1, remaining / lifetime))
+    const hours = Math.floor(remaining / 3_600_000)
+    const minutes = Math.max(1, Math.floor(remaining / 60_000))
+
+    return {
+      label: post.extended ? t.feed_moment_extended : t.feed_moment,
+      time: hours > 0 ? `${hours}h` : `${minutes}m`,
+      progress
+    }
+  }, [clockNow, post.createdAt, post.expiresAt, post.extended, post.isAnnouncement, t.feed_moment, t.feed_moment_extended, t.feed_official])
+
+  const lifeWidth = `${Math.round(momentState.progress * 100)}%` as `${number}%`
+  const authorContext = post.user.statusLabel
+    ?? (post.user.showDevice ? post.deviceModel : null)
 
   // ── Leitor de vídeo ─────────────────────────────────────────────────────────
   // Memoizado: um `{ uri }` inline mudava de referência a cada render e o
@@ -145,8 +224,11 @@ function FeedItem({
   const [paused, setPaused] = useState(false)
   const lastTap      = useRef(0)
   const tapTimer     = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const wasPlayingBeforeMenu = useRef(false)
+  const menuBlocking = useRef(false)
   const heartOpacity = useRef(new Animated.Value(0)).current
   const heartScale   = useRef(new Animated.Value(0.3)).current
+  const heartHalo    = useRef(new Animated.Value(0)).current
   useEffect(() => () => { if (tapTimer.current) clearTimeout(tapTimer.current) }, [])
 
   function togglePlay() {
@@ -156,6 +238,24 @@ function FeedItem({
       else                { player.play();  setPaused(false) }
     } catch {}
   }
+
+  function handleMenuBlocking(open: boolean) {
+    if (menuBlocking.current === open) return
+    menuBlocking.current = open
+    onBlockingChange(open)
+    if (!isVideo) return
+    try {
+      if (open) {
+        wasPlayingBeforeMenu.current = player.playing
+        player.pause()
+        setPaused(true)
+      } else if (wasPlayingBeforeMenu.current && isActive && isFocused) {
+        player.play()
+        setPaused(false)
+      }
+    } catch {}
+  }
+
   function handleTapMedia() {
     const now = Date.now()
     if (now - lastTap.current < 280) {
@@ -170,9 +270,17 @@ function FeedItem({
     lastTap.current = now
   }
   function burstHeart() {
-    heartOpacity.setValue(1); heartScale.setValue(0.3)
+    if (reduceMotion) {
+      heartOpacity.setValue(0)
+      return
+    }
+    heartOpacity.setValue(1); heartScale.setValue(0.3); heartHalo.setValue(0)
     Animated.parallel([
-      Animated.spring(heartScale, { toValue: 1, useNativeDriver: true, speed: 18, bounciness: 16 }),
+      Animated.sequence([
+        Animated.spring(heartScale, { toValue: 1.16, useNativeDriver: true, speed: 24, bounciness: 16 }),
+        Animated.spring(heartScale, { toValue: 1, useNativeDriver: true, speed: 22, bounciness: 5 }),
+      ]),
+      Animated.timing(heartHalo, { toValue: 1, duration: 520, useNativeDriver: true }),
       Animated.sequence([
         Animated.delay(480),
         Animated.timing(heartOpacity, { toValue: 0, duration: 340, useNativeDriver: true }),
@@ -191,11 +299,31 @@ function FeedItem({
     return parts.length === 2 ? [parts[0], parts[1]] : ['#FF6B35', '#E63946']
   }, [post.bgColor])
 
+  // A legenda mantém as duas linhas compactas do feed. Medimos uma cópia
+  // invisível sem corte para que o toque só exista quando há texto por revelar.
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false)
+  const [descriptionExpandable, setDescriptionExpandable] = useState(false)
+
+  useEffect(() => {
+    setDescriptionExpanded(false)
+    setDescriptionExpandable(false)
+  }, [post.id, post.caption])
+
+  function measureDescription(event: TextLayoutEvent) {
+    const expandable = event.nativeEvent.lines.length > DESCRIPTION_MAX_LINES
+    setDescriptionExpandable((current) => current === expandable ? current : expandable)
+    if (!expandable) setDescriptionExpanded(false)
+  }
+
   return (
-    <View style={[s.cell, { height: cellHeight }]}>
-      {/* ── Vídeo: janela entre a status bar e a navegação.
-             Média sempre filha direta da célula (não a envolver) para o
-             leitor nativo assentar e renderizar. ── */}
+    <View
+      style={[
+        s.cell,
+        { height: cellHeight },
+      ]}
+    >
+      {/* ── Mídia: começa depois da status bar e termina antes do scrubber.
+             Permanece filha direta da célula para o leitor nativo assentar. ── */}
       {isText ? (
         <LinearGradient colors={textGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[s.media, videoFrame]}>
           <View style={s.textWrap}><Text style={s.textContent}>{post.caption}</Text></View>
@@ -211,23 +339,10 @@ function FeedItem({
       ) : isVideo ? (
         <VideoView player={player} style={[s.media, videoFrame]} contentFit="cover" nativeControls={false} />
       ) : (
-        <Image source={{ uri }} style={[s.media, videoFrame]} contentFit="cover" cachePolicy="disk" recyclingKey={post.id} transition={150} />
-      )}
-
-      {/* Véu — legibilidade do autor/descrição sobre o vídeo */}
-      {!isText && (
-        <LinearGradient colors={['transparent', 'rgba(0,0,0,0.55)']} style={[s.scrim, { bottom: videoBottom }]} pointerEvents="none" />
-      )}
-
-      {/* Contraste lateral suave para as ações, sem desenhar uma cápsula. */}
-      {!post.isAnnouncement && (
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.34)']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={[s.actionScrim, { top: safeTop, bottom: videoBottom }]}
-          pointerEvents="none"
-        />
+        // `contain` e não `cover`: a imagem mostra-se inteira, na proporção com que
+        // foi publicada. Uma imagem baixa deixa faixas acima e abaixo — e essas
+        // faixas são `colors.feedSurface`, definido em `s.media`.
+        <Image source={{ uri }} style={[s.media, videoFrame]} contentFit="contain" cachePolicy="disk" recyclingKey={post.id} transition={150} />
       )}
 
       {/* Camada de toque — duplo toque para gostar.
@@ -237,11 +352,33 @@ function FeedItem({
       )}
 
       {buffering && (
-        <ActivityIndicator style={s.spinner} size="large" color="rgba(255,255,255,0.85)" pointerEvents="none" />
+        <ActivityIndicator style={s.spinner} size="large" color={colors.primary} pointerEvents="none" />
       )}
 
-      <Animated.View style={[s.bigHeart, { opacity: heartOpacity, transform: [{ scale: heartScale }] }]} pointerEvents="none">
-        <Ionicons name="heart" size={104} color="rgba(255,255,255,0.92)" />
+      <Animated.View
+        style={[
+          s.heartHalo,
+          {
+            opacity: heartHalo.interpolate({ inputRange: [0, 0.22, 1], outputRange: [0, 0.68, 0] }),
+            transform: [{ scale: heartHalo.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1.65] }) }]
+          },
+        ]}
+        pointerEvents="none"
+      />
+      <Animated.View
+        style={[
+          s.bigHeart,
+          {
+            opacity: heartOpacity,
+            transform: [
+              { scale: heartScale },
+              { rotate: heartScale.interpolate({ inputRange: [0.3, 1.16], outputRange: ['-11deg', '0deg'] }) },
+            ]
+          },
+        ]}
+        pointerEvents="none"
+      >
+        <FeedIcon name="heart-solid" size={104} color="rgba(255,255,255,0.94)" />
       </Animated.View>
 
       {isVideo && paused && (
@@ -250,17 +387,63 @@ function FeedItem({
         </View>
       )}
 
-      {/* ── Autor + descrição — sobre o vídeo, canto inferior esquerdo ── */}
-      <View style={[s.meta, { bottom: overlayBottom }]} pointerEvents="box-none">
-        <View style={s.authorRow}>
-          <View style={s.avatarRing}>
-            <AvatarImage uri={resolveUrl(post.user.avatar)} name={post.user.name} size={34} />
+      {/* ── Identidade do momento — contexto temporal, autor e conversa ── */}
+      <Animated.View
+        style={[
+          s.meta,
+          { bottom: overlayBottom },
+          !reduceMotion && {
+            opacity: metaEntry,
+            transform: [{ translateY: metaEntry.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }]
+          },
+        ]}
+        pointerEvents="box-none"
+      >
+        <View style={s.momentRow}>
+          <View style={s.momentIdentity}>
+            <View style={s.liveNode} />
+            <Text style={s.momentLabel}>{momentState.label}</Text>
           </View>
-          <View style={s.authorText}>
+          {!post.isAnnouncement && (
+            <>
+              <View style={s.lifeTrack}>
+                <View style={[s.lifeFill, { width: lifeWidth }]} />
+              </View>
+              <Text style={s.momentTime}>{momentState.time}</Text>
+            </>
+          )}
+        </View>
+
+        <View style={s.authorRow}>
+          <TouchableOpacity
+            onPress={() => nav.navigate('Profile', { userId: post.user.id })}
+            activeOpacity={0.82}
+            accessibilityRole="button"
+            accessibilityLabel={post.user.name}
+          >
+            <Animated.View
+              style={{ transform: [{ scale: ambient.interpolate({ inputRange: [0, 1], outputRange: [1, 1.018] }) }] }}
+            >
+              <View style={[s.avatarRing, isActive && !reduceMotion && s.avatarRingLive]}>
+                {isActive && !reduceMotion && <LiveRing size={43} strokeWidth={2} durationMs={8200} />}
+                <AvatarImage uri={resolveUrl(post.user.avatar)} name={post.user.name} size={34} />
+              </View>
+            </Animated.View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={s.authorText}
+            onPress={() => nav.navigate('Profile', { userId: post.user.id })}
+            activeOpacity={0.78}
+          >
             <Text style={s.authorName} numberOfLines={1}>
               {post.user.username ? `@${post.user.username}` : post.user.name}
             </Text>
-          </View>
+            {!!authorContext && (
+              <Text style={s.authorContext} numberOfLines={1}>{authorContext}</Text>
+            )}
+          </TouchableOpacity>
+
           {!isSelf && (
             <TouchableOpacity
               onPress={handleFollow}
@@ -268,27 +451,103 @@ function FeedItem({
               hitSlop={8}
               activeOpacity={0.7}
             >
+              <View style={[s.followNode, following && s.followNodeOn]} />
               <Text style={[s.followTxt, following && s.followingTxt]}>
-                {following ? 'Seguindo' : 'Seguir'}
+                {following ? t.following : t.follow}
               </Text>
             </TouchableOpacity>
           )}
         </View>
+
+        {/* O toque vive numa Pressable à volta de tudo, e nunca depende da
+            medição. Antes o `onPress` só era ligado se o medidor tivesse
+            corrido — se ele falhasse, a legenda ficava sem handler nenhum e
+            tocar nela não fazia rigorosamente nada. */}
         {!isText && !!post.caption && (
-          <Text style={s.description} numberOfLines={2}>{post.caption}</Text>
+          <Pressable
+            style={s.descriptionWrap}
+            onPress={() => setDescriptionExpanded((expanded) => !expanded)}
+            hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: descriptionExpanded }}
+            accessibilityLabel={post.caption}
+          >
+            <Text
+              style={s.description}
+              numberOfLines={descriptionExpanded ? undefined : DESCRIPTION_MAX_LINES}
+              ellipsizeMode="tail"
+              suppressHighlighting
+            >
+              {post.caption}
+            </Text>
+
+            {/* Pista de que há mais texto. Se a medição falhar, só se perde a
+                pista — o toque continua a funcionar. */}
+            {descriptionExpandable && (
+              <Text style={s.descriptionMore}>
+                {descriptionExpanded ? t.see_less : t.see_more}
+              </Text>
+            )}
+            {/* Medidor: rende a legenda inteira, invisível, só para contar linhas.
+                Tem de estar dentro de uma <View> com pointerEvents="none" — em
+                <Text> essa prop não é respeitada, e era o medidor que comia o
+                toque, deixando a legenda sem reagir. */}
+            <View style={s.descriptionMeasure} pointerEvents="none">
+              <Text
+                style={s.description}
+                onTextLayout={measureDescription}
+                accessible={false}
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants"
+              >
+                {post.caption}
+              </Text>
+            </View>
+          </Pressable>
         )}
-      </View>
+
+        {commentCount > 0 && (
+          <View style={s.socialRow}>
+            {!!post.recentCommenters?.length && (
+              <CommenterStack
+                commenters={post.recentCommenters}
+                onPress={() => onCommentPress(post)}
+                accessibilityLabel={`${commentCount} ${commentCount === 1 ? t.comment_one : t.comment_many}`}
+              />
+            )}
+            <TouchableOpacity
+              style={s.commentsLink}
+              onPress={() => onCommentPress(post)}
+              activeOpacity={0.72}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={`${commentCount} ${commentCount === 1 ? t.comment_one : t.comment_many}`}
+            >
+              <Text style={s.commentsText} numberOfLines={1}>
+                {commentCount === 1
+                  ? t.feed_view_comment
+                  : `${t.feed_view_comments} ${commentCount} ${t.comment_many}`}
+              </Text>
+              <FeedIcon name="chevron-right" size={13} color="rgba(255,255,255,0.56)" />
+            </TouchableOpacity>
+          </View>
+        )}
+      </Animated.View>
 
       {/* ── Ações — coluna direita sobre o vídeo, com contadores ── */}
       <ActionBar
         post={post}
         liked={liked}
         onLikeChange={onLikeChange}
-        reposted={reposted}
-        onRepost={onRepost}
         commentCount={commentCount}
         onCommentPress={() => onCommentPress(post)}
+        onDeleted={isSelf ? onDeleted : undefined}
+        onEdited={isSelf ? onEdited : undefined}
+        onProfileBlocked={onProfileBlocked}
+        onOptionsBlockingChange={handleMenuBlocking}
         bottomOffset={overlayBottom}
+        isActive={isActive}
+        reduceMotion={reduceMotion}
       />
 
       {/* ── Traço do tempo — scrubber: tocar/arrastar salta no vídeo ── */}
@@ -307,19 +566,61 @@ function FeedItem({
 export default React.memo(FeedItem)
 
 const s = StyleSheet.create({
-  cell:  { width, backgroundColor: '#000' },
-  media: { position: 'absolute', left: 0, right: 0, backgroundColor: '#000' },
-  scrim: { position: 'absolute', left: 0, right: 0, height: 190 },
-  actionScrim: { position: 'absolute', right: 0, width: 116 },
+  cell:  { width, backgroundColor: colors.feedSurface },
+  // As faixas acima/abaixo de media que não enche a altura mostram esta cor.
+  media: { position: 'absolute', left: 0, right: 0, backgroundColor: colors.feedSurface },
   tapLayer: { position: 'absolute', left: 0, right: 0 },
   spinner: { position: 'absolute', left: 0, right: 0, top: '42%' },
   bigHeart: { position: 'absolute', left: 0, right: 0, alignItems: 'center', top: '34%' },
+  heartHalo: {
+    position: 'absolute', alignSelf: 'center', top: '34%',
+    width: 108, height: 108, borderRadius: 54,
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.78)'
+  },
   textWrap:    { flex: 1, alignItems: 'center', justifyContent: 'center' },
   textContent: { color: '#fff', fontFamily: fonts.bold, fontSize: 26, lineHeight: 34, textAlign: 'center', paddingHorizontal: 36 },
 
   // Autor + descrição
-  meta:       { position: 'absolute', left: 16, right: 84, gap: 8 },
-  authorRow:  { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  meta:       { position: 'absolute', left: 16, right: 78, gap: 9 },
+  momentRow: {
+    height: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
+  momentIdentity: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  liveNode: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.75,
+    shadowRadius: 4
+  },
+  momentLabel: {
+    color: 'rgba(255,255,255,0.76)',
+    fontFamily: fonts.bold,
+    fontSize: 9.5,
+    lineHeight: 12,
+    letterSpacing: 1.35
+  },
+  lifeTrack: {
+    width: 38,
+    height: 2,
+    borderRadius: 1,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.22)'
+  },
+  lifeFill: { height: 2, borderRadius: 1, backgroundColor: colors.primary },
+  momentTime: {
+    color: 'rgba(255,255,255,0.58)',
+    fontFamily: fonts.semiBold,
+    fontSize: 10,
+    lineHeight: 12,
+    fontVariant: ['tabular-nums']
+  },
+  authorRow:  { minHeight: 43, flexDirection: 'row', alignItems: 'center', gap: 9 },
   // Anel laranja à volta do avatar, com folga (não colado ao avatar)
   avatarRing: {
     padding: 2.5,
@@ -328,31 +629,59 @@ const s = StyleSheet.create({
     borderColor: colors.primary,
     backgroundColor: 'transparent',
   },
-  authorText: { flexShrink: 1 },
+  avatarRingLive: { borderColor: 'transparent' },
+  authorText: { flex: 1, minWidth: 0, justifyContent: 'center' },
   authorName: {
-    color: '#fff', fontFamily: fonts.semiBold, fontSize: 15, letterSpacing: -0.2,
-    textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
+    color: '#fff', fontFamily: fonts.bold, fontSize: 15.5, lineHeight: 19, letterSpacing: -0.28
   },
-  authorHandle: {
-    color: 'rgba(255,255,255,0.62)', fontFamily: fonts.medium, fontSize: 12.5, marginTop: 1,
-    textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
+  authorContext: {
+    color: 'rgba(255,255,255,0.56)', fontFamily: fonts.medium, fontSize: 11.5, lineHeight: 15
   },
-  // No feed (sobre o vídeo) o Seguir é transparente — só contorno branco.
   followBtn: {
-    paddingHorizontal: 14, paddingVertical: 6, borderRadius: 14,
-    backgroundColor: 'transparent', borderWidth: 1.4, borderColor: 'rgba(255,255,255,0.9)',
+    minHeight: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingLeft: 11,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: 'rgba(255,255,255,0.28)'
   },
-  followTxt: { color: '#fff', fontFamily: fonts.semiBold, fontSize: 12.5 },
-  followingBtn: { borderColor: 'rgba(255,255,255,0.5)' },
-  followingTxt: { color: 'rgba(255,255,255,0.85)' },
+  followNode: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.primary },
+  followNodeOn: { backgroundColor: 'rgba(255,255,255,0.42)' },
+  followTxt: { color: '#fff', fontFamily: fonts.bold, fontSize: 11.5, letterSpacing: 0.1 },
+  followingBtn: { borderLeftColor: 'rgba(255,255,255,0.18)' },
+  followingTxt: { color: 'rgba(255,255,255,0.62)' },
+  descriptionWrap: { position: 'relative' },
   description: {
-    color: 'rgba(255,255,255,0.92)', fontFamily: fonts.medium, fontSize: 14, lineHeight: 19,
-    textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
+    color: 'rgba(255,255,255,0.9)', fontFamily: fonts.medium, fontSize: 13.5, lineHeight: 18.5
+  },
+  descriptionMore: {
+    color: 'rgba(255,255,255,0.6)',
+    fontFamily: fonts.semiBold,
+    fontSize: 12.5,
+    marginTop: 2,
+  },
+  descriptionMeasure: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    opacity: 0
+  },
+  socialRow: { minHeight: 26, flexDirection: 'row', alignItems: 'center', gap: 9 },
+  commentsLink: { flex: 1, minHeight: 26, flexDirection: 'row', alignItems: 'center', gap: 3 },
+  commentsText: {
+    flexShrink: 1,
+    color: 'rgba(255,255,255,0.6)',
+    fontFamily: fonts.medium,
+    fontSize: 11.5,
+    lineHeight: 15
   },
 
   // Traço do tempo do vídeo — scrubber (área de toque de 22px, linha ao centro)
   trackRow:  { position: 'absolute', left: 14, right: 14, height: 22, justifyContent: 'center' },
-  track:     { borderRadius: 2, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.18)' },
-  trackFill: { height: '100%', borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.95)' },
-  playOverlay: { position: 'absolute', left: 0, right: 0, top: '40%', alignItems: 'center' },
+  // Branco porque assenta sobre a feed escura. O sulco fica a 22% para se ler
+  // como calha sem competir com o preenchimento.
+  track:     { borderRadius: 2, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.22)' },
+  trackFill: { height: '100%', borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.92)' },
+  playOverlay: { position: 'absolute', left: 0, right: 0, top: '40%', alignItems: 'center' }
 })

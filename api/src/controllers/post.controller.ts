@@ -1,4 +1,4 @@
-import { Response } from 'express'
+import { Request, Response } from 'express'
 import multer from 'multer'
 import * as postService from '../services/post.service'
 import * as commentService from '../services/comment.service'
@@ -159,6 +159,16 @@ export async function getFeed(req: AuthRequest, res: Response) {
   try {
     const page = Number(req.query.page ?? 1)
     const posts = await postService.getFeed(req.user!.userId, page)
+    return ok(res, posts)
+  } catch (err) { return handleError(res, err) }
+}
+
+// Sem sessão: não recebe `req.user` e nunca regista vista nem toca no ciclo de
+// vida do post. Quem não tem conta observa; não conta como presença.
+export async function getPublicFeed(req: Request, res: Response) {
+  try {
+    const page = Math.max(1, Number(req.query.page ?? 1) || 1)
+    const posts = await postService.getPublicFeed(page)
     return ok(res, posts)
   } catch (err) { return handleError(res, err) }
 }

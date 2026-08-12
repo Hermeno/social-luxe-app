@@ -57,7 +57,7 @@ export default function ChatInputBar({
   async function handleAttach() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (status !== 'granted') {
-      Alert.alert('Permission required', 'Allow access to photos to send images.')
+      Alert.alert(t.perm_photos_title, t.perm_photos_msg)
       return
     }
     const result = await ImagePicker.launchImageLibraryAsync({
