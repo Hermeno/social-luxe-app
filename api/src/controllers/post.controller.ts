@@ -8,7 +8,7 @@ import { AuthRequest } from '../types'
 import { MediaType } from '@prisma/client'
 import { sendPush } from '../services/notification.service'
 import { prisma } from '../config/database'
-import { uploadToCloudinary, withThumbnails } from '../utils/cloudinary.util'
+import { uploadToCloudinaryWithMeta, uploadToCloudinary, withThumbnails } from '../utils/cloudinary.util'
 import { deleteFromR2, isR2Url } from '../utils/r2.util'
 import { emitToUser } from '../socket'
 
@@ -18,6 +18,8 @@ export async function createPost(req: AuthRequest, res: Response) {
     const file = req.file
 
     let mediaUrl: string | null = null
+    let mediaWidth: number | null = null
+    let mediaHeight: number | null = null
     let mediaType: MediaType
 
     if (!file) {
@@ -26,7 +28,10 @@ export async function createPost(req: AuthRequest, res: Response) {
       mediaType = MediaType.TEXT
     } else {
       mediaType = file.mimetype.startsWith('video') ? MediaType.VIDEO : MediaType.IMAGE
-      mediaUrl  = await uploadToCloudinary(file, 'luxe/posts')
+      const uploaded = await uploadToCloudinaryWithMeta(file, 'luxe/posts')
+      mediaUrl    = uploaded.url
+      mediaWidth  = uploaded.width
+      mediaHeight = uploaded.height
     }
 
     // Include partner if user has an accepted partner and opted in
@@ -52,7 +57,7 @@ export async function createPost(req: AuthRequest, res: Response) {
       isAnnouncement = true
     }
 
-    const post = await postService.createPost(req.user!.userId, mediaUrl, mediaType, caption, bgColor, partnerUserId ?? undefined, isAnnouncement, deviceModel ?? undefined)
+    const post = await postService.createPost(req.user!.userId, mediaUrl, mediaType, caption, bgColor, partnerUserId ?? undefined, isAnnouncement, deviceModel ?? undefined, mediaWidth, mediaHeight)
 
     // Notify partner of post invitation
     if (partnerUserId) {
@@ -132,8 +137,10 @@ export async function createAlbum(req: AuthRequest, res: Response) {
     if (files.length > 10) return badRequest(res, 'Máximo de 10 fotos por álbum')
 
     const { caption, deviceModel } = req.body
-    const urls = await Promise.all(files.map((f) => uploadToCloudinary(f, 'luxe/posts')))
-    const post = await postService.createAlbumPost(req.user!.userId, urls, caption?.trim() || undefined, deviceModel)
+    const uploaded = await Promise.all(files.map((f) => uploadToCloudinaryWithMeta(f, 'luxe/posts')))
+    const urls  = uploaded.map((u) => u.url)
+    const sizes = uploaded.map((u) => ({ w: u.width, h: u.height }))
+    const post = await postService.createAlbumPost(req.user!.userId, urls, caption?.trim() || undefined, deviceModel, undefined, sizes)
 
     ;(async () => {
       try {

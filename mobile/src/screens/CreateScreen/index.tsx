@@ -18,6 +18,8 @@ import { createHalf } from '../../services/half.service'
 import TargetPicker from './TargetPicker'
 import PostAlbumGrid from '../FeedScreen/PostAlbumGrid'
 import GalleryPicker, { PickedAsset } from '../../components/GalleryPicker'
+import PhotoEditor from '../../components/PhotoEditor'
+import { clearEditCache } from '../../components/PhotoEditor/render'
 import { getMyUnions } from '../../services/union.service'
 import { UNION_ENABLED } from '../../config/features'
 import { Union } from '../../types'
@@ -84,6 +86,7 @@ export default function CreateScreen() {
   const [media,            setMedia]            = useState<Media | null>(null)
   const [album,            setAlbum]            = useState<string[] | null>(null)
   const [galleryOpen,      setGalleryOpen]      = useState(false)
+  const [editorOpen,       setEditorOpen]       = useState(false)
   const [loading,          setLoading]          = useState(false)
   const [includePartner,   setIncludePartner]   = useState(false)
   const [isAnnouncement,   setIsAnnouncement]   = useState(false)
@@ -153,7 +156,42 @@ export default function CreateScreen() {
     setGalleryOpen(true)
   }
 
-  // Resultado da galeria própria
+  // Editar antes de publicar. Vale para uma foto ou para o álbum inteiro — o
+  // editor guarda uma edição por foto e devolve-as todas na mesma ordem.
+  // Vídeo fica de fora: cortar e afinar um vídeo é outro problema.
+  const editablePhotos: string[] = album ?? (media?.type === 'image' ? [media.uri] : [])
+  const canEdit = editablePhotos.length > 0
+
+  function openEditor() {
+    if (!canEdit || loading) return
+    Keyboard.dismiss()
+    setEditorOpen(true)
+  }
+
+  // Vindo da galeria é diferente: são duas folhas em ecrã inteiro a trocar de
+  // lugar, e no iOS a segunda não chega a aparecer se a primeira ainda está a
+  // sair. Esperar que a galeria feche custa um piscar de olhos e evita um beco
+  // sem saída onde não se vê nem uma nem outra.
+  const editorTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (editorTimer.current) clearTimeout(editorTimer.current) }, [])
+
+  function openEditorAfterGallery() {
+    if (editorTimer.current) clearTimeout(editorTimer.current)
+    editorTimer.current = setTimeout(() => setEditorOpen(true), Platform.OS === 'ios' ? 380 : 160)
+  }
+
+  function handleEditorDone(uris: string[]) {
+    setEditorOpen(false)
+    if (uris.length === 0) return
+    if (album) setAlbum(uris)
+    else setMedia({ uri: uris[0], type: 'image' })
+  }
+
+  // Resultado da galeria própria.
+  //
+  // Escolher uma foto abre logo o editor: é lá que se corta e se afina, e sair
+  // de lá traz a pessoa de volta a este ecrã, já com o botão de publicar à
+  // frente. Vídeo salta o editor — cortar vídeo é outro problema.
   function handleGalleryDone(assets: PickedAsset[]) {
     setGalleryOpen(false)
     if (assets.length === 0) return
@@ -170,6 +208,7 @@ export default function CreateScreen() {
       // O endpoint de álbum não recebe atribuição de parceiro nem anúncio.
       setIncludePartner(false)
       setIsAnnouncement(false)
+      openEditorAfterGallery()
       return
     }
 
@@ -177,6 +216,7 @@ export default function CreateScreen() {
     const asset = assets[0]
     setAlbum(null)
     setMedia({ uri: asset.uri, type: asset.type })
+    if (asset.type !== 'video') openEditorAfterGallery()
   }
 
   function getDeviceModel(): string {
@@ -334,6 +374,9 @@ export default function CreateScreen() {
   }
 
   function resetComposer() {
+    // As fotos editadas já foram enviadas (ou copiadas para a caixa de saída,
+    // que guarda as suas próprias cópias) — os ficheiros intermédios podem ir.
+    clearEditCache()
     setCaption('')
     setMedia(null)
     setAlbum(null)
@@ -413,6 +456,17 @@ export default function CreateScreen() {
                 <View style={s.canvasRailSignal} />
                 <Text style={s.canvasRailText}>{album.length} {t.create_photos}</Text>
               </View>
+              <TouchableOpacity
+                style={s.canvasRailAction}
+                onPress={openEditor}
+                disabled={loading}
+                activeOpacity={0.65}
+                accessibilityRole="button"
+                accessibilityLabel={t.pe_edit}
+                accessibilityState={{ disabled: loading }}
+              >
+                <Ionicons name="options-outline" size={18} color="#fff" />
+              </TouchableOpacity>
               <TouchableOpacity
                 style={s.canvasRailAction}
                 onPress={() => setAlbum(null)}
@@ -505,6 +559,19 @@ export default function CreateScreen() {
                     <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={18} color="#fff" />
                   </TouchableOpacity>
                 </>
+              )}
+              {media.type === 'image' && (
+                <TouchableOpacity
+                  style={s.canvasRailAction}
+                  onPress={openEditor}
+                  disabled={loading}
+                  activeOpacity={0.65}
+                  accessibilityRole="button"
+                  accessibilityLabel={t.pe_edit}
+                  accessibilityState={{ disabled: loading }}
+                >
+                  <Ionicons name="options-outline" size={18} color="#fff" />
+                </TouchableOpacity>
               )}
               <TouchableOpacity
                 style={s.canvasRailAction}
@@ -696,6 +763,15 @@ export default function CreateScreen() {
         onDone={handleGalleryDone}
         maxSelection={10}
       />
+
+      {editorOpen && (
+        <PhotoEditor
+          visible={editorOpen}
+          photos={editablePhotos}
+          onCancel={() => setEditorOpen(false)}
+          onDone={handleEditorDone}
+        />
+      )}
 
       <TargetPicker
         visible={pickerOpen}

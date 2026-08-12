@@ -13,12 +13,14 @@ export async function createPost(
   partnerUserId?: string,
   isAnnouncement?: boolean,
   deviceModel?: string,
+  mediaWidth?: number | null,
+  mediaHeight?: number | null,
 ) {
   const expiresAt = isAnnouncement
     ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
     : new Date(Date.now() + POST_INITIAL_HOURS * 60 * 60 * 1000)
   const post = await prisma.post.create({
-    data: { userId, mediaUrl, mediaType, caption, bgColor, expiresAt, partnerUserId: partnerUserId ?? null, isAnnouncement: isAnnouncement ?? false, deviceModel: deviceModel ?? null },
+    data: { userId, mediaUrl, mediaType, caption, bgColor, expiresAt, partnerUserId: partnerUserId ?? null, isAnnouncement: isAnnouncement ?? false, deviceModel: deviceModel ?? null, mediaWidth: mediaWidth ?? null, mediaHeight: mediaHeight ?? null },
     include: {
       user:        { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true, showDevice: true, statusLabel: true } },
       partnerUser: { select: { id: true, name: true, username: true, avatar: true } },
@@ -39,6 +41,7 @@ export async function createAlbumPost(
   caption?: string,
   deviceModel?: string,
   albumOverlays?: Overlay[][],   // paralelo a mediaUrls; emojis de cada foto
+  mediaSizes?: { w: number | null; h: number | null }[],   // paralelo a mediaUrls
 ) {
   const hasOverlays = albumOverlays?.some((a) => a.length > 0)
   const expiresAt = new Date(Date.now() + POST_INITIAL_HOURS * 60 * 60 * 1000)
@@ -47,6 +50,9 @@ export async function createAlbumPost(
       userId,
       mediaUrl:  mediaUrls[0] ?? null,
       mediaUrls,
+      mediaSizes: mediaSizes ?? undefined,
+      mediaWidth:  mediaSizes?.[0]?.w ?? null,
+      mediaHeight: mediaSizes?.[0]?.h ?? null,
       albumOverlays: hasOverlays ? albumOverlays : undefined,
       mediaType: MediaType.IMAGE,
       caption:   caption ?? null,

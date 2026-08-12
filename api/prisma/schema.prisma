@@ -134,6 +134,12 @@ model Post {
   mediaUrl        String?
   mediaUrls       String[]  @default([])   // álbum: 2+ fotos mostradas em grelha (mediaUrl = 1ª, p/ thumbnail)
   albumOverlays   Json?                     // emojis por foto do álbum, paralelo a mediaUrls: [[{emoji,x,y}], ...]
+  // Dimensões originais, guardadas no upload. A app precisa da proporção ANTES
+  // de a imagem carregar: sem elas desenha à altura toda e encolhe no `onLoad`,
+  // e esse salto lê-se como um piscar.
+  mediaWidth      Int?
+  mediaHeight     Int?
+  mediaSizes      Json?                     // álbum: [{ w, h }, ...] paralelo a mediaUrls
   mediaType       MediaType
   caption         String?
   bgColor         String?

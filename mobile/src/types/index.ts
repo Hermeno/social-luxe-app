@@ -39,6 +39,11 @@ export interface Post {
   mediaUrl: string | null
   mediaUrls?: string[]        // álbum: 2+ fotos mostradas em grelha
   albumOverlays?: { emoji: string; x: number; y: number }[][]   // emojis por foto do álbum
+  /** Dimensões originais, vindas do servidor. Permitem enquadrar a foto
+   *  antes de ela carregar — sem isto a altura salta no `onLoad`. */
+  mediaWidth?: number | null
+  mediaHeight?: number | null
+  mediaSizes?: { w: number | null; h: number | null }[]   // álbum, paralelo a mediaUrls
   thumbnailUrl: string
   mediaType: 'IMAGE' | 'VIDEO' | 'TEXT'
   caption: string | null

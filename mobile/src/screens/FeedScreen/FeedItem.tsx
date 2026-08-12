@@ -91,6 +91,37 @@ function FeedItem({
   const videoFrame = { top: safeTop, bottom: videoBottom }
   const trackWidth = width - 28                             // left/right 14
 
+  // ── Enquadramento da imagem ────────────────────────────────────────────────
+  // A largura é sempre a do ecrã; a altura é que vem da proporção da imagem.
+  // Por isso a moldura da foto NÃO é a `videoFrame` (que estica de cima a baixo):
+  // é calculada a partir do que a imagem mede, e centrada no espaço disponível.
+  const mediaSpace = Math.max(0, cellHeight - safeTop - videoBottom)
+
+  // A altura vem SEMPRE da proporção da imagem. Nunca da altura disponível —
+  // encher o ecrã na vertical é o que não se quer, nem sequer como estado
+  // temporário enquanto a foto carrega.
+  //
+  // Duas fontes para a proporção, por esta ordem:
+  //   1. o servidor, que a guarda no upload → certo já no primeiro desenho
+  //   2. o `onLoad`, para posts anteriores à migração
+  //
+  // No caso 2 a foto carrega INVISÍVEL e só se revela quando a proporção chega.
+  // Assim nunca se vê o tamanho errado — vê-se o fundo e depois a foto certa,
+  // em vez de uma foto esticada que encolhe.
+  const serverAspect = post.mediaWidth && post.mediaHeight
+    ? post.mediaWidth / post.mediaHeight
+    : null
+  const [loadedAspect, setLoadedAspect] = useState<number | null>(null)
+  useEffect(() => { setLoadedAspect(null) }, [post.id])
+
+  const aspect = serverAspect ?? loadedAspect
+  const photoHeight = aspect ? Math.min(width / aspect, mediaSpace) : mediaSpace
+  const photoFrame  = {
+    top: safeTop + (mediaSpace - photoHeight) / 2,
+    height: photoHeight,
+    opacity: aspect ? 1 : 0,
+  }
+
   // Conteúdo do post entra depois do cartão assentar; o avatar mantém um pulso
   // lento enquanto o post for o único ativo.
   const metaEntry = useRef(new Animated.Value(0)).current
@@ -332,6 +363,7 @@ function FeedItem({
         <View style={[s.media, videoFrame]}>
           <PostAlbumCarousel
             urls={post.mediaUrls ?? []}
+            sizes={post.mediaSizes}
             overlays={post.albumOverlays}
             dotsBottom={(overlayBottom - videoBottom) + 46 + (post.caption ? 38 : 0)}
           />
@@ -339,10 +371,24 @@ function FeedItem({
       ) : isVideo ? (
         <VideoView player={player} style={[s.media, videoFrame]} contentFit="cover" nativeControls={false} />
       ) : (
-        // `contain` e não `cover`: a imagem mostra-se inteira, na proporção com que
-        // foi publicada. Uma imagem baixa deixa faixas acima e abaixo — e essas
-        // faixas são `colors.feedSurface`, definido em `s.media`.
-        <Image source={{ uri }} style={[s.media, videoFrame]} contentFit="contain" cachePolicy="disk" recyclingKey={post.id} transition={150} />
+        // `cover` numa moldura que já tem a proporção da imagem não corta nada —
+        // a largura é sempre cheia e a altura veio da própria foto. Só recorta
+        // no caso extremo de uma imagem tão alta que não caberia no ecrã.
+        <Image
+          source={{ uri }}
+          style={[s.media, photoFrame]}
+          contentFit="cover"
+          cachePolicy="disk"
+          recyclingKey={post.id}
+          transition={150}
+          onLoad={(e) => {
+            // Só serve os posts sem dimensões no servidor. Nos outros já se
+            // sabia a proporção antes de a foto sequer começar a descarregar.
+            if (serverAspect) return
+            const { width: w, height: h } = e.source ?? {}
+            if (w && h) setLoadedAspect(w / h)
+          }}
+        />
       )}
 
       {/* Camada de toque — duplo toque para gostar.

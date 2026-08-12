@@ -9,10 +9,30 @@ import { MediaType } from '@prisma/client'
 // so the file is never held in memory. The temp file is always removed here.
 type UploadedFile = { path: string; mimetype: string }
 
+/**
+ * Dimensões da media, tal como o Cloudinary as reporta no upload.
+ *
+ * Isto existe porque o cliente precisa de saber a proporção ANTES de a imagem
+ * carregar. Sem isso a app desenha a foto à altura toda, descobre a proporção
+ * no `onLoad` e encolhe — um salto que se lê como "piscou e desapareceu".
+ */
+export interface UploadResult {
+  url: string
+  width: number | null
+  height: number | null
+}
+
 export async function uploadToCloudinary(
   file: UploadedFile,
   folder: string = 'luxe',
 ): Promise<string> {
+  return (await uploadToCloudinaryWithMeta(file, folder)).url
+}
+
+export async function uploadToCloudinaryWithMeta(
+  file: UploadedFile,
+  folder: string = 'luxe',
+): Promise<UploadResult> {
   const isVideo = file.mimetype.startsWith('video')
   const isAudio = file.mimetype.startsWith('audio')
   const isImage = file.mimetype.startsWith('image')
@@ -58,11 +78,11 @@ export async function uploadToCloudinary(
           },
         )
       })
-      return result.secure_url
+      return { url: result.secure_url, width: result.width ?? null, height: result.height ?? null }
     }
 
     const result = await cloudinary.uploader.upload(file.path, options)
-    return result.secure_url
+    return { url: result.secure_url, width: result.width ?? null, height: result.height ?? null }
   } finally {
     fs.unlink(file.path, () => {})
   }
@@ -115,6 +135,38 @@ export function generateThumbnailUrl(mediaUrl: string | null, mediaType: MediaTy
   return mediaType === MediaType.VIDEO ? '' : mediaUrl
 }
 
+// ── Display transformation (imagens) ───────────────────────────────────────────
+//
+// Porquê: a app enviava o original (~4000px, 1 MB+) e o telemóvel encolhia-o
+// para caber em ~1170px reais. Essa redução é feita pela GPU com filtragem
+// bilinear, que ao encolher mais de 2× salta a maior parte dos píxeis de origem
+// — daí o aspeto pastoso. Aqui o Cloudinary reduz com um filtro a sério e a
+// imagem chega quase no tamanho em que vai ser pintada.
+//
+//   w_1080,c_limit  largura máxima (mesmo teto que o Instagram usa);
+//                   `c_limit` nunca amplia originais mais pequenos
+//   q_auto:good     qualidade perceptual, não um número fixo
+//   f_auto          serve AVIF/WebP a quem os suporta, JPEG ao resto
+//   e_sharpen:60    nitidez DEPOIS da redução (abaixo do 100 por omissão)
+//
+// Medido numa foto de referência: 1 036 KB → 48 KB, e mais nítida.
+//
+// Vídeo fica de fora de propósito — precisa de streaming adaptativo, que é
+// outra conversa e não se resolve por transformação de URL.
+const DISPLAY_TRANSFORM = 'w_1080,c_limit,q_auto:good,f_auto,e_sharpen:60'
+
+/**
+ * URL de exibição para uma imagem. Devolve o URL tal e qual se não for uma
+ * imagem do Cloudinary — R2 e vídeos passam intactos.
+ */
+export function optimizeImageUrl(url: string | null | undefined): string | null {
+  if (!url) return null
+  if (!url.includes('cloudinary.com') || !url.includes('/image/upload/')) return url
+  // Já transformado (ex.: veio de uma resposta anterior) — não empilhar.
+  if (url.includes(DISPLAY_TRANSFORM)) return url
+  return url.replace('/image/upload/', `/image/upload/${DISPLAY_TRANSFORM}/`)
+}
+
 // ── Attach thumbnailUrl to post objects ────────────────────────────────────────
 
 type WithCount = {
@@ -124,7 +176,22 @@ type WithCount = {
 }
 
 export function withThumbnail<T extends WithCount>(post: T): T & { thumbnailUrl: string } {
-  return { ...post, thumbnailUrl: generateThumbnailUrl(post.mediaUrl, post.mediaType) }
+  // O thumbnail sai do URL ORIGINAL — se saísse do otimizado ficavam duas
+  // transformações empilhadas e o desfoque deixava de ser o que se pediu.
+  const thumbnailUrl = generateThumbnailUrl(post.mediaUrl, post.mediaType)
+
+  const isImage = post.mediaType !== MediaType.VIDEO && post.mediaType !== MediaType.TEXT
+  const rawAlbum = (post as { mediaUrls?: unknown }).mediaUrls
+  const album = Array.isArray(rawAlbum)
+    ? (rawAlbum as (string | null)[]).map(optimizeImageUrl)
+    : undefined
+
+  return {
+    ...post,
+    ...(isImage ? { mediaUrl: optimizeImageUrl(post.mediaUrl) } : {}),
+    ...(album ? { mediaUrls: album } : {}),
+    thumbnailUrl,
+  }
 }
 
 export function withThumbnails<T extends WithCount>(posts: T[]): (T & { thumbnailUrl: string })[] {
