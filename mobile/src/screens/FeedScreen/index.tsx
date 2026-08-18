@@ -21,6 +21,7 @@ import { prefetchMedia } from '../../db/mediaCache'
 import { colors, fonts } from '../../theme'
 import { API_BASE } from '../../config'
 import FeedHeader, { FeedUserGroup as UserGroup } from './FeedHeader'
+import Wordmark from '../../components/Wordmark'
 import FeedItem from './FeedItem'
 import CommentSheet from '../../components/CommentSheet'
 import useReducedMotionPreference from '../../hooks/useReducedMotionPreference'
@@ -575,7 +576,7 @@ export default function FeedScreen() {
         <>
           <View style={[s.topBar, { top: safeTop + 2 }]} pointerEvents="box-none">
             <View style={s.brandLockup}>
-              <Text style={s.wordmark} accessibilityRole="header">luxee</Text>
+              <Wordmark height={26} color="#FFFFFF" />
               <View style={s.brandSignal} pointerEvents="none">
                 <View style={s.brandSignalLine} />
                 <View style={s.brandSignalDot} />
@@ -647,13 +648,6 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  wordmark: {
-    color: '#fff',
-    fontFamily: fonts.extraBold,
-    fontSize: 25,
-    lineHeight: 32,
-    letterSpacing: -1.25,
   },
   brandLockup: { flexDirection: 'row', alignItems: 'flex-end', gap: 7 },
   brandSignal: {

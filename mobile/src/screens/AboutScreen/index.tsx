@@ -1,4 +1,5 @@
 import React from 'react'
+import Wordmark from '../../components/Wordmark'
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Linking, Alert,
 } from 'react-native'
@@ -82,7 +83,7 @@ export default function AboutScreen() {
             <Text style={s.appIconLetter}>l</Text>
           </View>
           <View style={s.appNameRow}>
-            <Text style={s.appName}>luxee</Text>
+            <Wordmark height={30} color={T} />
             <View style={s.appDot} />
           </View>
           <Text style={s.appVersion}>{t.version} 1.0.0 · build 1</Text>
@@ -160,7 +161,6 @@ const s = StyleSheet.create({
   },
   appIconLetter: { fontFamily: fonts.extraBold, fontSize: 42, color: BG, letterSpacing: -2 },
   appNameRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 7 },
-  appName:    { fontFamily: fonts.extraBold, fontSize: 30, color: T, letterSpacing: -1 },
   appDot:     { width: 9, height: 9, borderRadius: 999, backgroundColor: B, marginTop: 11 },
   appVersion: { fontFamily: fonts.medium, fontSize: 13, color: M },
 

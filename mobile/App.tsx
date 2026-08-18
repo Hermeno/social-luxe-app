@@ -12,6 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { LinearGradient } from 'expo-linear-gradient'
 import RootNavigator from './src/navigation/RootNavigator'
 import LanguageOnboardingScreen from './src/screens/LanguageOnboardingScreen'
+import Wordmark from './src/components/Wordmark'
 import { useAuthStore } from './src/store/auth.store'
 import { useI18n } from './src/i18n'
 import { useFriendsStore } from './src/store/friends.store'
@@ -182,7 +183,7 @@ export default function App() {
               style={s.splashIcon}
               resizeMode="contain"
             />
-            <Text style={s.splashText}>luxee</Text>
+            <Wordmark height={34} color="#FFFFFF" style={s.splashWordmark} />
           </View>
         ) : needsLanguage ? (
           <LanguageOnboardingScreen onDone={() => setNeedsLanguage(false)} />
@@ -209,8 +210,5 @@ const s = StyleSheet.create({
   root:       { flex: 1, backgroundColor: DARK },
   cover:      { flex: 1, backgroundColor: DARK, alignItems: 'center', justifyContent: 'center' },
   splashIcon: { width: 92, height: 92, tintColor: 'rgba(255,255,255,0.96)' },
-  splashText: {
-    position: 'absolute', bottom: 52,
-    color: '#FFFFFF', fontSize: 28, fontFamily: 'Jakarta-Bold', letterSpacing: 8,
-  },
+  splashWordmark: { position: 'absolute', bottom: 52 },
 })

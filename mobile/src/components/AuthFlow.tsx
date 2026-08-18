@@ -1,4 +1,5 @@
 import React from 'react'
+import Wordmark from './Wordmark'
 import {
   ActivityIndicator,
   StyleProp,
@@ -29,7 +30,7 @@ export const authUi = {
 export function AuthBrand({ light = false }: { light?: boolean }) {
   return (
     <View style={af.brandLockup} accessibilityRole="header">
-      <Text style={[af.brand, light && af.brandLight]}>luxee</Text>
+      <Wordmark height={24} color={light ? '#FFFFFF' : authUi.ink} />
     </View>
   )
 }
@@ -174,14 +175,6 @@ const af = StyleSheet.create({
     marginLeft: -12,
   },
   brandLockup: { alignItems: 'center', justifyContent: 'center' },
-  brand: {
-    color: authUi.ink,
-    fontFamily: fonts.extraBold,
-    fontSize: 23,
-    lineHeight: 28,
-    letterSpacing: -1,
-  },
-  brandLight: { color: '#FFFFFF' },
   field: {
     minHeight: 54,
     flexDirection: 'row',

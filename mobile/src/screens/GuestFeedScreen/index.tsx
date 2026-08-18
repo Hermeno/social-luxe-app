@@ -14,6 +14,7 @@ import { colors, fonts } from '../../theme'
 import { API_BASE } from '../../config'
 import { useT } from '../../i18n'
 import AvatarImage from '../../components/AvatarImage'
+import Wordmark from '../../components/Wordmark'
 import Icon from '../../components/Icon'
 import FeedIcon, { type FeedIconName } from '../../components/FeedIcon'
 
@@ -184,7 +185,7 @@ export default function GuestFeedScreen() {
         />
       )}
 
-      <Text style={s.wordmark}>luxee</Text>
+      <Wordmark height={26} color="#FFFFFF" shadow style={s.wordmark} />
 
       {/* A barra fica sempre: é a única saída deste ecrã. */}
       <View style={[s.gate, { paddingBottom: Math.max(safeBottom, 14) }]}>
@@ -216,12 +217,7 @@ const s = StyleSheet.create({
   scrimTop:    { position: 'absolute', top: 0, left: 0, right: 0 },
   scrimBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 260 },
 
-  wordmark: {
-    position: 'absolute', top: 52, left: 16,
-    color: '#fff', fontFamily: fonts.extraBold, fontSize: 25, lineHeight: 32,
-    letterSpacing: -1.25,
-    textShadowColor: 'rgba(0,0,0,0.45)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5,
-  },
+  wordmark: { position: 'absolute', top: 52, left: 16 },
 
   kept: {
     position: 'absolute', right: 14,
