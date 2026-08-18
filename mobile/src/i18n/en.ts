@@ -485,6 +485,18 @@ export const EN: { [K in keyof typeof import('./pt').PT]: string } = {
   ob_start: 'Start exploring',
   ob_selected_one: 'selected',
   ob_selected_many: 'selected',
+  ob_follow_heading: 'Follow a few people',
+  ob_follow_sub: 'We picked these accounts from your interests. Your feed starts with them.',
+  ob_follow_all: 'Follow all',
+  ob_follow_all_done: 'All followed',
+  ob_follow_shared_one: 'shared interest',
+  ob_follow_shared_many: 'shared interests',
+  ob_follow_count_one: 'account followed',
+  ob_follow_count_many: 'accounts followed',
+  ob_follow_empty: 'No accounts to suggest yet. You can search for people any time.',
+  ob_follow_load_fail: 'Couldn’t load suggestions.',
+  ob_follow_later: 'Not now',
+  ob_follow_finish: 'Continue',
 
   // ── Momento ──
   mo_title: 'Moments',

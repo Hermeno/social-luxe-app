@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { getCache, setCache, cacheConnections, enqueueSyncOp } from '../db/database'
-import { toggleFollow, getMyFollowing } from '../services/follow.service'
+import { toggleFollow, getMyFollowing, followMany as followManyApi } from '../services/follow.service'
 import type { FollowDuration } from '../services/follow.service'
 import type { Connection } from '../types'
 import { useSocialPreviewStore } from './socialPreview.store'
@@ -23,6 +23,7 @@ interface FollowStore {
   reconcileSnapshot: (ids: string[], observedRevision: number)                              => void
   reconcileOne: (userId: string, following: boolean, observedRevision: number)              => void
   toggle:  (userId: string, duration?: FollowDuration, profile?: FollowProfile)           => Promise<boolean>
+  followMany: (users: { id: string; name?: string | null; avatar?: string | null }[])       => Promise<void>
   reset:   (ownerId?: string | null)                                                       => void
 }
 
@@ -259,6 +260,83 @@ export const useFollowStore = create<FollowStore>((set, get) => {
         // pending lock in that case and must release it when it finishes.
         if (sessionAtStart === sessionGeneration) {
           pendingUserIds.delete(userId)
+        }
+      }
+    },
+
+    // "Seguir todos": um pedido para o lote inteiro em vez de N toggles.
+    // Partilha a mesma contabilidade do toggle (localDecisions/toggleVersions/
+    // pendingUserIds), senão uma leitura do servidor a meio do lote reporia o
+    // estado anterior e as linhas saltavam para trás.
+    followMany: async (users) => {
+      const ownerId = get().ownerId
+      const sessionAtStart = sessionGeneration
+      const following = get().followingIds
+      const targets = users.filter((u) => !pendingUserIds.has(u.id) && !following.has(u.id))
+      if (targets.length === 0) return
+
+      const operationVersion = ++mutationVersion
+      targets.forEach((u) => {
+        pendingUserIds.add(u.id)
+        localDecisions.set(u.id, true)
+        toggleVersions.set(u.id, operationVersion)
+      })
+
+      set((s) => {
+        const next = new Set(s.followingIds)
+        targets.forEach((u) => next.add(u.id))
+        return { followingIds: next }
+      })
+
+      const stillOwns = () => (
+        sessionAtStart === sessionGeneration && get().ownerId === ownerId
+      )
+
+      try {
+        await followManyApi(targets.map((u) => u.id))
+        if (!stillOwns()) return
+
+        const preview = useSocialPreviewStore.getState()
+        const conns: Connection[] = []
+        targets.forEach((u) => {
+          if (toggleVersions.get(u.id) !== operationVersion || !u.name) return
+          const profile = { id: u.id, name: u.name, avatar: u.avatar ?? null }
+          preview.rememberFollowing(profile)
+          conns.push({ user: profile, lastMessage: null, unreadCount: 0, postIds: [] })
+        })
+        if (conns.length > 0) cacheConnections(conns).catch(() => {})
+      } catch (error) {
+        // Mesma regra do toggle: 4xx é recusa do servidor e desfaz-se; falha de
+        // rede guarda a intenção na fila e mantém o estado otimista.
+        const status: number | undefined = (error as any)?.response?.status
+        const serverRefused = typeof status === 'number' && status >= 400 && status < 500
+
+        if (!serverRefused) {
+          targets.forEach((u) => {
+            enqueueSyncOp('follow', u.id, 'update', { following: true }).catch(() => {})
+          })
+          return
+        }
+
+        if (stillOwns()) {
+          const reverted = targets.filter((u) => toggleVersions.get(u.id) === operationVersion)
+          reverted.forEach((u) => localDecisions.set(u.id, false))
+          set((s) => {
+            const next = new Set(s.followingIds)
+            reverted.forEach((u) => next.delete(u.id))
+            return { followingIds: next }
+          })
+        }
+        throw error
+      } finally {
+        if (sessionAtStart === sessionGeneration) {
+          const settlementVersion = ++mutationVersion
+          targets.forEach((u) => {
+            if (toggleVersions.get(u.id) === operationVersion) {
+              toggleVersions.set(u.id, settlementVersion)
+            }
+            pendingUserIds.delete(u.id)
+          })
         }
       }
     },

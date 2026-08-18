@@ -11,7 +11,6 @@ import { Image, StyleSheet, Text, View } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { LinearGradient } from 'expo-linear-gradient'
 import RootNavigator from './src/navigation/RootNavigator'
-import LanguageOnboardingScreen from './src/screens/LanguageOnboardingScreen'
 import Wordmark from './src/components/Wordmark'
 import { useAuthStore } from './src/store/auth.store'
 import { useI18n } from './src/i18n'
@@ -56,12 +55,6 @@ function LocationSync() {
   return null
 }
 
-function LangInit() {
-  const { init } = useI18n()
-  useEffect(() => { init() }, [])
-  return null
-}
-
 function FollowerPoller() {
   const { isAuthenticated } = useAuthStore()
   const { setFollowerCount } = useFriendsStore()
@@ -94,27 +87,19 @@ export default function App() {
   const { isLoading: authLoading, isAuthenticated, loadUser } = useAuthStore()
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null)
   const [defaultTab, setDefaultTab] = useState<'Feed' | 'Messages' | null>(null)
-  // Idioma: no 1.º arranque (sem preferência guardada) mostramos o seletor.
-  const [needsLanguage, setNeedsLanguage] = useState<boolean | null>(null)
+  // Idioma: preferência guardada, senão o do telemóvel. Resolve-se antes de
+  // pintar, para nenhum ecrã aparecer na língua errada e corrigir-se a seguir.
+  const [langReady, setLangReady] = useState(false)
 
   useEffect(() => { loadUser() }, [])
+
+  useEffect(() => {
+    useI18n.getState().init().catch(() => {}).finally(() => setLangReady(true))
+  }, [])
 
   // Cursivas das publicações de texto: pedidas aqui para já estarem prontas
   // quando a feed abrir, mas fora do `useFonts` — este não segura o splash.
   useEffect(() => { usePostFontsStore.getState().ensureLoaded() }, [])
-
-  useEffect(() => {
-    AsyncStorage.getItem('@language')
-      .then((v) => setNeedsLanguage(!(v === 'pt' || v === 'en')))
-      .catch(() => setNeedsLanguage(false))
-  }, [])
-
-  // Ao terminar sessão, volta sempre ao seletor de idioma (mesmo já tendo usado).
-  const prevAuth = useRef(isAuthenticated)
-  useEffect(() => {
-    if (prevAuth.current && !isAuthenticated) setNeedsLanguage(true)
-    prevAuth.current = isAuthenticated
-  }, [isAuthenticated])
 
   useEffect(() => {
     // Nesta versão a feed é sempre o ecrã inicial (o seletor Feed/Chat está
@@ -144,9 +129,9 @@ export default function App() {
 
   const ready =
     fontsLoaded &&
+    langReady &&
     !authLoading &&
     defaultTab !== null &&
-    needsLanguage !== null &&
     (isAuthenticated || guestMode !== 'checking') &&
     (!isAuthenticated || onboardingDone !== null)
 
@@ -185,11 +170,8 @@ export default function App() {
             />
             <Wordmark height={34} color="#FFFFFF" style={s.splashWordmark} />
           </View>
-        ) : needsLanguage ? (
-          <LanguageOnboardingScreen onDone={() => setNeedsLanguage(false)} />
         ) : (
           <>
-            <LangInit />
             <TokenExpiryWatcher />
             <FollowerPoller />
             <LocationSync />

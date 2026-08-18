@@ -121,16 +121,21 @@ export function useFeed() {
     const removedIds = new Set(
       deletingOriginal ? [postId, ...related.map((p) => p.id)] : [postId],
     )
-    const repostCount = Math.max(0, (target?._count?.reposts ?? 0) - 1)
+    // Apagar a própria cópia desfaz o repost. O -1 sai da publicação de onde
+    // saiu o +1 — a que tem `userRepostedVia` — e não de um original adivinhado.
+    const undoRepost = (p: Post): Post => (!p.userRepostedVia ? p : {
+      ...p,
+      userRepostedVia: false,
+      _count: { ...p._count, reposts: Math.max(0, p._count.reposts - 1) },
+    })
 
     setPosts((prev) => prev
       .filter((p) => !removedIds.has(p.id))
-      .map((p) => !target?.repostOfId || (p.repostOfId ?? p.id) !== originalPostId ? p : {
+      .map((p) => !target?.repostOfId || (p.repostOfId ?? p.id) !== originalPostId ? p : undoRepost({
         ...p,
         userReposted: false,
         userRepostId: null,
-        _count: { ...p._count, reposts: repostCount },
-      }))
+      })))
 
     // O cache pode conter páginas já descarregadas da memória. Se o original
     // desaparecer, as suas cópias deixam de existir no servidor e saem juntas.
@@ -147,7 +152,10 @@ export function useFeed() {
         patchCachedPostInteraction(p.id, {
           userReposted: false,
           userRepostId: null,
-          _count: { ...p._count, reposts: repostCount },
+          ...(p.userRepostedVia && {
+            userRepostedVia: false,
+            _count: { ...p._count, reposts: Math.max(0, p._count.reposts - 1) },
+          }),
         }).catch(() => {})
       })
     }
@@ -194,14 +202,16 @@ export function useFeed() {
     ))
   }, [])
 
-  // Um original e as suas cópias mostram sempre o mesmo total/estado de repost.
-  // A resposta canónica do servidor sobe da ActionBar e corrige todas as células
-  // montadas, não apenas a que recebeu o toque.
+  // Duas coisas diferentes viajam neste resultado e não devem ser confundidas:
+  //   · `userReposted` é do CONTEÚDO — vale para o original e para todas as
+  //     cópias, e é o que impede repostar duas vezes o mesmo post;
+  //   · o contador é da PUBLICAÇÃO tocada (`viaPostId`) — só ela recebe o +1.
   const updateRepostState = useCallback((result: RepostResult) => {
     const {
       postId: originalPostId,
+      viaPostId,
+      viaCount,
       reposted,
-      repostCount,
       repostedPost,
       removedPostId,
     } = result
@@ -209,11 +219,21 @@ export function useFeed() {
     setPosts((prev) => {
       const next = prev
         .filter((p) => p.id !== removedPostId)
-        .map((p) => (p.repostOfId ?? p.id) !== originalPostId ? p : {
-          ...p,
-          userReposted: reposted,
-          userRepostId: repostedPost?.id ?? (reposted ? p.userRepostId : null),
-          _count: { ...p._count, reposts: repostCount },
+        .map((p) => {
+          const inChain = (p.repostOfId ?? p.id) === originalPostId
+          const isVia   = p.id === viaPostId
+          if (!inChain && !isVia) return p
+          return {
+            ...p,
+            ...(inChain && {
+              userReposted: reposted,
+              userRepostId: repostedPost?.id ?? (reposted ? p.userRepostId : null),
+            }),
+            ...(isVia && {
+              userRepostedVia: reposted,
+              _count: { ...p._count, reposts: viaCount ?? p._count.reposts },
+            }),
+          }
         })
 
       // O PUT cria uma publicação real para a feed. Inserimo-la já, em vez de
@@ -234,7 +254,10 @@ export function useFeed() {
       patchCachedPostInteraction(p.id, {
         userReposted: reposted,
         userRepostId: repostedPost?.id ?? (reposted ? p.userRepostId : null),
-        _count: { ...p._count, reposts: repostCount },
+        ...(p.id === viaPostId && {
+          userRepostedVia: reposted,
+          _count: { ...p._count, reposts: viaCount ?? p._count.reposts },
+        }),
       }).catch(() => {})
     })
     if (repostedPost) cachePosts([repostedPost], 'synced').catch(() => {})

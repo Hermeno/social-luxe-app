@@ -503,6 +503,18 @@ export const PT = {
   ob_start: 'Começar a explorar',
   ob_selected_one: 'selecionado',
   ob_selected_many: 'selecionados',
+  ob_follow_heading: 'Segue quem já cá está',
+  ob_follow_sub: 'Escolhemos estas contas a partir dos teus gostos. O teu feed começa com elas.',
+  ob_follow_all: 'Seguir todos',
+  ob_follow_all_done: 'Todos seguidos',
+  ob_follow_shared_one: 'interesse em comum',
+  ob_follow_shared_many: 'interesses em comum',
+  ob_follow_count_one: 'conta seguida',
+  ob_follow_count_many: 'contas seguidas',
+  ob_follow_empty: 'Ainda não temos contas para te sugerir. Podes procurar pessoas a qualquer momento.',
+  ob_follow_load_fail: 'Não foi possível carregar as sugestões.',
+  ob_follow_later: 'Agora não',
+  ob_follow_finish: 'Continuar',
 
   // ── Momento ──
   mo_title: 'Momentos',

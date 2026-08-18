@@ -69,14 +69,27 @@ export interface Post {
   hasVotedExtend?: boolean
   userLiked?: boolean
   userReposted?: boolean
+  /** Foi ESTA publicação que recebeu o meu repost (o meu +1 no contador dela).
+   *  Distinto de `userReposted`, que é verdadeiro em todas as células do mesmo
+   *  conteúdo. */
+  userRepostedVia?: boolean
   /** ID da cópia criada pelo próprio utilizador, útil para desfazer offline. */
   userRepostId?: string | null
 }
 
 export interface RepostResult {
+  /** Original canónico. Define `userReposted` em todas as células do conteúdo
+   *  e é o que impede repostar duas vezes a mesma publicação. */
   postId: string
+  /** Publicação onde a pessoa tocou — a que recebe o +1/-1 no contador. */
+  viaPostId: string
+  /**
+   * Novo contador de `viaPostId`. `null` offline, quando não há resposta do
+   * servidor: nesse caso quem recebe mantém o contador que já tinha em vez de
+   * se inventar um número.
+   */
+  viaCount: number | null
   reposted: boolean
-  repostCount: number
   repostedPost: Post | null
   removedPostId?: string | null
 }

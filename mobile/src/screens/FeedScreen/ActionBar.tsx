@@ -191,8 +191,12 @@ export default React.memo(function ActionBar({
   const railEntry = useRef(new Animated.Value(isActive ? 1 : 0)).current
   const likePop = useRef(new Animated.Value(1)).current
   const repostSpin = useRef(new Animated.Value(0)).current
-  const repostOneOpacity = useRef(new Animated.Value(post.userReposted ? 1 : 0)).current
-  const repostOneScale = useRef(new Animated.Value(post.userReposted ? 1 : 0.72)).current
+  // O "1" desenhado sobre o glifo é o MEU +1 nesta publicação — segue
+  // `userRepostedVia`, não `userReposted`. Numa cópia que eu não tenha tocado o
+  // botão fica activo (já repostei o conteúdo) mas sem o "1", senão contradizia
+  // o contador dela.
+  const repostOneOpacity = useRef(new Animated.Value(post.userRepostedVia ? 1 : 0)).current
+  const repostOneScale = useRef(new Animated.Value(post.userRepostedVia ? 1 : 0.72)).current
   const repostPendingRef = useRef(false)
   const localRepostStateRef = useRef<boolean | null>(null)
 
@@ -268,8 +272,8 @@ export default React.memo(function ActionBar({
     setRepostCount(post._count?.reposts ?? 0)
     setShareCount(post._count?.shares ?? 0)
     repostSpin.setValue(0)
-    repostOneOpacity.setValue(post.userReposted ? 1 : 0)
-    repostOneScale.setValue(post.userReposted ? 1 : 0.72)
+    repostOneOpacity.setValue(post.userRepostedVia ? 1 : 0)
+    repostOneScale.setValue(post.userRepostedVia ? 1 : 0.72)
     repostPendingRef.current = false
     localRepostStateRef.current = null
     setShowReactions(false)
@@ -280,6 +284,7 @@ export default React.memo(function ActionBar({
   useEffect(() => {
     if (repostPendingRef.current) return
     const next = post.userReposted ?? false
+    const nextVia = post.userRepostedVia ?? false
     if (localRepostStateRef.current === next) {
       // Foi este botão que originou a atualização: a animação em curso é dona
       // do aparecimento do "1" e não deve ser saltada por este efeito.
@@ -290,9 +295,9 @@ export default React.memo(function ActionBar({
     localRepostStateRef.current = null
     setReposted(next)
     setRepostCount(post._count?.reposts ?? 0)
-    repostOneOpacity.setValue(next ? 1 : 0)
-    repostOneScale.setValue(next ? 1 : 0.72)
-  }, [post.userReposted, post._count?.reposts])
+    repostOneOpacity.setValue(nextVia ? 1 : 0)
+    repostOneScale.setValue(nextVia ? 1 : 0.72)
+  }, [post.userReposted, post.userRepostedVia, post._count?.reposts])
 
   // O duplo toque vive no FeedItem; quando ele altera o estado partilhado,
   // esta rail recebe a mudança e completa o mesmo feedback magnético.
@@ -394,7 +399,9 @@ export default React.memo(function ActionBar({
     const was = reposted
     const previousCount = repostCount
     const next = !was
+    // Toda a publicação tem contador próprio: o +1 é sempre desta.
     const optimisticCount = Math.max(0, previousCount + (next ? 1 : -1))
+    // `postId` é o conteúdo (o original), `viaPostId` é onde se tocou.
     const originalPostId = post.repostOfId ?? post.id
     const animationStartedAt = Date.now()
 
@@ -405,11 +412,12 @@ export default React.memo(function ActionBar({
     animateRepost(next)
 
     if (!isConnected()) {
-      await enqueueSyncOp('repost', originalPostId, 'update', { reposted: next }).catch(() => {})
+      await enqueueSyncOp('repost', post.id, 'update', { reposted: next }).catch(() => {})
       onRepostChange?.({
         postId: originalPostId,
+        viaPostId: post.id,
+        viaCount: optimisticCount,
         reposted: next,
-        repostCount: optimisticCount,
         repostedPost: null,
         removedPostId: next ? null : (post.userRepostId ?? null),
       })
@@ -418,12 +426,16 @@ export default React.memo(function ActionBar({
     }
 
     try {
-      const result = await postService.setRepost(originalPostId, next)
+      const result = await postService.setRepost(post.id, next)
       setReposted(result.reposted)
-      setRepostCount(result.repostCount)
-      if (result.reposted !== next) {
+      // O contador só se move se o +1 tiver caído nesta publicação. Já ter
+      // repostado o conteúdo noutra célula devolve o `viaPostId` dessa — aqui
+      // nada muda, e o "1" também não nasce.
+      const isVia = result.viaPostId === post.id
+      setRepostCount(isVia ? (result.viaCount ?? previousCount) : previousCount)
+      if (result.reposted !== next || !isVia) {
         localRepostStateRef.current = null
-        setRepostVisualImmediately(result.reposted)
+        setRepostVisualImmediately(result.reposted && isVia)
       }
       // A cópia entra na FlatList só depois de a volta e o “1” terminarem;
       // assim a inserção não desmonta precisamente o botão que está animado.
@@ -435,11 +447,12 @@ export default React.memo(function ActionBar({
     } catch (error: any) {
       const status: number | undefined = error?.response?.status
       if (!status || status >= 500) {
-        await enqueueSyncOp('repost', originalPostId, 'update', { reposted: next }).catch(() => {})
+        await enqueueSyncOp('repost', post.id, 'update', { reposted: next }).catch(() => {})
         onRepostChange?.({
           postId: originalPostId,
+          viaPostId: post.id,
+          viaCount: optimisticCount,
           reposted: next,
-          repostCount: optimisticCount,
           repostedPost: null,
           removedPostId: next ? null : (post.userRepostId ?? null),
         })

@@ -98,6 +98,8 @@ export async function toggleCommentLike(commentId: string): Promise<{ liked: boo
 }
 
 // Estado explícito e idempotente: PUT liga; DELETE desliga.
+// `postId` é a publicação ONDE SE TOCOU — original ou cópia. O servidor resolve
+// sozinho o original canónico e regista a tocada como origem do +1.
 export async function setRepost(postId: string, reposted: boolean): Promise<RepostResult> {
   const res = reposted
     ? await api.put<ApiResponse<RepostResult>>(`/posts/${postId}/repost`)

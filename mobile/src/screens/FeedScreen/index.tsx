@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
+import React, { useState, useMemo, useCallback, useRef, useEffect, useLayoutEffect } from 'react'
 import {
   View, Text, ActivityIndicator, FlatList, StyleSheet, Dimensions, Keyboard, TouchableOpacity,
   type LayoutChangeEvent, type ViewToken,
@@ -141,6 +141,34 @@ export default function FeedScreen() {
 
   const flatPostsRef = useRef(flatPosts)
   flatPostsRef.current = flatPosts
+
+  // Inserir ou remover a cópia de um repost muda os índices da FlatList: tudo
+  // o que estava abaixo desliza uma célula e o viewport passa a mostrar outro
+  // post. Guardamos aqui quem estava a ser visto e repomos o offset em
+  // `useLayoutEffect` — mesmo commit da inserção, antes de pintar. Com
+  // `requestAnimationFrame` chegavam a desenhar-se frames com a lista já
+  // deslocada, e era isso que se via a piscar.
+  const pendingRepostAnchorRef = useRef<string[] | null>(null)
+
+  useLayoutEffect(() => {
+    const candidates = pendingRepostAnchorRef.current
+    if (!candidates) return
+    pendingRepostAnchorRef.current = null
+
+    const source = flatPostsRef.current
+    if (source.length === 0) return
+
+    const index = candidates.reduce(
+      (found, id) => (found >= 0 ? found : source.findIndex((post) => post.id === id)),
+      -1,
+    )
+    const target = source[index >= 0 ? index : 0]
+    listRef.current?.scrollToOffset({
+      offset: (index >= 0 ? index : 0) * listHRef.current,
+      animated: false,
+    })
+    if (target && target.id !== currentPostIdRef.current) setCurrentPostId(target.id)
+  }, [flatPosts])
 
   const currentIndex = useMemo(() => {
     if (!currentPostId) return 0
@@ -322,25 +350,22 @@ export default function FeedScreen() {
   }, [updatePostCounts])
 
   const handleRepostChange = useCallback((result: RepostResult) => {
-    const anchor = currentPostIdRef.current
     if (result.removedPostId && useFeedStore.getState().focusedPost?.id === result.removedPostId) {
       clearFocusedPost()
     }
-    updateRepostState(result)
 
-    // Inserir/remover a cópia muda os índices da FlatList. Conserva o post que
-    // a pessoa estava a ver; ao desfazer a própria cópia, prefere o original.
+    // A âncora fica marcada ANTES do setState: o `useLayoutEffect` acima corre
+    // no commit dessa alteração e já a encontra. Ao desfazer a própria cópia,
+    // o original é a segunda escolha.
     if (result.repostedPost || result.removedPostId) {
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        const source = flatPostsRef.current
-        const target = source.find((p) => p.id === anchor)
-          ?? source.find((p) => p.id === result.postId)
-          ?? source[0]
-        setCurrentPostId(target?.id ?? null)
-        alignPagerToPost(target?.id ?? null)
-      }))
+      const anchor = currentPostIdRef.current
+      pendingRepostAnchorRef.current = anchor && anchor !== result.removedPostId
+        ? [anchor, result.postId]
+        : [result.postId]
     }
-  }, [alignPagerToPost, clearFocusedPost, updateRepostState])
+
+    updateRepostState(result)
+  }, [clearFocusedPost, updateRepostState])
 
   const handlePostDeleted = useCallback((postId: string) => {
     if (useFeedStore.getState().focusedPost?.id === postId) clearFocusedPost()
@@ -577,10 +602,6 @@ export default function FeedScreen() {
           <View style={[s.topBar, { top: safeTop + 2 }]} pointerEvents="box-none">
             <View style={s.brandLockup}>
               <Wordmark height={26} color="#FFFFFF" />
-              <View style={s.brandSignal} pointerEvents="none">
-                <View style={s.brandSignalLine} />
-                <View style={s.brandSignalDot} />
-              </View>
             </View>
 
             <View style={s.topRightActions}>
@@ -649,16 +670,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  brandLockup: { flexDirection: 'row', alignItems: 'flex-end', gap: 7 },
-  brandSignal: {
-    height: 10,
-    paddingBottom: 3,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3
-  },
-  brandSignalLine: { width: 12, height: 2, borderRadius: 1, backgroundColor: colors.primary },
-  brandSignalDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: colors.primary },
+  brandLockup: { flexDirection: 'row', alignItems: 'flex-end' },
   topRightActions: {
     flexDirection: 'row',
     alignItems: 'center'

@@ -18,6 +18,29 @@ export async function toggleFollow(userId: string, duration?: FollowDuration): P
   return res.data.data ?? res.data
 }
 
+// Conta sugerida para seguir. `sharedInterests` é a intersecção com os gostos
+// escolhidos no onboarding — é o que se mostra como razão da sugestão.
+export interface SuggestedUser {
+  id: string
+  name: string
+  username?: string | null
+  avatar: string | null
+  bio: string | null
+  sharedInterests?: string[]
+  _count?: { followers: number; posts: number }
+}
+
+export async function getSuggestedUsers(limit?: number): Promise<SuggestedUser[]> {
+  const res = await api.get('/users/suggested', { params: limit ? { limit } : undefined })
+  return res.data.data ?? res.data ?? []
+}
+
+// Um pedido só para todo o lote — ver `followMany` na API.
+export async function followMany(userIds: string[]): Promise<{ following: string[] }> {
+  const res = await api.post('/users/follow-many', { userIds })
+  return res.data.data ?? res.data
+}
+
 export async function getFollowStatus(userId: string): Promise<{ following: boolean; followsMe: boolean }> {
   const res = await api.get(`/users/${userId}/follow-status`)
   return res.data.data ?? res.data
