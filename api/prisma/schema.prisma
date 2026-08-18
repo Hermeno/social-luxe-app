@@ -164,6 +164,7 @@ model Post {
   shares         Share[]
   reposts        Repost[] @relation("OriginalPostReposts")
   repostEntry    Repost?  @relation("RepostedPost")
+  repostsVia     Repost[] @relation("RepostVia")
   views          View[]
   reactions      Reaction[]
   extendVotes    PostExtendVote[]
@@ -313,14 +314,20 @@ model Repost {
   userId           String
   postId           String
   repostedPostId   String   @unique
+  // Publicação onde a pessoa tocou — o original ou uma cópia dele. É esta que
+  // recebe o +1 no contador; `postId` continua a ser o original canónico e é o
+  // que garante um repost por pessoa por conteúdo.
+  viaPostId        String?
   createdAt        DateTime @default(now())
 
-  user         User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  post         Post @relation("OriginalPostReposts", fields: [postId], references: [id], onDelete: Cascade)
-  repostedPost Post @relation("RepostedPost", fields: [repostedPostId], references: [id], onDelete: Cascade)
+  user         User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post         Post  @relation("OriginalPostReposts", fields: [postId], references: [id], onDelete: Cascade)
+  repostedPost Post  @relation("RepostedPost", fields: [repostedPostId], references: [id], onDelete: Cascade)
+  viaPost      Post? @relation("RepostVia", fields: [viaPostId], references: [id], onDelete: SetNull)
 
   @@unique([userId, postId])
   @@index([postId])
+  @@index([viaPostId])
 }
 
 model View {

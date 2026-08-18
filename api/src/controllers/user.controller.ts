@@ -296,25 +296,51 @@ export async function getConnections(req: AuthRequest, res: Response) {
   } catch (err) { return handleError(res, err) }
 }
 
+const SUGGESTED_SELECT = {
+  id: true, name: true, username: true, avatar: true, bio: true, interests: true,
+  _count: { select: { followers: true, posts: true } },
+} as const
+
 export async function getSuggestedUsers(req: AuthRequest, res: Response) {
   try {
     const userId = req.user!.userId
-    const alreadyFollowing = await prisma.follow.findMany({
-      where: { followerId: userId },
-      select: { followingId: true },
-    })
-    const excludeIds = [userId, ...alreadyFollowing.map((f) => f.followingId)]
+    const requested = Number(req.query.limit)
+    const limit = Number.isFinite(requested) ? Math.min(Math.max(Math.trunc(requested), 1), 50) : 20
 
-    // Users with most followers that I don't follow yet, limit 20
-    const users = await prisma.user.findMany({
-      where: { id: { notIn: excludeIds } },
-      select: {
-        id: true, name: true, username: true, avatar: true, bio: true,
-        _count: { select: { followers: true, posts: true } },
-      },
-      orderBy: { followers: { _count: 'desc' } },
-      take: 20,
-    })
+    const [me, alreadyFollowing] = await Promise.all([
+      prisma.user.findUnique({ where: { id: userId }, select: { interests: true } }),
+      prisma.follow.findMany({ where: { followerId: userId }, select: { followingId: true } }),
+    ])
+    const excludeIds  = [userId, ...alreadyFollowing.map((f) => f.followingId)]
+    const myInterests = me?.interests ?? []
+
+    // Quem partilha gostos vem primeiro — é isso que dá sentido ao passo dos
+    // interesses. Só depois se completa a lista com as contas mais seguidas.
+    const matched = myInterests.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { notIn: excludeIds }, interests: { hasSome: myInterests } },
+          select: SUGGESTED_SELECT,
+          orderBy: { followers: { _count: 'desc' } },
+          take: limit,
+        })
+      : []
+
+    const rest = matched.length < limit
+      ? await prisma.user.findMany({
+          where: { id: { notIn: [...excludeIds, ...matched.map((u) => u.id)] } },
+          select: SUGGESTED_SELECT,
+          orderBy: { followers: { _count: 'desc' } },
+          take: limit - matched.length,
+        })
+      : []
+
+    // `interests` sai da resposta: só interessa a intersecção, que é o que a
+    // app mostra como razão da sugestão.
+    const users = [...matched, ...rest].map(({ interests, ...user }) => ({
+      ...user,
+      sharedInterests: interests.filter((i) => myInterests.includes(i)).slice(0, 3),
+    }))
+
     return ok(res, users)
   } catch (err) { return handleError(res, err) }
 }

@@ -126,23 +126,32 @@ export async function attachPostMeta(posts: any[], userId?: string): Promise<any
   const repostedOriginalIds = new Set<string>()
   const myRepostByOriginal = new Map<string, string>()
 
+  const myViaPostIds = new Set<string>()
+
   const [repostCounts, myReposts] = await Promise.all([
+    // O contador é da PUBLICAÇÃO onde se tocou, não do original. Uma cópia
+    // nasce a zero e só sobe quando alguém repostar a partir dela.
     prisma.repost.groupBy({
-      by: ['postId'],
-      where: { postId: { in: originalPostIds } },
+      by: ['viaPostId'],
+      where: { viaPostId: { in: allPostIds } },
       _count: { _all: true },
     }),
     userId
       ? prisma.repost.findMany({
           where:  { userId, postId: { in: originalPostIds } },
-          select: { postId: true, repostedPostId: true },
+          select: { postId: true, repostedPostId: true, viaPostId: true },
         })
       : Promise.resolve([]),
   ])
-  const repostCountByOriginal = new Map(repostCounts.map((r) => [r.postId, r._count._all]))
+  const repostCountByPost = new Map(
+    repostCounts
+      .filter((r): r is typeof r & { viaPostId: string } => r.viaPostId !== null)
+      .map((r) => [r.viaPostId, r._count._all]),
+  )
   myReposts.forEach((r) => {
     repostedOriginalIds.add(r.postId)
     myRepostByOriginal.set(r.postId, r.repostedPostId)
+    if (r.viaPostId) myViaPostIds.add(r.viaPostId)
   })
 
   if (userId) {
@@ -162,7 +171,11 @@ export async function attachPostMeta(posts: any[], userId?: string): Promise<any
 
   return posts.map((p) => {
     const originalPostId = originalByDisplayed.get(p.id) ?? p.id
-    const repostCount = repostCountByOriginal.get(originalPostId) ?? 0
+    const isCopy = originalPostId !== p.id
+    // Quantos reposts saíram DESTA publicação. Uma cópia nasce a zero e sobe
+    // por mérito próprio. `userReposted` continua a olhar para o original — é
+    // lá que vive o vínculo que impede repostar duas vezes o mesmo conteúdo.
+    const repostCount = repostCountByPost.get(p.id) ?? 0
     const seen = new Set<string>([p.userId])
     const recentCommenters: Array<{ id: string; name: string; avatar: string | null }> = []
     for (const c of byPost.get(p.id) ?? []) {
@@ -176,8 +189,11 @@ export async function attachPostMeta(posts: any[], userId?: string): Promise<any
       recentCommenters,
       hasVotedExtend: votedPostIds.has(p.id),
       userLiked:      likedPostIds.has(p.id),
-      repostOfId:     originalPostId === p.id ? null : originalPostId,
+      repostOfId:     isCopy ? originalPostId : null,
       userReposted:   repostedOriginalIds.has(originalPostId),
+      // Foi ESTA publicação que recebeu o meu +1. Só aqui o botão mostra o "1"
+      // sobre o glifo; nas outras células do mesmo conteúdo fica só activo.
+      userRepostedVia: myViaPostIds.has(p.id),
       userRepostId:   myRepostByOriginal.get(originalPostId) ?? null,
       repostOriginalAuthorId: originalAuthorByDisplayed.get(p.id) ?? null,
       _count:         { ...p._count, reposts: repostCount },
@@ -570,15 +586,22 @@ const REPOSTED_POST_INCLUDE = {
   _count:      { select: { likes: true, comments: true, shares: true, reposts: true, views: true } },
 } as const
 
-async function repostResult(userId: string, originalPostId: string, repostedPost: any) {
-  const repostCount = await prisma.repost.count({ where: { postId: originalPostId } })
+async function repostResult(
+  userId: string,
+  originalPostId: string,
+  viaPostId: string,
+  repostedPost: any,
+) {
+  // O +1 é da publicação onde se tocou, não do original.
+  const viaCount = await prisma.repost.count({ where: { viaPostId } })
   const shaped = repostedPost
     ? (await attachPostMeta([withThumbnail(repostedPost)], userId))[0]
     : null
   return {
     postId: originalPostId,
+    viaPostId,
+    viaCount,
     reposted: true,
-    repostCount,
     repostedPost: shaped,
   }
 }
@@ -587,15 +610,22 @@ async function repostResult(userId: string, originalPostId: string, repostedPost
 // Se o alvo já for uma cópia, o vínculo continua a apontar para o original.
 export async function repostPost(userId: string, postId: string) {
   const original = await resolveRepostOriginal(postId)
+  // A publicação tocada: o original, ou a cópia de onde a pessoa repostou.
+  const viaPostId = postId
 
   const existing = await prisma.repost.findUnique({
     where:   { userId_postId: { userId, postId: original.id } },
     include: { repostedPost: { include: REPOSTED_POST_INCLUDE } },
   })
-  if (existing) return repostResult(userId, original.id, existing.repostedPost)
+  // Repetir o pedido não muda a origem: o +1 fica onde caiu da primeira vez.
+  if (existing) {
+    return repostResult(userId, original.id, existing.viaPostId ?? original.id, existing.repostedPost)
+  }
 
   const expiresAt = new Date(Date.now() + POST_INITIAL_HOURS * 60 * 60 * 1000)
   let repostedPost: any
+  // Se outro dispositivo ganhou a corrida, a origem é a que ele registou.
+  let wonViaPostId: string | null = null
   try {
     repostedPost = await prisma.$transaction(async (tx) => {
       const copy = await tx.post.create({
@@ -617,7 +647,7 @@ export async function repostPost(userId: string, postId: string) {
         include: REPOSTED_POST_INCLUDE,
       })
       await tx.repost.create({
-        data: { userId, postId: original.id, repostedPostId: copy.id },
+        data: { userId, postId: original.id, repostedPostId: copy.id, viaPostId },
       })
       return copy
     })
@@ -631,11 +661,12 @@ export async function repostPost(userId: string, postId: string) {
     })
     if (!won) throw error
     repostedPost = won.repostedPost
+    wonViaPostId = won.viaPostId ?? original.id
   }
 
   extendLife(original.id, 60).catch(() => {})
   recalcPostLife(original.id).catch(() => {})
-  return repostResult(userId, original.id, repostedPost)
+  return repostResult(userId, original.id, wonViaPostId ?? viaPostId, repostedPost)
 }
 
 // Desfazer também é idempotente: repetir DELETE mantém o estado desligado.
@@ -657,11 +688,14 @@ export async function removeRepost(userId: string, postId: string) {
     recalcPostLife(original.id).catch(() => {})
   }
 
-  const repostCount = await prisma.repost.count({ where: { postId: original.id } })
+  // O -1 sai de onde entrou o +1, não do original.
+  const viaPostId = existing?.viaPostId ?? original.id
+  const viaCount = await prisma.repost.count({ where: { viaPostId } })
   return {
     postId: original.id,
+    viaPostId,
+    viaCount,
     reposted: false,
-    repostCount,
     removedPostId: existing?.repostedPostId ?? null,
     repostedPost: null,
   }

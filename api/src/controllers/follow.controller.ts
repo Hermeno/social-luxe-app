@@ -6,6 +6,10 @@ import { ok, badRequest } from '../utils/response'
 import { handleError } from '../utils/errors'
 import { emitToUser } from '../socket'
 
+// Teto do lote: o onboarding sugere 15; a folga cobre usos futuros sem
+// deixar um cliente pedir milhares de follows num pedido só.
+const MAX_BULK_FOLLOW = 50
+
 function calcExpiresAt(duration?: string): Date | null {
   const now = new Date()
   if (duration === '1d') { now.setDate(now.getDate() + 1); return now }
@@ -50,6 +54,66 @@ export async function followUser(req: Request, res: Response) {
     return ok(res, { following: true })
   } catch (err) {
     return handleError(res, err, 'followUser')
+  }
+}
+
+// Segue vários perfis de uma vez — usado pelo "Seguir todos" do onboarding.
+// Um único pedido em vez de 15: sem rajada de POSTs nem meia-lista seguida se
+// a rede cair a meio.
+export async function followMany(req: Request, res: Response) {
+  try {
+    const followerId = req.user!.userId
+    const raw: unknown = req.body?.userIds
+
+    if (!Array.isArray(raw)) return badRequest(res, 'userIds must be an array')
+    const requestedIds = [...new Set(
+      raw.filter((id): id is string => typeof id === 'string' && id.length > 0 && id !== followerId),
+    )].slice(0, MAX_BULK_FOLLOW)
+    if (requestedIds.length === 0) return badRequest(res, 'userIds is required')
+
+    // Um ID inexistente não pode derrubar o lote inteiro — só os reais entram.
+    const targets = await prisma.user.findMany({
+      where: { id: { in: requestedIds } },
+      select: { id: true },
+    })
+    const targetIds = targets.map((t) => t.id)
+    if (targetIds.length === 0) return ok(res, { following: [] })
+
+    const existing = await prisma.follow.findMany({
+      where: { followerId, followingId: { in: targetIds } },
+      select: { followingId: true },
+    })
+    const alreadyIds = new Set(existing.map((e) => e.followingId))
+    const toCreate   = targetIds.filter((id) => !alreadyIds.has(id))
+
+    if (toCreate.length > 0) {
+      await prisma.follow.createMany({
+        data: toCreate.map((followingId) => ({ followerId, followingId })),
+        skipDuplicates: true,
+      })
+
+      const follower = await prisma.user.findUnique({
+        where: { id: followerId }, select: { id: true, name: true, username: true, avatar: true },
+      })
+      const message = `${follower?.name} começou a seguir-te. Segue de volta?`
+      toCreate.forEach((followingId) => {
+        sendPush(followingId, '👤 Novo seguidor', message, { type: 'follow', userId: followerId }).catch(() => {})
+        emitToUser(followingId, 'notification:new', {
+          id: `follow_${followerId}_${followingId}_${Date.now()}`,
+          type: 'follow',
+          message,
+          read: false,
+          createdAt: new Date().toISOString(),
+          fromUser: follower,
+        })
+      })
+    }
+
+    // Devolve o estado final (já seguidos + novos), não só os criados: é isso
+    // que a app precisa para reconciliar sem outro pedido.
+    return ok(res, { following: [...alreadyIds, ...toCreate] })
+  } catch (err) {
+    return handleError(res, err, 'followMany')
   }
 }
 
