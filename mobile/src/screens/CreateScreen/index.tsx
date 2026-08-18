@@ -34,6 +34,10 @@ import {
 import { isConnected } from '../../services/netinfo.service'
 import { toast } from '../../utils/toast'
 import { useT } from '../../i18n'
+import {
+  DEFAULT_POST_FONT, POST_FONTS, POST_FONT_KEYS, postFontStyle, type PostFontKey,
+} from '../../theme/postFonts'
+import { usePostFontsStore, usePostFontsReady } from '../../store/postFonts.store'
 
 // ── Background palette — cores ricas onde o texto branco lê sempre bem
 // (branco e creme removidos porque tornavam os ícones do feed invisíveis)
@@ -83,6 +87,7 @@ export default function CreateScreen() {
 
   const [caption,          setCaption]          = useState('')
   const [bgKey,            setBgKey]            = useState<BgKey>('gray')
+  const [fontKey,          setFontKey]          = useState<PostFontKey>(DEFAULT_POST_FONT)
   const [media,            setMedia]            = useState<Media | null>(null)
   const [album,            setAlbum]            = useState<string[] | null>(null)
   const [galleryOpen,      setGalleryOpen]      = useState(false)
@@ -104,6 +109,10 @@ export default function CreateScreen() {
   const canPublish = !!caption.trim() || !!media || !!album
   const hasText    = !!caption.trim()
   const activeBg   = BG[bgKey]
+  // O arranque já as pediu; aqui é a rede de segurança para quem chega ao
+  // compositor antes de esse pedido ter terminado.
+  const fontsReady = usePostFontsReady()
+  useEffect(() => { usePostFontsStore.getState().ensureLoaded() }, [])
   // Modo texto: sem media → a página inteira fica com a cor selecionada e o texto é branco
   const textMode   = !media && !album
 
@@ -273,6 +282,8 @@ export default function CreateScreen() {
       mediaType: album ? 'IMAGE' : media ? (media.type === 'video' ? 'VIDEO' : 'IMAGE') : 'TEXT',
       caption: caption.trim() || undefined,
       bgColor: !media && !album ? `${activeBg.bg}|${activeBg.bg}` : undefined,
+      // Só a publicação de texto leva letra; num post com media seria dado morto.
+      fontKey: !media && !album ? fontKey : undefined,
       partnerUserId: hasPartner && includePartner && !isAnnouncement ? otherMember!.id : undefined,
       isAnnouncement,
       deviceModel: getDeviceModel(),
@@ -338,6 +349,7 @@ export default function CreateScreen() {
             partnerId,
             isAnnouncement,
             deviceModel,
+            fontKey,
           )
 
       if (newPost) setPendingPost(newPost)
@@ -381,6 +393,7 @@ export default function CreateScreen() {
     setMedia(null)
     setAlbum(null)
     setBgKey('gray')
+    setFontKey(DEFAULT_POST_FONT)
     setIsAnnouncement(false)
     setIncludePartner(false)
   }
@@ -594,7 +607,7 @@ export default function CreateScreen() {
           <View style={s.composeArea}>
             <TextInput
               ref={captionRef}
-              style={s.bigInput}
+              style={[s.bigInput, postFontStyle(fontKey, 26, 38, fontsReady)]}
               placeholder={t.create_writePh}
               placeholderTextColor="rgba(255,255,255,0.55)"
               value={caption}
@@ -663,6 +676,50 @@ export default function CreateScreen() {
                       accessibilityState={{ selected, disabled: loading }}
                     >
                       <View style={[s.swatch, { backgroundColor: BG[key].bg }]} />
+                      <View style={[s.swatchMarker, selected && s.swatchMarkerOn]} />
+                    </TouchableOpacity>
+                  )
+                })}
+              </ScrollView>
+            </View>
+          )}
+
+          {/* Letra: mesma gramática da paleta — amostra por cima, marcador por
+              baixo. A amostra é desenhada na própria fonte, por isso a escolha
+              faz-se a ver o resultado e não a ler o nome. */}
+          {textMode && (
+            <View style={s.fontSection}>
+              <Text style={s.fontLabel}>{t.create_font}</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={s.fontScrollContent}
+                keyboardShouldPersistTaps="handled"
+                scrollEnabled={!loading}
+              >
+                {POST_FONT_KEYS.map((key) => {
+                  const selected = fontKey === key
+                  const label = t[`create_font_${key}` as keyof typeof t] as string
+                  return (
+                    <TouchableOpacity
+                      key={key}
+                      style={s.fontTarget}
+                      onPress={() => setFontKey(key)}
+                      disabled={loading}
+                      activeOpacity={0.68}
+                      accessibilityRole="button"
+                      accessibilityLabel={label}
+                      accessibilityState={{ selected, disabled: loading }}
+                    >
+                      <Text
+                        style={[
+                          s.fontSample,
+                          postFontStyle(key, 19, 24, fontsReady),
+                          selected && s.fontSampleOn,
+                        ]}
+                      >
+                        {POST_FONTS[key].sample}
+                      </Text>
                       <View style={[s.swatchMarker, selected && s.swatchMarkerOn]} />
                     </TouchableOpacity>
                   )
@@ -1001,6 +1058,38 @@ const s = StyleSheet.create({
   },
   swatchMarker: { width: 16, height: 2, backgroundColor: 'transparent' },
   swatchMarkerOn: { backgroundColor: '#FF7A1C' },
+
+  fontSection: {
+    height: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#DEDEDA',
+  },
+  fontLabel: {
+    fontFamily: fonts.medium,
+    fontSize: 12.5,
+    color: '#5C5C63',
+    paddingLeft: 16,
+    paddingRight: 4,
+  },
+  fontScrollContent: {
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    gap: 2,
+  },
+  fontTarget: {
+    minWidth: 52,
+    height: 63,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  // A amostra não leva `fontSize`/`lineHeight` aqui: vêm do `postFontStyle`,
+  // que compensa o corpo ótico mais pequeno das cursivas.
+  fontSample: { color: '#8A8A90' },
+  fontSampleOn: { color: '#1A1A1E' },
 
   optionRow: {
     minHeight: 52,

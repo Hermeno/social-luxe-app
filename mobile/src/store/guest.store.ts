@@ -28,6 +28,12 @@ interface GuestStore {
   loadMore: () => Promise<void>
   /** Um gesto que precisa de conta — leva à entrada normal. */
   requireAccount: () => void
+  /**
+   * Volta à vitrina depois de ter ido para a entrada. Só faz sentido enquanto
+   * os posts ainda estiverem em memória: `requireAccount` guarda-os de
+   * propósito, `leaveGuest` limpa-os. Sem posts, não há para onde voltar.
+   */
+  returnToGuest: () => void
   /** Sair do modo convidado. Depois de entrar — ou de sair — a porta é a normal. */
   leaveGuest: () => void
 }
@@ -76,6 +82,13 @@ export const useGuestStore = create<GuestStore>((set, get) => ({
   },
 
   requireAccount: () => set({ mode: 'auth' }),
+
+  returnToGuest: () => {
+    // Guarda contra voltar para uma vitrina vazia — depois do logout os posts
+    // já não existem e o ecrã ficaria em branco.
+    if (get().posts.length === 0) return
+    set({ mode: 'guest' })
+  },
 
   // Nunca volta a 'checking': quem termina sessão quer o ecrã de entrada, não
   // a vitrina de estranhos. A vitrina é só para quem chega de novo.

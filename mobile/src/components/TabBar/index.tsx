@@ -382,6 +382,7 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
                   borderColor="transparent"
                 />
                 <Text style={s.commentText} numberOfLines={1}>{commentLabel}</Text>
+                <Icon name="chevron-right" size={14} color="rgba(255,255,255,0.42)" strokeWidth={1.8} />
               </TouchableOpacity>
             </Animated.View>
           )}
@@ -401,10 +402,7 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
               >
                 <SocialAvatarStack users={discoveryPreview} />
                 <Text style={s.discoveryText} numberOfLines={1}>{t.follow}</Text>
-                <View style={s.discoverySignal} pointerEvents="none">
-                  <View style={s.discoverySignalLine} />
-                  <View style={s.discoverySignalDot} />
-                </View>
+                <Icon name="chevron-right" size={14} color={colors.gray400} strokeWidth={1.8} />
               </TouchableOpacity>
             </Animated.View>
           )}
@@ -546,7 +544,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     paddingHorizontal: 10,
-    borderRadius: 12,
+    borderRadius: TAB_BAR_ROW_HEIGHT / 2,
     backgroundColor: colors.commentField,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#2B3946',
@@ -558,7 +556,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     gap: 7,
     paddingHorizontal: 9,
-    borderRadius: 12,
+    borderRadius: TAB_BAR_ROW_HEIGHT / 2,
     backgroundColor: '#FFFFFF',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#D8D8D3',
@@ -570,16 +568,13 @@ const s = StyleSheet.create({
     fontSize: 12.5,
     letterSpacing: -0.15,
   },
-  discoverySignal: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  discoverySignalLine: { width: 9, height: 2, borderRadius: 1, backgroundColor: colors.primary },
-  discoverySignalDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: colors.primary },
   networkField: {
     height: TAB_BAR_ROW_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
     paddingHorizontal: 9,
-    borderRadius: 12,
+    borderRadius: TAB_BAR_ROW_HEIGHT / 2,
     backgroundColor: '#FFFFFF',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#D8D8D3',

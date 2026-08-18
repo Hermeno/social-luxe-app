@@ -86,7 +86,9 @@ export async function addCirclePhoto(sessionId: string, uri: string, overlays: E
   const form = new FormData()
   form.append('sessionId', sessionId)
   form.append('media', { uri, name: 'circle.jpg', type: 'image/jpeg' } as unknown as Blob)
-  if (overlays.length > 0) form.append('overlays', JSON.stringify(overlays))
+  // Enviar também [] torna explícito que uma nova foto sem emojis deve limpar
+  // os da foto anterior, em vez de deixar o campo ausente.
+  form.append('overlays', JSON.stringify(overlays))
   await uploadApi.post('/circle/photo', form, { headers: { 'Content-Type': 'multipart/form-data' } })
 }
 

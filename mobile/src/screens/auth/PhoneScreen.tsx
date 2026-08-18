@@ -11,6 +11,7 @@ import { AuthStackParams } from '../../navigation/AuthNavigator'
 import * as authService from '../../services/auth.service'
 import { fonts } from '../../theme'
 import { useI18n, useT } from '../../i18n'
+import { useGuestStore } from '../../store/guest.store'
 import Icon from '../../components/Icon'
 import {
   AuthFieldFrame,
@@ -217,6 +218,8 @@ export default function PhoneScreen() {
   const nav     = useNavigation<Nav>()
   const { top, bottom } = useSafeAreaInsets()
   const { lang, setLang } = useI18n()
+  const returnToGuest     = useGuestStore((g) => g.returnToGuest)
+  const canReturnToGuest  = useGuestStore((g) => g.posts.length > 0)
   const t = useT()
 
   const [selected, setSelected] = useState<Country>(detectCountryEntry)
@@ -252,6 +255,9 @@ export default function PhoneScreen() {
           step={1}
           total={5}
           stage={t.au_stage_contact}
+          // Só quando há vitrina para onde voltar. Depois do logout os posts
+          // já não estão em memória e o botão levaria a um ecrã vazio.
+          onBack={canReturnToGuest ? returnToGuest : undefined}
           right={(
             <View style={s.langToggle} accessibilityRole="radiogroup">
               <TouchableOpacity

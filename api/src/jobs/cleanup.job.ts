@@ -16,22 +16,39 @@ async function deleteMediaUrl(url: string | null): Promise<void> {
 }
 
 async function hardDeletePost(postId: string, mediaUrl: string | null): Promise<void> {
-  // Delete media from storage first (non-blocking — failure shouldn't block DB cleanup)
-  deleteMediaUrl(mediaUrl).catch(() => {})
+  const current = await prisma.post.findUnique({
+    where:  { id: postId },
+    select: {
+      repostEntry: { select: { postId: true } },
+      reposts:     { select: { repostedPostId: true } },
+    },
+  })
+  // O original pode ter sido processado primeiro e levado esta cópia consigo.
+  if (!current) return
+  const repostEntry = current.repostEntry
+  const copies = current.reposts
+
+  // Uma cópia de repost usa o URL do original. Só o original é dono do ficheiro
+  // físico; apagar uma cópia nunca pode partir a media que ele referencia.
+  if (!repostEntry) deleteMediaUrl(mediaUrl).catch(() => {})
 
   // Hard-delete all related records then the post itself.
   // Order matters: child records before parent to avoid FK violations.
-  await prisma.$transaction([
-    prisma.postExtendVote.deleteMany({ where: { postId } }),
-    prisma.reaction.deleteMany({ where: { postId } }),
-    prisma.share.deleteMany({ where: { postId } }),
-    prisma.view.deleteMany({ where: { postId } }),
-    prisma.like.deleteMany({ where: { postId } }),
+  await prisma.$transaction(async (tx) => {
+    await tx.repost.deleteMany({ where: { OR: [{ postId }, { repostedPostId: postId }] } })
+    if (copies.length > 0) {
+      await tx.post.deleteMany({ where: { id: { in: copies.map((r) => r.repostedPostId) } } })
+    }
+    await tx.postExtendVote.deleteMany({ where: { postId } })
+    await tx.reaction.deleteMany({ where: { postId } })
+    await tx.share.deleteMany({ where: { postId } })
+    await tx.view.deleteMany({ where: { postId } })
+    await tx.like.deleteMany({ where: { postId } })
     // Delete replies before top-level comments to respect self-referential FK
-    prisma.comment.deleteMany({ where: { postId, parentId: { not: null } } }),
-    prisma.comment.deleteMany({ where: { postId } }),
-    prisma.post.delete({ where: { id: postId } }),
-  ])
+    await tx.comment.deleteMany({ where: { postId, parentId: { not: null } } })
+    await tx.comment.deleteMany({ where: { postId } })
+    await tx.post.delete({ where: { id: postId } })
+  })
 }
 
 async function checkPostExtension(postId: string, userId: string): Promise<boolean> {

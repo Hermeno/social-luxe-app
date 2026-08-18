@@ -44,6 +44,8 @@ export interface OutboxPost {
   mediaType: 'IMAGE' | 'VIDEO' | 'TEXT'
   caption?: string
   bgColor?: string
+  /** Publicação de texto: chave da fonte escolhida no compositor. */
+  fontKey?: string
   partnerUserId?: string
   isAnnouncement?: boolean
   deviceModel?: string
@@ -80,6 +82,7 @@ export function buildLocalPost(
     mediaType: outbox.mediaType,
     caption: outbox.caption ?? null,
     bgColor: outbox.bgColor ?? null,
+    fontKey: outbox.fontKey ?? null,
     expiresAt: expires.toISOString(),
     extended: false,
     deviceModel: outbox.deviceModel ?? null,
@@ -87,6 +90,6 @@ export function buildLocalPost(
     partnerUserId: outbox.partnerUserId ?? null,
     isAnnouncement: outbox.isAnnouncement ?? false,
     user: author,
-    _count: { likes: 0, comments: 0, shares: 0, views: 0 },
+    _count: { likes: 0, comments: 0, shares: 0, reposts: 0, views: 0 },
   }
 }

@@ -12,8 +12,10 @@ import { useIsFocused, useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { Post } from '../../types'
+import { Post, type RepostResult } from '../../types'
 import { colors, fonts } from '../../theme'
+import { parsePostFontKey, postFontStyle } from '../../theme/postFonts'
+import { usePostFontsReady } from '../../store/postFonts.store'
 import { API_BASE } from '../../config'
 import * as postService from '../../services/post.service'
 import AvatarImage from '../../components/AvatarImage'
@@ -49,9 +51,11 @@ interface Props {
   commentCount: number
   onCommentPress: (post: Post) => void
   onLikeChange: (liked: boolean) => void
+  onRepostChange: (result: RepostResult) => void
   onDeleted: (id: string) => void
   onEdited: (id: string, caption: string) => void
   onProfileBlocked: (userId: string) => void
+  onAuthorMuted: (userId: string) => void
   onExpired: (id: string) => void
   onBlockingChange: (open: boolean) => void
 }
@@ -63,7 +67,7 @@ interface Props {
 // partilhado.
 function FeedItem({
   post, reduceMotion, isActive, cellHeight, liked, commentCount,
-  onCommentPress, onLikeChange, onDeleted, onEdited, onProfileBlocked, onExpired, onBlockingChange
+  onCommentPress, onLikeChange, onRepostChange, onDeleted, onEdited, onProfileBlocked, onAuthorMuted, onExpired, onBlockingChange
 }: Props) {
   const isFocused = useIsFocused()
   const nav = useNavigation<Nav>()
@@ -76,7 +80,10 @@ function FeedItem({
 
   const isVideo = post.mediaType === 'VIDEO'
   const isText  = post.mediaType === 'TEXT'
-  const isAlbum = !isVideo && !isText && !!post.mediaUrls && post.mediaUrls.length > 1
+  // `mediaUrls` identifica um post criado pelo fluxo de álbum/Círculo. O
+  // Círculo pode ter só uma foto; nesse caso ainda precisamos do carrossel para
+  // desenhar `albumOverlays` (antes o emoji era guardado mas sumia na feed).
+  const isAlbum = !isVideo && !isText && !!post.mediaUrls && post.mediaUrls.length > 0
   const uri     = resolveUrl(post.mediaUrl)
 
   // ── Geometria da pilha ──────────────────────────────────────────────────────
@@ -325,6 +332,14 @@ function FeedItem({
       .catch(() => {})
   }
 
+  // Enquanto o ficheiro da cursiva não chegou, o texto sai na fonte de sempre
+  // e volta a desenhar sozinho quando o store ficar pronto.
+  const postFontsReady = usePostFontsReady()
+  const textStyle = useMemo(
+    () => postFontStyle(parsePostFontKey(post.fontKey), 26, 34, postFontsReady),
+    [post.fontKey, postFontsReady],
+  )
+
   const textGradient = useMemo<[string, string]>(() => {
     const parts = post.bgColor?.split('|') ?? []
     return parts.length === 2 ? [parts[0], parts[1]] : ['#FF6B35', '#E63946']
@@ -357,7 +372,7 @@ function FeedItem({
              Permanece filha direta da célula para o leitor nativo assentar. ── */}
       {isText ? (
         <LinearGradient colors={textGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[s.media, videoFrame]}>
-          <View style={s.textWrap}><Text style={s.textContent}>{post.caption}</Text></View>
+          <View style={s.textWrap}><Text style={[s.textContent, textStyle]}>{post.caption}</Text></View>
         </LinearGradient>
       ) : isAlbum ? (
         <View style={[s.media, videoFrame]}>
@@ -585,15 +600,19 @@ function FeedItem({
         post={post}
         liked={liked}
         onLikeChange={onLikeChange}
+        onRepostChange={onRepostChange}
         commentCount={commentCount}
         onCommentPress={() => onCommentPress(post)}
         onDeleted={isSelf ? onDeleted : undefined}
         onEdited={isSelf ? onEdited : undefined}
         onProfileBlocked={onProfileBlocked}
+        onAuthorMuted={onAuthorMuted}
         onOptionsBlockingChange={handleMenuBlocking}
         bottomOffset={overlayBottom}
         isActive={isActive}
         reduceMotion={reduceMotion}
+        iconSize={30}
+        iconWeight="medium"
       />
 
       {/* ── Traço do tempo — scrubber: tocar/arrastar salta no vídeo ── */}

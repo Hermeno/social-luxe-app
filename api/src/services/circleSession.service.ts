@@ -301,7 +301,9 @@ export async function addPhoto(userId: string, sessionId: string, photoUrl: stri
   if (!member || member.status !== 'JOINED') throw new Error('Não estás nesta sessão')
   await prisma.circleSessionMember.update({
     where: { sessionId_userId: { sessionId, userId } },
-    data:  { photoUrl, photoAt: new Date(), overlays: overlays.length > 0 ? overlays : undefined },
+    // Prisma ignora propriedades `undefined`. Gravar sempre o array (incluindo
+    // []) garante que substituir uma foto também substitui os seus emojis.
+    data:  { photoUrl, photoAt: new Date(), overlays },
   })
   await broadcast(sessionId)
   return { ok: true }
@@ -314,7 +316,7 @@ export async function withdrawPhoto(userId: string, sessionId: string) {
   if (!member) throw new Error('Não estás nesta sessão')
   await prisma.circleSessionMember.update({
     where: { sessionId_userId: { sessionId, userId } },
-    data:  { photoUrl: null, photoAt: null, overlays: undefined },
+    data:  { photoUrl: null, photoAt: null, overlays: [] },
   })
   await broadcast(sessionId)
   return { ok: true }
@@ -410,7 +412,7 @@ export async function closeStaleSessions(): Promise<string[]> {
   await prisma.$transaction([
     prisma.circleSessionMember.updateMany({
       where: { sessionId: { in: ids } },
-      data:  { photoUrl: null, photoAt: null },
+      data:  { photoUrl: null, photoAt: null, overlays: [] },
     }),
     prisma.circleSession.updateMany({
       where: { id: { in: ids } },

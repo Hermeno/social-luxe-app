@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react'
 import {
-  View, Pressable, StyleSheet, Share, Modal, Animated
+  View, Pressable, StyleSheet, Share, Modal, Animated, Easing
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import FeedIcon from '../../components/FeedIcon'
+import FeedIcon, { type FeedIconWeight } from '../../components/FeedIcon'
 
-import { Post } from '../../types'
+import { Post, type RepostResult } from '../../types'
 import { colors, fonts } from '../../theme'
 import * as postService from '../../services/post.service'
-import { updateCachedPost, queueLike } from '../../db/database'
+import { updateCachedPost, queueLike, enqueueSyncOp } from '../../db/database'
 import { isConnected } from '../../services/netinfo.service'
 import ReactionPicker from '../../components/ReactionPicker'
 import { useT } from '../../i18n'
@@ -19,13 +19,18 @@ interface Props {
   onCommentPress: () => void
   liked?: boolean
   onLikeChange?: (liked: boolean) => void
+  onRepostChange?: (result: RepostResult) => void
   commentCount?: number
   onDeleted?: (id: string) => void
   onEdited?: (id: string, caption: string) => void
   onProfileBlocked?: (userId: string) => void
+  onAuthorMuted?: (userId: string) => void
   onOptionsBlockingChange?: (open: boolean) => void
   isActive?: boolean
   reduceMotion?: boolean
+  /** Tamanho/peso dos glifos. A feed principal reforça-os sem alterar a rail. */
+  iconSize?: number
+  iconWeight?: FeedIconWeight
   /** Distância ao fundo da coluna de ações. Sobrepõe o valor por defeito para
    *  a coluna assentar sobre o vídeo (que não vai até ao fundo do ecrã). */
   bottomOffset?: number
@@ -38,7 +43,7 @@ interface Props {
  * a tinta ocupar a mesma fração (ver scripts/build-feed-icons.mjs). Por isso o mesmo
  * número dá o mesmo tamanho aparente — não voltar a compensar ícone a ícone.
  */
-const RAIL = 27
+const DEFAULT_RAIL_ICON_SIZE = 27
 
 type HeartP = {
   id:  number
@@ -167,21 +172,29 @@ function RailAction({
 
 export default React.memo(function ActionBar({
   post, onCommentPress, liked: likedProp = false,
-  onLikeChange, commentCount: commentCountProp, bottomOffset,
-  onDeleted, onEdited, onProfileBlocked, onOptionsBlockingChange,
-  isActive = true, reduceMotion = false
+  onLikeChange, onRepostChange, commentCount: commentCountProp, bottomOffset,
+  onDeleted, onEdited, onProfileBlocked, onAuthorMuted, onOptionsBlockingChange,
+  isActive = true, reduceMotion = false,
+  iconSize = DEFAULT_RAIL_ICON_SIZE, iconWeight = 'regular',
 }: Props) {
   const { bottom: safeBottom } = useSafeAreaInsets()
   const t          = useT()
 
   const [liked,      setLiked]      = useState(likedProp)
   const [likeCount,  setLikeCount]  = useState(post._count?.likes ?? 0)
+  const [reposted,   setReposted]   = useState(post.userReposted ?? false)
+  const [repostCount, setRepostCount] = useState(post._count?.reposts ?? 0)
   const [shareCount, setShareCount] = useState(post._count?.shares ?? 0)
   const [showReactions, setShowReactions] = useState(false)
   const [hearts,    setHearts]    = useState<HeartP[]>([])
   const heartIdRef = useRef(0)
   const railEntry = useRef(new Animated.Value(isActive ? 1 : 0)).current
   const likePop = useRef(new Animated.Value(1)).current
+  const repostSpin = useRef(new Animated.Value(0)).current
+  const repostOneOpacity = useRef(new Animated.Value(post.userReposted ? 1 : 0)).current
+  const repostOneScale = useRef(new Animated.Value(post.userReposted ? 1 : 0.72)).current
+  const repostPendingRef = useRef(false)
+  const localRepostStateRef = useRef<boolean | null>(null)
 
   useEffect(() => {
     railEntry.stopAnimation()
@@ -251,9 +264,35 @@ export default React.memo(function ActionBar({
   useEffect(() => {
     setLiked(likedProp)
     setLikeCount(post._count?.likes ?? 0)
+    setReposted(post.userReposted ?? false)
+    setRepostCount(post._count?.reposts ?? 0)
     setShareCount(post._count?.shares ?? 0)
+    repostSpin.setValue(0)
+    repostOneOpacity.setValue(post.userReposted ? 1 : 0)
+    repostOneScale.setValue(post.userReposted ? 1 : 0.72)
+    repostPendingRef.current = false
+    localRepostStateRef.current = null
     setShowReactions(false)
   }, [post.id])
+
+  // Outras células do mesmo original recebem o resultado canónico pelo estado
+  // da feed. Mantém esta cópia local alinhada sem repetir a animação.
+  useEffect(() => {
+    if (repostPendingRef.current) return
+    const next = post.userReposted ?? false
+    if (localRepostStateRef.current === next) {
+      // Foi este botão que originou a atualização: a animação em curso é dona
+      // do aparecimento do "1" e não deve ser saltada por este efeito.
+      localRepostStateRef.current = null
+      setRepostCount(post._count?.reposts ?? 0)
+      return
+    }
+    localRepostStateRef.current = null
+    setReposted(next)
+    setRepostCount(post._count?.reposts ?? 0)
+    repostOneOpacity.setValue(next ? 1 : 0)
+    repostOneScale.setValue(next ? 1 : 0.72)
+  }, [post.userReposted, post._count?.reposts])
 
   // O duplo toque vive no FeedItem; quando ele altera o estado partilhado,
   // esta rail recebe a mudança e completa o mesmo feedback magnético.
@@ -304,6 +343,117 @@ export default React.memo(function ActionBar({
     } catch {}
   }
 
+  function animateRepost(next: boolean) {
+    repostSpin.stopAnimation()
+    repostOneOpacity.stopAnimation()
+    repostOneScale.stopAnimation()
+
+    if (reduceMotion) {
+      repostSpin.setValue(0)
+      repostOneOpacity.setValue(next ? 1 : 0)
+      repostOneScale.setValue(next ? 1 : 0.72)
+      return
+    }
+
+    repostSpin.setValue(0)
+    Animated.sequence([
+      Animated.timing(repostSpin, {
+        toValue: 1,
+        duration: 430,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.parallel([
+        Animated.timing(repostOneOpacity, {
+          toValue: next ? 1 : 0,
+          duration: 120,
+          useNativeDriver: true,
+        }),
+        Animated.spring(repostOneScale, {
+          toValue: next ? 1 : 0.72,
+          speed: 28,
+          bounciness: next ? 8 : 0,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start()
+  }
+
+  function setRepostVisualImmediately(next: boolean) {
+    repostSpin.stopAnimation()
+    repostOneOpacity.stopAnimation()
+    repostOneScale.stopAnimation()
+    repostSpin.setValue(0)
+    repostOneOpacity.setValue(next ? 1 : 0)
+    repostOneScale.setValue(next ? 1 : 0.72)
+  }
+
+  async function handleRepost() {
+    if (repostPendingRef.current) return
+
+    const was = reposted
+    const previousCount = repostCount
+    const next = !was
+    const optimisticCount = Math.max(0, previousCount + (next ? 1 : -1))
+    const originalPostId = post.repostOfId ?? post.id
+    const animationStartedAt = Date.now()
+
+    repostPendingRef.current = true
+    localRepostStateRef.current = next
+    setReposted(next)
+    setRepostCount(optimisticCount)
+    animateRepost(next)
+
+    if (!isConnected()) {
+      await enqueueSyncOp('repost', originalPostId, 'update', { reposted: next }).catch(() => {})
+      onRepostChange?.({
+        postId: originalPostId,
+        reposted: next,
+        repostCount: optimisticCount,
+        repostedPost: null,
+        removedPostId: next ? null : (post.userRepostId ?? null),
+      })
+      repostPendingRef.current = false
+      return
+    }
+
+    try {
+      const result = await postService.setRepost(originalPostId, next)
+      setReposted(result.reposted)
+      setRepostCount(result.repostCount)
+      if (result.reposted !== next) {
+        localRepostStateRef.current = null
+        setRepostVisualImmediately(result.reposted)
+      }
+      // A cópia entra na FlatList só depois de a volta e o “1” terminarem;
+      // assim a inserção não desmonta precisamente o botão que está animado.
+      if (result.repostedPost && result.reposted && !reduceMotion) {
+        const remaining = 560 - (Date.now() - animationStartedAt)
+        if (remaining > 0) await new Promise<void>((resolve) => setTimeout(resolve, remaining))
+      }
+      onRepostChange?.(result)
+    } catch (error: any) {
+      const status: number | undefined = error?.response?.status
+      if (!status || status >= 500) {
+        await enqueueSyncOp('repost', originalPostId, 'update', { reposted: next }).catch(() => {})
+        onRepostChange?.({
+          postId: originalPostId,
+          reposted: next,
+          repostCount: optimisticCount,
+          repostedPost: null,
+          removedPostId: next ? null : (post.userRepostId ?? null),
+        })
+      } else {
+        localRepostStateRef.current = null
+        setReposted(was)
+        setRepostCount(previousCount)
+        setRepostVisualImmediately(was)
+      }
+    } finally {
+      repostPendingRef.current = false
+    }
+  }
+
   const isAnnouncement = post.isAnnouncement ?? false
 
   return (
@@ -312,23 +462,6 @@ export default React.memo(function ActionBar({
       <Animated.View style={[s.rail, { bottom: bottomOffset ?? safeBottom + 96 }]} pointerEvents="box-none">
         {!isAnnouncement && (
           <>
-            {/* Marca de calibração Luxee: uma hairline e um único tick de marca.
-                Não é botão nem fundo; apenas assina a coluna sem tapar a média. */}
-            <Animated.View
-              pointerEvents="none"
-              accessible={false}
-              style={[
-                s.railSignature,
-                !reduceMotion && {
-                  opacity: railEntry.interpolate({ inputRange: [0, 0.4], outputRange: [0, 0.72], extrapolate: 'clamp' }),
-                  transform: [{ translateX: railEntry.interpolate({ inputRange: [0, 0.4], outputRange: [8, 0], extrapolate: 'clamp' }) }]
-                },
-              ]}
-            >
-              <View style={s.signatureHairline} />
-              <View style={s.signatureTick} />
-            </Animated.View>
-
             {/* Like */}
             <RailAction
               label={t.nf_likes}
@@ -340,13 +473,14 @@ export default React.memo(function ActionBar({
               order={0}
               reduceMotion={reduceMotion}
             >
-              {/* Gostado troca de desenho, não de preenchimento: o contorno destes
-                  ícones é geometria, não traço, por isso não há `fill` para ligar. */}
+              {/* Gostado troca de desenho, não apenas de pintura. O contorno recebe
+                  o peso da feed; o coração sólido fica regular para não saltar de tamanho. */}
               <Animated.View style={{ transform: [{ scale: likePop }] }}>
                 <FeedIcon
                   name={liked ? 'heart-solid' : 'heart'}
-                  size={RAIL}
+                  size={iconSize}
                   color={liked ? colors.heart : '#fff'}
+                  weight={liked ? 'regular' : iconWeight}
                 />
               </Animated.View>
               {hearts.map((h) => (
@@ -371,17 +505,63 @@ export default React.memo(function ActionBar({
               reduceMotion={reduceMotion}
             >
               {/* Já nasce com a cauda à direita — dispensa o espelho que aqui estava. */}
-              <FeedIcon name="chat-outline" size={RAIL} color="#fff" />
+              <FeedIcon name="chat-outline" size={iconSize} color="#fff" weight={iconWeight} />
+            </RailAction>
+
+            {/* Repost: o glifo completa uma volta; só depois nasce o "1".
+                O número vive fora da camada rodada para permanecer direito. */}
+            <RailAction
+              label={t.feed_repost}
+              count={fmt(repostCount)}
+              selected={reposted}
+              onPress={handleRepost}
+              entry={railEntry}
+              order={2}
+              reduceMotion={reduceMotion}
+            >
+              <View style={{ width: iconSize, height: iconSize }}>
+                <Animated.View
+                  style={{
+                    transform: [{
+                      rotate: repostSpin.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['0deg', '360deg'],
+                      }),
+                    }],
+                  }}
+                >
+                  <FeedIcon
+                    name="repost"
+                    size={iconSize}
+                    color="#fff"
+                    // O SVG já tem o peso dentro da geometria preenchida; o
+                    // reforço `medium` deixava-o mais grosso que os vizinhos.
+                    weight="regular"
+                  />
+                </Animated.View>
+                <Animated.View
+                  pointerEvents="none"
+                  style={[
+                    s.repostOneWrap,
+                    {
+                      opacity: repostOneOpacity,
+                      transform: [{ scale: repostOneScale }],
+                    },
+                  ]}
+                >
+                  <Animated.Text style={s.repostOne}>1</Animated.Text>
+                </Animated.View>
+              </View>
             </RailAction>
 
             {/* Partilhar */}
-            <RailAction label={t.mo_share} count={fmt(shareCount)} onPress={handleShare} entry={railEntry} order={2} reduceMotion={reduceMotion}>
-              <FeedIcon name="share" size={RAIL} color="#fff" />
+            <RailAction label={t.mo_share} count={fmt(shareCount)} onPress={handleShare} entry={railEntry} order={3} reduceMotion={reduceMotion}>
+              <FeedIcon name="share" size={iconSize} color="#fff" weight={iconWeight} />
             </RailAction>
           </>
         )}
 
-        {/* Opções — ocupa exatamente a mesma grelha visual das três ações. */}
+        {/* Opções — ocupa exatamente a mesma grelha visual das ações. */}
         <Animated.View
           style={[
             s.actionSlot,
@@ -406,9 +586,12 @@ export default React.memo(function ActionBar({
             onDeleted={onDeleted}
             onEdited={onEdited}
             onProfileBlocked={onProfileBlocked}
+            onAuthorMuted={onAuthorMuted}
             onBlockingChange={onOptionsBlockingChange}
             rail
-            triggerSize={RAIL}
+            triggerSize={iconSize}
+            // As barras já trazem a espessura exata da referência raster.
+            triggerWeight="regular"
           />
         </Animated.View>
       </Animated.View>
@@ -431,26 +614,6 @@ const s = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     zIndex: 20
-  },
-  railSignature: {
-    width: 24,
-    height: 8,
-    opacity: 0.72,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3
-  },
-  signatureHairline: {
-    width: 14,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(255,255,255,0.46)'
-  },
-  signatureTick: {
-    width: 4,
-    height: 2,
-    borderRadius: 1,
-    backgroundColor: colors.primary
   },
   actionHit: {
     width: 64,
@@ -493,6 +656,25 @@ const s = StyleSheet.create({
     lineHeight: 15,
     letterSpacing: 0,
     fontVariant: ['tabular-nums'],
+  },
+  repostOneWrap: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  repostOne: {
+    color: '#fff',
+    fontFamily: fonts.extraBold,
+    fontSize: 9.5,
+    lineHeight: 11,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.38)',
+    textShadowOffset: { width: 0, height: 0.5 },
+    textShadowRadius: 1,
   },
 
 

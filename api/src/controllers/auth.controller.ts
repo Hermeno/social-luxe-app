@@ -155,17 +155,35 @@ export async function deleteAccount(req: AuthRequest, res: Response) {
     // Collect media URLs before the rows disappear (DB cascades remove the rows,
     // but storage on Cloudinary/R2 must be cleaned up explicitly)
     const [posts, stories, messages] = await Promise.all([
-      prisma.post.findMany({ where: { userId: user.id, mediaUrl: { not: null } }, select: { mediaUrl: true } }),
+      prisma.post.findMany({
+        where: { userId: user.id },
+        select: {
+          id: true,
+          mediaUrl: true,
+          repostEntry: { select: { id: true } },
+          reposts: { select: { repostedPostId: true } },
+        },
+      }),
       prisma.story.findMany({ where: { userId: user.id }, select: { mediaUrl: true } }),
       prisma.message.findMany({ where: { senderId: user.id, mediaUrl: { not: null } }, select: { mediaUrl: true } }),
     ])
 
-    await prisma.user.delete({ where: { id: user.id } })
+    const repostCopiesOfMyOriginals = posts.flatMap((p) => p.reposts.map((r) => r.repostedPostId))
+    await prisma.$transaction(async (tx) => {
+      // As cópias pertencem a quem repostou, por isso não cairiam no cascade do
+      // utilizador que criou o original. Sem esta remoção ficariam com media órfã.
+      if (repostCopiesOfMyOriginals.length > 0) {
+        await tx.post.deleteMany({ where: { id: { in: repostCopiesOfMyOriginals } } })
+      }
+      await tx.user.delete({ where: { id: user.id } })
+    })
 
     // Best-effort storage cleanup — a failure here must not undo the deletion
     const mediaUrls = [
       user.avatar,
-      ...posts.map((p) => p.mediaUrl),
+      // Uma cópia de repost referencia o ficheiro de outra pessoa; não é dona
+      // dele e nunca o deve apagar ao eliminar a conta.
+      ...posts.filter((p) => !p.repostEntry).map((p) => p.mediaUrl),
       ...stories.map((s) => s.mediaUrl),
       ...messages.map((m) => m.mediaUrl),
     ]

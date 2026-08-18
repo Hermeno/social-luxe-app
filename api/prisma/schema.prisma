@@ -94,6 +94,7 @@ model User {
   comments         Comment[]
   commentLikes     CommentLike[]
   shares           Share[]
+  reposts          Repost[]
   views            View[]
   sentMessages     Message[]           @relation("Sender")
   receivedMessages Message[]           @relation("Receiver")
@@ -103,6 +104,8 @@ model User {
   reactions        Reaction[]
   blocksGiven      Block[]             @relation("Blocker")
   blocksReceived   Block[]             @relation("Blocked")
+  mutesGiven       UserMute[]           @relation("Muter")
+  mutesReceived    UserMute[]           @relation("Muted")
   reports          Report[]
   extendVotes      PostExtendVote[]
   deviceTokens     DeviceToken[]
@@ -143,6 +146,7 @@ model Post {
   mediaType       MediaType
   caption         String?
   bgColor         String?
+  fontKey         String?                   // publicação de texto: 'script'|'hand'; null = fonte padrão
   expiresAt       DateTime
   extended        Boolean   @default(false)
   deviceModel     String?
@@ -158,6 +162,8 @@ model Post {
   likes          Like[]
   comments       Comment[]
   shares         Share[]
+  reposts        Repost[] @relation("OriginalPostReposts")
+  repostEntry    Repost?  @relation("RepostedPost")
   views          View[]
   reactions      Reaction[]
   extendVotes    PostExtendVote[]
@@ -300,6 +306,23 @@ model Share {
   post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
 }
 
+// Repost é diferente de Share: Share regista uma partilha externa; Repost é uma
+// republicação única por pessoa e aponta também para a cópia criada na feed.
+model Repost {
+  id               String   @id @default(cuid())
+  userId           String
+  postId           String
+  repostedPostId   String   @unique
+  createdAt        DateTime @default(now())
+
+  user         User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post         Post @relation("OriginalPostReposts", fields: [postId], references: [id], onDelete: Cascade)
+  repostedPost Post @relation("RepostedPost", fields: [repostedPostId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([postId])
+}
+
 model View {
   id        String   @id @default(cuid())
   userId    String
@@ -386,6 +409,23 @@ model Block {
   blocked User @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
 
   @@unique([blockerId, blockedId])
+}
+
+// Silenciar publicacoes e intencionalmente diferente de bloquear. So muda o
+// feed de quem silenciou; perfil, follows e mensagens continuam disponiveis.
+model UserMute {
+  id        String    @id @default(cuid())
+  muterId   String
+  mutedId   String
+  expiresAt DateTime? // null = para sempre
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  muter User @relation("Muter", fields: [muterId], references: [id], onDelete: Cascade)
+  muted User @relation("Muted", fields: [mutedId], references: [id], onDelete: Cascade)
+
+  @@unique([muterId, mutedId])
+  @@index([muterId, expiresAt])
 }
 
 model Report {

@@ -48,6 +48,8 @@ export interface Post {
   mediaType: 'IMAGE' | 'VIDEO' | 'TEXT'
   caption: string | null
   bgColor: string | null
+  /** Publicação de texto: chave da fonte ('script'|'hand'). null = padrão. */
+  fontKey?: string | null
   expiresAt: string
   extended: boolean
   deviceModel?: string | null
@@ -56,11 +58,27 @@ export interface Post {
   partnerAccepted?: boolean
   partnerUser?: { id: string; name: string; avatar: string | null } | null
   isAnnouncement?: boolean
+  /** Nos clones de repost, aponta para o post original canónico. */
+  repostOfId?: string | null
+  /** Autor do conteúdo original de um repost. Usado pela moderação para
+   *  não reintroduzir conteúdo ocultado através da cópia de outra pessoa. */
+  repostOriginalAuthorId?: string | null
   user: Pick<User, 'id' | 'name' | 'username' | 'avatar' | 'viewsPublic' | 'showDevice' | 'statusLabel' | 'lastSeen'>
-  _count: { likes: number; comments: number; shares: number; views: number }
+  _count: { likes: number; comments: number; shares: number; reposts: number; views: number }
   recentCommenters?: Array<{ id: string; name: string; avatar: string | null }>
   hasVotedExtend?: boolean
   userLiked?: boolean
+  userReposted?: boolean
+  /** ID da cópia criada pelo próprio utilizador, útil para desfazer offline. */
+  userRepostId?: string | null
+}
+
+export interface RepostResult {
+  postId: string
+  reposted: boolean
+  repostCount: number
+  repostedPost: Post | null
+  removedPostId?: string | null
 }
 
 /**

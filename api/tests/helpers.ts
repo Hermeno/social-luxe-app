@@ -31,6 +31,7 @@ export async function loginTestUser(phone = '+2449900000001') {
 
 export async function cleanDb() {
   await prisma.message.deleteMany()
+  await prisma.repost.deleteMany()
   await prisma.share.deleteMany()
   await prisma.view.deleteMany()
   await prisma.like.deleteMany()

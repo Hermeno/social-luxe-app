@@ -5,6 +5,7 @@ import userRoutes from './user.routes'
 import messageRoutes from './message.routes'
 import storyRoutes from './story.routes'
 import blockRoutes from './block.routes'
+import muteRoutes from './mute.routes'
 import reportRoutes from './report.routes'
 import notificationRoutes from './notification.routes'
 import friendshipRoutes from './friendship.routes'
@@ -25,6 +26,7 @@ router.use('/users', userRoutes)
 router.use('/messages', messageRoutes)
 router.use('/stories', storyRoutes)
 router.use('/blocks', blockRoutes)
+router.use('/mutes', muteRoutes)
 router.use('/reports', reportRoutes)
 router.use('/notifications', notificationRoutes)
 router.use('/friendships', friendshipRoutes)

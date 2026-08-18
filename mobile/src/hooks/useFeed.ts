@@ -8,13 +8,14 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react'
 import Toast from 'react-native-toast-message'
-import { Post } from '../types'
+import { Post, type RepostResult } from '../types'
 import { syncFeed, forceSyncFeed } from '../db/sync'
 import { onConnectivityChange } from '../services/netinfo.service'
 import {
   cachePosts,
   getCachedPosts,
   updateCachedPost,
+  patchCachedPostInteraction,
   deleteCachedPost,
   enqueueSyncOp,
 } from '../db/database'
@@ -27,6 +28,8 @@ export function useFeed() {
   const [loading, setLoading] = useState(false)
   const [page, setPage]       = useState(1)
   const [hasMore, setHasMore] = useState(true)
+  const postsRef = useRef<Post[]>([])
+  postsRef.current = posts
 
   const initialised  = useRef(false)
   const loadingRef   = useRef(false)
@@ -110,8 +113,44 @@ export function useFeed() {
 
   // ── Remove post (optimistic + queue delete) ───────────────────────────────
   const removePost = useCallback(async (postId: string) => {
-    setPosts((prev) => prev.filter((p) => p.id !== postId))
-    await deleteCachedPost(postId).catch(() => {})
+    const snapshot = postsRef.current
+    const target = snapshot.find((p) => p.id === postId)
+    const originalPostId = target?.repostOfId ?? postId
+    const deletingOriginal = !target?.repostOfId
+    const related = snapshot.filter((p) => (p.repostOfId ?? p.id) === originalPostId)
+    const removedIds = new Set(
+      deletingOriginal ? [postId, ...related.map((p) => p.id)] : [postId],
+    )
+    const repostCount = Math.max(0, (target?._count?.reposts ?? 0) - 1)
+
+    setPosts((prev) => prev
+      .filter((p) => !removedIds.has(p.id))
+      .map((p) => !target?.repostOfId || (p.repostOfId ?? p.id) !== originalPostId ? p : {
+        ...p,
+        userReposted: false,
+        userRepostId: null,
+        _count: { ...p._count, reposts: repostCount },
+      }))
+
+    // O cache pode conter páginas já descarregadas da memória. Se o original
+    // desaparecer, as suas cópias deixam de existir no servidor e saem juntas.
+    const cached = await getCachedPosts().catch(() => [] as Post[])
+    const cachedRemoved = deletingOriginal
+      ? cached.filter((p) => (p.repostOfId ?? p.id) === originalPostId).map((p) => p.id)
+      : [postId]
+    await Promise.all([...new Set([...removedIds, ...cachedRemoved])]
+      .map((id) => deleteCachedPost(id).catch(() => {})))
+
+    if (target?.repostOfId) {
+      related.forEach((p) => {
+        if (p.id === postId) return
+        patchCachedPostInteraction(p.id, {
+          userReposted: false,
+          userRepostId: null,
+          _count: { ...p._count, reposts: repostCount },
+        }).catch(() => {})
+      })
+    }
 
     if (!isConnected()) {
       await enqueueSyncOp('post', postId, 'delete', {}).catch(() => {})
@@ -155,6 +194,53 @@ export function useFeed() {
     ))
   }, [])
 
+  // Um original e as suas cópias mostram sempre o mesmo total/estado de repost.
+  // A resposta canónica do servidor sobe da ActionBar e corrige todas as células
+  // montadas, não apenas a que recebeu o toque.
+  const updateRepostState = useCallback((result: RepostResult) => {
+    const {
+      postId: originalPostId,
+      reposted,
+      repostCount,
+      repostedPost,
+      removedPostId,
+    } = result
+    const affected = postsRef.current.filter((p) => (p.repostOfId ?? p.id) === originalPostId)
+    setPosts((prev) => {
+      const next = prev
+        .filter((p) => p.id !== removedPostId)
+        .map((p) => (p.repostOfId ?? p.id) !== originalPostId ? p : {
+          ...p,
+          userReposted: reposted,
+          userRepostId: repostedPost?.id ?? (reposted ? p.userRepostId : null),
+          _count: { ...p._count, reposts: repostCount },
+        })
+
+      // O PUT cria uma publicação real para a feed. Inserimo-la já, em vez de
+      // obrigar a pessoa a atualizar o ecrã para ver o próprio repost.
+      if (repostedPost && !next.some((p) => p.id === repostedPost.id)) {
+        const createdAt = new Date(repostedPost.createdAt).getTime()
+        const insertAt = next.findIndex((p) => new Date(p.createdAt).getTime() < createdAt)
+        if (insertAt < 0) return [...next, repostedPost]
+        const ordered = [...next]
+        ordered.splice(insertAt, 0, repostedPost)
+        return ordered
+      }
+      return next
+    })
+
+    affected.forEach((p) => {
+      if (p.id === removedPostId) return
+      patchCachedPostInteraction(p.id, {
+        userReposted: reposted,
+        userRepostId: repostedPost?.id ?? (reposted ? p.userRepostId : null),
+        _count: { ...p._count, reposts: repostCount },
+      }).catch(() => {})
+    })
+    if (repostedPost) cachePosts([repostedPost], 'synced').catch(() => {})
+    if (removedPostId) deleteCachedPost(removedPostId).catch(() => {})
+  }, [])
+
   // ── Purge expired posts from in-memory state every 30s ───────────────────
   useEffect(() => {
     const id = setInterval(() => {
@@ -184,5 +270,8 @@ export function useFeed() {
     return () => { socket.off('post:new', onNewPost) }
   }, [prependPost])
 
-  return { posts, loading, loadMore, refresh, prependPost, removePost, updatePost, incrementView, updatePostCounts }
+  return {
+    posts, loading, loadMore, refresh, prependPost, removePost, updatePost,
+    incrementView, updatePostCounts, updateRepostState,
+  }
 }

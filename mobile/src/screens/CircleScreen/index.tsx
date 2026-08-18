@@ -60,37 +60,60 @@ function SearchingDots({ color = '#fff' }: { color?: string }) {
 
 const EMOJI_SET  = ['❤️', '🔥', '😂', '😍', '⭐️', '💯', '🙌', '👀', '✨', '😎', '🎯', '🌸', '👑', '🕶️']
 const EMOJI_FRAC = 0.14
+const MAX_EMOJI_OVERLAYS = 16
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
 
 type Placed = { id: string; emoji: string; x: number; y: number }
+type ImageRect = { left: number; top: number; width: number; height: number }
+
+// As primeiras posições ficam perto do centro, mas não exactamente umas sobre
+// as outras. Antes, cada toque colocava o novo emoji no mesmo ponto e parecia
+// que o segundo/terceiro toque não tinha feito nada.
+const EMOJI_START_OFFSETS = [
+  { x: 0, y: 0 },
+  { x: 0.10, y: 0.08 },
+  { x: -0.10, y: 0.08 },
+  { x: 0.10, y: -0.08 },
+  { x: -0.10, y: -0.08 },
+] as const
 
 // Emoji arrastável sobre a pré-visualização
 function PlacedEmoji({
-  item, boundsW, boundsH, onCommit, onRemove,
+  item, imageRect, onCommit, onRemove,
 }: {
-  item: Placed; boundsW: number; boundsH: number
+  item: Placed
+  imageRect: ImageRect
   onCommit: (id: string, x: number, y: number) => void
   onRemove: (id: string) => void
 }) {
-  const size      = boundsW * EMOJI_FRAC
-  const startLeft = item.x * boundsW - size / 2
-  const startTop  = item.y * boundsH - size / 2
+  // x/y são fracções da FOTO original. A preview usa `cover`, por isso a foto
+  // pode ser maior do que o ecrã e ficar cortada nas bordas. Converter através
+  // de imageRect mantém a posição escolhida quando o post chega à feed.
+  const size      = imageRect.width * EMOJI_FRAC
+  const startLeft = imageRect.left + item.x * imageRect.width - size / 2
+  const startTop  = imageRect.top + item.y * imageRect.height - size / 2
   const pan       = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current
+
+  const resetPan = () => pan.setValue({ x: 0, y: 0 })
 
   const responder = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => false,
     onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 3 || Math.abs(g.dy) > 3,
     onPanResponderMove: (_, g) => pan.setValue({ x: g.dx, y: g.dy }),
     onPanResponderRelease: (_, g) => {
-      const cx = clamp((startLeft + g.dx + size / 2) / boundsW, 0.06, 0.94)
-      const cy = clamp((startTop + g.dy + size / 2) / boundsH, 0.06, 0.94)
-      pan.setValue({ x: 0, y: 0 })
+      const cx = clamp((startLeft + g.dx + size / 2 - imageRect.left) / imageRect.width, 0.06, 0.94)
+      const cy = clamp((startTop + g.dy + size / 2 - imageRect.top) / imageRect.height, 0.06, 0.94)
+      resetPan()
       onCommit(item.id, cx, cy)
     },
-  }), [startLeft, startTop, boundsW, boundsH, size])
+    onPanResponderTerminate: resetPan,
+  }), [startLeft, startTop, size, imageRect.left, imageRect.top, imageRect.width, imageRect.height])
 
   return (
-    <Animated.View style={[em.placed, { left: startLeft, top: startTop, transform: pan.getTranslateTransform() }]} {...responder.panHandlers}>
+    <Animated.View
+      style={[em.placed, { left: startLeft, top: startTop, transform: pan.getTranslateTransform() }]}
+      {...responder.panHandlers}
+    >
       <Text style={{ fontSize: size }}>{item.emoji}</Text>
       <TouchableOpacity style={em.del} onPress={() => onRemove(item.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
         <Ionicons name="close" size={11} color="#fff" />
@@ -134,6 +157,7 @@ export default function CircleScreen() {
   const [focused,    setFocused]    = useState(false)
   const [facing,     setFacing]     = useState<'back' | 'front'>('back')
   const [previewUri, setPreviewUri] = useState<string | null>(null)
+  const [previewSize, setPreviewSize] = useState<{ w: number; h: number } | null>(null)
   const [placed,     setPlaced]     = useState<Placed[]>([])
   const [previewBox, setPreviewBox] = useState({ w: 0, h: 0 })
   const [initDone,   setInitDone]   = useState(false)
@@ -172,6 +196,27 @@ export default function CircleScreen() {
   const photoCount  = members.filter((m) => m.photoUrl).length
   const joinedCount = members.filter((m) => m.status === 'JOINED').length
   const iHavePhoto = members.some((m) => m.user.id === myId && m.photoUrl)
+
+  // Caixa real ocupada pela foto em `contentFit="cover"`. Pode ultrapassar o
+  // ecrã nos lados ou em cima/baixo; os emojis usam esta geometria para guardar
+  // coordenadas relativas ao ficheiro, não relativas ao recorte da preview.
+  const previewImageRect = useMemo<ImageRect>(() => {
+    if (previewBox.w <= 0 || previewBox.h <= 0) {
+      return { left: 0, top: 0, width: 0, height: 0 }
+    }
+    if (!previewSize?.w || !previewSize.h) {
+      return { left: 0, top: 0, width: previewBox.w, height: previewBox.h }
+    }
+    const scale = Math.max(previewBox.w / previewSize.w, previewBox.h / previewSize.h)
+    const renderedW = previewSize.w * scale
+    const renderedH = previewSize.h * scale
+    return {
+      left: (previewBox.w - renderedW) / 2,
+      top: (previewBox.h - renderedH) / 2,
+      width: renderedW,
+      height: renderedH,
+    }
+  }, [previewBox.h, previewBox.w, previewSize?.h, previewSize?.w])
 
   // ── Janela para publicar ────────────────────────────────────────────────────
   // O botão não pode ficar para sempre: a foto vive um minuto e o momento passa.
@@ -300,6 +345,7 @@ export default function CircleScreen() {
       setFocused(false)
       setStatusBarStyle('dark')
       setPreviewUri(null)
+      setPreviewSize(null)
       callTimers.current.forEach(clearTimeout)
       callTimers.current = []
       socket?.off('circle:update', onUpdate)
@@ -429,7 +475,11 @@ export default function CircleScreen() {
     setShooting(true)
     try {
       const pic = await camRef.current.takePictureAsync({ quality: 0.8 })
-      if (pic?.uri) { setPreviewUri(pic.uri); setPlaced([]) }
+      if (pic?.uri) {
+        setPreviewUri(pic.uri)
+        setPreviewSize(pic.width && pic.height ? { w: pic.width, h: pic.height } : null)
+        setPlaced([])
+      }
     } catch {}
     setShooting(false)
   }
@@ -477,7 +527,17 @@ export default function CircleScreen() {
   }
 
   function addEmoji(emoji: string) {
-    setPlaced((p) => [...p, { id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, emoji, x: 0.5, y: 0.4 }])
+    setPlaced((current) => {
+      if (current.length >= MAX_EMOJI_OVERLAYS) return current
+      const offset = EMOJI_START_OFFSETS[current.length % EMOJI_START_OFFSETS.length]
+      const ring = Math.floor(current.length / EMOJI_START_OFFSETS.length)
+      return [...current, {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        emoji,
+        x: clamp(0.5 + offset.x + ring * 0.025, 0.08, 0.92),
+        y: clamp(0.4 + offset.y + ring * 0.025, 0.08, 0.92),
+      }]
+    })
   }
   function commitEmoji(id: string, x: number, y: number) {
     setPlaced((p) => p.map((it) => (it.id === id ? { ...it, x, y } : it)))
@@ -495,6 +555,7 @@ export default function CircleScreen() {
       const overlays: EmojiOverlay[] = placed.map(({ emoji, x, y }) => ({ emoji, x, y }))
       await circle.addCirclePhoto(sess.id, previewUri, overlays)
       setPreviewUri(null)
+      setPreviewSize(null)
       setPlaced([])
       // É aqui que a foto fica guardada no círculo. Sem este aviso a
       // pré-visualização desaparecia e nada dizia que tinha acontecido.
@@ -556,9 +617,15 @@ export default function CircleScreen() {
           style={StyleSheet.absoluteFill}
           onLayout={(ev) => setPreviewBox({ w: ev.nativeEvent.layout.width, h: ev.nativeEvent.layout.height })}
         >
-          <Image source={{ uri: previewUri }} style={StyleSheet.absoluteFill} contentFit="cover" />
-          {previewBox.h > 0 && placed.map((it) => (
-            <PlacedEmoji key={it.id} item={it} boundsW={previewBox.w} boundsH={previewBox.h} onCommit={commitEmoji} onRemove={removeEmoji} />
+          <Image source={{ uri: previewUri }} style={StyleSheet.absoluteFill} contentFit="cover" pointerEvents="none" />
+          {previewImageRect.width > 0 && placed.map((it) => (
+            <PlacedEmoji
+              key={it.id}
+              item={it}
+              imageRect={previewImageRect}
+              onCommit={commitEmoji}
+              onRemove={removeEmoji}
+            />
           ))}
         </View>
       )}
@@ -766,14 +833,23 @@ export default function CircleScreen() {
             keyboardShouldPersistTaps="handled"
           >
             {EMOJI_SET.map((emo) => (
-              <TouchableOpacity key={emo} style={s.emojiChip} onPress={() => addEmoji(emo)} activeOpacity={0.7}>
+              <TouchableOpacity
+                key={emo}
+                style={[s.emojiChip, placed.length >= MAX_EMOJI_OVERLAYS && s.emojiChipDisabled]}
+                onPress={() => addEmoji(emo)}
+                activeOpacity={0.7}
+                disabled={placed.length >= MAX_EMOJI_OVERLAYS}
+                accessibilityRole="button"
+                accessibilityLabel={emo}
+                accessibilityState={{ disabled: placed.length >= MAX_EMOJI_OVERLAYS }}
+              >
                 <Text style={s.emojiChipTxt}>{emo}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
 
           <View style={s.previewActions}>
-            <TouchableOpacity style={s.retake} onPress={() => { setPreviewUri(null); setPlaced([]) }} activeOpacity={0.85} disabled={submitting}>
+            <TouchableOpacity style={s.retake} onPress={() => { setPreviewUri(null); setPreviewSize(null); setPlaced([]) }} activeOpacity={0.85} disabled={submitting}>
               <Text style={s.retakeTxt}>{t.circle_retake}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={s.usePhoto} onPress={confirmPhoto} activeOpacity={0.85} disabled={submitting}>
@@ -840,7 +916,7 @@ export default function CircleScreen() {
 }
 
 const em = StyleSheet.create({
-  placed: { position: 'absolute' },
+  placed: { position: 'absolute', zIndex: 2, elevation: 2 },
   del: {
     position: 'absolute', top: -6, right: -6,
     width: 20, height: 20, borderRadius: 10,
@@ -1052,6 +1128,7 @@ const s = StyleSheet.create({
     width: 42, height: 42, borderRadius: 21,
     backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center',
   },
+  emojiChipDisabled: { opacity: 0.38 },
   emojiChipTxt: { fontSize: 22 },
   previewActions: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14, paddingHorizontal: 24,

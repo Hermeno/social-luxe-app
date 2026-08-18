@@ -166,7 +166,7 @@ export async function updateInterests(req: AuthRequest, res: Response) {
 
 export async function getUserPosts(req: AuthRequest, res: Response) {
   try {
-    const posts = await userService.getUserPosts(req.params.id)
+    const posts = await userService.getUserPosts(req.params.id, req.user!.userId)
     return ok(res, posts)
   } catch (err) { return handleError(res, err) }
 }
@@ -318,4 +318,3 @@ export async function getSuggestedUsers(req: AuthRequest, res: Response) {
     return ok(res, users)
   } catch (err) { return handleError(res, err) }
 }
-

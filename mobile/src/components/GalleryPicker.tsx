@@ -43,8 +43,6 @@ export default function GalleryPicker({ visible, onClose, onDone, maxSelection =
   const [perm, requestPerm] = MediaLibrary.usePermissions()
 
   const [assets,   setAssets]   = useState<MediaLibrary.Asset[]>([])
-  const [cursor,   setCursor]   = useState<string | undefined>(undefined)
-  const [hasMore,  setHasMore]  = useState(true)
   const [loading,  setLoading]  = useState(false)
   const [selected, setSelected] = useState<string[]>([])   // ids, por ordem de escolha
   const [resolving, setResolving] = useState(false)
@@ -54,23 +52,42 @@ export default function GalleryPicker({ visible, onClose, onDone, maxSelection =
   const loadingRef = useRef(false)
   const selectedAssetsRef = useRef<Map<string, MediaLibrary.Asset>>(new Map())
 
+  // Onde a paginação vai e se ainda há mais. Refs e não estado: nada disto se
+  // desenha, e como estado ficava preso dentro do `load` que a lista guardou.
+  // Ao trocar de pasta, o `onEndReached` disparava com o cursor da pasta
+  // anterior e pedia uma página sobreposta — as mesmas fotos outra vez, e o
+  // React a queixar-se de chaves repetidas.
+  const cursorRef  = useRef<string | undefined>(undefined)
+  const hasMoreRef = useRef(true)
+
   const load = useCallback(async (reset = false) => {
-    if (!reset && (loadingRef.current || !hasMore)) return
+    if (!reset && (loadingRef.current || !hasMoreRef.current)) return
     const generation = reset ? ++loadGeneration.current : loadGeneration.current
     loadingRef.current = true
     setLoading(true)
     try {
       const page = await MediaLibrary.getAssetsAsync({
         first:     PAGE,
-        after:     reset ? undefined : cursor,
+        after:     reset ? undefined : cursorRef.current,
         album:     albumId ?? undefined,
         mediaType: [MediaLibrary.MediaType.photo, MediaLibrary.MediaType.video],
         sortBy:    [MediaLibrary.SortBy.creationTime],
       })
       if (generation !== loadGeneration.current) return
-      setAssets((prev) => reset ? page.assets : [...prev, ...page.assets])
-      setCursor(page.endCursor)
-      setHasMore(page.hasNextPage)
+      // Mesmo com o cursor certo, o expo-media-library repete fotos entre
+      // páginas quando várias partilham a data de criação. Uma foto só entra
+      // na lista uma vez, venha ela de onde vier.
+      setAssets((prev) => {
+        const merged = reset ? page.assets : [...prev, ...page.assets]
+        const seen = new Set<string>()
+        return merged.filter((a) => {
+          if (seen.has(a.id)) return false
+          seen.add(a.id)
+          return true
+        })
+      })
+      cursorRef.current = page.endCursor
+      hasMoreRef.current = page.hasNextPage
     } catch {}
     finally {
       if (generation === loadGeneration.current) {
@@ -78,7 +95,7 @@ export default function GalleryPicker({ visible, onClose, onDone, maxSelection =
         setLoading(false)
       }
     }
-  }, [hasMore, cursor, albumId])
+  }, [albumId])
 
   // Pede permissão ao abrir
   useEffect(() => {
@@ -125,7 +142,9 @@ export default function GalleryPicker({ visible, onClose, onDone, maxSelection =
   // (Re)carrega os itens quando abre ou quando muda de pasta
   useEffect(() => {
     if (!visible || perm?.status !== 'granted') return
-    setAssets([]); setCursor(undefined); setHasMore(true)
+    setAssets([])
+    cursorRef.current = undefined
+    hasMoreRef.current = true
     load(true)
   }, [visible, perm?.status, albumId])
 

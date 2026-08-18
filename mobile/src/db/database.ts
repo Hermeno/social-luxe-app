@@ -192,6 +192,25 @@ export async function updateCachedPost(postId: string, partial: Partial<Post>): 
   )
 }
 
+/**
+ * Atualiza apenas estado vindo de uma interação confirmada pelo servidor.
+ * Ao contrário de `updateCachedPost`, não marca o post como conteúdo local
+ * pendente; isso permitiria que um contador congelasse e bloqueasse o próximo
+ * refresh da feed.
+ */
+export async function patchCachedPostInteraction(postId: string, partial: Partial<Post>): Promise<void> {
+  const database = await getDb()
+  const row = await database.getFirstAsync<{ data: string }>(
+    'SELECT data FROM posts_cache WHERE id = ?', [postId],
+  )
+  if (!row) return
+  const post = { ...JSON.parse(row.data), ...partial }
+  await database.runAsync(
+    `UPDATE posts_cache SET data = ?, updated_at = ? WHERE id = ?`,
+    [JSON.stringify(post), Date.now(), postId],
+  )
+}
+
 export async function deleteCachedPost(postId: string): Promise<void> {
   const database = await getDb()
   await database.runAsync(
@@ -214,7 +233,11 @@ export async function deleteCachedPostsByUser(userId: string): Promise<void> {
   const ids = rows.flatMap((row) => {
     try {
       const post = JSON.parse(row.data) as Post
-      return post.userId === userId || post.user?.id === userId ? [row.id] : []
+      return post.userId === userId
+        || post.user?.id === userId
+        || post.repostOriginalAuthorId === userId
+        ? [row.id]
+        : []
     } catch {
       return []
     }

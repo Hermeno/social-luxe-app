@@ -562,7 +562,9 @@ const s = StyleSheet.create({
   title:  { fontFamily: fonts.semiBold, fontSize: 15, color: '#FFFFFF', letterSpacing: -0.2 },
   done:   { fontFamily: fonts.semiBold, fontSize: 14, color: ACCENT },
 
-  stage: { flex: 1, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  // Sem `overflow: hidden`: as pegas do recorte assentam na beira da foto e
+  // recortá-las contra a tela deixava-as sem sítio onde ser tocadas.
+  stage: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   brokenTxt: { fontFamily: fonts.medium, fontSize: 13.5, color: '#9A9AA0', paddingHorizontal: 32, textAlign: 'center' },
 
   strip: { paddingHorizontal: 12, paddingVertical: 10, gap: 8 },

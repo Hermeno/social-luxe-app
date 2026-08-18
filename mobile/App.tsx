@@ -16,6 +16,7 @@ import { useAuthStore } from './src/store/auth.store'
 import { useI18n } from './src/i18n'
 import { useFriendsStore } from './src/store/friends.store'
 import { useGuestStore } from './src/store/guest.store'
+import { usePostFontsStore } from './src/store/postFonts.store'
 import { getMyFollowerCount } from './src/services/follow.service'
 import { api, onTokenExpired } from './src/services/api'
 
@@ -96,6 +97,10 @@ export default function App() {
   const [needsLanguage, setNeedsLanguage] = useState<boolean | null>(null)
 
   useEffect(() => { loadUser() }, [])
+
+  // Cursivas das publicações de texto: pedidas aqui para já estarem prontas
+  // quando a feed abrir, mas fora do `useFonts` — este não segura o splash.
+  useEffect(() => { usePostFontsStore.getState().ensureLoaded() }, [])
 
   useEffect(() => {
     AsyncStorage.getItem('@language')

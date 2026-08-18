@@ -10,11 +10,56 @@ import { sendPush } from '../services/notification.service'
 import { prisma } from '../config/database'
 import { uploadToCloudinaryWithMeta, uploadToCloudinary, withThumbnails } from '../utils/cloudinary.util'
 import { deleteFromR2, isR2Url } from '../utils/r2.util'
+import { parsePostFontKey } from '../utils/postFont.util'
 import { emitToUser } from '../socket'
+
+// Socket delivery follows the same visibility boundary as the feed. Without
+// this check, a newly created post could be reinserted in real time immediately
+// after the viewer had silenced or blocked its author.
+async function emitPostToVisibleFollowers(authorId: string, post: unknown) {
+  const followers = await prisma.follow.findMany({
+    where: { followingId: authorId },
+    select: { followerId: true },
+  })
+  if (followers.length === 0) return
+
+  const followerIds = followers.map((follow) => follow.followerId)
+  const now = new Date()
+  const [blocks, mutes] = await Promise.all([
+    prisma.block.findMany({
+      where: {
+        OR: [
+          { blockerId: authorId, blockedId: { in: followerIds } },
+          { blockedId: authorId, blockerId: { in: followerIds } },
+        ],
+      },
+      select: { blockerId: true, blockedId: true },
+    }),
+    prisma.userMute.findMany({
+      where: {
+        mutedId: authorId,
+        muterId: { in: followerIds },
+        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      },
+      select: { muterId: true },
+    }),
+  ])
+
+  const hiddenRecipients = new Set(mutes.map((mute) => mute.muterId))
+  for (const block of blocks) {
+    hiddenRecipients.add(block.blockerId === authorId ? block.blockedId : block.blockerId)
+  }
+
+  for (const followerId of followerIds) {
+    if (!hiddenRecipients.has(followerId)) emitToUser(followerId, 'post:new', post)
+  }
+}
 
 export async function createPost(req: AuthRequest, res: Response) {
   try {
     const { caption, bgColor } = req.body
+    // Só a whitelist entra; um valor inventado cai na fonte padrão.
+    const fontKey = parsePostFontKey(req.body.fontKey)
     const file = req.file
 
     let mediaUrl: string | null = null
@@ -57,25 +102,15 @@ export async function createPost(req: AuthRequest, res: Response) {
       isAnnouncement = true
     }
 
-    const post = await postService.createPost(req.user!.userId, mediaUrl, mediaType, caption, bgColor, partnerUserId ?? undefined, isAnnouncement, deviceModel ?? undefined, mediaWidth, mediaHeight)
+    const post = await postService.createPost(req.user!.userId, mediaUrl, mediaType, caption, bgColor, partnerUserId ?? undefined, isAnnouncement, deviceModel ?? undefined, mediaWidth, mediaHeight, mediaType === MediaType.TEXT ? fontKey : null)
 
     // Notify partner of post invitation
     if (partnerUserId) {
       sendPush(partnerUserId, '💑 Foste incluído/a num post', 'O teu parceiro publicou algo contigo. Aceita ou rejeita.', { type: 'post_partner_invite', postId: post.id }).catch(() => {})
     }
 
-    // ── Real-time push to all followers via WebSocket ─────────────────────────
-    ;(async () => {
-      try {
-        const followers = await prisma.follow.findMany({
-          where:  { followingId: req.user!.userId },
-          select: { followerId: true },
-        })
-        followers.forEach(({ followerId }) => {
-          emitToUser(followerId, 'post:new', post)
-        })
-      } catch {}
-    })()
+    // ── Real-time push to followers who may still see this author ─────────────
+    emitPostToVisibleFollowers(req.user!.userId, post).catch(() => {})
 
     return created(res, post)
   } catch (err: unknown) {
@@ -99,11 +134,11 @@ export async function getPartnerPostInvites(req: AuthRequest, res: Response) {
       where: { partnerUserId: req.user!.userId, partnerAccepted: false, deletedAt: null },
       include: {
         user: { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true } },
-        _count: { select: { likes: true, comments: true, shares: true, views: true } },
+        _count: { select: { likes: true, comments: true, shares: true, reposts: true, views: true } },
       },
       orderBy: { createdAt: 'desc' },
     })
-    return ok(res, withThumbnails(posts))
+    return ok(res, await postService.attachPostMeta(withThumbnails(posts), req.user!.userId))
   } catch (err) { return handleError(res, err, 'getPartnerPostInvites') }
 }
 
@@ -142,15 +177,7 @@ export async function createAlbum(req: AuthRequest, res: Response) {
     const sizes = uploaded.map((u) => ({ w: u.width, h: u.height }))
     const post = await postService.createAlbumPost(req.user!.userId, urls, caption?.trim() || undefined, deviceModel, undefined, sizes)
 
-    ;(async () => {
-      try {
-        const followers = await prisma.follow.findMany({
-          where:  { followingId: req.user!.userId },
-          select: { followerId: true },
-        })
-        followers.forEach(({ followerId }) => emitToUser(followerId, 'post:new', post))
-      } catch {}
-    })()
+    emitPostToVisibleFollowers(req.user!.userId, post).catch(() => {})
 
     return created(res, post)
   } catch (err: unknown) {
@@ -271,7 +298,7 @@ export async function deletePost(req: AuthRequest, res: Response) {
     const result = await postService.deletePost(req.user!.userId, req.params.id)
 
     // Delete media from storage (fire-and-forget)
-    if (result.mediaUrl) {
+    if (result.deleteMedia && result.mediaUrl) {
       ;(async () => {
         try {
           if (isR2Url(result.mediaUrl)) {
@@ -311,8 +338,15 @@ export async function sharePost(req: AuthRequest, res: Response) {
 
 export async function repostPost(req: AuthRequest, res: Response) {
   try {
-    const post = await postService.repostPost(req.user!.userId, req.params.id)
-    return created(res, post)
+    const result = await postService.repostPost(req.user!.userId, req.params.id)
+    return created(res, result)
+  } catch (err) { return handleError(res, err) }
+}
+
+export async function removeRepost(req: AuthRequest, res: Response) {
+  try {
+    const result = await postService.removeRepost(req.user!.userId, req.params.id)
+    return ok(res, result)
   } catch (err) { return handleError(res, err) }
 }
 

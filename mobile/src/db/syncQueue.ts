@@ -19,24 +19,29 @@ import {
   deleteCachedPost,
 } from './database'
 import { clearOutboxMedia, type OutboxPost } from './outbox'
-import { createPost, createAlbum } from '../services/post.service'
+import { createPost, createAlbum, setRepost } from '../services/post.service'
 import { isConnected } from '../services/netinfo.service'
 import { toggleFollow } from '../services/follow.service'
 
-let processing = false
+let processingPromise: Promise<void> | null = null
 
-export async function processQueue(): Promise<void> {
-  if (processing || !isConnected()) return
-  processing = true
+export function processQueue(): Promise<void> {
+  if (!isConnected()) return Promise.resolve()
+  // Quem chega durante um flush espera o mesmo trabalho. Isto é importante
+  // para o refresh não pedir a feed antes de um repost offline terminar.
+  if (processingPromise) return processingPromise
 
-  try {
-    await flushLikes()
-    await flushGenericQueue()
-  } catch (err) {
-    console.log('[SyncQueue] Error during flush:', err)
-  } finally {
-    processing = false
-  }
+  processingPromise = (async () => {
+    try {
+      await flushLikes()
+      await flushGenericQueue()
+    } catch (err) {
+      console.log('[SyncQueue] Error during flush:', err)
+    } finally {
+      processingPromise = null
+    }
+  })()
+  return processingPromise
 }
 
 // ── Flush pending likes ────────────────────────────────────────────────────────
@@ -90,6 +95,7 @@ async function flushGenericQueue(): Promise<void> {
                 out.partnerUserId,
                 out.isAnnouncement,
                 out.deviceModel,
+                out.fontKey,
               )
           // Ordem importa: primeiro grava o real, só depois apaga o temporário.
           // Ao contrário, uma falha a meio deixava a feed sem post nenhum.
@@ -143,6 +149,15 @@ async function flushGenericQueue(): Promise<void> {
           const res  = await api.post(`/posts/comments/${op.entityId}/like`)
           const got  = res.data?.data?.liked ?? res.data?.liked
           if (got !== want) await api.post(`/posts/comments/${op.entityId}/like`)
+          break
+        }
+        // Repost usa estado explícito (PUT liga / DELETE desliga), portanto é
+        // naturalmente idempotente e seguro para repetir depois de uma falha.
+        case 'repost:update': {
+          const want = (op.payload as any).reposted as boolean
+          const result = await setRepost(op.entityId, want)
+          if (result.repostedPost) await cachePosts([result.repostedPost], 'synced')
+          if (result.removedPostId) await deleteCachedPost(result.removedPostId)
           break
         }
         default:

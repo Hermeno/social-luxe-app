@@ -1,9 +1,15 @@
 /**
  * O retângulo de recorte que se arrasta por cima da foto.
  *
- * Vive à parte do resto do editor de propósito: arrastar um canto muda estado a
- * cada dedo movido, e essa avalanche de renders tem de ficar contida aqui em
- * baixo em vez de repintar a tela do Skia que está por trás.
+ * Oito pegas: quatro cantos e quatro lados. Puxar um lado mexe só naquele lado
+ * — é o gesto que toda a gente tenta primeiro para "baixar o topo" ou "apertar
+ * a direita". Com um formato fixo os lados desaparecem: um rácio preso não
+ * sobrevive a um lado a mexer sozinho, e uma pega que não obedece é pior do que
+ * pega nenhuma.
+ *
+ * Vive à parte do resto do editor de propósito: arrastar muda estado a cada
+ * dedo movido, e essa avalanche de renders tem de ficar contida aqui em baixo
+ * em vez de repintar a tela do Skia que está por trás.
  *
  * Usa PanResponder — o gesto tem de funcionar dentro de um Modal, onde o
  * gesture-handler precisaria de raiz própria, e o worklets do Reanimated não
@@ -25,12 +31,32 @@ interface Props {
   onChange: (crop: CropRect) => void
 }
 
-type Grip = 'tl' | 'tr' | 'bl' | 'br' | 'move'
+type Grip = 'tl' | 'tr' | 'bl' | 'br' | 't' | 'b' | 'l' | 'r' | 'move'
 
-const MIN = 56          // lado mínimo do recorte, em pontos
-const HANDLE = 44       // área de toque de cada canto
+/** Que lados do retângulo cada pega arrasta. */
+const PULLS: Record<Exclude<Grip, 'move'>, { l: boolean; r: boolean; t: boolean; b: boolean }> = {
+  tl: { l: true,  r: false, t: true,  b: false },
+  tr: { l: false, r: true,  t: true,  b: false },
+  bl: { l: true,  r: false, t: false, b: true  },
+  br: { l: false, r: true,  t: false, b: true  },
+  t:  { l: false, r: false, t: true,  b: false },
+  b:  { l: false, r: false, t: false, b: true  },
+  l:  { l: true,  r: false, t: false, b: false },
+  r:  { l: false, r: true,  t: false, b: false },
+}
 
-const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi)
+const MIN = 56      // lado mínimo do recorte, em pontos
+const HANDLE = 46   // lado da área de toque de um canto
+// A pega fica com um terço de fora e dois terços de dentro. Toda para fora
+// ficaria cortada pela beira do ecrã quando a foto o enche — e uma pega que
+// não se pode tocar é o mesmo que não existir.
+const OUT = 14
+
+/** Aperta um valor entre dois limites, mesmo que venham trocados. */
+function clamp(v: number, lo: number, hi: number): number {
+  if (hi < lo) return lo
+  return Math.min(Math.max(v, lo), hi)
+}
 
 function toPx(c: CropRect, f: Frame): PxRect {
   return { x: f.x + c.x * f.width, y: f.y + c.y * f.height, w: c.w * f.width, h: c.h * f.height }
@@ -63,7 +89,7 @@ export default function CropOverlay({ frame, crop, aspect, onChange }: Props) {
 
   const write = useCallback((r: PxRect) => { rectRef.current = r; setRect(r) }, [])
 
-  // Recorte vindo de fora (mudou de foto, rodou, carregou em repor)
+  // Recorte vindo de fora (mudou de foto, rodou, escolheu formato, repôs)
   useEffect(() => {
     const next = toPx(crop, frame)
     const cur = rectRef.current
@@ -78,57 +104,62 @@ export default function CropOverlay({ frame, crop, aspect, onChange }: Props) {
     const f = frameRef.current
     const asp = aspectRef.current
 
+    const fl = f.x
+    const ft = f.y
+    const fr = f.x + f.width
+    const fb = f.y + f.height
+
     if (grip === 'move') {
       write({
-        x: clamp(s.x + dx, f.x, f.x + f.width - s.w),
-        y: clamp(s.y + dy, f.y, f.y + f.height - s.h),
+        x: clamp(s.x + dx, fl, fr - s.w),
+        y: clamp(s.y + dy, ft, fb - s.h),
         w: s.w, h: s.h,
       })
       return
     }
 
-    const pullsLeft = grip === 'tl' || grip === 'bl'
-    const pullsTop  = grip === 'tl' || grip === 'tr'
+    const pulls = PULLS[grip]
+    let left   = s.x
+    let top    = s.y
+    let right  = s.x + s.w
+    let bottom = s.y + s.h
 
-    // O canto oposto fica preso; é dele que o retângulo cresce.
-    const anchorX = pullsLeft ? s.x + s.w : s.x
-    const anchorY = pullsTop  ? s.y + s.h : s.y
-    const dirX = pullsLeft ? -1 : 1
-    const dirY = pullsTop  ? -1 : 1
+    if (pulls.l) left   = clamp(s.x + dx,       fl,        right - MIN)
+    if (pulls.r) right  = clamp(s.x + s.w + dx, left + MIN, fr)
+    if (pulls.t) top    = clamp(s.y + dy,       ft,        bottom - MIN)
+    if (pulls.b) bottom = clamp(s.y + s.h + dy, top + MIN,  fb)
 
-    const maxW = Math.max(1, dirX > 0 ? f.x + f.width - anchorX : anchorX - f.x)
-    const maxH = Math.max(1, dirY > 0 ? f.y + f.height - anchorY : anchorY - f.y)
-
-    let w = dirX > 0 ? s.w + dx : s.w - dx
-    let h = dirY > 0 ? s.h + dy : s.h - dy
-
-    if (asp != null) {
-      // Puxar para lá do canto oposto daria lados negativos e, a seguir,
-      // divisões que viram o retângulo do avesso. Nada abaixo de 1.
-      w = Math.max(w, 1)
-      h = Math.max(h, 1)
-      // Dois eixos, um só rácio: manda o que o dedo puxou mais longe.
-      w = Math.max(w, h * asp)
-      h = w / asp
-      const shrink = Math.min(1, maxW / w, maxH / h)
-      w *= shrink
-      h = w / asp
-      const grow = Math.max(MIN / Math.max(w, 1), MIN / Math.max(h, 1))
-      if (grow > 1) {
-        w = Math.min(w * grow, maxW)
+    // Com o rácio preso só há cantos, e o canto oposto fica ancorado. Manda o
+    // eixo em que o dedo andou mais: arrastar para o lado governa a largura,
+    // arrastar para cima ou para baixo governa a altura. O outro segue.
+    if (asp !== null) {
+      let w: number
+      let h: number
+      if (Math.abs(dx) >= Math.abs(dy)) {
+        w = Math.max(right - left, 1)
         h = w / asp
-        if (h > maxH) { h = maxH; w = h * asp }
+      } else {
+        h = Math.max(bottom - top, 1)
+        w = h * asp
       }
-    } else {
-      w = clamp(w, Math.min(MIN, maxW), maxW)
-      h = clamp(h, Math.min(MIN, maxH), maxH)
+
+      const maxW = Math.max(1, pulls.l ? right - fl : fr - left)
+      const maxH = Math.max(1, pulls.t ? bottom - ft : fb - top)
+      w = Math.min(w, maxW, maxH * asp)
+      h = w / asp
+
+      if (w < MIN || h < MIN) {
+        w = Math.min(Math.max(MIN, MIN * asp), maxW, maxH * asp)
+        h = w / asp
+      }
+
+      if (pulls.l) left = right - w
+      else right = left + w
+      if (pulls.t) top = bottom - h
+      else bottom = top + h
     }
 
-    write({
-      x: dirX > 0 ? anchorX : anchorX - w,
-      y: dirY > 0 ? anchorY : anchorY - h,
-      w, h,
-    })
+    write({ x: left, y: top, w: right - left, h: bottom - top })
   }, [write])
 
   const responders = useMemo(() => {
@@ -144,14 +175,21 @@ export default function CropOverlay({ frame, crop, aspect, onChange }: Props) {
     return {
       move: build('move'),
       tl: build('tl'), tr: build('tr'), bl: build('bl'), br: build('br'),
+      t: build('t'), b: build('b'), l: build('l'), r: build('r'),
     }
   }, [drag])
 
   const { x, y, w, h } = rect
-  const corner = (cx: number, cy: number) => ({
+  const sides = aspect === null
+
+  // Os lados ficam entre os cantos, para não haver duas pegas no mesmo sítio.
+  const barW = Math.max(0, w - HANDLE * 1.6)
+  const barH = Math.max(0, h - HANDLE * 1.6)
+
+  const cornerBox = (cx: number, cy: number, insetX: 1 | -1, insetY: 1 | -1) => ({
     position: 'absolute' as const,
-    left: cx - HANDLE / 2,
-    top: cy - HANDLE / 2,
+    left: cx - (insetX > 0 ? OUT : HANDLE - OUT),
+    top:  cy - (insetY > 0 ? OUT : HANDLE - OUT),
     width: HANDLE,
     height: HANDLE,
   })
@@ -177,18 +215,52 @@ export default function CropOverlay({ frame, crop, aspect, onChange }: Props) {
         <View pointerEvents="none" style={[s.gridH, { top: (h * 2) / 3 }]} />
       </View>
 
-      {/* Cantos — área de toque generosa, marca fina */}
-      <View {...responders.tl.panHandlers} style={corner(x, y)}>
-        <View style={[s.grip, s.gripTL]} pointerEvents="none" />
+      {/* Lados — só com formato livre, onde um lado pode mexer-se sozinho */}
+      {sides && barW > 0 && (
+        <>
+          <View
+            {...responders.t.panHandlers}
+            style={{ position: 'absolute', left: x + (w - barW) / 2, top: y - OUT, width: barW, height: HANDLE }}
+          >
+            <View style={[s.barH, { top: OUT - 1.5 }]} pointerEvents="none" />
+          </View>
+          <View
+            {...responders.b.panHandlers}
+            style={{ position: 'absolute', left: x + (w - barW) / 2, top: y + h - (HANDLE - OUT), width: barW, height: HANDLE }}
+          >
+            <View style={[s.barH, { top: HANDLE - OUT - 1.5 }]} pointerEvents="none" />
+          </View>
+        </>
+      )}
+      {sides && barH > 0 && (
+        <>
+          <View
+            {...responders.l.panHandlers}
+            style={{ position: 'absolute', left: x - OUT, top: y + (h - barH) / 2, width: HANDLE, height: barH }}
+          >
+            <View style={[s.barV, { left: OUT - 1.5 }]} pointerEvents="none" />
+          </View>
+          <View
+            {...responders.r.panHandlers}
+            style={{ position: 'absolute', left: x + w - (HANDLE - OUT), top: y + (h - barH) / 2, width: HANDLE, height: barH }}
+          >
+            <View style={[s.barV, { left: HANDLE - OUT - 1.5 }]} pointerEvents="none" />
+          </View>
+        </>
+      )}
+
+      {/* Cantos — sempre presentes, e sempre por cima dos lados */}
+      <View {...responders.tl.panHandlers} style={cornerBox(x, y, 1, 1)}>
+        <View style={[s.grip, { top: OUT - 1.5, left: OUT - 1.5, borderTopWidth: 3, borderLeftWidth: 3 }]} pointerEvents="none" />
       </View>
-      <View {...responders.tr.panHandlers} style={corner(x + w, y)}>
-        <View style={[s.grip, s.gripTR]} pointerEvents="none" />
+      <View {...responders.tr.panHandlers} style={cornerBox(x + w, y, -1, 1)}>
+        <View style={[s.grip, { top: OUT - 1.5, right: OUT - 1.5, borderTopWidth: 3, borderRightWidth: 3 }]} pointerEvents="none" />
       </View>
-      <View {...responders.bl.panHandlers} style={corner(x, y + h)}>
-        <View style={[s.grip, s.gripBL]} pointerEvents="none" />
+      <View {...responders.bl.panHandlers} style={cornerBox(x, y + h, 1, -1)}>
+        <View style={[s.grip, { bottom: OUT - 1.5, left: OUT - 1.5, borderBottomWidth: 3, borderLeftWidth: 3 }]} pointerEvents="none" />
       </View>
-      <View {...responders.br.panHandlers} style={corner(x + w, y + h)}>
-        <View style={[s.grip, s.gripBR]} pointerEvents="none" />
+      <View {...responders.br.panHandlers} style={cornerBox(x + w, y + h, -1, -1)}>
+        <View style={[s.grip, { bottom: OUT - 1.5, right: OUT - 1.5, borderBottomWidth: 3, borderRightWidth: 3 }]} pointerEvents="none" />
       </View>
     </View>
   )
@@ -202,9 +274,7 @@ const s = StyleSheet.create({
   gridV:  { position: 'absolute', top: 0, bottom: 0, width: StyleSheet.hairlineWidth, backgroundColor: LINE },
   gridH:  { position: 'absolute', left: 0, right: 0, height: StyleSheet.hairlineWidth, backgroundColor: LINE },
 
-  grip:   { position: 'absolute', width: 22, height: 22, borderColor: '#FFFFFF' },
-  gripTL: { top: HANDLE / 2 - 2, left: HANDLE / 2 - 2, borderTopWidth: 3, borderLeftWidth: 3 },
-  gripTR: { top: HANDLE / 2 - 2, right: HANDLE / 2 - 2, borderTopWidth: 3, borderRightWidth: 3 },
-  gripBL: { bottom: HANDLE / 2 - 2, left: HANDLE / 2 - 2, borderBottomWidth: 3, borderLeftWidth: 3 },
-  gripBR: { bottom: HANDLE / 2 - 2, right: HANDLE / 2 - 2, borderBottomWidth: 3, borderRightWidth: 3 },
+  grip:   { position: 'absolute', width: 24, height: 24, borderColor: '#FFFFFF' },
+  barH:   { position: 'absolute', left: 0, right: 0, height: 3, backgroundColor: '#FFFFFF' },
+  barV:   { position: 'absolute', top: 0, bottom: 0, width: 3, backgroundColor: '#FFFFFF' },
 })

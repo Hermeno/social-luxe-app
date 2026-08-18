@@ -1,11 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ActivityIndicator, Animated, KeyboardAvoidingView, Modal, Platform, Pressable,
+  ActivityIndicator, Animated, Modal, Pressable,
   StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native'
+// O KeyboardAvoidingView do React Native falha em edge-to-edge e, no Android,
+// não faz nada sem `behavior`. Este lê o inset real do teclado (WindowInsets
+// IME) através do KeyboardProvider que envolve a app — é o mesmo que a folha
+// de comentários já usa.
+import { KeyboardAvoidingView, useKeyboardState } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import FeedIcon from '../../components/FeedIcon'
+import FeedIcon, { type FeedIconWeight } from '../../components/FeedIcon'
 import Icon, { type IconName } from '../../components/Icon'
 import { confirm } from '../../components/confirm'
 import { API_BASE } from '../../config'
@@ -13,6 +18,7 @@ import { deleteCachedPostsByUser } from '../../db/database'
 import useReducedMotionPreference from '../../hooks/useReducedMotionPreference'
 import { useT } from '../../i18n'
 import { blockUser } from '../../services/block.service'
+import { muteUser, type MuteDuration } from '../../services/mute.service'
 import { isPostSaved, toggleSavedPost } from '../../services/savedPost.service'
 import { useAuthStore } from '../../store/auth.store'
 import { colors, fonts } from '../../theme'
@@ -25,9 +31,11 @@ interface Props {
   onDeleted?: (id: string) => void
   onEdited?: (id: string, caption: string) => void
   onProfileBlocked?: (userId: string) => void
+  onAuthorMuted?: (userId: string) => void
   onBlockingChange?: (open: boolean) => void
   rail?: boolean
   triggerSize?: number
+  triggerWeight?: FeedIconWeight
 }
 
 interface OptionRowProps {
@@ -81,8 +89,8 @@ function resolveMedia(url: string): string {
 }
 
 export default function PostOptionsMenu({
-  post, onDeleted, onEdited, onProfileBlocked, onBlockingChange,
-  rail = false, triggerSize = 25,
+  post, onDeleted, onEdited, onProfileBlocked, onAuthorMuted, onBlockingChange,
+  rail = false, triggerSize = 25, triggerWeight = 'regular',
 }: Props) {
   const { bottom: safeBottom } = useSafeAreaInsets()
   const t = useT()
@@ -99,6 +107,11 @@ export default function PostOptionsMenu({
   const [saving, setSaving] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [blocking, setBlocking] = useState(false)
+  const [showMuteChoices, setShowMuteChoices] = useState(false)
+  const [muting, setMuting] = useState<MuteDuration | null>(null)
+
+  // O campo já não precisa da área segura do fundo quando o teclado a cobre.
+  const keyboardOpen = useKeyboardState().isVisible
 
   const menuScale = useRef(new Animated.Value(0.92)).current
   const menuOp = useRef(new Animated.Value(0)).current
@@ -125,14 +138,15 @@ export default function PostOptionsMenu({
   }, [menuOp, menuScale, reduceMotion, showMenu])
 
   useEffect(() => {
-    onBlockingChange?.(showMenu || editMode || confirming || blocking)
+    onBlockingChange?.(showMenu || showMuteChoices || editMode || confirming || blocking || !!muting)
     // A identidade do callback não representa uma mudança de bloqueio.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [blocking, confirming, editMode, showMenu])
+  }, [blocking, confirming, editMode, muting, showMenu, showMuteChoices])
 
   useEffect(() => {
     let active = true
     setShowMenu(false)
+    setShowMuteChoices(false)
     setEditMode(false)
     setConfirming(false)
     setEditText(post.caption ?? '')
@@ -212,6 +226,26 @@ export default function PostOptionsMenu({
     }
   }
 
+  async function handleMuteAuthor(duration: MuteDuration) {
+    if (!currentUserId || isOwnPost || post.isAnnouncement || muting) return
+    setMuting(duration)
+    try {
+      await muteUser(post.user.id, duration)
+      await deleteCachedPostsByUser(post.user.id).catch(() => {})
+      setShowMuteChoices(false)
+      onAuthorMuted?.(post.user.id)
+      toast.success(
+        t.feed_mute_done_title,
+        (duration === 'ONE_MONTH' ? t.feed_mute_month_done : t.feed_mute_forever_done)
+          .replace('{name}', post.user.name),
+      )
+    } catch {
+      toast.error(t.error, t.feed_mute_fail)
+    } finally {
+      setMuting(null)
+    }
+  }
+
   async function handleDelete() {
     if (!onDeleted) return
     setConfirming(true)
@@ -258,7 +292,12 @@ export default function PostOptionsMenu({
         accessibilityLabel={t.feed_options_title}
       >
         <View style={[s.triggerIconStage, rail && s.triggerIconStageRail]}>
-          <FeedIcon name="setimo-nav-currentcolor" size={triggerSize} color="#fff" />
+          <FeedIcon
+            name="option"
+            size={triggerSize}
+            color="#fff"
+            weight={triggerWeight}
+          />
         </View>
         {rail && <View style={s.triggerMetricSlot} pointerEvents="none" />}
       </TouchableOpacity>
@@ -311,6 +350,15 @@ export default function PostOptionsMenu({
                 <>
                   <View style={s.divider} />
                   <OptionRow
+                    icon="eye"
+                    label={t.feed_mute_posts}
+                    onPress={() => {
+                      setShowMenu(false)
+                      setShowMuteChoices(true)
+                    }}
+                  />
+                  <View style={s.divider} />
+                  <OptionRow
                     icon="ban"
                     label={t.feed_block_profile}
                     danger
@@ -347,14 +395,74 @@ export default function PostOptionsMenu({
       </Modal>
 
       <Modal
+        visible={showMuteChoices}
+        transparent
+        statusBarTranslucent
+        animationType={reduceMotion ? 'none' : 'fade'}
+        onRequestClose={() => { if (!muting) setShowMuteChoices(false) }}
+      >
+        <Pressable
+          style={[s.backdrop, { paddingBottom: Math.max(safeBottom, 12) }]}
+          onPress={() => { if (!muting) setShowMuteChoices(false) }}
+        >
+          <View
+            style={s.sheet}
+            onStartShouldSetResponder={() => true}
+            accessibilityViewIsModal
+            importantForAccessibility="yes"
+          >
+            <View style={s.grabber} />
+            <View style={s.sheetHeader}>
+              <Text style={s.sheetTitle} numberOfLines={2}>
+                {t.feed_mute_title.replace('{name}', post.user.name)}
+              </Text>
+              <View style={s.sheetSignal} pointerEvents="none">
+                <View style={s.sheetSignalLine} />
+                <View style={s.sheetSignalDot} />
+              </View>
+            </View>
+            <Text style={s.muteDescription}>{t.feed_mute_description}</Text>
+            <View style={s.optionList}>
+              <OptionRow
+                icon="hourglass"
+                label={t.feed_mute_one_month}
+                loading={muting === 'ONE_MONTH'}
+                disabled={!!muting && muting !== 'ONE_MONTH'}
+                onPress={() => handleMuteAuthor('ONE_MONTH')}
+              />
+              <View style={s.divider} />
+              <OptionRow
+                icon="eye"
+                label={t.feed_mute_forever}
+                loading={muting === 'FOREVER'}
+                disabled={!!muting && muting !== 'FOREVER'}
+                onPress={() => handleMuteAuthor('FOREVER')}
+              />
+            </View>
+            <TouchableOpacity
+              style={s.muteCancel}
+              onPress={() => setShowMuteChoices(false)}
+              disabled={!!muting}
+              activeOpacity={0.75}
+              accessibilityRole="button"
+              accessibilityLabel={t.cancel}
+            >
+              <Text style={s.muteCancelText}>{t.cancel}</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
+
+      <Modal
         visible={editMode}
         transparent
+        statusBarTranslucent
         animationType={reduceMotion ? 'none' : 'slide'}
         onRequestClose={() => setEditMode(false)}
       >
-        <KeyboardAvoidingView style={s.editOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAvoidingView style={s.editOverlay} behavior="padding">
           <Pressable style={s.editBackdrop} onPress={() => setEditMode(false)} />
-          <View style={[s.editSheet, { paddingBottom: Math.max(safeBottom, 14) }]}>
+          <View style={[s.editSheet, { paddingBottom: keyboardOpen ? 14 : Math.max(safeBottom, 14) }]}>
             <View style={s.editGrabber} />
             <View style={s.editRow}>
               <TextInput
@@ -507,6 +615,28 @@ const s = StyleSheet.create({
     fontSize: 9.5,
     letterSpacing: 1.1,
     textTransform: 'uppercase',
+  },
+  muteDescription: {
+    marginTop: -2,
+    marginBottom: 12,
+    paddingHorizontal: 8,
+    color: colors.gray500,
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  muteCancel: {
+    minHeight: 48,
+    marginTop: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    backgroundColor: '#F1F1EE',
+  },
+  muteCancelText: {
+    color: colors.gray600,
+    fontFamily: fonts.bold,
+    fontSize: 14,
   },
   editOverlay: { flex: 1, justifyContent: 'flex-end' },
   editBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.38)' },

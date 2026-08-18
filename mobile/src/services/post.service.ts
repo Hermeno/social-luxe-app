@@ -1,5 +1,5 @@
 import { api, uploadApi } from './api'
-import { ApiResponse, Post, Comment } from '../types'
+import { ApiResponse, Post, Comment, RepostResult } from '../types'
 
 export async function getFeed(page = 1): Promise<Post[]> {
   const res = await api.get<ApiResponse<Post[]>>(`/posts/feed?page=${page}`)
@@ -34,9 +34,10 @@ export async function createPost(
   partnerUserId?: string,
   isAnnouncement?: boolean,
   deviceModel?: string,
+  fontKey?: string,
 ) {
   if (mediaType === 'TEXT') {
-    const res = await api.post<ApiResponse<Post>>('/posts', { caption, bgColor, partnerUserId, isAnnouncement, deviceModel })
+    const res = await api.post<ApiResponse<Post>>('/posts', { caption, bgColor, partnerUserId, isAnnouncement, deviceModel, fontKey })
     return res.data.data
   }
 
@@ -96,9 +97,11 @@ export async function toggleCommentLike(commentId: string): Promise<{ liked: boo
   return res.data.data
 }
 
-// Repost — republica o post na tua própria feed (o servidor duplica o conteúdo)
-export async function repostPost(postId: string): Promise<Post> {
-  const res = await api.post<ApiResponse<Post>>(`/posts/${postId}/repost`)
+// Estado explícito e idempotente: PUT liga; DELETE desliga.
+export async function setRepost(postId: string, reposted: boolean): Promise<RepostResult> {
+  const res = reposted
+    ? await api.put<ApiResponse<RepostResult>>(`/posts/${postId}/repost`)
+    : await api.delete<ApiResponse<RepostResult>>(`/posts/${postId}/repost`)
   return res.data.data
 }
 

@@ -13,6 +13,8 @@ const SAFE_MESSAGES = new Set([
   'Not authorised',
   'Already following',
   'Not following',
+  'Cannot block yourself',
+  'Cannot mute yourself',
   'Already friends',
   'Friend request already sent',
   'Insufficient coins',

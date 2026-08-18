@@ -14,7 +14,8 @@ import { colors, fonts } from '../../theme'
 import { API_BASE } from '../../config'
 import { useT } from '../../i18n'
 import AvatarImage from '../../components/AvatarImage'
-import Icon, { type IconName } from '../../components/Icon'
+import Icon from '../../components/Icon'
+import FeedIcon, { type FeedIconName } from '../../components/FeedIcon'
 
 const { height: SCREEN_H } = Dimensions.get('window')
 
@@ -28,7 +29,7 @@ function resolveMedia(url: string | null | undefined): string {
 // O cadeado é o ponto — ver o que existe é o que dá vontade de entrar.
 function LockedAction({
   name, value, label, onPress,
-}: { name: IconName; value?: number; label: string; onPress: () => void }) {
+}: { name: FeedIconName; value?: number; label: string; onPress: () => void }) {
   return (
     <TouchableOpacity
       style={s.action}
@@ -37,7 +38,7 @@ function LockedAction({
       accessibilityRole="button"
       accessibilityLabel={label}
     >
-      <Icon name={name} size={27} color="#fff" strokeWidth={1.9} />
+      <FeedIcon name={name} size={27} color="#fff" />
       {value !== undefined && value > 0 && <Text style={s.actionCount}>{value}</Text>}
     </TouchableOpacity>
   )
@@ -98,9 +99,10 @@ function GuestItem({
       </View>
 
       <View style={[s.actions, { bottom: safeBottom + 150 }]}>
-        <LockedAction name="heart"   value={post._count.likes}    label={t.guest_locked} onPress={onRequireAccount} />
-        <LockedAction name="message" value={post._count.comments} label={t.guest_locked} onPress={onRequireAccount} />
-        <LockedAction name="send"                                 label={t.guest_locked} onPress={onRequireAccount} />
+        {/* Mesmos glifos e tamanho da rail da feed principal (ver ActionBar). */}
+        <LockedAction name="heart"        value={post._count.likes}    label={t.guest_locked} onPress={onRequireAccount} />
+        <LockedAction name="chat-outline" value={post._count.comments} label={t.guest_locked} onPress={onRequireAccount} />
+        <LockedAction name="share"                                     label={t.guest_locked} onPress={onRequireAccount} />
       </View>
 
       <View style={[s.meta, { bottom: safeBottom + 96 }]}>

@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import {
   View, Text, ActivityIndicator, FlatList, StyleSheet, Dimensions, Keyboard, TouchableOpacity,
-  type ViewToken,
+  type LayoutChangeEvent, type ViewToken,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import FeedIcon from '../../components/FeedIcon'
@@ -9,7 +9,7 @@ import Icon from '../../components/Icon'
 import { setStatusBarStyle } from 'expo-status-bar'
 import { useNavigation, useFocusEffect } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
-import { Post } from '../../types'
+import { Post, type RepostResult } from '../../types'
 import { useFeed } from '../../hooks/useFeed'
 import { useFeedStore } from '../../store/feed.store'
 import { useNotificationStore } from '../../store/notification.store'
@@ -24,8 +24,11 @@ import FeedHeader, { FeedUserGroup as UserGroup } from './FeedHeader'
 import FeedItem from './FeedItem'
 import CommentSheet from '../../components/CommentSheet'
 import useReducedMotionPreference from '../../hooks/useReducedMotionPreference'
+import { BLOCKED_USER_IDS_CACHE_KEY, getBlockedUsers } from '../../services/block.service'
+import { MUTED_USER_IDS_CACHE_KEY, getMutedUsers } from '../../services/mute.service'
 
 const { height: SCREEN_H } = Dimensions.get('window')
+const TOP_ACTION_ICON_SIZE = 27
 
 type Nav = StackNavigationProp<AppStackParams>
 
@@ -34,13 +37,25 @@ function resolveMedia(url: string | null | undefined): string {
   return url.startsWith('http') ? url : `${API_BASE}${url}`
 }
 
+function postReferencesAuthor(post: Post, userId: string): boolean {
+  return post.user.id === userId || post.repostOriginalAuthorId === userId
+}
+
+function postReferencesAnyAuthor(post: Post, userIds: Set<string>): boolean {
+  return userIds.has(post.user.id)
+    || (!!post.repostOriginalAuthorId && userIds.has(post.repostOriginalAuthorId))
+}
+
 // ─── Feed ──────────────────────────────────────────────────────────────────
 // Pager vertical: uma FlatList paginada onde cada célula é um post em ecrã
 // inteiro (FeedItem). A célula é dona do seu vídeo — aqui só se gere o estado
 // partilhado (likes, vistas), o agrupamento do topo e a folha de
 // comentários. O deslize suave vem da própria FlatList.
 export default function FeedScreen() {
-  const { posts, loading, refresh, loadMore, prependPost, removePost, updatePost, incrementView, updatePostCounts } = useFeed()
+  const {
+    posts, loading, refresh, loadMore, prependPost, removePost, updatePost,
+    incrementView, updatePostCounts, updateRepostState,
+  } = useFeed()
   const t   = useT()
   const nav = useNavigation<Nav>()
   const reduceMotion = useReducedMotionPreference()
@@ -67,6 +82,8 @@ export default function FeedScreen() {
   const [commentDeltas, setCommentDeltas] = useState<Record<string, number>>({})
   const [likedPostIds,  setLikedPostIds]  = useState<Set<string>>(new Set())
   const [blockedAuthorIds, setBlockedAuthorIds] = useState<Set<string>>(new Set())
+  const [mutedAuthorIds, setMutedAuthorIds] = useState<Set<string>>(new Set())
+  const moderationRevisionRef = useRef(0)
 
   const listRef = useRef<FlatList<Post>>(null)
   const { top: safeTop } = useSafeAreaInsets()
@@ -74,6 +91,14 @@ export default function FeedScreen() {
   // e o layout — assim toda a gente fica alinhada (Dimensions.window no arranque
   // podia não bater certo e desalinhava os posts a partir do 2.º).
   const [listH, setListH] = useState(SCREEN_H)
+  const listHRef = useRef(SCREEN_H)
+  const measuredViewportRef = useRef<{ width: number; height: number } | null>(null)
+  const currentPostIdRef = useRef(currentPostId)
+  currentPostIdRef.current = currentPostId
+  const searchModeRef = useRef(searchMode)
+  searchModeRef.current = searchMode
+  const searchAnchorPostIdRef = useRef<string | null>(null)
+  const searchRealignPendingRef = useRef(false)
 
   // Um post aberto pela pesquisa/perfil vive apenas nesta composição. Nunca é
   // enviado a `prependPost`, portanto não entra no cache offline da feed.
@@ -81,8 +106,11 @@ export default function FeedScreen() {
     const base = focusedPost
       ? [focusedPost, ...posts.filter((post) => post.id !== focusedPost.id)]
       : posts
-    return base.filter((post) => !blockedAuthorIds.has(post.user.id))
-  }, [blockedAuthorIds, focusedPost, posts])
+    return base.filter((post) => (
+      !postReferencesAnyAuthor(post, blockedAuthorIds)
+      && !postReferencesAnyAuthor(post, mutedAuthorIds)
+    ))
+  }, [blockedAuthorIds, focusedPost, mutedAuthorIds, posts])
 
   // ── Dados: autores para o cabeçalho; ordem original para o pager ───────────
   const userGroups = useMemo<UserGroup[]>(() => {
@@ -121,7 +149,50 @@ export default function FeedScreen() {
 
   const activePost = flatPosts[currentIndex]
 
+  // Repõe um post exactamente no início do viewport. O teclado pode conservar
+  // um contentOffset em píxeis enquanto a janela muda; sem este snap defensivo,
+  // o offset deixa de ser múltiplo da altura da célula e mostra dois posts.
+  const alignPagerToPost = useCallback((postId: string | null, height = listHRef.current) => {
+    const source = flatPostsRef.current
+    if (source.length === 0) return
+    const found = postId ? source.findIndex((post) => post.id === postId) : 0
+    const index = found >= 0 ? found : 0
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToOffset({ offset: index * height, animated: false })
+    })
+  }, [])
+
+  // Só a primeira medição normal (ou uma mudança real de largura) redefine a
+  // geometria. Uma redução com a mesma largura é o teclado, não um novo ecrã.
+  // A app está bloqueada em retrato, por isso manter esta altura é também o que
+  // garante que cellHeight, getItemLayout e snapToInterval nunca divergem.
+  const handleFeedLayout = useCallback((event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout
+    if (width <= 0 || height <= 0) return
+
+    const previous = measuredViewportRef.current
+    if (!previous) {
+      if (searchModeRef.current || Keyboard.isVisible()) return
+      measuredViewportRef.current = { width, height }
+      const heightChanged = Math.abs(height - listHRef.current) > 0.5
+      listHRef.current = height
+      if (heightChanged) setListH(height)
+      return
+    }
+
+    const widthChanged = Math.abs(width - previous.width) > 1
+    const keyboardSized = !widthChanged && height < previous.height - 1
+    if (searchModeRef.current || Keyboard.isVisible() || keyboardSized) return
+    if (!widthChanged && Math.abs(height - previous.height) <= 1) return
+
+    measuredViewportRef.current = { width, height }
+    listHRef.current = height
+    setListH(height)
+    alignPagerToPost(currentPostIdRef.current, height)
+  }, [alignPagerToPost])
+
   const openComments = useCallback((post: Post) => {
+    if (searchModeRef.current) searchRealignPendingRef.current = Keyboard.isVisible()
     Keyboard.dismiss()
     setSearchMode(false)
     setSearchQuery('')
@@ -183,8 +254,12 @@ export default function FeedScreen() {
   }, [activePost?.id])
 
   const newPostsCount = useMemo(
-    () => posts.filter((post) => !blockedAuthorIds.has(post.user.id) && !viewedIds.has(post.id)).length,
-    [blockedAuthorIds, posts, viewedIds],
+    () => posts.filter((post) => (
+      !postReferencesAnyAuthor(post, blockedAuthorIds)
+      && !postReferencesAnyAuthor(post, mutedAuthorIds)
+      && !viewedIds.has(post.id)
+    )).length,
+    [blockedAuthorIds, mutedAuthorIds, posts, viewedIds],
   )
   useEffect(() => { setNewPostsCount(newPostsCount) }, [newPostsCount])
 
@@ -245,6 +320,27 @@ export default function FeedScreen() {
     updatePostCounts(postId, { likes: Math.max(0, base + (liked ? 1 : -1)) })
   }, [updatePostCounts])
 
+  const handleRepostChange = useCallback((result: RepostResult) => {
+    const anchor = currentPostIdRef.current
+    if (result.removedPostId && useFeedStore.getState().focusedPost?.id === result.removedPostId) {
+      clearFocusedPost()
+    }
+    updateRepostState(result)
+
+    // Inserir/remover a cópia muda os índices da FlatList. Conserva o post que
+    // a pessoa estava a ver; ao desfazer a própria cópia, prefere o original.
+    if (result.repostedPost || result.removedPostId) {
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const source = flatPostsRef.current
+        const target = source.find((p) => p.id === anchor)
+          ?? source.find((p) => p.id === result.postId)
+          ?? source[0]
+        setCurrentPostId(target?.id ?? null)
+        alignPagerToPost(target?.id ?? null)
+      }))
+    }
+  }, [alignPagerToPost, clearFocusedPost, updateRepostState])
+
   const handlePostDeleted = useCallback((postId: string) => {
     if (useFeedStore.getState().focusedPost?.id === postId) clearFocusedPost()
     removePost(postId)
@@ -259,39 +355,128 @@ export default function FeedScreen() {
   }, [clearFocusedPost, posts, removePost])
 
   const handleProfileBlocked = useCallback((userId: string) => {
-    const remaining = flatPostsRef.current.filter((post) => post.user.id !== userId)
+    moderationRevisionRef.current += 1
+    const remaining = flatPostsRef.current.filter((post) => !postReferencesAuthor(post, userId))
     setBlockedAuthorIds((current) => {
       if (current.has(userId)) return current
       const next = new Set(current)
       next.add(userId)
+      setCache(BLOCKED_USER_IDS_CACHE_KEY, Array.from(next)).catch(() => {})
       return next
     })
-    if (useFeedStore.getState().focusedPost?.user.id === userId) clearFocusedPost()
+    const focused = useFeedStore.getState().focusedPost
+    if (focused && postReferencesAuthor(focused, userId)) clearFocusedPost()
+    setCurrentPostId(remaining[0]?.id ?? null)
+    requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated: false }))
+    refresh().catch(() => {})
+  }, [clearFocusedPost, refresh])
+
+  const handleAuthorMuted = useCallback((userId: string) => {
+    moderationRevisionRef.current += 1
+    const remaining = flatPostsRef.current.filter((post) => !postReferencesAuthor(post, userId))
+    setMutedAuthorIds((current) => {
+      if (current.has(userId)) return current
+      const next = new Set(current)
+      next.add(userId)
+      setCache(MUTED_USER_IDS_CACHE_KEY, Array.from(next)).catch(() => {})
+      return next
+    })
+    if (useFeedStore.getState().focusedPost
+      && postReferencesAuthor(useFeedStore.getState().focusedPost!, userId)) {
+      clearFocusedPost()
+    }
     setCurrentPostId(remaining[0]?.id ?? null)
     requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated: false }))
     refresh().catch(() => {})
   }, [clearFocusedPost, refresh])
 
   // ── Pesquisa / topo ─────────────────────────────────────────────────────────
-  useFocusEffect(useCallback(() => {
-    if (openSearch) { setSearchMode(true); setOpenSearch(false) }
-  }, [openSearch]))
+  const openSearchPanel = useCallback(() => {
+    const anchor = currentPostIdRef.current ?? flatPostsRef.current[0]?.id ?? null
+    searchAnchorPostIdRef.current = anchor
+    alignPagerToPost(anchor)
+    setSearchMode(true)
+  }, [alignPagerToPost])
 
-  const handleSearchOpen   = useCallback(() => setSearchMode(true), [])
-  const handleSearchClose  = useCallback(() => { Keyboard.dismiss(); setSearchMode(false); setSearchQuery('') }, [])
+  useFocusEffect(useCallback(() => {
+    if (openSearch) { openSearchPanel(); setOpenSearch(false) }
+  }, [openSearch, openSearchPanel, setOpenSearch]))
+
+  const handleSearchOpen   = openSearchPanel
+  const handleSearchClose  = useCallback(() => {
+    searchRealignPendingRef.current = Keyboard.isVisible()
+    Keyboard.dismiss()
+    setSearchMode(false)
+    setSearchQuery('')
+    alignPagerToPost(searchAnchorPostIdRef.current ?? currentPostIdRef.current)
+  }, [alignPagerToPost])
   const handleSearchChange = useCallback((q: string) => setSearchQuery(q), [])
   const handleBubblePress  = useCallback((group: UserGroup) => {
-    Keyboard.dismiss()
     const idx = flatPostsRef.current.findIndex((p) => p.user.id === group.user.id)
-    if (idx >= 0) scrollToIndex(idx)
-    setSearchMode(false); setSearchQuery('')
-  }, [scrollToIndex])
+    if (idx >= 0) {
+      const targetId = flatPostsRef.current[idx].id
+      searchAnchorPostIdRef.current = targetId
+      setCurrentPostId(targetId)
+      alignPagerToPost(targetId)
+    }
+    searchRealignPendingRef.current = Keyboard.isVisible()
+    Keyboard.dismiss()
+    setSearchMode(false)
+    setSearchQuery('')
+  }, [alignPagerToPost])
   const handleCreatePress  = useCallback(() => nav.navigate('Tabs', { screen: 'Create' }), [nav])
   const handleCirclePress  = useCallback(() => nav.navigate('Tabs', { screen: 'Circle' }), [nav])
+
+  // Também cobre o gesto de esconder o teclado sem carregar em Cancelar. A
+  // pesquisa continua aberta, mas a célula volta já ao seu snap exacto.
+  useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidHide', () => {
+      if (!searchModeRef.current && !searchRealignPendingRef.current) return
+      searchRealignPendingRef.current = false
+      alignPagerToPost(searchAnchorPostIdRef.current ?? currentPostIdRef.current)
+    })
+    return () => sub.remove()
+  }, [alignPagerToPost])
 
   // ── Foco: a status bar fica fora da mídia, sobre o papel claro da Feed ──────
   const refreshRef = useRef(refresh)
   refreshRef.current = refresh
+  useFocusEffect(useCallback(() => {
+    let active = true
+    const revisionAtStart = moderationRevisionRef.current
+
+    // O cache impede que autores já ocultados reapareçam no arranque offline.
+    // A resposta do servidor substitui o Set inteiro ao recuperar foco, por isso
+    // um "voltar a ver" feito no ecrã de gestão não exige reiniciar a app.
+    ;(async () => {
+      const [cachedBlocked, cachedMuted] = await Promise.all([
+        getCache<string[]>(BLOCKED_USER_IDS_CACHE_KEY).catch(() => null),
+        getCache<string[]>(MUTED_USER_IDS_CACHE_KEY).catch(() => null),
+      ])
+      if (!active || moderationRevisionRef.current !== revisionAtStart) return
+      if (cachedBlocked) setBlockedAuthorIds(new Set(cachedBlocked))
+      if (cachedMuted) setMutedAuthorIds(new Set(cachedMuted))
+
+      const [blocked, muted] = await Promise.all([
+        getBlockedUsers().catch(() => null),
+        getMutedUsers().catch(() => null),
+      ])
+      if (!active || moderationRevisionRef.current !== revisionAtStart) return
+      if (blocked) {
+        const ids = blocked.map((user) => user.id)
+        setBlockedAuthorIds(new Set(ids))
+        setCache(BLOCKED_USER_IDS_CACHE_KEY, ids).catch(() => {})
+      }
+      if (muted) {
+        const ids = muted.map((user) => user.id)
+        setMutedAuthorIds(new Set(ids))
+        setCache(MUTED_USER_IDS_CACHE_KEY, ids).catch(() => {})
+      }
+    })()
+
+    return () => { active = false }
+  }, []))
+
   useFocusEffect(useCallback(() => {
     setStatusBarStyle('dark')
     refreshRef.current()
@@ -318,13 +503,15 @@ export default function FeedScreen() {
       commentCount={(item._count?.comments ?? 0) + (commentDeltas[item.id] ?? 0)}
       onCommentPress={openComments}
       onLikeChange={(liked) => handleLikeChange(item.id, liked)}
+      onRepostChange={handleRepostChange}
       onDeleted={handlePostDeleted}
       onEdited={(id, caption) => updatePost(id, caption)}
       onProfileBlocked={handleProfileBlocked}
+      onAuthorMuted={handleAuthorMuted}
       onExpired={handlePostExpired}
       onBlockingChange={() => {}}
     />
-  ), [currentPostId, listH, likedPostIds, commentDeltas, openComments, handleLikeChange, handlePostDeleted, handlePostExpired, handleProfileBlocked, updatePost, reduceMotion])
+  ), [currentPostId, listH, likedPostIds, commentDeltas, openComments, handleLikeChange, handleRepostChange, handlePostDeleted, handlePostExpired, handleProfileBlocked, handleAuthorMuted, updatePost, reduceMotion])
 
   const getItemLayout = useCallback((_: unknown, index: number) => (
     { length: listH, offset: listH * index, index }
@@ -333,10 +520,7 @@ export default function FeedScreen() {
   return (
     <View
       style={s.container}
-      onLayout={(e) => {
-        const h = e.nativeEvent.layout.height
-        if (h > 0 && h !== listH) setListH(h)
-      }}
+      onLayout={handleFeedLayout}
     >
       {flatPosts.length > 0 ? (
         <FlatList
@@ -346,6 +530,7 @@ export default function FeedScreen() {
           keyExtractor={(p) => p.id}
           renderItem={renderItem}
           getItemLayout={getItemLayout}
+          scrollEnabled={!searchMode}
           showsVerticalScrollIndicator={false}
           snapToInterval={listH}
           snapToAlignment="start"
@@ -362,7 +547,6 @@ export default function FeedScreen() {
           windowSize={3}
           maxToRenderPerBatch={2}
           initialNumToRender={2}
-          removeClippedSubviews
           onScrollToIndexFailed={({ index }) => {
             listRef.current?.scrollToOffset({ offset: listH * index, animated: false })
           }}
@@ -406,7 +590,7 @@ export default function FeedScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={t.feed_search_ph}
               >
-                <FeedIcon name="search" size={24} color="#fff" />
+                <FeedIcon name="search" size={TOP_ACTION_ICON_SIZE} color="#fff" weight="medium" />
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -422,7 +606,7 @@ export default function FeedScreen() {
                     <Icon name="camera" size={9} strokeWidth={2.5} color="#fff" />
                   </View>
                 )}
-                <FeedIcon name="circle" size={24} color="#fff" />
+                <FeedIcon name="circle" size={TOP_ACTION_ICON_SIZE} color="#fff" weight="medium" />
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -432,7 +616,7 @@ export default function FeedScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={t.feed_create}
               >
-                <FeedIcon name="baseline-plus" size={24} color="#fff" />
+                <FeedIcon name="baseline-plus" size={TOP_ACTION_ICON_SIZE} color="#fff" />
               </TouchableOpacity>
             </View>
           </View>
