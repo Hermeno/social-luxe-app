@@ -10,12 +10,19 @@ export const colors = {
   offWhite:     '#F7F7F7',
 
   // Campo de comentário embutido na navigation
-  commentField: '#18242E',
+  commentField: '#fff',
 
   // Fundo da feed principal — e SÓ da feed. É o que se vê por trás dos posts,
   // nas faixas acima e abaixo de imagens que não enchem a altura, e na tab bar
   // enquanto a feed está aberta. O resto da app continua branco.
-  feedSurface: '#1C252C',
+  //
+  // Ponto único: toda a feed lê daqui (célula, media, álbum, ecrã vazio e tab
+  // bar), por isso trocar é mexer numa linha só. Em experimentação — os valores
+  // já testados ficam abaixo e nenhum se apaga enquanto a escolha não assentar.
+  // feedSurface: '#1F2C34',
+  feedSurface: '#0B141A',
+  feedSurfaceSlate:    '#1C252C',   // azul-ardósia — o original, até 19/08/2026
+  feedSurfaceGraphite: '#111314',   // grafite frio — 19/08/2026
 
   gray100: '#F7F7F7',
   gray200: '#EAEAEA',

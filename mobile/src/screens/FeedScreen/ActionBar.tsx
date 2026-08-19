@@ -403,7 +403,6 @@ export default React.memo(function ActionBar({
     const optimisticCount = Math.max(0, previousCount + (next ? 1 : -1))
     // `postId` é o conteúdo (o original), `viaPostId` é onde se tocou.
     const originalPostId = post.repostOfId ?? post.id
-    const animationStartedAt = Date.now()
 
     repostPendingRef.current = true
     localRepostStateRef.current = next
@@ -437,12 +436,10 @@ export default React.memo(function ActionBar({
         localRepostStateRef.current = null
         setRepostVisualImmediately(result.reposted && isVia)
       }
-      // A cópia entra na FlatList só depois de a volta e o “1” terminarem;
-      // assim a inserção não desmonta precisamente o botão que está animado.
-      if (result.repostedPost && result.reposted && !reduceMotion) {
-        const remaining = 560 - (Date.now() - animationStartedAt)
-        if (remaining > 0) await new Promise<void>((resolve) => setTimeout(resolve, remaining))
-      }
+      // O resultado canónico segue já. A cópia deixou de ser inserida na feed
+      // que está a ser lida, por isso não há inserção nenhuma por que esperar:
+      // esperar meio segundo aqui só atrasava o contador a chegar às outras
+      // células do mesmo conteúdo.
       onRepostChange?.(result)
     } catch (error: any) {
       const status: number | undefined = error?.response?.status

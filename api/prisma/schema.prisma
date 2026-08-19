@@ -43,85 +43,86 @@ enum ReportTarget {
 // ─── User ────────────────────────────────────────────────────────────────────
 
 model User {
-  id           String   @id @default(cuid())
-  name         String
+  id                    String    @id @default(cuid())
+  name                  String
   // @handle único. Grátis = base + número (ex.: herminio4821); Pro = base sem
   // número. usernameBase guarda a parte de texto escolhida (editar/upgrade).
-  username     String?  @unique
-  usernameBase String?
-  isPaid       Boolean  @default(false)
-  phone        String   @unique
-  countryCode  String
-  password     String
-  avatar       String?
-  bio          String?
-  availability String?  @default("Disponível")
-  viewsPublic          Boolean  @default(false)
-  contact              String?
-  defaultFollowDuration String? @default("forever")
-  city                 String?
-  district             String?
-  autoReply            String?
-  showDevice           Boolean  @default(false)
-  statusLabel          String?
-  interests            String[] @default([])
-  lat          Float?
-  lng          Float?
-  isAdmin      Boolean  @default(false)
-  lastSeen     DateTime?
-  createdAt    DateTime @default(now())
+  username              String?   @unique
+  usernameBase          String?
+  isPaid                Boolean   @default(false)
+  phone                 String    @unique
+  countryCode           String
+  password              String
+  avatar                String?
+  bio                   String?
+  availability          String?   @default("Disponível")
+  viewsPublic           Boolean   @default(false)
+  contact               String?
+  defaultFollowDuration String?   @default("forever")
+  city                  String?
+  district              String?
+  autoReply             String?
+  showDevice            Boolean   @default(false)
+  statusLabel           String?
+  interests             String[]  @default([])
+  lat                   Float?
+  lng                   Float?
+  isAdmin               Boolean   @default(false)
+  lastSeen              DateTime?
+  createdAt             DateTime  @default(now())
 
   // ── Conta profissional / comercial ──
   // PERSONAL | PROFESSIONAL. Em PROFESSIONAL o perfil deixa de responder "quem
   // sou" e passa a responder "o que vendo e como falas comigo agora".
   accountType      String   @default("PERSONAL")
-  businessCategory String?                        // guardado em PT (ID estável), mostrado traduzido
+  businessCategory String? // guardado em PT (ID estável), mostrado traduzido
   businessAddress  String?
-  businessHours    Json?                          // 7 entradas: [{ closed, open:"08:00", close:"18:00" }]
-  whatsapp         String?                        // número completo com indicativo
-  profileActions   String[] @default([])          // call | whatsapp | message | directions
+  businessHours    Json? // 7 entradas: [{ closed, open:"08:00", close:"18:00" }]
+  whatsapp         String? // número completo com indicativo
+  profileActions   String[] @default([]) // call | whatsapp | message | directions
 
   // Redes sociais: { instagram: "handle", github: "user", ... }. Vale para
   // qualquer conta — um programador com GitHub não é um negócio.
-  socialLinks      Json?
+  socialLinks Json?
 
-  posts            Post[]
-  friendshipsA     Friendship[]        @relation("FriendA")
-  friendshipsB     Friendship[]        @relation("FriendB")
-  historyA         FriendshipHistory[] @relation("HistoryA")
-  historyB         FriendshipHistory[] @relation("HistoryB")
-  likes            Like[]
-  comments         Comment[]
-  commentLikes     CommentLike[]
-  shares           Share[]
-  reposts          Repost[]
-  views            View[]
-  sentMessages     Message[]           @relation("Sender")
-  receivedMessages Message[]           @relation("Receiver")
-  msgReactions     MessageReaction[]
-  stories          Story[]
-  storyViews       StoryView[]         @relation("StoryViewer")
-  reactions        Reaction[]
-  blocksGiven      Block[]             @relation("Blocker")
-  blocksReceived   Block[]             @relation("Blocked")
-  mutesGiven       UserMute[]           @relation("Muter")
-  mutesReceived    UserMute[]           @relation("Muted")
-  reports          Report[]
-  extendVotes      PostExtendVote[]
-  deviceTokens     DeviceToken[]
-  collabPostsA     CollabPost[]        @relation("CollabA")
-  collabPostsB     CollabPost[]        @relation("CollabB")
-  following        Follow[]            @relation("Follower")
-  followers        Follow[]            @relation("Following")
-  partnerPosts     Post[]              @relation("PostPartner")
-  donationsGiven   Donation[]         @relation("DonorDonations")
-  donationsReceived Donation[]        @relation("RequesterDonations")
-  donationFeedbacks DonationFeedback[] @relation("FeedbackGiver")
-  unionsAsA        Union[]        @relation("UnionMemberA")
-  unionsAsB        Union[]        @relation("UnionMemberB")
-  unionInvites     UnionInvite[]
-  pairingsAsA      Pairing[]      @relation("PairingUserA")
-  pairingsAsB      Pairing[]      @relation("PairingUserB")
+  posts                Post[]
+  friendshipsA         Friendship[]          @relation("FriendA")
+  friendshipsB         Friendship[]          @relation("FriendB")
+  historyA             FriendshipHistory[]   @relation("HistoryA")
+  historyB             FriendshipHistory[]   @relation("HistoryB")
+  likes                Like[]
+  comments             Comment[]
+  commentLikes         CommentLike[]
+  shares               Share[]
+  reposts              Repost[]
+  views                View[]
+  sentMessages         Message[]             @relation("Sender")
+  receivedMessages     Message[]             @relation("Receiver")
+  msgReactions         MessageReaction[]
+  stories              Story[]
+  storyViews           StoryView[]           @relation("StoryViewer")
+  reactions            Reaction[]
+  blocksGiven          Block[]               @relation("Blocker")
+  blocksReceived       Block[]               @relation("Blocked")
+  mutesGiven           UserMute[]            @relation("Muter")
+  mutesReceived        UserMute[]            @relation("Muted")
+  reports              Report[]
+  extendVotes          PostExtendVote[]
+  tasteFeedback        TasteFeedback[]
+  deviceTokens         DeviceToken[]
+  collabPostsA         CollabPost[]          @relation("CollabA")
+  collabPostsB         CollabPost[]          @relation("CollabB")
+  following            Follow[]              @relation("Follower")
+  followers            Follow[]              @relation("Following")
+  partnerPosts         Post[]                @relation("PostPartner")
+  donationsGiven       Donation[]            @relation("DonorDonations")
+  donationsReceived    Donation[]            @relation("RequesterDonations")
+  donationFeedbacks    DonationFeedback[]    @relation("FeedbackGiver")
+  unionsAsA            Union[]               @relation("UnionMemberA")
+  unionsAsB            Union[]               @relation("UnionMemberB")
+  unionInvites         UnionInvite[]
+  pairingsAsA          Pairing[]             @relation("PairingUserA")
+  pairingsAsB          Pairing[]             @relation("PairingUserB")
   halvesCreated        Half[]                @relation("HalfCreator")
   halvesReceived       Half[]                @relation("HalfTarget")
   halvesCompleted      Half[]                @relation("HalfCompleter")
@@ -135,18 +136,18 @@ model Post {
   id              String    @id @default(cuid())
   userId          String
   mediaUrl        String?
-  mediaUrls       String[]  @default([])   // álbum: 2+ fotos mostradas em grelha (mediaUrl = 1ª, p/ thumbnail)
-  albumOverlays   Json?                     // emojis por foto do álbum, paralelo a mediaUrls: [[{emoji,x,y}], ...]
+  mediaUrls       String[]  @default([]) // álbum: 2+ fotos mostradas em grelha (mediaUrl = 1ª, p/ thumbnail)
+  albumOverlays   Json? // emojis por foto do álbum, paralelo a mediaUrls: [[{emoji,x,y}], ...]
   // Dimensões originais, guardadas no upload. A app precisa da proporção ANTES
   // de a imagem carregar: sem elas desenha à altura toda e encolhe no `onLoad`,
   // e esse salto lê-se como um piscar.
   mediaWidth      Int?
   mediaHeight     Int?
-  mediaSizes      Json?                     // álbum: [{ w, h }, ...] paralelo a mediaUrls
+  mediaSizes      Json? // álbum: [{ w, h }, ...] paralelo a mediaUrls
   mediaType       MediaType
   caption         String?
   bgColor         String?
-  fontKey         String?                   // publicação de texto: 'script'|'hand'; null = fonte padrão
+  fontKey         String? // publicação de texto: 'script'|'hand'; null = fonte padrão
   expiresAt       DateTime
   extended        Boolean   @default(false)
   deviceModel     String?
@@ -156,19 +157,18 @@ model Post {
   partnerAccepted Boolean   @default(false)
   isAnnouncement  Boolean   @default(false)
 
-
-  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  partnerUser    User?            @relation("PostPartner", fields: [partnerUserId], references: [id], onDelete: SetNull)
-  likes          Like[]
-  comments       Comment[]
-  shares         Share[]
-  reposts        Repost[] @relation("OriginalPostReposts")
-  repostEntry    Repost?  @relation("RepostedPost")
-  repostsVia     Repost[] @relation("RepostVia")
-  views          View[]
-  reactions      Reaction[]
-  extendVotes    PostExtendVote[]
-  half           Half?
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  partnerUser User?            @relation("PostPartner", fields: [partnerUserId], references: [id], onDelete: SetNull)
+  likes       Like[]
+  comments    Comment[]
+  shares      Share[]
+  reposts     Repost[]         @relation("OriginalPostReposts")
+  repostEntry Repost?          @relation("RepostedPost")
+  repostsVia  Repost[]         @relation("RepostVia")
+  views       View[]
+  reactions   Reaction[]
+  extendVotes PostExtendVote[]
+  half        Half?
 }
 
 // ─── Metade ───────────────────────────────────────────────────────────────────
@@ -199,8 +199,8 @@ model Half {
   completedAt   DateTime?
   createdAt     DateTime   @default(now())
 
-  creator     User  @relation("HalfCreator",   fields: [creatorId],     references: [id], onDelete: Cascade)
-  targetUser  User? @relation("HalfTarget",    fields: [targetUserId],  references: [id], onDelete: Cascade)
+  creator     User  @relation("HalfCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  targetUser  User? @relation("HalfTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
   completedBy User? @relation("HalfCompleter", fields: [completedById], references: [id], onDelete: SetNull)
   post        Post? @relation(fields: [postId], references: [id], onDelete: SetNull)
 
@@ -208,7 +208,6 @@ model Half {
   @@index([targetUserId, status])
   @@index([status, expiresAt])
 }
-
 
 // ─── Friendship ───────────────────────────────────────────────────────────────
 
@@ -268,19 +267,19 @@ model Reaction {
 }
 
 model Comment {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
   postId    String
   content   String
   parentId  String?
-  createdAt DateTime @default(now())
-  editedAt  DateTime?                       // marca "editado" quando o autor altera
-  deletedAt DateTime?                       // apagado leve: as respostas sobrevivem
+  createdAt DateTime  @default(now())
+  editedAt  DateTime? // marca "editado" quando o autor altera
+  deletedAt DateTime? // apagado leve: as respostas sobrevivem
 
-  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  post    Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
-  parent  Comment?  @relation("Replies", fields: [parentId], references: [id], onDelete: Cascade)
-  replies Comment[] @relation("Replies")
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post    Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  parent  Comment?      @relation("Replies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies Comment[]     @relation("Replies")
   likes   CommentLike[]
 }
 
@@ -310,15 +309,15 @@ model Share {
 // Repost é diferente de Share: Share regista uma partilha externa; Repost é uma
 // republicação única por pessoa e aponta também para a cópia criada na feed.
 model Repost {
-  id               String   @id @default(cuid())
-  userId           String
-  postId           String
-  repostedPostId   String   @unique
+  id             String   @id @default(cuid())
+  userId         String
+  postId         String
+  repostedPostId String   @unique
   // Publicação onde a pessoa tocou — o original ou uma cópia dele. É esta que
   // recebe o +1 no contador; `postId` continua a ser o original canónico e é o
   // que garante um repost por pessoa por conteúdo.
-  viaPostId        String?
-  createdAt        DateTime @default(now())
+  viaPostId      String?
+  createdAt      DateTime @default(now())
 
   user         User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   post         Post  @relation("OriginalPostReposts", fields: [postId], references: [id], onDelete: Cascade)
@@ -342,20 +341,56 @@ model View {
   @@unique([userId, postId])
 }
 
+// O que a pessoa respondeu ao cartão de gosto da feed: quer mais momentos
+// assim, ou não tem interesse nenhum.
+enum TasteSignal {
+  MORE
+  LESS
+}
+
+// Sinal de gosto — a matéria-prima do algoritmo.
+//
+// De propósito SEM chave estrangeira para Post: as publicações são efémeras e
+// são apagadas em definitivo poucas horas depois (ver cleanup.job). Se este
+// registo dependesse delas, o sinal desaparecia com o post e não sobrava nada
+// para treinar. Por isso as características do momento ficam denormalizadas
+// aqui — é o sinal que tem de sobreviver, não a publicação.
+model TasteFeedback {
+  id        String      @id @default(cuid())
+  userId    String
+  // Publicação onde se tocou. Se era uma cópia de repost, `postId` já é o
+  // original: o gosto é do conteúdo, não de quem o republicou.
+  postId    String
+  authorId  String
+  mediaType MediaType
+  signal    TasteSignal
+  // Quanto tempo a pessoa esteve no post antes de responder. Separa o "não
+  // tenho interesse" imediato do que só veio depois de ver tudo — a mesma
+  // resposta com pesos diferentes.
+  dwellMs   Int?
+  createdAt DateTime    @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Uma resposta por pessoa por conteúdo; mudar de ideias substitui a anterior.
+  @@unique([userId, postId])
+  @@index([userId, createdAt])
+  @@index([authorId, signal])
+}
 
 // ─── Messages ─────────────────────────────────────────────────────────────────
 
 model Message {
-  id          String    @id @default(cuid())
-  senderId    String
-  receiverId  String
-  content     String?
-  mediaUrl    String?
-  readAt      DateTime?
-  replyToId   String?
-  createdAt   DateTime  @default(now())
+  id         String    @id @default(cuid())
+  senderId   String
+  receiverId String
+  content    String?
+  mediaUrl   String?
+  readAt     DateTime?
+  replyToId  String?
+  createdAt  DateTime  @default(now())
 
-  sender    User              @relation("Sender",   fields: [senderId],   references: [id], onDelete: Cascade)
+  sender    User              @relation("Sender", fields: [senderId], references: [id], onDelete: Cascade)
   receiver  User              @relation("Receiver", fields: [receiverId], references: [id], onDelete: Cascade)
   replyTo   Message?          @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
   replies   Message[]         @relation("MessageReplies")
@@ -373,7 +408,7 @@ model MessageReaction {
   createdAt DateTime @default(now())
 
   message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId],    references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([messageId, userId])
 }
@@ -381,12 +416,12 @@ model MessageReaction {
 // ─── Stories ─────────────────────────────────────────────────────────────────
 
 model Story {
-  id        String      @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
   mediaUrl  String
   mediaType MediaType
   expiresAt DateTime
-  createdAt DateTime    @default(now())
+  createdAt DateTime  @default(now())
 
   user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   views StoryView[]
@@ -460,7 +495,6 @@ model PostExtendVote {
   @@unique([postId, userId])
 }
 
-
 // ─── Device Tokens ───────────────────────────────────────────────────────────
 
 model DeviceToken {
@@ -491,8 +525,8 @@ model CollabPost {
   expiresAt  DateTime?
   createdAt  DateTime   @default(now())
 
-  userA User  @relation("CollabA", fields: [userAId],  references: [id], onDelete: Cascade)
-  userB User? @relation("CollabB", fields: [userBId],  references: [id], onDelete: SetNull)
+  userA User  @relation("CollabA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB User? @relation("CollabB", fields: [userBId], references: [id], onDelete: SetNull)
 }
 
 // ─── Follow ───────────────────────────────────────────────────────────────────
@@ -504,7 +538,7 @@ model Follow {
   expiresAt   DateTime?
   createdAt   DateTime  @default(now())
 
-  follower  User @relation("Follower",  fields: [followerId],  references: [id], onDelete: Cascade)
+  follower  User @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
   following User @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
 
   @@unique([followerId, followingId])
@@ -539,9 +573,9 @@ model Donation {
   updatedAt   DateTime       @updatedAt
 
   donorId     String
-  donor       User           @relation("DonorDonations",     fields: [donorId],     references: [id], onDelete: Cascade)
+  donor       User               @relation("DonorDonations", fields: [donorId], references: [id], onDelete: Cascade)
   requesterId String?
-  requester   User?          @relation("RequesterDonations", fields: [requesterId], references: [id], onDelete: SetNull)
+  requester   User?              @relation("RequesterDonations", fields: [requesterId], references: [id], onDelete: SetNull)
   feedbacks   DonationFeedback[]
 }
 
@@ -553,8 +587,8 @@ model DonationFeedback {
   comment    String?
   createdAt  DateTime @default(now())
 
-  donation   Donation @relation(fields: [donationId], references: [id], onDelete: Cascade)
-  from       User     @relation("FeedbackGiver", fields: [fromUserId], references: [id], onDelete: Cascade)
+  donation Donation @relation(fields: [donationId], references: [id], onDelete: Cascade)
+  from     User     @relation("FeedbackGiver", fields: [fromUserId], references: [id], onDelete: Cascade)
 }
 
 // ─── União (Duo Profile) ─────────────────────────────────────────────────────
@@ -573,10 +607,10 @@ model Union {
   bio       String?
   memberAId String
   memberBId String
-  createdAt DateTime  @default(now())
+  createdAt DateTime @default(now())
 
-  memberA  User           @relation("UnionMemberA", fields: [memberAId], references: [id], onDelete: Cascade)
-  memberB  User           @relation("UnionMemberB", fields: [memberBId], references: [id], onDelete: Cascade)
+  memberA          User           @relation("UnionMemberA", fields: [memberAId], references: [id], onDelete: Cascade)
+  memberB          User           @relation("UnionMemberB", fields: [memberBId], references: [id], onDelete: Cascade)
   sentMessages     UnionMessage[] @relation("UnionSender")
   receivedMessages UnionMessage[] @relation("UnionReceiver")
   invitesSent      UnionInvite[]  @relation("InviteFromUnion")
@@ -602,16 +636,16 @@ model UnionInvite {
 }
 
 model UnionMessage {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   fromUnionId String
   toUnionId   String
   content     String?
   mediaUrl    String?
   readAt      DateTime?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
-  fromUnion Union @relation("UnionSender",   fields: [fromUnionId], references: [id], onDelete: Cascade)
-  toUnion   Union @relation("UnionReceiver", fields: [toUnionId],   references: [id], onDelete: Cascade)
+  fromUnion Union @relation("UnionSender", fields: [fromUnionId], references: [id], onDelete: Cascade)
+  toUnion   Union @relation("UnionReceiver", fields: [toUnionId], references: [id], onDelete: Cascade)
 
   @@index([fromUnionId, toUnionId, createdAt(sort: Desc)])
   @@index([toUnionId, fromUnionId, createdAt(sort: Desc)])
@@ -657,7 +691,6 @@ model Pairing {
 
 // ─── Círculo (caça a objetos do mundo real, verificada pela comunidade) ──────
 
-
 // ─── Círculo — sessão de foto em grupo, ao vivo com pessoas próximas ─────────
 
 enum CircleSessionStatus {
@@ -677,7 +710,7 @@ model CircleSession {
   status    CircleSessionStatus @default(OPEN)
   lat       Float?
   lng       Float?
-  shotAt    DateTime?           // instante do disparo sincronizado (contagem decrescente)
+  shotAt    DateTime? // instante do disparo sincronizado (contagem decrescente)
   createdAt DateTime            @default(now())
 
   host    User                  @relation("CircleHost", fields: [hostId], references: [id], onDelete: Cascade)
@@ -692,8 +725,8 @@ model CircleSessionMember {
   userId    String
   status    CircleMemberStatus @default(JOINED)
   photoUrl  String?
-  photoAt   DateTime?          // quando a foto entrou — abre a janela de publicação
-  overlays  Json?              // emojis colados na foto: [{ emoji, x, y }] (x/y fração 0..1)
+  photoAt   DateTime? // quando a foto entrou — abre a janela de publicação
+  overlays  Json? // emojis colados na foto: [{ emoji, x, y }] (x/y fração 0..1)
   createdAt DateTime           @default(now())
 
   session CircleSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)

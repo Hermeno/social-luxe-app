@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View, Text, StyleSheet, Dimensions, Pressable, TouchableOpacity, Animated,
   ActivityIndicator, PanResponder,
@@ -18,11 +18,12 @@ import { parsePostFontKey, postFontStyle } from '../../theme/postFonts'
 import { usePostFontsReady } from '../../store/postFonts.store'
 import { API_BASE } from '../../config'
 import * as postService from '../../services/post.service'
+import type { TasteSignal } from '../../services/post.service'
 import AvatarImage from '../../components/AvatarImage'
 import ActionBar from './ActionBar'
+import TasteCard from './TasteCard'
 import PostAlbumCarousel from './PostAlbumCarousel'
 import CommenterStack from './CommenterStack'
-import LiveRing from '../../components/LiveRing'
 import FeedIcon from '../../components/FeedIcon'
 import { useAuthStore } from '../../store/auth.store'
 import { useFollowStore } from '../../store/follow.store'
@@ -50,7 +51,7 @@ interface Props {
   liked: boolean
   commentCount: number
   onCommentPress: (post: Post) => void
-  onLikeChange: (liked: boolean) => void
+  onLikeChange: (postId: string, liked: boolean) => void
   onRepostChange: (result: RepostResult) => void
   onDeleted: (id: string) => void
   onEdited: (id: string, caption: string) => void
@@ -58,7 +59,17 @@ interface Props {
   onAuthorMuted: (userId: string) => void
   onExpired: (id: string) => void
   onBlockingChange: (open: boolean) => void
+  /** A feed já decidiu que esta publicação está na amostra do cartão de gosto
+   *  e que ainda não foi respondida. As regras de conteúdo (é meu, é anúncio)
+   *  ficam aqui, na célula, que é quem as conhece. */
+  tasteEligible: boolean
+  onTasteSignal: (postId: string, signal: TasteSignal, dwellMs: number) => void
 }
+
+// O cartão não nasce com o post: só depois de a pessoa lá ter estado o tempo
+// suficiente para ter uma opinião. Perguntar ao primeiro segundo é perguntar
+// antes de haver resposta — e a resposta que vier assim não vale nada.
+const TASTE_DELAY_MS = 4200
 
 // ─── Uma célula do pager: um momento por ecrã ───────────────────────────────
 // Pilha: status bar livre · mídia · scrubber · navegação. O campo de comentário
@@ -67,7 +78,8 @@ interface Props {
 // partilhado.
 function FeedItem({
   post, reduceMotion, isActive, cellHeight, liked, commentCount,
-  onCommentPress, onLikeChange, onRepostChange, onDeleted, onEdited, onProfileBlocked, onAuthorMuted, onExpired, onBlockingChange
+  onCommentPress, onLikeChange, onRepostChange, onDeleted, onEdited, onProfileBlocked, onAuthorMuted, onExpired, onBlockingChange,
+  tasteEligible, onTasteSignal,
 }: Props) {
   const isFocused = useIsFocused()
   const nav = useNavigation<Nav>()
@@ -294,13 +306,45 @@ function FeedItem({
     } catch {}
   }
 
+  // ── Cartão de gosto ────────────────────────────────────────────────────────
+  // Nunca no meu próprio post nem num anúncio: perguntar se quero ver mais do
+  // que eu próprio publiquei não ensina nada a ninguém.
+  const tasteAsks = tasteEligible && !isSelf && !post.isAnnouncement
+  const [tasteVisible, setTasteVisible] = useState(false)
+  const tasteAnsweredRef = useRef(false)
+  const activeSinceRef = useRef(0)
+
+  useEffect(() => {
+    if (tasteAnsweredRef.current) return
+    if (!tasteAsks || !isActive || !isFocused) { setTasteVisible(false); return }
+    activeSinceRef.current = Date.now()
+    const id = setTimeout(() => setTasteVisible(true), TASTE_DELAY_MS)
+    return () => clearTimeout(id)
+  }, [tasteAsks, isActive, isFocused])
+
+  const handleTasteAnswer = useCallback((signal: TasteSignal) => {
+    tasteAnsweredRef.current = true
+    // O tempo até responder distingue o "não" imediato do "não" depois de ver
+    // tudo — duas respostas iguais que não valem o mesmo.
+    const dwellMs = activeSinceRef.current ? Date.now() - activeSinceRef.current : 0
+    onTasteSignal(post.id, signal, dwellMs)
+  }, [onTasteSignal, post.id])
+
+  // A feed dá-nos um handler estável (o mesmo para todas as células); a rail
+  // continua a falar só em "gostei/não gostei". A ponte é memoizada para não
+  // quebrar o `React.memo` da rail a cada render desta célula.
+  const emitLikeChange = useCallback(
+    (next: boolean) => onLikeChange(post.id, next),
+    [onLikeChange, post.id],
+  )
+
   function handleTapMedia() {
     const now = Date.now()
     if (now - lastTap.current < 280) {
       // Duplo toque → gostar. Cancela o pause do toque simples.
       if (tapTimer.current) { clearTimeout(tapTimer.current); tapTimer.current = null }
       burstHeart()
-      if (!liked) { onLikeChange(true); postService.likePost(post.id).catch(() => {}) }
+      if (!liked) { onLikeChange(post.id, true); postService.likePost(post.id).catch(() => {}) }
     } else {
       // Toque simples → pausar/retomar, após a janela do duplo toque.
       tapTimer.current = setTimeout(() => { togglePlay(); tapTimer.current = null }, 280)
@@ -460,6 +504,14 @@ function FeedItem({
         ]}
         pointerEvents="box-none"
       >
+        {tasteVisible && (
+          <TasteCard
+            reduceMotion={reduceMotion}
+            onAnswer={handleTasteAnswer}
+            onDone={() => setTasteVisible(false)}
+          />
+        )}
+
         <View style={s.momentRow}>
           <View style={s.momentIdentity}>
             <View style={s.liveNode} />
@@ -485,9 +537,10 @@ function FeedItem({
             <Animated.View
               style={{ transform: [{ scale: ambient.interpolate({ inputRange: [0, 1], outputRange: [1, 1.018] }) }] }}
             >
-              <View style={[s.avatarRing, isActive && !reduceMotion && s.avatarRingLive]}>
-                {isActive && !reduceMotion && <LiveRing size={43} strokeWidth={2} durationMs={8200} />}
-                <AvatarImage uri={resolveUrl(post.user.avatar)} name={post.user.name} size={34} />
+              <View style={s.avatarRing}>
+                <View style={s.avatarInner}>
+                  <AvatarImage uri={resolveUrl(post.user.avatar)} name={post.user.name} size={34} />
+                </View>
               </View>
             </Animated.View>
           </TouchableOpacity>
@@ -599,7 +652,7 @@ function FeedItem({
       <ActionBar
         post={post}
         liked={liked}
-        onLikeChange={onLikeChange}
+        onLikeChange={emitLikeChange}
         onRepostChange={onRepostChange}
         commentCount={commentCount}
         onCommentPress={() => onCommentPress(post)}
@@ -686,15 +739,25 @@ const s = StyleSheet.create({
     fontVariant: ['tabular-nums']
   },
   authorRow:  { minHeight: 43, flexDirection: 'row', alignItems: 'center', gap: 9 },
-  // Anel laranja à volta do avatar, com folga (não colado ao avatar)
+  // Anel do autor — moldura fixa, nunca gira. Um fio claro a emoldurar a cara,
+  // com uma folga escura por dentro para o rosto não colar ao traço e uma
+  // sombra curta que o descola de media claro. A vida do post lê-se no traço
+  // de tempo acima; à volta da cara basta um desenho limpo e quieto.
   avatarRing: {
     padding: 2.5,
     borderRadius: 999,
-    borderWidth: 2,
-    borderColor: colors.primary,
-    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.92)',
+    backgroundColor: 'rgba(0,0,0,0.34)',
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 3,
   },
-  avatarRingLive: { borderColor: 'transparent' },
+  // Corta a foto num círculo exato dentro da folga — sem isto, um avatar
+  // quadrado encostava aos cantos e o anel deixava de parecer desenhado.
+  avatarInner: { borderRadius: 999, overflow: 'hidden' },
   authorText: { flex: 1, minWidth: 0, justifyContent: 'center' },
   authorName: {
     color: '#fff', fontFamily: fonts.bold, fontSize: 15.5, lineHeight: 19, letterSpacing: -0.28

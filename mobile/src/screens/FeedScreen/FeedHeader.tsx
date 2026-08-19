@@ -11,7 +11,6 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { colors, fonts } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
 import SegmentedRing from '../../components/SegmentedRing'
-import LiveRing from '../../components/LiveRing'
 import { useOnlineStore } from '../../store/online.store'
 import { useAuthStore } from '../../store/auth.store'
 import { useT } from '../../i18n'
@@ -229,12 +228,14 @@ export default memo(function FeedHeader({
           return (
             <TouchableOpacity key={g.user.id} onPress={() => onBubblePress(g)} activeOpacity={0.72} style={s.tile}>
               <View style={s.ringWrap}>
-                {isActive ? (
-                  // Quem está no ecrã: anel de gradiente que roda (vivo)
-                  <LiveRing size={RING_OUTER} strokeWidth={RING_STROKE} color={colors.primary} />
-                ) : (
-                  <SegmentedRing count={g.posts.length} size={RING_OUTER} strokeWidth={RING_STROKE} color="rgba(202,40,81,0.7)" />
-                )}
+                {/* Anel sempre parado. Quem está no ecrã distingue-se pela cor
+                    cheia da marca; os outros ficam no tom claro da paleta. */}
+                <SegmentedRing
+                  count={g.posts.length}
+                  size={RING_OUTER}
+                  strokeWidth={RING_STROKE}
+                  color={isActive ? colors.primary : colors.primaryLight}
+                />
                 <Animated.View style={[s.avatarCircle, isActive && { transform: [{ scale: breatheScale }] }]}>
                   <AvatarImage uri={g.user.avatar} name={g.user.name} size={AV_SIZE} borderWidth={0} borderColor="transparent" />
                 </Animated.View>

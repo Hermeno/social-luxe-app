@@ -19,7 +19,7 @@ import {
   deleteCachedPost,
 } from './database'
 import { clearOutboxMedia, type OutboxPost } from './outbox'
-import { createPost, createAlbum, setRepost } from '../services/post.service'
+import { createPost, createAlbum, setRepost, sendTasteSignal } from '../services/post.service'
 import { isConnected } from '../services/netinfo.service'
 import { toggleFollow } from '../services/follow.service'
 
@@ -158,6 +158,14 @@ async function flushGenericQueue(): Promise<void> {
           const result = await setRepost(op.entityId, want)
           if (result.repostedPost) await cachePosts([result.repostedPost], 'synced')
           if (result.removedPostId) await deleteCachedPost(result.removedPostId)
+          break
+        }
+        // O sinal de gosto é a matéria-prima do algoritmo: perder um por não
+        // haver rede é perder aprendizagem. O servidor faz upsert por
+        // (pessoa, conteúdo), portanto repetir é inofensivo.
+        case 'taste:update': {
+          const { signal, dwellMs } = op.payload as any
+          await sendTasteSignal(op.entityId, signal, dwellMs ?? 0)
           break
         }
         default:

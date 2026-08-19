@@ -206,6 +206,11 @@ export const EN: { [K in keyof typeof import('./pt').PT]: string } = {
   feed_create: 'Create',
   feed_search_ph: 'Search people...',
   feed_announcement: 'official announcement · luxee',
+
+  taste_question: 'Want to see more moments like this?',
+  taste_less: 'Not interested',
+  taste_more: 'More like this',
+  taste_thanks: 'Noted. Your feed will follow you.',
   feed_see_more: 'See more',
   feed_delete_title: 'Delete post',
   feed_delete_msg: 'This action is permanent.',

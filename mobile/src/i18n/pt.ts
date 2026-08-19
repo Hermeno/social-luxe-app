@@ -217,6 +217,12 @@ export const PT = {
   feed_create: 'Criar',
   feed_search_ph: 'Pesquisar pessoas...',
   feed_announcement: 'anúncio oficial · luxee',
+
+  // Cartão de gosto — aparece de vez em quando, sobre a publicação
+  taste_question: 'Queres ver mais momentos assim?',
+  taste_less: 'Não tenho interesse',
+  taste_more: 'Ver mais deste tipo',
+  taste_thanks: 'Anotado. O teu feed vai seguir-te.',
   feed_see_more: 'Ver mais',
   feed_delete_title: 'Eliminar publicação',
   feed_delete_msg: 'Esta ação é permanente.',

@@ -350,6 +350,28 @@ export async function removeRepost(req: AuthRequest, res: Response) {
   } catch (err) { return handleError(res, err) }
 }
 
+// POST /posts/:id/taste  { signal: 'MORE' | 'LESS', dwellMs?: number }
+export async function recordTasteFeedback(req: AuthRequest, res: Response) {
+  try {
+    const signal = req.body?.signal
+    if (signal !== 'MORE' && signal !== 'LESS') {
+      return res.status(400).json({ success: false, message: 'signal must be MORE or LESS' })
+    }
+    // O cliente mede o tempo com o relógio dele; aceita-se como pista, nunca
+    // como verdade. Fora de um intervalo plausível, vale mais não guardar nada
+    // do que guardar um número que envenena o treino.
+    const raw = Number(req.body?.dwellMs)
+    const dwellMs = Number.isFinite(raw) && raw >= 0 && raw <= 3_600_000
+      ? Math.round(raw)
+      : null
+
+    const result = await postService.recordTasteFeedback(
+      req.user!.userId, req.params.id, signal, dwellMs,
+    )
+    return ok(res, result)
+  } catch (err) { return handleError(res, err) }
+}
+
 export async function voteExtendPost(req: AuthRequest, res: Response) {
   try {
     const result = await postService.voteExtendPost(req.user!.userId, req.params.id)

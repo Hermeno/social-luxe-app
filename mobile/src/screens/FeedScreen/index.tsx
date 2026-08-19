@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useRef, useEffect, useLayoutEffect } from 'react'
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import {
   View, Text, ActivityIndicator, FlatList, StyleSheet, Dimensions, Keyboard, TouchableOpacity,
   type LayoutChangeEvent, type ViewToken,
@@ -14,8 +14,10 @@ import { useFeed } from '../../hooks/useFeed'
 import { useFeedStore } from '../../store/feed.store'
 import { useNotificationStore } from '../../store/notification.store'
 import { AppStackParams } from '../../navigation/AppNavigator'
-import { markPostViewed, getViewedPostIds, getCache, setCache } from '../../db/database'
+import { markPostViewed, getViewedPostIds, getCache, setCache, enqueueSyncOp } from '../../db/database'
 import * as postService from '../../services/post.service'
+import type { TasteSignal } from '../../services/post.service'
+import { isConnected } from '../../services/netinfo.service'
 import { useT } from '../../i18n'
 import { prefetchMedia } from '../../db/mediaCache'
 import { colors, fonts } from '../../theme'
@@ -48,6 +50,30 @@ function postReferencesAnyAuthor(post: Post, userIds: Set<string>): boolean {
 }
 
 // ─── Feed ──────────────────────────────────────────────────────────────────
+// Objeto estável: recriá-lo a cada render faria a FlatList reavaliar a config.
+const MAINTAIN_VISIBLE_POSITION = { minIndexForVisible: 0 } as const
+
+// Handler vazio estável — um `() => {}` inline em `renderItem` quebrava o
+// `React.memo` de todas as células a cada render da feed.
+const NOOP = () => {}
+
+// ─── Amostragem do cartão de gosto ──────────────────────────────────────────
+// Uma em cada N publicações leva a pergunta. Não é para toda a gente nem para
+// todo o post: o valor do cartão está em ser raro — perguntado a toda a hora
+// vira mobília e a resposta deixa de ser pensada.
+//
+// O sorteio é um hash do id, não um `Math.random()`: a mesma publicação decide
+// sempre igual, em qualquer render e depois de fechar a app. Com aleatoriedade
+// o cartão nascia e morria a cada re-render da feed.
+const TASTE_SAMPLE_EVERY = 6
+const TASTE_RATED_CACHE_KEY = 'taste_rated_post_ids'
+
+function isTasteSample(postId: string): boolean {
+  let hash = 0
+  for (let i = 0; i < postId.length; i += 1) hash = (hash * 31 + postId.charCodeAt(i)) >>> 0
+  return hash % TASTE_SAMPLE_EVERY === 0
+}
+
 // Pager vertical: uma FlatList paginada onde cada célula é um post em ecrã
 // inteiro (FeedItem). A célula é dona do seu vídeo — aqui só se gere o estado
 // partilhado (likes, vistas), o agrupamento do topo e a folha de
@@ -82,6 +108,7 @@ export default function FeedScreen() {
   const [searchQuery,   setSearchQuery]   = useState('')
   const [commentDeltas, setCommentDeltas] = useState<Record<string, number>>({})
   const [likedPostIds,  setLikedPostIds]  = useState<Set<string>>(new Set())
+  const [tasteRatedIds, setTasteRatedIds] = useState<Set<string>>(new Set())
   const [blockedAuthorIds, setBlockedAuthorIds] = useState<Set<string>>(new Set())
   const [mutedAuthorIds, setMutedAuthorIds] = useState<Set<string>>(new Set())
   const moderationRevisionRef = useRef(0)
@@ -142,33 +169,11 @@ export default function FeedScreen() {
   const flatPostsRef = useRef(flatPosts)
   flatPostsRef.current = flatPosts
 
-  // Inserir ou remover a cópia de um repost muda os índices da FlatList: tudo
-  // o que estava abaixo desliza uma célula e o viewport passa a mostrar outro
-  // post. Guardamos aqui quem estava a ser visto e repomos o offset em
-  // `useLayoutEffect` — mesmo commit da inserção, antes de pintar. Com
-  // `requestAnimationFrame` chegavam a desenhar-se frames com a lista já
-  // deslocada, e era isso que se via a piscar.
-  const pendingRepostAnchorRef = useRef<string[] | null>(null)
-
-  useLayoutEffect(() => {
-    const candidates = pendingRepostAnchorRef.current
-    if (!candidates) return
-    pendingRepostAnchorRef.current = null
-
-    const source = flatPostsRef.current
-    if (source.length === 0) return
-
-    const index = candidates.reduce(
-      (found, id) => (found >= 0 ? found : source.findIndex((post) => post.id === id)),
-      -1,
-    )
-    const target = source[index >= 0 ? index : 0]
-    listRef.current?.scrollToOffset({
-      offset: (index >= 0 ? index : 0) * listHRef.current,
-      animated: false,
-    })
-    if (target && target.id !== currentPostIdRef.current) setCurrentPostId(target.id)
-  }, [flatPosts])
+  // Repostar deixou de mexer nesta lista (ver `updateRepostState` em useFeed),
+  // por isso não há aqui âncoras, reancoragens nem bloqueios de viewability: o
+  // pager fica exactamente onde estava porque nada se inseriu por cima dele.
+  // A única mudança de índice que sobra é a de desfazer a partir da própria
+  // cópia, e essa é resolvida em `handleRepostChange`, no mesmo commit.
 
   const currentIndex = useMemo(() => {
     if (!currentPostId) return 0
@@ -269,7 +274,8 @@ export default function FeedScreen() {
   // ── Célula visível → post ativo (é o que decide qual vídeo toca) ───────────
   const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
     const first = viewableItems.find((v) => v.isViewable)
-    if (first?.item) setCurrentPostId((first.item as Post).id)
+    const id = (first?.item as Post | undefined)?.id
+    if (id) setCurrentPostId(id)
   }).current
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 80 }).current
 
@@ -343,25 +349,61 @@ export default function FeedScreen() {
   // Vistas persistidas
   useEffect(() => { getViewedPostIds().then(setViewedIds).catch(() => {}) }, [])
 
+  // ── Sinal de gosto ─────────────────────────────────────────────────────────
+  // Quem já respondeu nunca mais é perguntado sobre a mesma publicação, mesmo
+  // depois de fechar a app — por isso a lista fica em disco, não só em memória.
+  useEffect(() => {
+    getCache<string[]>(TASTE_RATED_CACHE_KEY)
+      .then((ids) => { if (ids?.length) setTasteRatedIds(new Set(ids)) })
+      .catch(() => {})
+  }, [])
+
+  const handleTasteSignal = useCallback((postId: string, signal: TasteSignal, dwellMs: number) => {
+    setTasteRatedIds((prev) => {
+      if (prev.has(postId)) return prev
+      const next = new Set(prev)
+      next.add(postId)
+      // Guardamos no máximo os últimos 500: a lista só serve para não repetir
+      // a pergunta, e a verdade do que foi respondido vive no servidor.
+      const ids = Array.from(next).slice(-500)
+      setCache(TASTE_RATED_CACHE_KEY, ids).catch(() => {})
+      return next
+    })
+
+    // Falhar aqui seria perder aprendizagem, não um pixel: a fila reenvia
+    // quando houver rede e o servidor faz upsert, portanto repetir é seguro.
+    if (!isConnected()) {
+      enqueueSyncOp('taste', postId, 'update', { signal, dwellMs }).catch(() => {})
+      return
+    }
+    postService.sendTasteSignal(postId, signal, dwellMs).catch(() => {
+      enqueueSyncOp('taste', postId, 'update', { signal, dwellMs }).catch(() => {})
+    })
+  }, [])
+
   const handleLikeChange = useCallback((postId: string, liked: boolean) => {
     setLikedPostIds((prev) => { const n = new Set(prev); liked ? n.add(postId) : n.delete(postId); return n })
     const base = flatPostsRef.current.find((p) => p.id === postId)?._count?.likes ?? 0
     updatePostCounts(postId, { likes: Math.max(0, base + (liked ? 1 : -1)) })
   }, [updatePostCounts])
 
+  // Repostar não move ninguém: só sobe o contador e acende o botão. O único
+  // caso em que a lista encolhe é desfazer a partir da própria cópia — a
+  // célula que está a ser lida deixa de existir no servidor. Aí escolhemos
+  // aqui, no mesmo commit do `setPosts`, quem fica no lugar dela: a seguinte,
+  // ou a anterior se era a última. Sem isto o post ativo caía no índice 0
+  // durante um frame — acendia a rail e o vídeo do primeiro post — e só depois
+  // o relatório de viewability o repunha. Esse ida-e-volta era o piscar.
   const handleRepostChange = useCallback((result: RepostResult) => {
-    if (result.removedPostId && useFeedStore.getState().focusedPost?.id === result.removedPostId) {
-      clearFocusedPost()
-    }
-
-    // A âncora fica marcada ANTES do setState: o `useLayoutEffect` acima corre
-    // no commit dessa alteração e já a encontra. Ao desfazer a própria cópia,
-    // o original é a segunda escolha.
-    if (result.repostedPost || result.removedPostId) {
-      const anchor = currentPostIdRef.current
-      pendingRepostAnchorRef.current = anchor && anchor !== result.removedPostId
-        ? [anchor, result.postId]
-        : [result.postId]
+    const removedPostId = result.removedPostId
+    if (removedPostId) {
+      if (useFeedStore.getState().focusedPost?.id === removedPostId) clearFocusedPost()
+      if (removedPostId === currentPostIdRef.current) {
+        const source = flatPostsRef.current
+        const index = source.findIndex((post) => post.id === removedPostId)
+        const heir = index >= 0 ? (source[index + 1] ?? source[index - 1]) : undefined
+        setCurrentPostId(heir?.id ?? null)
+      }
     }
 
     updateRepostState(result)
@@ -528,16 +570,18 @@ export default function FeedScreen() {
       liked={likedPostIds.has(item.id)}
       commentCount={(item._count?.comments ?? 0) + (commentDeltas[item.id] ?? 0)}
       onCommentPress={openComments}
-      onLikeChange={(liked) => handleLikeChange(item.id, liked)}
+      onLikeChange={handleLikeChange}
       onRepostChange={handleRepostChange}
       onDeleted={handlePostDeleted}
-      onEdited={(id, caption) => updatePost(id, caption)}
+      onEdited={updatePost}
       onProfileBlocked={handleProfileBlocked}
       onAuthorMuted={handleAuthorMuted}
       onExpired={handlePostExpired}
-      onBlockingChange={() => {}}
+      onBlockingChange={NOOP}
+      tasteEligible={!tasteRatedIds.has(item.id) && isTasteSample(item.id)}
+      onTasteSignal={handleTasteSignal}
     />
-  ), [currentPostId, listH, likedPostIds, commentDeltas, openComments, handleLikeChange, handleRepostChange, handlePostDeleted, handlePostExpired, handleProfileBlocked, handleAuthorMuted, updatePost, reduceMotion])
+  ), [currentPostId, listH, likedPostIds, commentDeltas, tasteRatedIds, openComments, handleLikeChange, handleRepostChange, handlePostDeleted, handlePostExpired, handleProfileBlocked, handleAuthorMuted, handleTasteSignal, updatePost, reduceMotion])
 
   const getItemLayout = useCallback((_: unknown, index: number) => (
     { length: listH, offset: listH * index, index }
@@ -566,6 +610,11 @@ export default function FeedScreen() {
           alwaysBounceVertical={false}
           overScrollMode="never"
           contentInsetAdjustmentBehavior="never"
+          // Compensação nativa: quando chega um post novo pelo socket e ele
+          // entra acima do que está à vista, o contentOffset é corrigido na UI
+          // thread, no mesmo frame da mutação. O JS nunca vê a lista deslocada,
+          // logo não há frame desenhado fora do sítio.
+          maintainVisibleContentPosition={MAINTAIN_VISIBLE_POSITION}
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
           onEndReached={loadMore}

@@ -701,6 +701,39 @@ export async function removeRepost(userId: string, postId: string) {
   }
 }
 
+// ─── Sinal de gosto ────────────────────────────────────────────────────────
+// O gosto é do CONTEÚDO, não da publicação onde se tocou: responder numa cópia
+// de repost regista o original e o autor dele. Sem isto o mesmo momento contava
+// duas vezes e o algoritmo aprendia com um eco.
+//
+// Idempotente e reversível: mudar de ideias substitui a resposta anterior em vez
+// de acumular linhas contraditórias.
+export async function recordTasteFeedback(
+  userId: string,
+  postId: string,
+  signal: 'MORE' | 'LESS',
+  dwellMs: number | null,
+) {
+  const original = await resolveRepostOriginal(postId)
+  const shape = {
+    authorId:  original.userId,
+    mediaType: original.mediaType,
+    signal,
+    dwellMs,
+  }
+
+  await prisma.tasteFeedback.upsert({
+    where:  { userId_postId: { userId, postId: original.id } },
+    create: { userId, postId: original.id, ...shape },
+    // `createdAt` acompanha a resposta que vale: o perfil de gosto lê-se do
+    // mais recente para trás e uma correção de hoje não pode ficar arquivada
+    // com a data da opinião que substituiu.
+    update: { ...shape, createdAt: new Date() },
+  })
+
+  return { postId: original.id, signal }
+}
+
 export async function voteExtendPost(userId: string, postId: string) {
   const post = await prisma.post.findUnique({ where: { id: postId }, select: { isAnnouncement: true, deletedAt: true } })
   if (!post || post.deletedAt) throw new Error('Post not found')

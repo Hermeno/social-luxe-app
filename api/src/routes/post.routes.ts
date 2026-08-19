@@ -25,6 +25,7 @@ router.put('/:id/repost', postController.repostPost)
 router.delete('/:id/repost', postController.removeRepost)
 // Compatibilidade com versões anteriores que já chamavam POST.
 router.post('/:id/repost', postController.repostPost)
+router.post('/:id/taste',       postController.recordTasteFeedback)
 router.post('/:id/vote-extend', postController.voteExtendPost)
 router.get('/:id/extend-votes', postController.getExtendVotes)
 router.get('/:id/comments', postController.getComments)

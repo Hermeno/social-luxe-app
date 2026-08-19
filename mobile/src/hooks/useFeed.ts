@@ -206,6 +206,15 @@ export function useFeed() {
   //   · `userReposted` é do CONTEÚDO — vale para o original e para todas as
   //     cópias, e é o que impede repostar duas vezes o mesmo post;
   //   · o contador é da PUBLICAÇÃO tocada (`viaPostId`) — só ela recebe o +1.
+  //
+  // E uma coisa que isto NÃO faz: mexer na lista que está a ser lida. A cópia
+  // criada pelo PUT é uma publicação real, mas fazê-la nascer no meio do pager
+  // empurrava todas as células uma para baixo — o post no ecrã deslizava, a
+  // FlatList reancorava, a viewability reportava outra célula e o post ativo
+  // ia e voltava. Era esse ida-e-volta que se via a piscar e a saltar. A cópia
+  // fica no cache e entra na feed na próxima sincronização, como qualquer
+  // outra publicação nova. Repostar passa a ser só o que a pessoa pediu:
+  // o botão acende e o contador sobe, sem lhe tirarem o post das mãos.
   const updateRepostState = useCallback((result: RepostResult) => {
     const {
       postId: originalPostId,
@@ -217,36 +226,34 @@ export function useFeed() {
     } = result
     const affected = postsRef.current.filter((p) => (p.repostOfId ?? p.id) === originalPostId)
     setPosts((prev) => {
-      const next = prev
-        .filter((p) => p.id !== removedPostId)
-        .map((p) => {
-          const inChain = (p.repostOfId ?? p.id) === originalPostId
-          const isVia   = p.id === viaPostId
-          if (!inChain && !isVia) return p
-          return {
-            ...p,
-            ...(inChain && {
-              userReposted: reposted,
-              userRepostId: repostedPost?.id ?? (reposted ? p.userRepostId : null),
-            }),
-            ...(isVia && {
-              userRepostedVia: reposted,
-              _count: { ...p._count, reposts: viaCount ?? p._count.reposts },
-            }),
-          }
-        })
+      // Desfazer apaga a cópia no servidor: essa sim tem de sair da lista, se
+      // por acaso já lá estiver (veio de uma sincronização anterior).
+      const kept = removedPostId && prev.some((p) => p.id === removedPostId)
+        ? prev.filter((p) => p.id !== removedPostId)
+        : prev
 
-      // O PUT cria uma publicação real para a feed. Inserimo-la já, em vez de
-      // obrigar a pessoa a atualizar o ecrã para ver o próprio repost.
-      if (repostedPost && !next.some((p) => p.id === repostedPost.id)) {
-        const createdAt = new Date(repostedPost.createdAt).getTime()
-        const insertAt = next.findIndex((p) => new Date(p.createdAt).getTime() < createdAt)
-        if (insertAt < 0) return [...next, repostedPost]
-        const ordered = [...next]
-        ordered.splice(insertAt, 0, repostedPost)
-        return ordered
-      }
-      return next
+      let touched = kept !== prev
+      const next = kept.map((p) => {
+        const inChain = (p.repostOfId ?? p.id) === originalPostId
+        const isVia   = p.id === viaPostId
+        if (!inChain && !isVia) return p
+        touched = true
+        return {
+          ...p,
+          ...(inChain && {
+            userReposted: reposted,
+            userRepostId: repostedPost?.id ?? (reposted ? p.userRepostId : null),
+          }),
+          ...(isVia && {
+            userRepostedVia: reposted,
+            _count: { ...p._count, reposts: viaCount ?? p._count.reposts },
+          }),
+        }
+      })
+
+      // Nada desta feed mudou (repostou-se um post aberto de fora, por
+      // exemplo): devolver o mesmo array poupa um render de todas as células.
+      return touched ? next : prev
     })
 
     affected.forEach((p) => {

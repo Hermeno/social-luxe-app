@@ -238,8 +238,10 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
     ? (activeRoute.params as { userId?: string } | undefined)?.userId
     : undefined
   const onOwnProfile = onProfile && (!profileUserId || profileUserId === currentUser?.id)
-  const iconActive = onFeed ? '#ffffff' : colors.black
-  const iconInactv = onFeed ? 'rgba(255,255,255,0.5)' : colors.gray400
+  // A nav é branca em toda a app, feed incluída — logo os ícones são sempre os
+  // escuros. Eram brancos enquanto a barra acompanhava o fundo da feed.
+  const iconActive = colors.black
+  const iconInactv = colors.gray400
 
   useEffect(() => {
     if (currentUser?.id) loadSocialPreview(currentUser.id).catch(() => {})
@@ -354,7 +356,7 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
       <View
         style={[
           s.bar,
-          onFeed ? s.barFeed : s.barLight,
+          s.barLight,
           { paddingBottom: tabBarBottomInset(bottom) },
         ]}
       >
@@ -521,6 +523,9 @@ const s = StyleSheet.create({
     paddingHorizontal: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
+  // Variante escura: a nav acompanhava o fundo da feed e desaparecia dentro
+  // dele. Fica guardada para o caso de se querer voltar — basta repô-la no
+  // `style` da barra, junto com os ícones claros.
   barFeed: {
     backgroundColor: colors.feedSurface,
     borderTopColor: 'rgba(255,255,255,0.12)',
@@ -613,7 +618,7 @@ const s = StyleSheet.create({
   },
   commentText: {
     flex: 1,
-    color: 'rgba(255,255,255,0.64)',
+    color: 'rgba(23, 17, 17, 0.64)',
     fontFamily: fonts.medium,
     fontSize: 13.5,
     letterSpacing: -0.15,

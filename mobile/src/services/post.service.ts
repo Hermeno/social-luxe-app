@@ -107,6 +107,19 @@ export async function setRepost(postId: string, reposted: boolean): Promise<Repo
   return res.data.data
 }
 
+// ─── Sinal de gosto ────────────────────────────────────────────────────────
+// A resposta ao cartão da feed. `postId` é onde se tocou — o servidor resolve
+// o original se for uma cópia de repost, para o gosto ser do conteúdo.
+export type TasteSignal = 'MORE' | 'LESS'
+
+export async function sendTasteSignal(
+  postId: string,
+  signal: TasteSignal,
+  dwellMs: number,
+): Promise<void> {
+  await api.post(`/posts/${postId}/taste`, { signal, dwellMs })
+}
+
 export async function sharePost(postId: string) {
   await api.post(`/posts/${postId}/share`)
 }
