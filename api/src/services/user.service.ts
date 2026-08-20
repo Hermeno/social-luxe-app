@@ -1,6 +1,6 @@
 import { prisma } from '../config/database'
 import { withThumbnails } from '../utils/cloudinary.util'
-import { attachPostMeta } from './post.service'
+import { attachPostMeta, withoutHiddenCollectiveCaptures } from './post.service'
 
 const USER_SELECT = {
   id: true, name: true, username: true, avatar: true, bio: true, availability: true,
@@ -119,15 +119,34 @@ export async function getUserById(userId: string, viewerId?: string) {
 }
 
 export async function getUserPosts(userId: string, viewerId?: string) {
-  const posts = await prisma.post.findMany({
-    where: { userId, deletedAt: null, expiresAt: { gt: new Date() } },
-    include: {
-      user: { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true, isAdmin: true, showDevice: true, statusLabel: true } },
-      _count: { select: { likes: true, comments: true, views: true, shares: true, reposts: true } },
-    },
-    orderBy: { createdAt: 'desc' },
-  })
-  return attachPostMeta(withThumbnails(posts), viewerId)
+  const [posts, blocks] = await Promise.all([
+    prisma.post.findMany({
+      where: { userId, deletedAt: null, expiresAt: { gt: new Date() } },
+      include: {
+        user: { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true, isAdmin: true, showDevice: true, statusLabel: true } },
+        _count: { select: { likes: true, comments: true, views: true, shares: true, reposts: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
+    viewerId
+      ? prisma.block.findMany({
+          where: {
+            OR: [
+              { blockerId: viewerId },
+              { blockedId: viewerId },
+            ],
+          },
+          select: { blockerId: true, blockedId: true },
+        })
+      : Promise.resolve([]),
+  ])
+  const hiddenIds = new Set(blocks.flatMap((block) => [block.blockerId, block.blockedId]))
+  hiddenIds.delete(viewerId ?? '')
+  if (hiddenIds.has(userId)) return []
+  return attachPostMeta(
+    withThumbnails(withoutHiddenCollectiveCaptures(posts, hiddenIds)),
+    viewerId,
+  )
 }
 
 // ─── Conexões em comum ────────────────────────────────────────────────────────

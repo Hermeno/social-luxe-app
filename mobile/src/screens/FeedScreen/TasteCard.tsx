@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native'
+import FeedIcon from '../../components/FeedIcon'
 import { fonts } from '../../theme'
 import { useT } from '../../i18n'
 import type { TasteSignal } from '../../services/post.service'
@@ -102,17 +103,20 @@ export default function TasteCard({ reduceMotion, onAnswer, onDone }: Props) {
             accessibilityRole="button"
             accessibilityLabel={t.taste_less}
           >
-            <Text style={s.pillTxt} numberOfLines={1}>{t.taste_less}</Text>
+            <Text style={s.pillTxt} numberOfLines={2}>{t.taste_less}</Text>
           </Pressable>
 
           <Pressable
-            style={({ pressed }) => [s.pill, pressed && s.pillPressed]}
+            style={({ pressed }) => [s.pill, s.pillMore, pressed && s.pillPressed]}
             onPress={() => handleAnswer('MORE')}
             hitSlop={6}
             accessibilityRole="button"
             accessibilityLabel={t.taste_more}
           >
-            <Text style={s.pillTxt} numberOfLines={1}>{t.taste_more}</Text>
+            <Text style={s.pillTxt} numberOfLines={2}>{t.taste_more}</Text>
+            {/* O sinal só está do lado do "sim": este é o caminho que continua,
+                o outro é o que fecha. A seta diz isso sem gastar palavras. */}
+            <FeedIcon name="chevron-right" size={13} color="rgba(255,255,255,0.9)" />
           </Pressable>
         </View>
       </Animated.View>
@@ -140,17 +144,26 @@ const s = StyleSheet.create({
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   pill: {
-    flexShrink: 1,
-    paddingHorizontal: 13,
-    paddingVertical: 7,
-    borderRadius: 999,
+    // Metade da largura para cada lado — dois pesos iguais, e nenhum rótulo
+    // cortado a meio em ecrãs estreitos (a legenda passa a duas linhas).
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    // Cantos suaves, não uma cápsula: o traço acompanha o resto da feed em vez
+    // de virar um botão de ação.
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.38)',
+    borderColor: 'rgba(255,255,255,0.62)',
     backgroundColor: 'transparent',
   },
-  pillPressed: { borderColor: 'rgba(255,255,255,0.92)' },
+  // O lado do "sim" leva a seta ao lado do texto, sem sair do centro.
+  pillMore: { flexDirection: 'row', gap: 5 },
+  pillPressed: { borderColor: '#FFFFFF' },
   pillTxt: {
     ...shadow,
+    textAlign: 'center',
     color: 'rgba(255,255,255,0.94)',
     fontFamily: fonts.semiBold,
     fontSize: 12.5,

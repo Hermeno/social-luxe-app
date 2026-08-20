@@ -1,8 +1,9 @@
 import { prisma } from '../config/database'
-import { MediaType } from '@prisma/client'
+import { MediaType, Prisma } from '@prisma/client'
 import { POST_INITIAL_HOURS, POST_EXTENDED_HOURS } from '../types'
 import { sendPush } from './notification.service'
 import { withThumbnail, withThumbnails } from '../utils/cloudinary.util'
+import { emitToUser } from '../socket'
 
 export async function createPost(
   userId: string,
@@ -36,6 +37,33 @@ export async function createPost(
 // mediaUrl = 1ª foto (thumbnail/compat); mediaUrls = todas.
 type Overlay = { emoji: string; x: number; y: number }
 
+export interface CollectiveMomentSnapshot {
+  version: 1
+  id: string
+  sessionId: string
+  roundId?: string
+  revision?: string
+  creatorId: string
+  createdAt: string
+  participants: Array<{
+    id: string
+    name: string
+    username: string | null
+    avatar: string | null
+  }>
+  captures: Array<{
+    id: string
+    userId: string
+    slot?: number
+    mediaIndex: number
+    mediaUrl: string
+    overlays: Overlay[]
+    createdAt: string
+  }>
+}
+
+type PostWriteClient = Pick<Prisma.TransactionClient, 'post'>
+
 export async function createAlbumPost(
   userId: string,
   mediaUrls: string[],
@@ -43,31 +71,126 @@ export async function createAlbumPost(
   deviceModel?: string,
   albumOverlays?: Overlay[][],   // paralelo a mediaUrls; emojis de cada foto
   mediaSizes?: { w: number | null; h: number | null }[],   // paralelo a mediaUrls
+  collectiveMoment?: CollectiveMomentSnapshot,
+  db: PostWriteClient = prisma,
 ) {
   const hasOverlays = albumOverlays?.some((a) => a.length > 0)
   const expiresAt = new Date(Date.now() + POST_INITIAL_HOURS * 60 * 60 * 1000)
-  const post = await prisma.post.create({
-    data: {
-      userId,
-      mediaUrl:  mediaUrls[0] ?? null,
-      mediaUrls,
-      mediaSizes: mediaSizes ?? undefined,
-      mediaWidth:  mediaSizes?.[0]?.w ?? null,
-      mediaHeight: mediaSizes?.[0]?.h ?? null,
-      albumOverlays: hasOverlays ? albumOverlays : undefined,
-      mediaType: MediaType.IMAGE,
-      caption:   caption ?? null,
-      bgColor:   null,
-      expiresAt,
-      deviceModel: deviceModel ?? null,
-    },
-    include: {
-      user:        { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true, showDevice: true, statusLabel: true } },
-      partnerUser: { select: { id: true, name: true, username: true, avatar: true } },
-      _count:      { select: { likes: true, comments: true, shares: true, reposts: true, views: true } },
-    },
-  })
+  const circlePublicationKey = collectiveMoment ? `${userId}:${collectiveMoment.id}` : null
+  const data: Prisma.PostUncheckedCreateInput = {
+    userId,
+    mediaUrl: mediaUrls[0] ?? null,
+    mediaUrls,
+    mediaSizes: mediaSizes ?? undefined,
+    mediaWidth: mediaSizes?.[0]?.w ?? null,
+    mediaHeight: mediaSizes?.[0]?.h ?? null,
+    albumOverlays: hasOverlays ? albumOverlays : undefined,
+    collectiveMoment: collectiveMoment
+      ? collectiveMoment as unknown as Prisma.InputJsonValue
+      : undefined,
+    circlePublicationKey,
+    mediaType: MediaType.IMAGE,
+    caption: caption ?? null,
+    bgColor: null,
+    expiresAt,
+    deviceModel: deviceModel ?? null,
+  }
+  const include = {
+    user:        { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true, showDevice: true, statusLabel: true } },
+    partnerUser: { select: { id: true, name: true, username: true, avatar: true } },
+    _count:      { select: { likes: true, comments: true, shares: true, reposts: true, views: true } },
+  } as const
+
+  // Retries de rede/toques duplos devolvem o mesmo Post da mesma pessoa e
+  // ronda. Álbuns comuns continuam a seguir o caminho de criação normal.
+  const post = circlePublicationKey
+    ? await db.post.upsert({
+        where: { circlePublicationKey },
+        // A mesma pessoa continua com um único Post por ronda, mas a segunda
+        // captura (ou uma substituição de slot) atualiza esse Post em vez de
+        // devolver para sempre o snapshot da primeira publicação.
+        update: {
+          mediaUrl: mediaUrls[0] ?? null,
+          mediaUrls,
+          mediaSizes: mediaSizes
+            ? mediaSizes as unknown as Prisma.InputJsonValue
+            : Prisma.DbNull,
+          mediaWidth: mediaSizes?.[0]?.w ?? null,
+          mediaHeight: mediaSizes?.[0]?.h ?? null,
+          albumOverlays: hasOverlays
+            ? albumOverlays as unknown as Prisma.InputJsonValue
+            : Prisma.DbNull,
+          collectiveMoment: collectiveMoment as unknown as Prisma.InputJsonValue,
+          caption: caption ?? null,
+          deviceModel: deviceModel ?? null,
+        },
+        create: data,
+        include,
+      })
+    : await db.post.create({ data, include })
   return withThumbnail(post)
+}
+
+function collectiveCaptureUserIds(post: unknown): string[] {
+  if (!post || typeof post !== 'object') return []
+  const moment = (post as { collectiveMoment?: unknown }).collectiveMoment
+  if (!moment || typeof moment !== 'object' || Array.isArray(moment)) return []
+  const captures = (moment as { captures?: unknown }).captures
+  if (!Array.isArray(captures)) return []
+  return captures.flatMap((capture) => {
+    if (!capture || typeof capture !== 'object') return []
+    const userId = (capture as { userId?: unknown }).userId
+    return typeof userId === 'string' ? [userId] : []
+  })
+}
+
+// Entrega em tempo real segue a mesma fronteira de visibilidade do feed. Num
+// Momento Coletivo, autoria visual inclui também quem tirou cada fotografia:
+// bloquear/silenciar uma dessas pessoas não pode ser contornado pelo socket.
+export async function emitPostToVisibleFollowers(
+  authorId: string,
+  post: unknown,
+  event: 'post:new' | 'post:updated' = 'post:new',
+) {
+  const followers = await prisma.follow.findMany({
+    where: { followingId: authorId },
+    select: { followerId: true },
+  })
+  if (followers.length === 0) return
+
+  const followerIds = followers.map((follow) => follow.followerId)
+  const followerSet = new Set(followerIds)
+  const contentUserIds = [...new Set([authorId, ...collectiveCaptureUserIds(post)])]
+  const now = new Date()
+  const [blocks, mutes] = await Promise.all([
+    prisma.block.findMany({
+      where: {
+        OR: [
+          { blockerId: { in: contentUserIds }, blockedId: { in: followerIds } },
+          { blockerId: { in: followerIds }, blockedId: { in: contentUserIds } },
+        ],
+      },
+      select: { blockerId: true, blockedId: true },
+    }),
+    prisma.userMute.findMany({
+      where: {
+        mutedId: { in: contentUserIds },
+        muterId: { in: followerIds },
+        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      },
+      select: { muterId: true },
+    }),
+  ])
+
+  const hiddenRecipients = new Set(mutes.map((mute) => mute.muterId))
+  for (const block of blocks) {
+    if (followerSet.has(block.blockerId)) hiddenRecipients.add(block.blockerId)
+    if (followerSet.has(block.blockedId)) hiddenRecipients.add(block.blockedId)
+  }
+
+  for (const followerId of followerIds) {
+    if (!hiddenRecipients.has(followerId)) emitToUser(followerId, event, post)
+  }
 }
 
 // Haversine distance in km between two lat/lng points
@@ -79,6 +202,73 @@ function haversine(lat1: number, lng1: number, lat2: number, lng2: number) {
     Math.sin(dLat / 2) ** 2 +
     Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+export function withoutHiddenCollectiveCaptures<T extends { collectiveMoment?: unknown }>(
+  posts: T[],
+  hiddenUserIds: ReadonlySet<string>,
+): T[] {
+  if (hiddenUserIds.size === 0) return posts
+  return posts.filter((post) => {
+    const moment = post.collectiveMoment
+    if (!moment || typeof moment !== 'object' || Array.isArray(moment)) return true
+    const captures = (moment as { captures?: unknown }).captures
+    if (!Array.isArray(captures)) return true
+    // Sanitizar apenas um card quebraria os índices paralelos de URLs,
+    // overlays e dimensões. O limite de moderação mais seguro é ocultar o
+    // momento inteiro quando ele reintroduzir uma captura bloqueada/silenciada.
+    return !captures.some((capture) => {
+      if (!capture || typeof capture !== 'object') return false
+      const userId = (capture as { userId?: unknown }).userId
+      return typeof userId === 'string' && hiddenUserIds.has(userId)
+    })
+  })
+}
+
+// `collectiveMoment` é JSONB e a regra de moderação olha para autores dentro do
+// snapshot. Filtrar só depois de skip/take encurtava a página e fazia o mobile
+// concluir incorretamente que não existiam mais posts. Este helper pagina o
+// conjunto já filtrado; quando não há bloqueios/mutes mantém o caminho barato.
+async function findVisibleFeedPage(
+  where: Prisma.PostWhereInput,
+  include: Record<string, unknown>,
+  hiddenUserIds: ReadonlySet<string>,
+  page: number,
+  limit: number,
+): Promise<any[]> {
+  const visibleOffset = Math.max(0, page - 1) * limit
+  if (hiddenUserIds.size === 0) {
+    return prisma.post.findMany({
+      where,
+      include,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      skip: visibleOffset,
+      take: limit,
+    })
+  }
+
+  const result: any[] = []
+  const batchSize = Math.max(30, limit * 3)
+  let rawOffset = 0
+  let visibleSeen = 0
+  while (result.length < limit) {
+    const raw = await prisma.post.findMany({
+      where,
+      include,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      skip: rawOffset,
+      take: batchSize,
+    })
+    if (raw.length === 0) break
+    rawOffset += raw.length
+    for (const post of withoutHiddenCollectiveCaptures(raw, hiddenUserIds)) {
+      if (visibleSeen++ < visibleOffset) continue
+      result.push(post)
+      if (result.length === limit) break
+    }
+    if (raw.length < batchSize) break
+  }
+  return result
 }
 
 // ─── Feed meta helpers ────────────────────────────────────────────────────────
@@ -282,13 +472,13 @@ export async function getFeed(userId: string, page = 1, limit = 10) {
     // Personalised feed: all connections + own posts, excluding blocked/muted
     // publication authors.
     const allowedIds = [...connectionIds, userId].filter((id) => !hiddenContentIds.has(id))
-    const posts = await prisma.post.findMany({
-      where: { ...visibleBaseWhere, OR: [{ userId: { in: allowedIds } }, { isAnnouncement: true }] },
+    const posts = await findVisibleFeedPage(
+      { ...visibleBaseWhere, OR: [{ userId: { in: allowedIds } }, { isAnnouncement: true }] },
       include,
-      orderBy: { createdAt: 'desc' },
-      skip: (page - 1) * limit,
-      take: limit,
-    })
+      hiddenContentIds,
+      page,
+      limit,
+    )
     return attachPostMeta(withThumbnails(posts), userId)
   }
 
@@ -318,25 +508,25 @@ export async function getFeed(userId: string, page = 1, limit = 10) {
     if (nearbyIds.length > 0) {
       const nearbyWithSelf = [...new Set([...nearbyIds, userId])]
         .filter((id) => !hiddenContentIds.has(id))
-      const posts = await prisma.post.findMany({
-        where: { ...visibleBaseWhere, OR: [{ userId: { in: nearbyWithSelf } }, { isAnnouncement: true }] },
+      const posts = await findVisibleFeedPage(
+        { ...visibleBaseWhere, OR: [{ userId: { in: nearbyWithSelf } }, { isAnnouncement: true }] },
         include,
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit,
-      })
+        hiddenContentIds,
+        page,
+        limit,
+      )
       return attachPostMeta(withThumbnails(posts), userId)
     }
   }
 
   // Fallback: global feed — own posts always included
-  const posts = await prisma.post.findMany({
-    where: { ...visibleBaseWhere, OR: [{ userId: { notIn: [...hiddenContentIds] } }, { isAnnouncement: true }] },
+  const posts = await findVisibleFeedPage(
+    { ...visibleBaseWhere, OR: [{ userId: { notIn: [...hiddenContentIds] } }, { isAnnouncement: true }] },
     include,
-    orderBy: { createdAt: 'desc' },
-    skip: (page - 1) * limit,
-    take: limit,
-  })
+    hiddenContentIds,
+    page,
+    limit,
+  )
   return attachPostMeta(withThumbnails(posts), userId)
 }
 
@@ -391,7 +581,7 @@ export async function searchPosts(query: string, userId: string) {
     orderBy: { createdAt: 'desc' },
     take: 30,
   })
-  return attachPostMeta(withThumbnails(posts), userId)
+  return attachPostMeta(withThumbnails(withoutHiddenCollectiveCaptures(posts, new Set(hiddenContentIds))), userId)
 }
 
 // Extend a post's expiry by `minutes`. Announcements are never touched.
@@ -526,6 +716,11 @@ export async function deletePost(userId: string, postId: string) {
     include: { repostEntry: { select: { postId: true } } },
   })
   if (!post || post.userId !== userId) throw new Error('Post not found')
+  const ownedMediaUrls = post.repostEntry
+    ? []
+    : [...new Set(post.mediaUrls.length > 0
+        ? post.mediaUrls
+        : post.mediaUrl ? [post.mediaUrl] : [])]
 
   await prisma.$transaction(async (tx) => {
     // Ao apagar o original, as cópias deixam de ter uma fonte legítima e saem
@@ -546,8 +741,46 @@ export async function deletePost(userId: string, postId: string) {
   })
 
   if (post.repostEntry) recalcPostLife(post.repostEntry.postId).catch(() => {})
+
+  // Fotografias de um Círculo podem ser publicadas por mais de um membro. Só
+  // o último Post que referencia uma URL recebe autorização para removê-la do
+  // storage; apagar um dos outros não pode partir o momento de outra pessoa.
+  const [stillReferenced, liveCirclePhotos, liveCircleCaptures] = ownedMediaUrls.length > 0
+    ? await Promise.all([
+        prisma.post.findMany({
+          where: {
+            OR: [
+              { mediaUrl: { in: ownedMediaUrls } },
+              { mediaUrls: { hasSome: ownedMediaUrls } },
+            ],
+          },
+          select: { mediaUrl: true, mediaUrls: true },
+        }),
+        // Enquanto a sessão ainda conserva a captura, outro participante pode
+        // publicá-la. A sessão é, portanto, uma referência tão válida quanto
+        // outro Post para decidir a eliminação física.
+        prisma.circleSessionMember.findMany({
+          where: { photoUrl: { in: ownedMediaUrls } },
+          select: { photoUrl: true },
+        }),
+        prisma.circleSessionCapture.findMany({
+          where: { mediaUrl: { in: ownedMediaUrls } },
+          select: { mediaUrl: true },
+        }),
+      ])
+    : [[], [], []]
+  const referencedUrls = new Set<string>([
+    ...stillReferenced.flatMap((candidate) => [
+    ...(candidate.mediaUrl ? [candidate.mediaUrl] : []),
+    ...candidate.mediaUrls,
+    ]),
+    ...liveCirclePhotos.flatMap((capture) => capture.photoUrl ? [capture.photoUrl] : []),
+    ...liveCircleCaptures.map((capture) => capture.mediaUrl),
+  ])
+
   return {
     mediaUrl: post.mediaUrl,
+    mediaUrls: ownedMediaUrls.filter((url) => !referencedUrls.has(url)),
     mediaType: post.mediaType,
     // A cópia usa o mesmo URL do original: apagá-lo do storage aqui partiria
     // o post original. Só o dono do original remove o ficheiro físico.
@@ -637,6 +870,7 @@ export async function repostPost(userId: string, postId: string) {
           mediaWidth:    original.mediaWidth,
           mediaHeight:   original.mediaHeight,
           mediaSizes:    (original.mediaSizes ?? undefined) as any,
+          collectiveMoment: (original.collectiveMoment ?? undefined) as any,
           mediaType:     original.mediaType,
           caption:       original.caption,
           bgColor:       original.bgColor,

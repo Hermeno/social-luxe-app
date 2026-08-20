@@ -52,7 +52,7 @@ export type AppStackParams = {
   Verified: undefined
   Halves: undefined
   Notifications: undefined
-  PostViewer: { posts: Post[]; startIndex: number }
+  PostViewer: { posts: Post[]; startIndex: number; collectiveCaptureIndex?: number }
   EditProfile: undefined
   Settings: undefined
   Privacy: undefined

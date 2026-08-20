@@ -25,6 +25,7 @@ import { API_BASE } from '../../config'
 import FeedHeader, { FeedUserGroup as UserGroup } from './FeedHeader'
 import Wordmark from '../../components/Wordmark'
 import FeedItem from './FeedItem'
+import { hydrateTastePolicy, noteTastePostSeen } from './tastePolicy'
 import CommentSheet from '../../components/CommentSheet'
 import useReducedMotionPreference from '../../hooks/useReducedMotionPreference'
 import { BLOCKED_USER_IDS_CACHE_KEY, getBlockedUsers } from '../../services/block.service'
@@ -41,12 +42,20 @@ function resolveMedia(url: string | null | undefined): string {
 }
 
 function postReferencesAuthor(post: Post, userId: string): boolean {
-  return post.user.id === userId || post.repostOriginalAuthorId === userId
+  if (post.user.id === userId || post.repostOriginalAuthorId === userId) return true
+  const captures = Array.isArray(post.collectiveMoment?.captures)
+    ? post.collectiveMoment.captures
+    : []
+  return captures.some((capture) => capture?.userId === userId)
 }
 
 function postReferencesAnyAuthor(post: Post, userIds: Set<string>): boolean {
-  return userIds.has(post.user.id)
-    || (!!post.repostOriginalAuthorId && userIds.has(post.repostOriginalAuthorId))
+  if (userIds.has(post.user.id)) return true
+  if (post.repostOriginalAuthorId && userIds.has(post.repostOriginalAuthorId)) return true
+  const captures = Array.isArray(post.collectiveMoment?.captures)
+    ? post.collectiveMoment.captures
+    : []
+  return captures.some((capture) => !!capture?.userId && userIds.has(capture.userId))
 }
 
 // ─── Feed ──────────────────────────────────────────────────────────────────
@@ -57,22 +66,6 @@ const MAINTAIN_VISIBLE_POSITION = { minIndexForVisible: 0 } as const
 // `React.memo` de todas as células a cada render da feed.
 const NOOP = () => {}
 
-// ─── Amostragem do cartão de gosto ──────────────────────────────────────────
-// Uma em cada N publicações leva a pergunta. Não é para toda a gente nem para
-// todo o post: o valor do cartão está em ser raro — perguntado a toda a hora
-// vira mobília e a resposta deixa de ser pensada.
-//
-// O sorteio é um hash do id, não um `Math.random()`: a mesma publicação decide
-// sempre igual, em qualquer render e depois de fechar a app. Com aleatoriedade
-// o cartão nascia e morria a cada re-render da feed.
-const TASTE_SAMPLE_EVERY = 6
-const TASTE_RATED_CACHE_KEY = 'taste_rated_post_ids'
-
-function isTasteSample(postId: string): boolean {
-  let hash = 0
-  for (let i = 0; i < postId.length; i += 1) hash = (hash * 31 + postId.charCodeAt(i)) >>> 0
-  return hash % TASTE_SAMPLE_EVERY === 0
-}
 
 // Pager vertical: uma FlatList paginada onde cada célula é um post em ecrã
 // inteiro (FeedItem). A célula é dona do seu vídeo — aqui só se gere o estado
@@ -108,7 +101,6 @@ export default function FeedScreen() {
   const [searchQuery,   setSearchQuery]   = useState('')
   const [commentDeltas, setCommentDeltas] = useState<Record<string, number>>({})
   const [likedPostIds,  setLikedPostIds]  = useState<Set<string>>(new Set())
-  const [tasteRatedIds, setTasteRatedIds] = useState<Set<string>>(new Set())
   const [blockedAuthorIds, setBlockedAuthorIds] = useState<Set<string>>(new Set())
   const [mutedAuthorIds, setMutedAuthorIds] = useState<Set<string>>(new Set())
   const moderationRevisionRef = useRef(0)
@@ -281,7 +273,10 @@ export default function FeedScreen() {
 
   // ── Vistas: marca o post ativo como visto ──────────────────────────────────
   useEffect(() => {
-    if (!activePost || viewedIds.has(activePost.id)) return
+    if (!activePost) return
+    // Distância entre cartões conta-se em publicações vistas, não em segundos.
+    noteTastePostSeen()
+    if (viewedIds.has(activePost.id)) return
     markPostViewed(activePost.id).catch(() => {})
     postService.addView(activePost.id).catch(() => {})
     incrementView(activePost.id)
@@ -350,26 +345,12 @@ export default function FeedScreen() {
   useEffect(() => { getViewedPostIds().then(setViewedIds).catch(() => {}) }, [])
 
   // ── Sinal de gosto ─────────────────────────────────────────────────────────
-  // Quem já respondeu nunca mais é perguntado sobre a mesma publicação, mesmo
-  // depois de fechar a app — por isso a lista fica em disco, não só em memória.
-  useEffect(() => {
-    getCache<string[]>(TASTE_RATED_CACHE_KEY)
-      .then((ids) => { if (ids?.length) setTasteRatedIds(new Set(ids)) })
-      .catch(() => {})
-  }, [])
+  // A memória de quem já respondeu, quando se perguntou pela última vez e
+  // quantas vezes o cartão foi ignorado vive na política, em disco. Aqui só se
+  // carrega uma vez e se envia o que a pessoa responder.
+  useEffect(() => { hydrateTastePolicy() }, [])
 
   const handleTasteSignal = useCallback((postId: string, signal: TasteSignal, dwellMs: number) => {
-    setTasteRatedIds((prev) => {
-      if (prev.has(postId)) return prev
-      const next = new Set(prev)
-      next.add(postId)
-      // Guardamos no máximo os últimos 500: a lista só serve para não repetir
-      // a pergunta, e a verdade do que foi respondido vive no servidor.
-      const ids = Array.from(next).slice(-500)
-      setCache(TASTE_RATED_CACHE_KEY, ids).catch(() => {})
-      return next
-    })
-
     // Falhar aqui seria perder aprendizagem, não um pixel: a fila reenvia
     // quando houver rede e o servidor faz upsert, portanto repetir é seguro.
     if (!isConnected()) {
@@ -578,10 +559,9 @@ export default function FeedScreen() {
       onAuthorMuted={handleAuthorMuted}
       onExpired={handlePostExpired}
       onBlockingChange={NOOP}
-      tasteEligible={!tasteRatedIds.has(item.id) && isTasteSample(item.id)}
       onTasteSignal={handleTasteSignal}
     />
-  ), [currentPostId, listH, likedPostIds, commentDeltas, tasteRatedIds, openComments, handleLikeChange, handleRepostChange, handlePostDeleted, handlePostExpired, handleProfileBlocked, handleAuthorMuted, handleTasteSignal, updatePost, reduceMotion])
+  ), [currentPostId, listH, likedPostIds, commentDeltas, openComments, handleLikeChange, handleRepostChange, handlePostDeleted, handlePostExpired, handleProfileBlocked, handleAuthorMuted, handleTasteSignal, updatePost, reduceMotion])
 
   const getItemLayout = useCallback((_: unknown, index: number) => (
     { length: listH, offset: listH * index, index }

@@ -86,76 +86,86 @@ model User {
   socialLinks Json?
 
   posts                Post[]
-  friendshipsA         Friendship[]          @relation("FriendA")
-  friendshipsB         Friendship[]          @relation("FriendB")
-  historyA             FriendshipHistory[]   @relation("HistoryA")
-  historyB             FriendshipHistory[]   @relation("HistoryB")
+  friendshipsA         Friendship[]           @relation("FriendA")
+  friendshipsB         Friendship[]           @relation("FriendB")
+  historyA             FriendshipHistory[]    @relation("HistoryA")
+  historyB             FriendshipHistory[]    @relation("HistoryB")
   likes                Like[]
   comments             Comment[]
   commentLikes         CommentLike[]
   shares               Share[]
   reposts              Repost[]
   views                View[]
-  sentMessages         Message[]             @relation("Sender")
-  receivedMessages     Message[]             @relation("Receiver")
+  sentMessages         Message[]              @relation("Sender")
+  receivedMessages     Message[]              @relation("Receiver")
   msgReactions         MessageReaction[]
   stories              Story[]
-  storyViews           StoryView[]           @relation("StoryViewer")
+  storyViews           StoryView[]            @relation("StoryViewer")
   reactions            Reaction[]
-  blocksGiven          Block[]               @relation("Blocker")
-  blocksReceived       Block[]               @relation("Blocked")
-  mutesGiven           UserMute[]            @relation("Muter")
-  mutesReceived        UserMute[]            @relation("Muted")
+  blocksGiven          Block[]                @relation("Blocker")
+  blocksReceived       Block[]                @relation("Blocked")
+  mutesGiven           UserMute[]             @relation("Muter")
+  mutesReceived        UserMute[]             @relation("Muted")
   reports              Report[]
   extendVotes          PostExtendVote[]
   tasteFeedback        TasteFeedback[]
   deviceTokens         DeviceToken[]
-  collabPostsA         CollabPost[]          @relation("CollabA")
-  collabPostsB         CollabPost[]          @relation("CollabB")
-  following            Follow[]              @relation("Follower")
-  followers            Follow[]              @relation("Following")
-  partnerPosts         Post[]                @relation("PostPartner")
-  donationsGiven       Donation[]            @relation("DonorDonations")
-  donationsReceived    Donation[]            @relation("RequesterDonations")
-  donationFeedbacks    DonationFeedback[]    @relation("FeedbackGiver")
-  unionsAsA            Union[]               @relation("UnionMemberA")
-  unionsAsB            Union[]               @relation("UnionMemberB")
+  collabPostsA         CollabPost[]           @relation("CollabA")
+  collabPostsB         CollabPost[]           @relation("CollabB")
+  following            Follow[]               @relation("Follower")
+  followers            Follow[]               @relation("Following")
+  partnerPosts         Post[]                 @relation("PostPartner")
+  donationsGiven       Donation[]             @relation("DonorDonations")
+  donationsReceived    Donation[]             @relation("RequesterDonations")
+  donationFeedbacks    DonationFeedback[]     @relation("FeedbackGiver")
+  unionsAsA            Union[]                @relation("UnionMemberA")
+  unionsAsB            Union[]                @relation("UnionMemberB")
   unionInvites         UnionInvite[]
-  pairingsAsA          Pairing[]             @relation("PairingUserA")
-  pairingsAsB          Pairing[]             @relation("PairingUserB")
-  halvesCreated        Half[]                @relation("HalfCreator")
-  halvesReceived       Half[]                @relation("HalfTarget")
-  halvesCompleted      Half[]                @relation("HalfCompleter")
-  circleSessionsHosted CircleSession[]       @relation("CircleHost")
-  circleMemberships    CircleSessionMember[] @relation("CircleMember")
+  pairingsAsA          Pairing[]              @relation("PairingUserA")
+  pairingsAsB          Pairing[]              @relation("PairingUserB")
+  halvesCreated        Half[]                 @relation("HalfCreator")
+  halvesReceived       Half[]                 @relation("HalfTarget")
+  halvesCompleted      Half[]                 @relation("HalfCompleter")
+  circleSessionsHosted CircleSession[]        @relation("CircleHost")
+  circleMemberships    CircleSessionMember[]  @relation("CircleMember")
+  circleRoundsOwned    CircleSessionRound[]   @relation("CircleRoundOwner")
+  circleCaptures       CircleSessionCapture[] @relation("CircleCaptureAuthor")
 }
 
 // ─── Post ────────────────────────────────────────────────────────────────────
 
 model Post {
-  id              String    @id @default(cuid())
-  userId          String
-  mediaUrl        String?
-  mediaUrls       String[]  @default([]) // álbum: 2+ fotos mostradas em grelha (mediaUrl = 1ª, p/ thumbnail)
-  albumOverlays   Json? // emojis por foto do álbum, paralelo a mediaUrls: [[{emoji,x,y}], ...]
+  id                   String    @id @default(cuid())
+  userId               String
+  mediaUrl             String?
+  mediaUrls            String[]  @default([]) // álbum: 2+ fotos mostradas em grelha (mediaUrl = 1ª, p/ thumbnail)
+  albumOverlays        Json? // emojis por foto do álbum, paralelo a mediaUrls: [[{emoji,x,y}], ...]
   // Dimensões originais, guardadas no upload. A app precisa da proporção ANTES
   // de a imagem carregar: sem elas desenha à altura toda e encolhe no `onLoad`,
   // e esse salto lê-se como um piscar.
-  mediaWidth      Int?
-  mediaHeight     Int?
-  mediaSizes      Json? // álbum: [{ w, h }, ...] paralelo a mediaUrls
-  mediaType       MediaType
-  caption         String?
-  bgColor         String?
-  fontKey         String? // publicação de texto: 'script'|'hand'; null = fonte padrão
-  expiresAt       DateTime
-  extended        Boolean   @default(false)
-  deviceModel     String?
-  deletedAt       DateTime?
-  createdAt       DateTime  @default(now())
-  partnerUserId   String?
-  partnerAccepted Boolean   @default(false)
-  isAnnouncement  Boolean   @default(false)
+  mediaWidth           Int?
+  mediaHeight          Int?
+  mediaSizes           Json? // álbum: [{ w, h }, ...] paralelo a mediaUrls
+  // Snapshot imutável de um Círculo publicado. Mantém todos os participantes
+  // separados das capturas para que quem participou sem fotografar não seja
+  // inventado no carousel, e preserva a autoria quando a sessão ao vivo expira.
+  // Shape: { id, sessionId, creatorId, createdAt, participants[], captures[] }.
+  collectiveMoment     Json?
+  // Idempotência da publicação do Círculo: publisher + ronda. Reposts não
+  // copiam esta chave, pois são outra operação.
+  circlePublicationKey String?   @unique
+  mediaType            MediaType
+  caption              String?
+  bgColor              String?
+  fontKey              String? // publicação de texto: 'script'|'hand'; null = fonte padrão
+  expiresAt            DateTime
+  extended             Boolean   @default(false)
+  deviceModel          String?
+  deletedAt            DateTime?
+  createdAt            DateTime  @default(now())
+  partnerUserId        String?
+  partnerAccepted      Boolean   @default(false)
+  isAnnouncement       Boolean   @default(false)
 
   user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   partnerUser User?            @relation("PostPartner", fields: [partnerUserId], references: [id], onDelete: SetNull)
@@ -715,25 +725,71 @@ model CircleSession {
 
   host    User                  @relation("CircleHost", fields: [hostId], references: [id], onDelete: Cascade)
   members CircleSessionMember[]
+  rounds  CircleSessionRound[]
 
   @@index([hostId, status])
 }
 
 model CircleSessionMember {
-  id        String             @id @default(cuid())
-  sessionId String
-  userId    String
-  status    CircleMemberStatus @default(JOINED)
-  photoUrl  String?
-  photoAt   DateTime? // quando a foto entrou — abre a janela de publicação
-  overlays  Json? // emojis colados na foto: [{ emoji, x, y }] (x/y fração 0..1)
-  createdAt DateTime           @default(now())
+  id           String             @id @default(cuid())
+  sessionId    String
+  userId       String
+  status       CircleMemberStatus @default(JOINED)
+  photoUrl     String?
+  photoAt      DateTime? // quando a foto entrou — abre a janela de publicação
+  photoRoundAt DateTime? // shotAt da ronda a que esta captura pertence
+  photoWidth   Int?
+  photoHeight  Int?
+  overlays     Json? // emojis colados na foto: [{ emoji, x, y }] (x/y fração 0..1)
+  createdAt    DateTime           @default(now())
 
   session CircleSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   user    User          @relation("CircleMember", fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([sessionId, userId])
   @@index([userId, status])
+}
+
+// Uma ronda é a unidade temporal estável do Círculo. `shotAt` identifica o
+// disparo e `expiresAt` limita novos uploads; o Post publicado guarda o seu
+// próprio snapshot e não depende destas linhas efémeras.
+model CircleSessionRound {
+  id          String   @id @default(cuid())
+  sessionId   String
+  shotAt      DateTime
+  expiresAt   DateTime
+  isSolo      Boolean  @default(false)
+  ownerUserId String?
+  createdAt   DateTime @default(now())
+
+  session  CircleSession          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  owner    User?                  @relation("CircleRoundOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  captures CircleSessionCapture[]
+
+  @@index([sessionId, expiresAt])
+  @@index([ownerUserId, expiresAt])
+}
+
+// Cada participante pode contribuir com no máximo dois cartões por ronda. O
+// índice composto faz essa regra sobreviver a retries e concorrência, em vez de
+// depender de arrays paralelos no Member.
+model CircleSessionCapture {
+  id          String   @id @default(cuid())
+  roundId     String
+  userId      String
+  slot        Int
+  mediaUrl    String
+  photoWidth  Int?
+  photoHeight Int?
+  overlays    Json?
+  createdAt   DateTime @default(now())
+
+  round CircleSessionRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  user  User               @relation("CircleCaptureAuthor", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, userId, slot])
+  @@index([userId, createdAt])
+  @@index([mediaUrl])
 }
 
 // ─── PasswordReset ────────────────────────────────────────────────────────────

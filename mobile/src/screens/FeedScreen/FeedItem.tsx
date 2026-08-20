@@ -22,7 +22,12 @@ import type { TasteSignal } from '../../services/post.service'
 import AvatarImage from '../../components/AvatarImage'
 import ActionBar from './ActionBar'
 import TasteCard from './TasteCard'
+import {
+  shouldAskTaste, tasteDwellMs, noteTasteShown, noteTasteAnswered, noteTasteIgnored,
+  type TasteKind,
+} from './tastePolicy'
 import PostAlbumCarousel from './PostAlbumCarousel'
+import CollectiveMomentCarousel from './CollectiveMomentCarousel'
 import CommenterStack from './CommenterStack'
 import FeedIcon from '../../components/FeedIcon'
 import { useAuthStore } from '../../store/auth.store'
@@ -59,17 +64,8 @@ interface Props {
   onAuthorMuted: (userId: string) => void
   onExpired: (id: string) => void
   onBlockingChange: (open: boolean) => void
-  /** A feed já decidiu que esta publicação está na amostra do cartão de gosto
-   *  e que ainda não foi respondida. As regras de conteúdo (é meu, é anúncio)
-   *  ficam aqui, na célula, que é quem as conhece. */
-  tasteEligible: boolean
   onTasteSignal: (postId: string, signal: TasteSignal, dwellMs: number) => void
 }
-
-// O cartão não nasce com o post: só depois de a pessoa lá ter estado o tempo
-// suficiente para ter uma opinião. Perguntar ao primeiro segundo é perguntar
-// antes de haver resposta — e a resposta que vier assim não vale nada.
-const TASTE_DELAY_MS = 4200
 
 // ─── Uma célula do pager: um momento por ecrã ───────────────────────────────
 // Pilha: status bar livre · mídia · scrubber · navegação. O campo de comentário
@@ -79,7 +75,7 @@ const TASTE_DELAY_MS = 4200
 function FeedItem({
   post, reduceMotion, isActive, cellHeight, liked, commentCount,
   onCommentPress, onLikeChange, onRepostChange, onDeleted, onEdited, onProfileBlocked, onAuthorMuted, onExpired, onBlockingChange,
-  tasteEligible, onTasteSignal,
+  onTasteSignal,
 }: Props) {
   const isFocused = useIsFocused()
   const nav = useNavigation<Nav>()
@@ -92,11 +88,32 @@ function FeedItem({
 
   const isVideo = post.mediaType === 'VIDEO'
   const isText  = post.mediaType === 'TEXT'
-  // `mediaUrls` identifica um post criado pelo fluxo de álbum/Círculo. O
-  // Círculo pode ter só uma foto; nesse caso ainda precisamos do carrossel para
-  // desenhar `albumOverlays` (antes o emoji era guardado mas sumia na feed).
+  const collectiveCaptures = Array.isArray(post.collectiveMoment?.captures)
+    ? post.collectiveMoment.captures
+    : []
+  const collectiveParticipants = Array.isArray(post.collectiveMoment?.participants)
+    ? post.collectiveMoment.participants
+    : []
+  const isCollective = !isVideo && !isText && collectiveCaptures.length > 0
+  // `mediaUrls` também identifica álbuns normais. O discriminador coletivo é
+  // explícito para não mudar o desenho desses posts antigos.
   const isAlbum = !isVideo && !isText && !!post.mediaUrls && post.mediaUrls.length > 0
   const uri     = resolveUrl(post.mediaUrl)
+
+  const collectiveUrls = useMemo(() => collectiveCaptures.map((capture, index) => (
+    resolveUrl(post.mediaUrls?.[capture.mediaIndex ?? index] ?? capture.mediaUrl)
+  )), [collectiveCaptures, post.mediaUrls])
+  const collectiveSizes = useMemo(() => collectiveCaptures.map((capture, index) => (
+    post.mediaSizes?.[capture.mediaIndex ?? index] ?? { w: null, h: null }
+  )), [collectiveCaptures, post.mediaSizes])
+
+  const openCollectiveCapture = useCallback((captureIndex: number) => {
+    nav.navigate('PostViewer', {
+      posts: [post],
+      startIndex: 0,
+      collectiveCaptureIndex: captureIndex,
+    })
+  }, [nav, post])
 
   // ── Geometria da pilha ──────────────────────────────────────────────────────
   // A mídia respeita a status bar. Em baixo, o scrubber tem uma faixa própria
@@ -307,28 +324,61 @@ function FeedItem({
   }
 
   // ── Cartão de gosto ────────────────────────────────────────────────────────
-  // Nunca no meu próprio post nem num anúncio: perguntar se quero ver mais do
-  // que eu próprio publiquei não ensina nada a ninguém.
-  const tasteAsks = tasteEligible && !isSelf && !post.isAnnouncement
+  // Quem decide SE se pergunta é a política (tastePolicy.ts); a célula só sabe
+  // QUANDO — no momento em que a pessoa já esteve aqui tempo suficiente para
+  // ter opinião. A decisão é tomada nessa altura, e não antes: só então se
+  // sabe que ela ficou, que é a informação que torna a pergunta útil.
+  const tasteKind: TasteKind = isVideo ? 'VIDEO' : isText ? 'TEXT' : 'IMAGE'
   const [tasteVisible, setTasteVisible] = useState(false)
   const tasteAnsweredRef = useRef(false)
+  const tasteShownRef = useRef(false)
   const activeSinceRef = useRef(0)
 
   useEffect(() => {
     if (tasteAnsweredRef.current) return
-    if (!tasteAsks || !isActive || !isFocused) { setTasteVisible(false); return }
+
+    if (!isActive) {
+      // Apareceu e a pessoa deslizou para outro post: também é resposta, e a
+      // política usa-a para se calar durante umas horas.
+      if (tasteShownRef.current) {
+        tasteShownRef.current = false
+        noteTasteIgnored(post.id)
+      }
+      setTasteVisible(false)
+      return
+    }
+    if (!isFocused) return
+    // Já está no ecrã: um re-render (um gosto, um contador) não pode voltar a
+    // decidir nem a gastar outra vez o orçamento da sessão.
+    if (tasteShownRef.current) return
+
     activeSinceRef.current = Date.now()
-    const id = setTimeout(() => setTasteVisible(true), TASTE_DELAY_MS)
+    const id = setTimeout(() => {
+      if (!shouldAskTaste({
+        postId: post.id,
+        kind: tasteKind,
+        isSelf,
+        isAnnouncement: post.isAnnouncement ?? false,
+        // Gostar ou repostar já é uma resposta dada com os dedos.
+        engaged: liked || !!post.userReposted,
+        followingAuthor: following,
+      })) return
+      noteTasteShown(post.id)
+      tasteShownRef.current = true
+      setTasteVisible(true)
+    }, tasteDwellMs(tasteKind))
     return () => clearTimeout(id)
-  }, [tasteAsks, isActive, isFocused])
+  }, [isActive, isFocused, post.id, tasteKind, isSelf, post.isAnnouncement, liked, post.userReposted, following])
 
   const handleTasteAnswer = useCallback((signal: TasteSignal) => {
     tasteAnsweredRef.current = true
+    tasteShownRef.current = false
+    noteTasteAnswered(post.id, tasteKind)
     // O tempo até responder distingue o "não" imediato do "não" depois de ver
     // tudo — duas respostas iguais que não valem o mesmo.
     const dwellMs = activeSinceRef.current ? Date.now() - activeSinceRef.current : 0
     onTasteSignal(post.id, signal, dwellMs)
-  }, [onTasteSignal, post.id])
+  }, [onTasteSignal, post.id, tasteKind])
 
   // A feed dá-nos um handler estável (o mesmo para todas as células); a rail
   // continua a falar só em "gostei/não gostei". A ponte é memoizada para não
@@ -418,6 +468,18 @@ function FeedItem({
         <LinearGradient colors={textGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[s.media, videoFrame]}>
           <View style={s.textWrap}><Text style={[s.textContent, textStyle]}>{post.caption}</Text></View>
         </LinearGradient>
+      ) : isCollective ? (
+        <View style={[s.media, videoFrame]}>
+          <CollectiveMomentCarousel
+            captures={collectiveCaptures}
+            participants={collectiveParticipants}
+            urls={collectiveUrls}
+            sizes={collectiveSizes}
+            reduceMotion={reduceMotion}
+            onOpen={openCollectiveCapture}
+            contentBottom={(overlayBottom - videoBottom) + 46 + (post.caption ? 38 : 0)}
+          />
+        </View>
       ) : isAlbum ? (
         <View style={[s.media, videoFrame]}>
           <PostAlbumCarousel
@@ -451,8 +513,8 @@ function FeedItem({
       )}
 
       {/* Camada de toque — duplo toque para gostar.
-             Nos álbuns não a pomos: bloquearia o deslize do carrossel. */}
-      {!isAlbum && (
+             Nos carrosséis não a pomos: bloquearia o gesto horizontal. */}
+      {!isAlbum && !isCollective && (
         <Pressable style={[s.tapLayer, videoFrame]} onPress={handleTapMedia} />
       )}
 

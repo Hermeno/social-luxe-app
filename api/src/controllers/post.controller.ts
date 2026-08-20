@@ -8,52 +8,9 @@ import { AuthRequest } from '../types'
 import { MediaType } from '@prisma/client'
 import { sendPush } from '../services/notification.service'
 import { prisma } from '../config/database'
-import { uploadToCloudinaryWithMeta, uploadToCloudinary, withThumbnails } from '../utils/cloudinary.util'
+import { deleteFromCloudinary, uploadToCloudinaryWithMeta, withThumbnails } from '../utils/cloudinary.util'
 import { deleteFromR2, isR2Url } from '../utils/r2.util'
 import { parsePostFontKey } from '../utils/postFont.util'
-import { emitToUser } from '../socket'
-
-// Socket delivery follows the same visibility boundary as the feed. Without
-// this check, a newly created post could be reinserted in real time immediately
-// after the viewer had silenced or blocked its author.
-async function emitPostToVisibleFollowers(authorId: string, post: unknown) {
-  const followers = await prisma.follow.findMany({
-    where: { followingId: authorId },
-    select: { followerId: true },
-  })
-  if (followers.length === 0) return
-
-  const followerIds = followers.map((follow) => follow.followerId)
-  const now = new Date()
-  const [blocks, mutes] = await Promise.all([
-    prisma.block.findMany({
-      where: {
-        OR: [
-          { blockerId: authorId, blockedId: { in: followerIds } },
-          { blockedId: authorId, blockerId: { in: followerIds } },
-        ],
-      },
-      select: { blockerId: true, blockedId: true },
-    }),
-    prisma.userMute.findMany({
-      where: {
-        mutedId: authorId,
-        muterId: { in: followerIds },
-        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
-      },
-      select: { muterId: true },
-    }),
-  ])
-
-  const hiddenRecipients = new Set(mutes.map((mute) => mute.muterId))
-  for (const block of blocks) {
-    hiddenRecipients.add(block.blockerId === authorId ? block.blockedId : block.blockerId)
-  }
-
-  for (const followerId of followerIds) {
-    if (!hiddenRecipients.has(followerId)) emitToUser(followerId, 'post:new', post)
-  }
-}
 
 export async function createPost(req: AuthRequest, res: Response) {
   try {
@@ -110,7 +67,7 @@ export async function createPost(req: AuthRequest, res: Response) {
     }
 
     // ── Real-time push to followers who may still see this author ─────────────
-    emitPostToVisibleFollowers(req.user!.userId, post).catch(() => {})
+    postService.emitPostToVisibleFollowers(req.user!.userId, post).catch(() => {})
 
     return created(res, post)
   } catch (err: unknown) {
@@ -177,7 +134,7 @@ export async function createAlbum(req: AuthRequest, res: Response) {
     const sizes = uploaded.map((u) => ({ w: u.width, h: u.height }))
     const post = await postService.createAlbumPost(req.user!.userId, urls, caption?.trim() || undefined, deviceModel, undefined, sizes)
 
-    emitPostToVisibleFollowers(req.user!.userId, post).catch(() => {})
+    postService.emitPostToVisibleFollowers(req.user!.userId, post).catch(() => {})
 
     return created(res, post)
   } catch (err: unknown) {
@@ -298,21 +255,14 @@ export async function deletePost(req: AuthRequest, res: Response) {
     const result = await postService.deletePost(req.user!.userId, req.params.id)
 
     // Delete media from storage (fire-and-forget)
-    if (result.deleteMedia && result.mediaUrl) {
+    if (result.deleteMedia && result.mediaUrls.length > 0) {
       ;(async () => {
-        try {
-          if (isR2Url(result.mediaUrl)) {
-            await deleteFromR2(result.mediaUrl!)
-          } else if (result.mediaUrl!.includes('cloudinary.com')) {
-            const match = result.mediaUrl!.match(/\/upload\/(?:v\d+\/)?(.+)\.[^.]+$/)
-            if (match) {
-              const { cloudinary } = await import('../config/cloudinary')
-              await cloudinary.uploader.destroy(match[1], {
-                resource_type: result.mediaType === 'VIDEO' ? 'video' : 'image',
-              })
-            }
-          }
-        } catch {}
+        for (const mediaUrl of result.mediaUrls) {
+          try {
+            if (isR2Url(mediaUrl)) await deleteFromR2(mediaUrl)
+            else await deleteFromCloudinary(mediaUrl)
+          } catch {}
+        }
       })()
     }
 

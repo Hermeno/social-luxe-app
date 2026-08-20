@@ -33,6 +33,38 @@ export interface User {
   socialLinks?: unknown            // normalizeSocials() dá-lhe forma
 }
 
+export interface CollectiveMomentParticipant {
+  id: string
+  name: string
+  username: string | null
+  avatar: string | null
+}
+
+export interface CollectiveMomentCapture {
+  id: string
+  userId: string
+  /** Posição da fotografia deste participante na ronda (1 ou 2). */
+  slot?: number
+  mediaIndex: number
+  mediaUrl: string
+  overlays: Array<{ emoji: string; x: number; y: number }>
+  createdAt: string
+}
+
+/** Snapshot do Círculo no instante em que virou um Post. Participantes sem
+ * captura continuam em `participants`; só quem fotografou aparece em
+ * `captures` e, portanto, no carousel. */
+export interface CollectiveMoment {
+  version: 1
+  id: string
+  sessionId: string
+  roundId?: string
+  creatorId: string
+  createdAt: string
+  participants: CollectiveMomentParticipant[]
+  captures: CollectiveMomentCapture[]
+}
+
 export interface Post {
   id: string
   userId: string
@@ -44,6 +76,7 @@ export interface Post {
   mediaWidth?: number | null
   mediaHeight?: number | null
   mediaSizes?: { w: number | null; h: number | null }[]   // álbum, paralelo a mediaUrls
+  collectiveMoment?: CollectiveMoment | null
   thumbnailUrl: string
   mediaType: 'IMAGE' | 'VIDEO' | 'TEXT'
   caption: string | null

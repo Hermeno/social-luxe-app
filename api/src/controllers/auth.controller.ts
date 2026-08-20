@@ -9,6 +9,7 @@ import { comparePassword as compareHash, hashPassword } from '../utils/hash'
 import { deleteFromCloudinary } from '../utils/cloudinary.util'
 import { deleteFromR2, isR2Url } from '../utils/r2.util'
 import { usernameOptions as genUsernameOptions } from '../utils/username'
+import { Prisma } from '@prisma/client'
 
 export async function checkPhone(req: AuthRequest, res: Response) {
   try {
@@ -160,6 +161,7 @@ export async function deleteAccount(req: AuthRequest, res: Response) {
         select: {
           id: true,
           mediaUrl: true,
+          mediaUrls: true,
           repostEntry: { select: { id: true } },
           reposts: { select: { repostedPostId: true } },
         },
@@ -169,21 +171,107 @@ export async function deleteAccount(req: AuthRequest, res: Response) {
     ])
 
     const repostCopiesOfMyOriginals = posts.flatMap((p) => p.reposts.map((r) => r.repostedPostId))
-    await prisma.$transaction(async (tx) => {
+    const circleUrls = await prisma.$transaction(async (tx) => {
+      // Publicar/retirar/limpar uma captura usa exatamente o mesmo lock. Assim a
+      // conta ou vê o Post já commitado, ou remove a sessão/captura antes de um
+      // publish tardio poder construir um snapshot com media prestes a apagar.
+      const affected = await tx.circleSession.findMany({
+        where: {
+          OR: [
+            { hostId: user.id },
+            { members: { some: { userId: user.id } } },
+          ],
+        },
+        select: { id: true },
+      })
+      const sessionIds = affected.map((session) => session.id).sort()
+      if (sessionIds.length > 0) {
+        await tx.$queryRaw<Array<{ id: string }>>(
+          Prisma.sql`
+            SELECT "id" FROM "CircleSession"
+            WHERE "id" IN (${Prisma.join(sessionIds)})
+            ORDER BY "id"
+            FOR UPDATE
+          `,
+        )
+      }
+
+      const [legacyCaptures, normalizedCaptures] = await Promise.all([
+        tx.circleSessionMember.findMany({
+          where: {
+            photoUrl: { not: null },
+            OR: [
+              { userId: user.id },
+              { session: { hostId: user.id } },
+            ],
+          },
+          select: { photoUrl: true },
+        }),
+        tx.circleSessionCapture.findMany({
+          where: {
+            OR: [
+              { userId: user.id },
+              { round: { session: { hostId: user.id } } },
+            ],
+          },
+          select: { mediaUrl: true },
+        }),
+      ])
+
       // As cópias pertencem a quem repostou, por isso não cairiam no cascade do
       // utilizador que criou o original. Sem esta remoção ficariam com media órfã.
       if (repostCopiesOfMyOriginals.length > 0) {
         await tx.post.deleteMany({ where: { id: { in: repostCopiesOfMyOriginals } } })
       }
       await tx.user.delete({ where: { id: user.id } })
-    })
+      return [...new Set([
+        ...legacyCaptures.flatMap((capture) => capture.photoUrl ? [capture.photoUrl] : []),
+        ...normalizedCaptures.map((capture) => capture.mediaUrl),
+      ])]
+    }, { maxWait: 5_000, timeout: 15_000 })
 
     // Best-effort storage cleanup — a failure here must not undo the deletion
+    const ownedPostUrls = [...new Set(posts
+      .filter((post) => !post.repostEntry)
+      .flatMap((post) => post.mediaUrls.length > 0
+        ? post.mediaUrls
+        : post.mediaUrl ? [post.mediaUrl] : []))]
+    const cleanupCandidates = [...new Set([...ownedPostUrls, ...circleUrls])]
+    const [remainingPosts, liveCirclePhotos, liveCircleCaptures] = cleanupCandidates.length > 0
+      ? await Promise.all([
+          prisma.post.findMany({
+            where: {
+              OR: [
+                { mediaUrl: { in: cleanupCandidates } },
+                { mediaUrls: { hasSome: cleanupCandidates } },
+              ],
+            },
+            select: { mediaUrl: true, mediaUrls: true },
+          }),
+          prisma.circleSessionMember.findMany({
+            where: { photoUrl: { in: cleanupCandidates } },
+            select: { photoUrl: true },
+          }),
+          prisma.circleSessionCapture.findMany({
+            where: { mediaUrl: { in: cleanupCandidates } },
+            select: { mediaUrl: true },
+          }),
+        ])
+      : [[], [], []]
+    const stillReferenced = new Set<string>([
+      ...remainingPosts.flatMap((post) => [
+      ...(post.mediaUrl ? [post.mediaUrl] : []),
+      ...post.mediaUrls,
+      ]),
+      ...liveCirclePhotos.flatMap((capture) => capture.photoUrl ? [capture.photoUrl] : []),
+      ...liveCircleCaptures.map((capture) => capture.mediaUrl),
+    ])
+
     const mediaUrls = [
       user.avatar,
-      // Uma cópia de repost referencia o ficheiro de outra pessoa; não é dona
-      // dele e nunca o deve apagar ao eliminar a conta.
-      ...posts.filter((p) => !p.repostEntry).map((p) => p.mediaUrl),
+      // Uma cópia de repost e um Post coletivo de outra pessoa podem apontar
+      // para o mesmo ficheiro; só URLs sem qualquer referência saem do storage.
+      ...cleanupCandidates.filter((url) => !stillReferenced.has(url)),
       ...stories.map((s) => s.mediaUrl),
       ...messages.map((m) => m.mediaUrl),
     ]

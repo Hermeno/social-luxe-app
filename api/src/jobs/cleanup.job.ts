@@ -15,7 +15,7 @@ async function deleteMediaUrl(url: string | null): Promise<void> {
   }
 }
 
-async function hardDeletePost(postId: string, mediaUrl: string | null): Promise<void> {
+async function hardDeletePost(postId: string, mediaUrl: string | null, mediaUrls: string[] = []): Promise<void> {
   const current = await prisma.post.findUnique({
     where:  { id: postId },
     select: {
@@ -28,9 +28,12 @@ async function hardDeletePost(postId: string, mediaUrl: string | null): Promise<
   const repostEntry = current.repostEntry
   const copies = current.reposts
 
-  // Uma cópia de repost usa o URL do original. Só o original é dono do ficheiro
-  // físico; apagar uma cópia nunca pode partir a media que ele referencia.
-  if (!repostEntry) deleteMediaUrl(mediaUrl).catch(() => {})
+  // Uma cópia de repost usa os URLs do original. Só um post de origem pode ser
+  // dono físico; em Círculos, a referência pode ainda ser partilhada por outro
+  // publicador e será verificada depois da transação.
+  const ownedUrls = repostEntry
+    ? []
+    : [...new Set(mediaUrls.length > 0 ? mediaUrls : mediaUrl ? [mediaUrl] : [])]
 
   // Hard-delete all related records then the post itself.
   // Order matters: child records before parent to avoid FK violations.
@@ -49,6 +52,39 @@ async function hardDeletePost(postId: string, mediaUrl: string | null): Promise<
     await tx.comment.deleteMany({ where: { postId } })
     await tx.post.delete({ where: { id: postId } })
   })
+
+  if (ownedUrls.length > 0) {
+    const [remaining, liveCirclePhotos, liveCircleCaptures] = await Promise.all([
+      prisma.post.findMany({
+        where: {
+          OR: [
+            { mediaUrl: { in: ownedUrls } },
+            { mediaUrls: { hasSome: ownedUrls } },
+          ],
+        },
+        select: { mediaUrl: true, mediaUrls: true },
+      }),
+      prisma.circleSessionMember.findMany({
+        where: { photoUrl: { in: ownedUrls } },
+        select: { photoUrl: true },
+      }),
+      prisma.circleSessionCapture.findMany({
+        where: { mediaUrl: { in: ownedUrls } },
+        select: { mediaUrl: true },
+      }),
+    ])
+    const referenced = new Set<string>([
+      ...remaining.flatMap((post) => [
+      ...(post.mediaUrl ? [post.mediaUrl] : []),
+      ...post.mediaUrls,
+      ]),
+      ...liveCirclePhotos.flatMap((capture) => capture.photoUrl ? [capture.photoUrl] : []),
+      ...liveCircleCaptures.map((capture) => capture.mediaUrl),
+    ])
+    ownedUrls
+      .filter((url) => !referenced.has(url))
+      .forEach((url) => deleteMediaUrl(url).catch(() => {}))
+  }
 }
 
 async function checkPostExtension(postId: string, userId: string): Promise<boolean> {
@@ -78,17 +114,17 @@ async function processExpiredPosts() {
       const newExpiry = new Date(now.getTime() + 24 * 60 * 60 * 1000)
       await prisma.post.update({ where: { id: post.id }, data: { expiresAt: newExpiry, extended: true } })
     } else {
-      await hardDeletePost(post.id, post.mediaUrl)
+      await hardDeletePost(post.id, post.mediaUrl, post.mediaUrls)
     }
   }
 
   // Clean up any old soft-deleted posts (legacy — migrating from the old soft-delete pattern)
   const legacySoftDeleted = await prisma.post.findMany({
     where: { deletedAt: { not: null } },
-    select: { id: true, mediaUrl: true },
+    select: { id: true, mediaUrl: true, mediaUrls: true },
   })
   for (const p of legacySoftDeleted) {
-    await hardDeletePost(p.id, p.mediaUrl)
+    await hardDeletePost(p.id, p.mediaUrl, p.mediaUrls)
   }
 }
 
