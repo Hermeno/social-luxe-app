@@ -17,6 +17,9 @@ import { getCachedConnections, updateCachedConnection } from '../db/database'
 import { useMessageBadgeStore } from '../store/messageBadge.store'
 import { useNotificationStore, AppNotification } from '../store/notification.store'
 import { getIncoming as getCircleIncoming } from '../services/circle.service'
+import type { CircleMember, CircleRound } from '../services/circle.service'
+import { isCircleScreenActive } from '../screens/CircleScreen/presence'
+import { strings } from '../i18n'
 import AuthNavigator from './AuthNavigator'
 import AppNavigator from './AppNavigator'
 import OnboardingScreen from '../screens/OnboardingScreen'
@@ -288,6 +291,41 @@ export default function RootNavigator({ onboardingDone, setOnboardingDone, defau
 
     const onCircleCalled = () => setCircleInvite(true)
 
+    // ── Alguém do círculo disparou e eu ainda não ──────────────────────────
+    // A ronda dura um minuto. Com o ecrã do Círculo à frente quem avisa é a
+    // faixa lá dentro; fora dele não havia aviso nenhum e o minuto passava sem
+    // se dar por nada. Uma notificação por ronda — nunca duas.
+    const notifiedRounds = new Set<string>()
+    const onCircleUpdate = ({ currentRound, members }: {
+      sessionId: string
+      members?: CircleMember[]
+      currentRound?: CircleRound | null
+    }) => {
+      if (isCircleScreenActive()) return
+      if (!currentRound?.id || !Array.isArray(members)) return
+      if (new Date(currentRound.expiresAt).getTime() <= Date.now()) return
+      if (notifiedRounds.has(currentRound.id)) return
+
+      const inRound = (member: CircleMember) => (member.captures ?? [])
+        .some((capture) => capture.roundId === currentRound.id)
+      const mine = members.find((member) => member.user.id === myId)
+      if (!mine || inRound(mine)) return
+      const shooter = members.find((member) => member.user.id !== myId && inRound(member))
+      if (!shooter) return
+
+      notifiedRounds.add(currentRound.id)
+      const t = strings()
+      const leftMs = new Date(currentRound.expiresAt).getTime() - Date.now()
+      Notifications.scheduleNotificationAsync({
+        content: {
+          title: `⭕ ${shooter.user.name.split(' ')[0]} ${t.circle_alreadyShot}`,
+          body: `${t.circle_shootTogether} · ${Math.max(1, Math.round(leftMs / 1000))}s`,
+          data: { type: 'circle_shot', sessionId: currentRound.sessionId },
+        },
+        trigger: null,
+      }).catch(() => {})
+    }
+
     const onNotification = (payload: Partial<AppNotification> & Record<string, unknown>) => {
       const item = normalizeNotification(payload)
       if (item) addNotification(item)
@@ -308,6 +346,7 @@ export default function RootNavigator({ onboardingDone, setOnboardingDone, defau
     socket.on('user:offline', onUserOffline)
     socket.on('message:new', onNewMessage)
     socket.on('circle:called', onCircleCalled)
+    socket.on('circle:update', onCircleUpdate)
     socket.on('notification:new', onNotification)
     socket.on('notification', onNotification)
     socket.on('union:together:live', onUnionTogetherLive)
@@ -318,6 +357,7 @@ export default function RootNavigator({ onboardingDone, setOnboardingDone, defau
       socket.off('user:offline', onUserOffline)
       socket.off('message:new', onNewMessage)
       socket.off('circle:called', onCircleCalled)
+      socket.off('circle:update', onCircleUpdate)
       socket.off('notification:new', onNotification)
       socket.off('notification', onNotification)
       socket.off('union:together:live', onUnionTogetherLive)

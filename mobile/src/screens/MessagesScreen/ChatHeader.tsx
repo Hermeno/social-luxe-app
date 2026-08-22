@@ -6,6 +6,7 @@ import AvatarImage from '../../components/AvatarImage'
 import { useT } from '../../i18n'
 import { Pairing } from '../../types'
 import { pairingLabel } from '../../services/pairing.service'
+import { displayHandle } from '../../utils/handle'
 
 const AV_SIZE    = 30
 const AV_BOX     = AV_SIZE + 8  // caixa do avatar, alinhada com o resto do cabeçalho
@@ -89,7 +90,7 @@ export default function ChatHeader({
       </TouchableOpacity>
 
       <View style={s.info}>
-        <Text style={s.name} numberOfLines={1}>{userHandle ? `@${userHandle}` : userName}</Text>
+        <Text style={s.name} numberOfLines={1}>{userHandle ? displayHandle(userHandle) : userName}</Text>
         <View style={s.statusRow}>
           {(isOnline || isTyping) && <View style={s.onlineDot} />}
           <Text style={[s.status, { color: isOnline || isTyping ? '#22C55E' : colors.gray400 }]}>

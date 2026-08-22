@@ -56,15 +56,23 @@ const EMPTY: Memory = { answered: [], byKind: {}, ignoredStreak: 0, lastAskedAt:
 
 // ── Números da política ─────────────────────────────────────────────────────
 const ASKS_PER_SESSION   = 2        // teto por utilização da app
-const ASKS_WHEN_KNOWN     = 1       // ... e metade disso quando já sabemos muito
+const ASKS_WHEN_KNOWN     = 2       // ... e o mesmo quando já sabemos muito:
+                                    // o gosto muda, e uma pergunta por sessão
+                                    // era pouco para o acompanhar
 const MIN_POSTS_BETWEEN  = 7        // publicações entre dois cartões
 const MIN_MS_BETWEEN     = 90_000   // e tempo, para não caberem todos num minuto
 const SETTLE_POSTS       = 3        // ninguém é interrompido mal abre a app
 const KNOWN_ENOUGH       = 30       // sinais a partir dos quais se pergunta menos
 const ANSWERED_KEEP      = 500      // histórico local só serve para não repetir
 // Silêncio depois de o cartão ser ignorado N vezes seguidas. Insistir com quem
-// não responde não traz sinal nenhum — traz desinstalações.
-const IGNORE_PAUSE_MS = [0, 0, 6 * 3_600_000, 24 * 3_600_000, 72 * 3_600_000]
+// não responde não traz sinal nenhum — mas desaparecer durante dias também não:
+// o feed fica sem forma de aprender e o utilizador sem forma de o afinar. Daí a
+// escala parar nas horas e não nos dias.
+const IGNORE_PAUSE_MS = [0, 0, 45 * 60_000, 2 * 3_600_000, 6 * 3_600_000]
+// Cada janela inteira sem cartão nenhum perdoa uma ignorada. É isto que faltava:
+// a série só descia com uma resposta, portanto três cartões passados à frente
+// calavam a pergunta para sempre — ia crescendo e nunca voltava atrás.
+const STREAK_FORGIVE_MS = 3 * 3_600_000
 
 let memory: Memory = { ...EMPTY }
 let hydrated = false
@@ -92,8 +100,12 @@ function persist(): void {
 }
 
 function ignorePause(): number {
-  const i = Math.min(memory.ignoredStreak, IGNORE_PAUSE_MS.length - 1)
-  return IGNORE_PAUSE_MS[i]
+  // A série é lida já com o perdão do tempo aplicado — não se toca na memória,
+  // para uma sessão longa não apagar o histórico à socapa.
+  const idleMs = Date.now() - memory.lastAskedAt
+  const forgiven = memory.lastAskedAt > 0 ? Math.floor(idleMs / STREAK_FORGIVE_MS) : 0
+  const streak = Math.max(0, memory.ignoredStreak - forgiven)
+  return IGNORE_PAUSE_MS[Math.min(streak, IGNORE_PAUSE_MS.length - 1)]
 }
 
 function sessionBudget(): number {
@@ -190,7 +202,9 @@ export function noteTasteAnswered(postId: string, kind: TasteKind): void {
 
 /** Apareceu e a pessoa seguiu em frente. Também é uma resposta. */
 export function noteTasteIgnored(postId: string): void {
-  memory.ignoredStreak += 1
+  // Limitada ao tamanho da escala: sem isto uma série de 20 precisava de 60h
+  // para voltar ao princípio, mesmo com a pausa já no máximo.
+  memory.ignoredStreak = Math.min(IGNORE_PAUSE_MS.length, memory.ignoredStreak + 1)
   decisions.set(postId, false)
   persist()
 }

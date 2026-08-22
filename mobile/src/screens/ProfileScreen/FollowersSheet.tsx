@@ -29,6 +29,7 @@ import { isConnected } from '../../services/netinfo.service'
 import { toast } from '../../utils/toast'
 import { useT } from '../../i18n'
 import useReducedMotionPreference from '../../hooks/useReducedMotionPreference'
+import { displayHandle } from '../../utils/handle'
 
 type Mode = 'followers' | 'following'
 type Nav = StackNavigationProp<AppStackParams>
@@ -545,7 +546,7 @@ export default function FollowersSheet({
               const following = followingIds.has(item.id)
               const showFollowButton = Boolean(myId && item.id !== myId)
               const secondary = [
-                item.username ? `@${item.username.replace(/^@/, '')}` : '',
+                displayHandle(item.username),
                 item.bio ?? '',
               ].filter(Boolean).join(' · ')
               return (

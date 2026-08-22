@@ -19,6 +19,7 @@ import {
   authStyles,
   authUi,
 } from '../../components/AuthFlow'
+import { displayHandle } from '../../utils/handle'
 
 type Nav   = StackNavigationProp<AuthStackParams>
 type Route = RouteProp<AuthStackParams, 'SetName'>
@@ -166,7 +167,7 @@ export default function SetNameScreen() {
                         accessibilityRole="radio"
                         accessibilityState={{ checked: selected }}
                       >
-                        <Text style={[s.handleText, selected && s.handleTextSelected]}>@{handle}</Text>
+                        <Text style={[s.handleText, selected && s.handleTextSelected]}>{displayHandle(handle)}</Text>
                         {selected ? <Ionicons name="checkmark" size={17} color={authUi.signal} /> : null}
                       </TouchableOpacity>
                     )

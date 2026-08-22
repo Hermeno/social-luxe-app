@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import {
   View, Text, ActivityIndicator, FlatList, StyleSheet, Dimensions, Keyboard, TouchableOpacity,
+  Animated, Easing,
   type LayoutChangeEvent, type ViewToken,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -19,9 +20,7 @@ import * as postService from '../../services/post.service'
 import type { TasteSignal } from '../../services/post.service'
 import { isConnected } from '../../services/netinfo.service'
 import { useT } from '../../i18n'
-import { prefetchMedia } from '../../db/mediaCache'
 import { colors, fonts } from '../../theme'
-import { API_BASE } from '../../config'
 import FeedHeader, { FeedUserGroup as UserGroup } from './FeedHeader'
 import Wordmark from '../../components/Wordmark'
 import FeedItem from './FeedItem'
@@ -33,13 +32,11 @@ import { MUTED_USER_IDS_CACHE_KEY, getMutedUsers } from '../../services/mute.ser
 
 const { height: SCREEN_H } = Dimensions.get('window')
 const TOP_ACTION_ICON_SIZE = 27
+// De quanto em quanto tempo o Círculo se vira. Longe o suficiente para ser um
+// aceno e não um enfeite a mexer-se sem parar por cima da feed.
+const FLIP_EVERY_MS = 9000
 
 type Nav = StackNavigationProp<AppStackParams>
-
-function resolveMedia(url: string | null | undefined): string {
-  if (!url) return ''
-  return url.startsWith('http') ? url : `${API_BASE}${url}`
-}
 
 function postReferencesAuthor(post: Post, userId: string): boolean {
   if (post.user.id === userId || post.repostOriginalAuthorId === userId) return true
@@ -315,13 +312,10 @@ export default function FeedScreen() {
     requestAnimationFrame(() => scrollToIndex(idx))
   }, [focusedPost, focusedPostRequest, flatPosts, scrollToIndex])
 
-  // Prefetch dos próximos vídeos para o armazenamento
-  useEffect(() => {
-    const urls = flatPosts.slice(currentIndex + 1, currentIndex + 3)
-      .filter((p) => p.mediaType === 'VIDEO')
-      .map((p) => resolveMedia(p.mediaUrl))
-    if (urls.length > 0) prefetchMedia(urls)
-  }, [currentIndex])
+  // Não há prefetch de vídeo. Descarregar os próximos dois ficheiros inteiros
+  // gastava os MB de vídeos que o utilizador só passa à frente — e nem servia
+  // para os que ele vê: o leitor usa sempre o URL remoto, nunca o ficheiro
+  // descarregado. Cada vídeo carrega quando (e só quando) fica parado no ecrã.
 
   // ── Persistência dos likes ─────────────────────────────────────────────────
   const likedLoadedRef = useRef(false)
@@ -473,6 +467,34 @@ export default function FeedScreen() {
     setSearchMode(false)
     setSearchQuery('')
   }, [alignPagerToPost])
+  // ── O giro do Círculo ──────────────────────────────────────────────────────
+  // Uma roda não serve: o desenho é um anel, e rodá-lo no plano do ecrã não se
+  // vê — fica igual em todos os ângulos. O que se vê é virá-lo, como uma moeda:
+  // o anel fecha-se numa linha e reabre do outro lado. Com um golpe de escala a
+  // meio, para parecer que sai do ecrã em vez de girar dentro dele.
+  const circleFlip = useRef(new Animated.Value(0)).current
+  useFocusEffect(useCallback(() => {
+    if (reduceMotion) return
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const flip = () => {
+      circleFlip.setValue(0)
+      Animated.timing(circleFlip, {
+        toValue: 1,
+        duration: 900,
+        easing: Easing.inOut(Easing.cubic),
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (finished) timer = setTimeout(flip, FLIP_EVERY_MS)
+      })
+    }
+    timer = setTimeout(flip, FLIP_EVERY_MS)
+    return () => {
+      if (timer) clearTimeout(timer)
+      circleFlip.stopAnimation()
+      circleFlip.setValue(0)
+    }
+  }, [circleFlip, reduceMotion]))
+
   const handleCreatePress  = useCallback(() => nav.navigate('Tabs', { screen: 'Create' }), [nav])
   const handleCirclePress  = useCallback(() => nav.navigate('Tabs', { screen: 'Circle' }), [nav])
 
@@ -630,7 +652,46 @@ export default function FeedScreen() {
         <>
           <View style={[s.topBar, { top: safeTop + 2 }]} pointerEvents="box-none">
             <View style={s.brandLockup}>
-              <Wordmark height={26} color="#FFFFFF" />
+              {/* O Círculo é o gesto que define a app — vive ao lado da marca,
+                  não no grupo das ferramentas do canto oposto. */}
+              <TouchableOpacity
+                style={s.brandCircleBtn}
+                onPress={handleCirclePress}
+                activeOpacity={0.65}
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel={circleInvite ? `${t.circle_errTitle}, ${t.pending}` : t.circle_errTitle}
+              >
+                {circleInvite && (
+                  <View style={[s.circleInviteBadge, s.brandCircleBadge]}>
+                    {/* Não veio `camera` no pacote — fica o ícone da Luxee. */}
+                    <Icon name="camera" size={9} strokeWidth={2.5} color="#fff" />
+                  </View>
+                )}
+                <Animated.View
+                  style={{
+                    transform: [
+                      { perspective: 620 },
+                      {
+                        rotateY: circleFlip.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: ['0deg', '360deg'],
+                        }),
+                      },
+                      {
+                        scale: circleFlip.interpolate({
+                          inputRange: [0, 0.5, 1],
+                          outputRange: [1, 1.14, 1],
+                        }),
+                      },
+                    ],
+                  }}
+                >
+                  <FeedIcon name="circle" size={TOP_ACTION_ICON_SIZE} color="#fff" weight="medium" />
+                </Animated.View>
+              </TouchableOpacity>
+
+              <Wordmark height={35} color="#FFFFFF" />
             </View>
 
             <View style={s.topRightActions}>
@@ -642,22 +703,6 @@ export default function FeedScreen() {
                 accessibilityLabel={t.feed_search_ph}
               >
                 <FeedIcon name="search" size={TOP_ACTION_ICON_SIZE} color="#fff" weight="medium" />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={s.topIconBtn}
-                onPress={handleCirclePress}
-                activeOpacity={0.65}
-                accessibilityRole="button"
-                accessibilityLabel={circleInvite ? `${t.circle_errTitle}, ${t.pending}` : t.circle_errTitle}
-              >
-                {circleInvite && (
-                  <View style={s.circleInviteBadge}>
-                    {/* Não veio `camera` no pacote — fica o ícone da Luxee. */}
-                    <Icon name="camera" size={9} strokeWidth={2.5} color="#fff" />
-                  </View>
-                )}
-                <FeedIcon name="circle" size={TOP_ACTION_ICON_SIZE} color="#fff" weight="medium" />
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -699,7 +744,22 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  brandLockup: { flexDirection: 'row', alignItems: 'flex-end' },
+  brandLockup: { flexDirection: 'row', alignItems: 'flex-end', gap: 11 },
+  // A assinatura assenta pela base, e o corpo das letras fica ~16,5pt acima
+  // dela. Estes 3pt põem o ícone no meio das LETRAS, não no meio da caixa do
+  // ficheiro — que tem ascendente alto e descendente longo.
+  brandCircleBtn: {
+    width: TOP_ACTION_ICON_SIZE,
+    height: TOP_ACTION_ICON_SIZE,
+    marginBottom: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'visible',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.46, shadowRadius: 2
+  },
+  // A caixa aqui é do tamanho do ícone, não os 48 do canto: o emblema encosta
+  // ao canto do desenho em vez de flutuar dentro de um botão maior.
+  brandCircleBadge: { top: -4, right: -4 },
   topRightActions: {
     flexDirection: 'row',
     alignItems: 'center'

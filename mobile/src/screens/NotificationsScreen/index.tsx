@@ -21,6 +21,7 @@ import { useFollowStore } from '../../store/follow.store'
 import { api } from '../../services/api'
 import { colors, fonts, spacing, radius } from '../../theme'
 import { useT } from '../../i18n'
+import { displayHandle } from '../../utils/handle'
 
 function NotifRow({ item, timeLabel, onPress }: { item: AppNotification; timeLabel: string; onPress: () => void }) {
   const followed = useFollowStore((s) => item.fromUser ? s.followingIds.has(item.fromUser.id) : false)
@@ -121,7 +122,7 @@ function SuggestedRow({ user }: { user: SuggestUser }) {
     <View style={s.suggestRow}>
       <AvatarImage uri={user.avatar} name={user.name} size={48} />
       <View style={s.suggestInfo}>
-        <Text style={s.suggestName} numberOfLines={1}>{user.username ? `@${user.username}` : user.name}</Text>
+        <Text style={s.suggestName} numberOfLines={1}>{user.username ? displayHandle(user.username) : user.name}</Text>
         <Text style={s.suggestSub} numberOfLines={1}>{user.bio || t.msg_suggestion_one}</Text>
       </View>
       <FollowSplitButton following={false} loading={loading} onFollow={handleFollow} theme="light" followBack />

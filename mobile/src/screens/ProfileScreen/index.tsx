@@ -44,6 +44,7 @@ import { UNION_ENABLED } from '../../config/features'
 import type { Union, UnionInvite, Pairing } from '../../types'
 import * as pairingService from '../../services/pairing.service'
 import { useT } from '../../i18n'
+import { displayHandle } from '../../utils/handle'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type Nav   = StackNavigationProp<AppStackParams>
@@ -870,7 +871,7 @@ export default function ProfileScreen() {
           </TouchableOpacity>
 
           <Text style={m.name} numberOfLines={1}>
-            {profile?.username ? `@${profile.username}` : (profile?.name ?? '')}
+            {profile?.username ? displayHandle(profile.username) : (profile?.name ?? '')}
           </Text>
 
           {!!profile?.statusLabel && (

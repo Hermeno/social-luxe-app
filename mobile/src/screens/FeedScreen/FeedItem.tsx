@@ -35,9 +35,14 @@ import { useFollowStore } from '../../store/follow.store'
 import { tabBarOccupiedHeight } from '../../components/TabBar/layout'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { useT } from '../../i18n'
+import { displayHandle } from '../../utils/handle'
 
 const { width } = Dimensions.get('window')
 const DESCRIPTION_MAX_LINES = 2
+// Quanto tempo uma célula de vídeo tem de ficar parada no ecrã antes de valer a
+// pena gastar dados com ela. Curto para quem pára não notar, longo para quem
+// está a rolar não pagar nada.
+const VIDEO_ARM_DELAY = 260
 type Nav = StackNavigationProp<AppStackParams>
 
 function resolveUrl(url: string | null | undefined): string {
@@ -107,13 +112,11 @@ function FeedItem({
     post.mediaSizes?.[capture.mediaIndex ?? index] ?? { w: null, h: null }
   )), [collectiveCaptures, post.mediaSizes])
 
-  const openCollectiveCapture = useCallback((captureIndex: number) => {
-    nav.navigate('PostViewer', {
-      posts: [post],
-      startIndex: 0,
-      collectiveCaptureIndex: captureIndex,
-    })
-  }, [nav, post])
+  // O cartão de convite do carrossel abre o separador Círculo, o mesmo destino
+  // do ícone no topo da feed.
+  const openCircle = useCallback(() => {
+    nav.navigate('Tabs', { screen: 'Circle' })
+  }, [nav])
 
   // ── Geometria da pilha ──────────────────────────────────────────────────────
   // A mídia respeita a status bar. Em baixo, o scrubber tem uma faixa própria
@@ -227,9 +230,23 @@ function FeedItem({
     ?? (post.user.showDevice ? post.deviceModel : null)
 
   // ── Leitor de vídeo ─────────────────────────────────────────────────────────
+  // O vídeo só recebe fonte depois de a célula ficar MESMO parada no ecrã. A
+  // FlatList monta as células vizinhas antes de se chegar lá; se elas nascessem
+  // com fonte, o leitor começava a encher o buffer de vídeos que o utilizador
+  // ainda não viu — e pagava-os na íntegra ao passar à frente. Passar por cima
+  // a rolar não gasta um byte de vídeo.
+  //
+  // Uma vez armada, a fonte fica: voltar atrás um post não recomeça a descarga.
+  const [videoArmed, setVideoArmed] = useState(false)
+  useEffect(() => {
+    if (!isVideo || videoArmed || !isActive || !isFocused) return
+    const id = setTimeout(() => setVideoArmed(true), VIDEO_ARM_DELAY)
+    return () => clearTimeout(id)
+  }, [isVideo, videoArmed, isActive, isFocused])
+
   // Memoizado: um `{ uri }` inline mudava de referência a cada render e o
   // expo-video criava um player novo que nunca recebia play().
-  const source = useMemo(() => (isVideo ? { uri } : null), [isVideo, uri])
+  const source = useMemo(() => (isVideo && videoArmed ? { uri } : null), [isVideo, videoArmed, uri])
   const player = useVideoPlayer(source, (p) => { p.loop = true; p.muted = false })
 
   const [status, setStatus] = useState<VideoPlayerStatus>('idle')
@@ -476,7 +493,8 @@ function FeedItem({
             urls={collectiveUrls}
             sizes={collectiveSizes}
             reduceMotion={reduceMotion}
-            onOpen={openCollectiveCapture}
+            isActive={isActive}
+            onCreateCircle={openCircle}
             contentBottom={(overlayBottom - videoBottom) + 46 + (post.caption ? 38 : 0)}
           />
         </View>
@@ -509,6 +527,22 @@ function FeedItem({
             const { width: w, height: h } = e.source ?? {}
             if (w && h) setLoadedAspect(w / h)
           }}
+        />
+      )}
+
+      {/* Enquanto o vídeo não está pronto mostra-se a miniatura desfocada que o
+             servidor já gera (1–3 KB). Antes ficava um rectângulo preto — e era
+             o vídeo inteiro a encher o buffer que o tirava de lá. */}
+      {isVideo && status !== 'readyToPlay' && !!post.thumbnailUrl && (
+        <Image
+          source={{ uri: resolveUrl(post.thumbnailUrl) }}
+          style={[s.media, videoFrame]}
+          contentFit="cover"
+          cachePolicy="disk"
+          recyclingKey={`${post.id}:thumb`}
+          transition={0}
+          pointerEvents="none"
+          accessibilityIgnoresInvertColors
         />
       )}
 
@@ -577,7 +611,12 @@ function FeedItem({
         <View style={s.momentRow}>
           <View style={s.momentIdentity}>
             <View style={s.liveNode} />
-            <Text style={s.momentLabel}>{momentState.label}</Text>
+            {/* Sem rótulo (os momentos normais deixaram de o ter) não se
+                desenha o <Text>: um vazio continuava a ocupar o `gap` da linha
+                e afastava o ponto do traço do tempo. */}
+            {!!momentState.label && (
+              <Text style={s.momentLabel}>{momentState.label}</Text>
+            )}
           </View>
           {!post.isAnnouncement && (
             <>
@@ -613,7 +652,7 @@ function FeedItem({
             activeOpacity={0.78}
           >
             <Text style={s.authorName} numberOfLines={1}>
-              {post.user.username ? `@${post.user.username}` : post.user.name}
+              {post.user.username ? displayHandle(post.user.username) : post.user.name}
             </Text>
             {!!authorContext && (
               <Text style={s.authorContext} numberOfLines={1}>{authorContext}</Text>
@@ -723,7 +762,10 @@ function FeedItem({
         onProfileBlocked={onProfileBlocked}
         onAuthorMuted={onAuthorMuted}
         onOptionsBlockingChange={handleMenuBlocking}
-        bottomOffset={overlayBottom}
+        // A coluna desce até ao limite da mídia, 14pt abaixo da linha do autor.
+        // Mais baixo do que isto entrava na faixa do traço do tempo, que corre
+        // logo a seguir e atravessa a largura toda.
+        bottomOffset={videoBottom}
         isActive={isActive}
         reduceMotion={reduceMotion}
         iconSize={30}
@@ -820,9 +862,13 @@ const s = StyleSheet.create({
   // Corta a foto num círculo exato dentro da folga — sem isto, um avatar
   // quadrado encostava aos cantos e o anel deixava de parecer desenhado.
   avatarInner: { borderRadius: 999, overflow: 'hidden' },
-  authorText: { flex: 1, minWidth: 0, justifyContent: 'center' },
+  // `flexShrink` e não `flex: 1`: com `flex: 1` o bloco do nome esticava para
+  // toda a largura livre e empurrava o botão de seguir para a borda oposta.
+  // A encolher, ocupa só o que o nome mede — o botão fica logo ao lado — e um
+  // nome comprido continua a cortar com reticências em vez de o expulsar.
+  authorText: { flexShrink: 1, minWidth: 0, justifyContent: 'center' },
   authorName: {
-    color: '#fff', fontFamily: fonts.bold, fontSize: 15.5, lineHeight: 19, letterSpacing: -0.28
+    color: '#fff', fontFamily: fonts.bold, fontSize: 14.5, lineHeight: 18, letterSpacing: -0.28
   },
   authorContext: {
     color: 'rgba(255,255,255,0.56)', fontFamily: fonts.medium, fontSize: 11.5, lineHeight: 15

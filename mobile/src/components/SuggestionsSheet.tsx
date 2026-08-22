@@ -17,6 +17,7 @@ import { api } from '../services/api'
 import type { AppStackParams } from '../navigation/AppNavigator'
 import { useT } from '../i18n'
 import useReducedMotionPreference from '../hooks/useReducedMotionPreference'
+import { displayHandle } from '../utils/handle'
 
 const HIT = { top: 10, bottom: 10, left: 10, right: 10 }
 
@@ -75,7 +76,7 @@ function Row({ user, onOpen }: { user: SuggestUser; onOpen: () => void }) {
       >
         <AvatarImage uri={user.avatar} name={user.name} size={48} />
         <View style={s.info}>
-          <Text style={s.name} numberOfLines={1}>{user.username ? `@${user.username}` : user.name}</Text>
+          <Text style={s.name} numberOfLines={1}>{user.username ? displayHandle(user.username) : user.name}</Text>
           <Text style={s.context} numberOfLines={1}>{context}</Text>
         </View>
       </TouchableOpacity>

@@ -30,7 +30,7 @@ export const authUi = {
 export function AuthBrand({ light = false }: { light?: boolean }) {
   return (
     <View style={af.brandLockup} accessibilityRole="header">
-      <Wordmark height={24} color={light ? '#FFFFFF' : authUi.ink} />
+      <Wordmark height={32} color={light ? '#FFFFFF' : authUi.ink} />
     </View>
   )
 }

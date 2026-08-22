@@ -51,6 +51,7 @@ import { colors, fonts } from '../../theme'
 import { useT } from '../../i18n'
 import AvatarImage from '../../components/AvatarImage'
 import DuoAvatar from '../../components/DuoAvatar'
+import { displayHandle } from '../../utils/handle'
 
 type Nav = StackNavigationProp<AppStackParams>
 
@@ -112,7 +113,7 @@ function UserRow({
 }) {
   const t         = useT()
   const followers = user._count?.followers ?? 0
-  const account   = user.username ? `@${user.username}` : null
+  const account   = user.username ? displayHandle(user.username) : null
   const audience  = `${fmtCount(followers)} ${followers === 1 ? t.follower : t.followers}`
 
   return (
@@ -247,7 +248,7 @@ function ConvoRow({ item, viewedIds, onPress, index, myUserId, isQuickOpen, onTo
         {/* Text info */}
         <View style={s.info}>
           <View style={s.topRow}>
-            <Text style={[s.name, unread && s.nameBold]} numberOfLines={1}>{item.user.username ? `@${item.user.username}` : item.user.name}</Text>
+            <Text style={[s.name, unread && s.nameBold]} numberOfLines={1}>{item.user.username ? displayHandle(item.user.username) : item.user.name}</Text>
             {hasMsg && (
               <Text style={[s.time, unread && s.timeActive]}>
                 {timeAgo(item.lastMessage!.createdAt, t.time_now)}

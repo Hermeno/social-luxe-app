@@ -83,7 +83,7 @@ export default function AboutScreen() {
             <Text style={s.appIconLetter}>l</Text>
           </View>
           <View style={s.appNameRow}>
-            <Wordmark height={30} color={T} />
+            <Wordmark height={40} color={T} />
             <View style={s.appDot} />
           </View>
           <Text style={s.appVersion}>{t.version} 1.0.0 · build 1</Text>

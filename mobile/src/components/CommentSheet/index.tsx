@@ -19,6 +19,7 @@ import AvatarImage from '../AvatarImage'
 import FollowSplitButton, { type FollowDuration } from '../FollowSplitButton'
 import { useAuthStore } from '../../store/auth.store'
 import { useFollowStore } from '../../store/follow.store'
+import { displayHandle } from '../../utils/handle'
 
 // ─── CommentSheet ─────────────────────────────────────────────────────────────
 // Folha branca de comentários.
@@ -222,7 +223,7 @@ export default function CommentSheet({ post, onClose, onCommentAdded }: Props) {
             <View style={s.authorInfo}>
               <Text style={s.authorName} numberOfLines={1}>{author.name}</Text>
               {!!author.username && (
-                <Text style={s.authorHandle} numberOfLines={1}>@{author.username}</Text>
+                <Text style={s.authorHandle} numberOfLines={1}>{displayHandle(author.username)}</Text>
               )}
             </View>
             <FollowSplitButton

@@ -18,6 +18,7 @@ import { isConnected } from '../../services/netinfo.service'
 import AvatarImage from '../../components/AvatarImage'
 import FollowSplitButton from '../../components/FollowSplitButton'
 import { useT } from '../../i18n'
+import { displayHandle } from '../../utils/handle'
 
 type Nav = StackNavigationProp<AppStackParams>
 
@@ -57,7 +58,7 @@ function UserRow({ user, followed, loadingFollow, onFollow, onPress }: RowProps)
       <TouchableOpacity style={s.rowLeft} onPress={onPress} activeOpacity={0.7}>
         <AvatarImage uri={user.avatar} name={user.name} size={48} />
         <View style={s.rowInfo}>
-          <Text style={s.rowName} numberOfLines={1}>{user.username ? `@${user.username}` : user.name}</Text>
+          <Text style={s.rowName} numberOfLines={1}>{user.username ? displayHandle(user.username) : user.name}</Text>
           {!!sub && <Text style={s.rowSub} numberOfLines={1}>{sub}</Text>}
         </View>
       </TouchableOpacity>

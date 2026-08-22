@@ -9,6 +9,7 @@ import { AppStackParams } from '../../navigation/AppNavigator'
 import { colors, spacing, radius, fonts } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
 import { useT, Strings } from '../../i18n'
+import { displayHandle } from '../../utils/handle'
 
 type Nav = StackNavigationProp<AppStackParams>
 interface Props { user: UserSummary; onAdded: () => void }
@@ -60,7 +61,7 @@ export default function UserCard({ user, onAdded }: Props) {
       </TouchableOpacity>
 
       <TouchableOpacity style={s.info} onPress={() => nav.navigate('Profile', { userId: user.id })} activeOpacity={0.7}>
-        <Text style={s.name}>{user.username ? `@${user.username}` : user.name}</Text>
+        <Text style={s.name}>{user.username ? displayHandle(user.username) : user.name}</Text>
         {user.bio ? <Text style={s.bio} numberOfLines={1}>{user.bio}</Text> : null}
       </TouchableOpacity>
 

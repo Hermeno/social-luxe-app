@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useMemo, useState } from 'react'
+import React, { useRef, useEffect, useMemo } from 'react'
 import { View, TouchableOpacity, StyleSheet, Text, Animated } from 'react-native'
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -17,8 +17,9 @@ import Icon from '../Icon'
 import { TAB_BAR_ROW_HEIGHT, TAB_BAR_TOP_GAP, tabBarBottomInset } from './layout'
 import useReducedMotionPreference from '../../hooks/useReducedMotionPreference'
 
-const SZ = 24
-const ACTIVE_MARKER_WIDTH = 24
+// O mesmo tamanho da coluna de acções do post (`DEFAULT_RAIL_ICON_SIZE`), para
+// os dois conjuntos de ícones da feed se lerem como um só sistema.
+const SZ = 27
 
 function mergePreview(...groups: SocialPreviewUser[][]): SocialPreviewUser[] {
   const seen = new Set<string>()
@@ -221,9 +222,6 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
   const loadSocialPreview = useSocialPreviewStore((s) => s.load)
   const currentUser   = useAuthStore((s) => s.user)
   const avatar        = currentUser?.avatar ?? null
-  const [navWidth, setNavWidth] = useState(0)
-  const indicatorX = useRef(new Animated.Value(0)).current
-  const indicatorOpacity = useRef(new Animated.Value(0)).current
   const barVisibility = useRef(new Animated.Value(1)).current
   const commentScale = useRef(new Animated.Value(1)).current
 
@@ -281,28 +279,6 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
     () => mergePreview(previewFollowing, previewFollowers),
     [previewFollowing, previewFollowers],
   )
-
-  const activeNavIndex = homeActive ? 0 : msgActive ? 1 : profActive ? 2 : -1
-  useEffect(() => {
-    if (navWidth <= 0 || activeNavIndex < 0) {
-      indicatorOpacity.stopAnimation()
-      indicatorOpacity.setValue(0)
-      return
-    }
-    const buttonWidth = navWidth / 3
-    const targetX = activeNavIndex * buttonWidth + (buttonWidth - ACTIVE_MARKER_WIDTH) / 2
-    if (reduceMotion) {
-      indicatorX.stopAnimation()
-      indicatorOpacity.stopAnimation()
-      indicatorX.setValue(targetX)
-      indicatorOpacity.setValue(1)
-      return
-    }
-    Animated.parallel([
-      Animated.spring(indicatorX, { toValue: targetX, speed: 20, bounciness: 5, useNativeDriver: true }),
-      Animated.timing(indicatorOpacity, { toValue: 1, duration: 150, useNativeDriver: true }),
-    ]).start()
-  }, [activeNavIndex, indicatorOpacity, indicatorX, navWidth, reduceMotion])
 
   function animateCommentField(pressed: boolean) {
     if (reduceMotion) return
@@ -430,18 +406,7 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
           )}
         </View>
 
-        <View style={s.navActions} onLayout={(event) => setNavWidth(event.nativeEvent.layout.width)}>
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              s.activeMarker,
-              { opacity: indicatorOpacity, transform: [{ translateX: indicatorX }] },
-            ]}
-          >
-            <View style={s.activeMarkerLine} />
-            <View style={s.activeMarkerDot} />
-          </Animated.View>
-
+        <View style={s.navActions}>
           {/* Home → Feed. Tocar já no feed refresca (como as apps grandes). */}
           <MotionTabButton
             onPress={() => {
@@ -630,29 +595,6 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     position: 'relative',
-  },
-  activeMarker: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    width: ACTIVE_MARKER_WIDTH,
-    height: 4,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
-  },
-  activeMarkerLine: {
-    width: 14,
-    height: 2,
-    borderRadius: 1,
-    backgroundColor: colors.primary,
-  },
-  activeMarkerDot: {
-    width: 3,
-    height: 3,
-    borderRadius: 1.5,
-    backgroundColor: colors.primary,
   },
   btn: {
     flex: 1,

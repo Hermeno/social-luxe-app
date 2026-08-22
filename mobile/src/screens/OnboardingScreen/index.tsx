@@ -19,6 +19,7 @@ import SkeletonBox from '../../components/SkeletonBox'
 import { useFollowStore } from '../../store/follow.store'
 import { getSuggestedUsers, type SuggestedUser } from '../../services/follow.service'
 import { AuthHeader, AuthPrimaryButton, authStyles, authUi } from '../../components/AuthFlow'
+import { displayHandle } from '../../utils/handle'
 
 interface Props { onDone: () => void }
 
@@ -392,7 +393,7 @@ function SuggestionRow({ user, onFollow }: {
 
   const meta = shared.length > 0
     ? shared.join(' · ')
-    : (user.bio?.trim() || (user.username ? `@${user.username}` : t.msg_suggestion_one))
+    : (user.bio?.trim() || (user.username ? displayHandle(user.username) : t.msg_suggestion_one))
 
   return (
     <View style={su.row}>

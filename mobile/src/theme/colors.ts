@@ -24,6 +24,10 @@ export const colors = {
   feedSurfaceSlate:    '#1C252C',   // azul-ardósia — o original, até 19/08/2026
   feedSurfaceGraphite: '#111314',   // grafite frio — 19/08/2026
 
+  // Cartão de convite ao Círculo, dentro do carrossel do momento colectivo.
+  // Um degrau acima do fundo da feed: lê-se como cartão sem virar mancha clara.
+  circleInvite: '#121B22',
+
   gray100: '#F7F7F7',
   gray200: '#EAEAEA',
   gray300: '#D1D1D6',

@@ -1,12 +1,13 @@
 import React, { useState } from 'react'
 import { View, Text, TouchableOpacity, TextInput, StyleSheet } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
+import FeedIcon from '../FeedIcon'
 import { Comment } from '../../types'
 import { colors, fonts } from '../../theme'
 import { useT } from '../../i18n'
 import { useAuthStore } from '../../store/auth.store'
 import { confirm } from '../confirm'
 import AvatarImage from '../AvatarImage'
+import { displayHandle } from '../../utils/handle'
 
 const HIT = { top: 10, bottom: 10, left: 10, right: 10 }
 
@@ -66,7 +67,7 @@ export default function CommentItem({
       <View style={s.body}>
         {/* Bolha: nome e texto juntos, como uma unidade de leitura */}
         <View style={[s.bubble, pending && s.bubblePending]}>
-          <Text style={s.name} numberOfLines={1}>{comment.user.username ? `@${comment.user.username}` : comment.user.name}</Text>
+          <Text style={s.name} numberOfLines={1}>{comment.user.username ? displayHandle(comment.user.username) : comment.user.name}</Text>
 
           {editing ? (
             <TextInput
@@ -137,10 +138,13 @@ export default function CommentItem({
         hitSlop={HIT}
         activeOpacity={0.6}
       >
-        <Ionicons
-          name={comment.likedByMe ? 'heart' : 'heart-outline'}
+        {/* O mesmo desenho da coluna de acções do post: gostado troca de
+            forma, não só de pintura. As cores continuam as do painel claro. */}
+        <FeedIcon
+          name={comment.likedByMe ? 'heart-solid' : 'heart'}
           size={15}
           color={comment.likedByMe ? colors.primary : 'rgba(0,0,0,0.28)'}
+          weight={comment.likedByMe ? 'regular' : 'medium'}
         />
         {likes > 0 && (
           <Text style={[s.likeCount, comment.likedByMe && s.likeCountOn]}>{likes}</Text>

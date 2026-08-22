@@ -49,3 +49,12 @@ export function useT(): Strings {
   const { lang } = useI18n()
   return lang === 'en' ? EN : PT
 }
+
+/**
+ * A mesma tabela do `useT`, para quem precisa dela FORA de um componente —
+ * handlers de socket, por exemplo. Ler daqui evita pendurar o idioma nas
+ * dependências de um efeito que faz mais do que traduzir texto.
+ */
+export function strings(): Strings {
+  return useI18n.getState().lang === 'en' ? EN : PT
+}

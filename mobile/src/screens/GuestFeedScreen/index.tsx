@@ -17,6 +17,7 @@ import AvatarImage from '../../components/AvatarImage'
 import Wordmark from '../../components/Wordmark'
 import Icon from '../../components/Icon'
 import FeedIcon, { type FeedIconName } from '../../components/FeedIcon'
+import { displayHandle } from '../../utils/handle'
 
 const { height: SCREEN_H } = Dimensions.get('window')
 
@@ -110,7 +111,7 @@ function GuestItem({
         <View style={s.author}>
           <AvatarImage uri={post.user.avatar} name={post.user.name} size={34} />
           <Text style={s.authorName} numberOfLines={1}>
-            {post.user.username ? `@${post.user.username}` : post.user.name}
+            {post.user.username ? displayHandle(post.user.username) : post.user.name}
           </Text>
         </View>
         {!!post.caption && !isText && (
@@ -185,7 +186,7 @@ export default function GuestFeedScreen() {
         />
       )}
 
-      <Wordmark height={26} color="#FFFFFF" shadow style={s.wordmark} />
+      <Wordmark height={35} color="#FFFFFF" shadow style={s.wordmark} />
 
       {/* A barra fica sempre: é a única saída deste ecrã. */}
       <View style={[s.gate, { paddingBottom: Math.max(safeBottom, 14) }]}>

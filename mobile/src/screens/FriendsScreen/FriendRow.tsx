@@ -7,6 +7,7 @@ import { Friendship, FriendshipDuration } from '../../types'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { colors, spacing, radius, fonts } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
+import { displayHandle } from '../../utils/handle'
 
 type Nav = StackNavigationProp<AppStackParams>
 
@@ -46,7 +47,7 @@ export default function FriendRow({ item, onRenew, onRemove }: Props) {
       </TouchableOpacity>
 
       <TouchableOpacity style={s.info} onPress={goProfile} activeOpacity={0.7}>
-        <Text style={s.name}>{item.friend.username ? `@${item.friend.username}` : item.friend.name}</Text>
+        <Text style={s.name}>{item.friend.username ? displayHandle(item.friend.username) : item.friend.name}</Text>
         <Text style={s.dur}>{LABELS[item.duration]}</Text>
         {left && <Text style={[s.left, left.includes('h') && s.urgent]}>{left}</Text>}
       </TouchableOpacity>

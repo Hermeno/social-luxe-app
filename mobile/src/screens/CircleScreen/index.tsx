@@ -4,7 +4,7 @@ import SuggestionsSheet from '../../components/SuggestionsSheet'
 import { useMessagesStore } from '../../store/messages.store'
 import {
   View, Text, StyleSheet, Pressable, ScrollView,
-  ActivityIndicator, Alert, Animated, PanResponder, Modal, Easing,
+  ActivityIndicator, Alert, Animated, PanResponder, Modal, Easing, Vibration,
   type StyleProp, type ViewStyle,
 } from 'react-native'
 import { Image } from 'expo-image'
@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { colors, fonts, radius, spacing } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
 import * as circle from '../../services/circle.service'
+import { setCircleScreenActive } from './presence'
 import {
   CircleMember,
   CircleRound,
@@ -294,7 +295,10 @@ export default function CircleScreen() {
   const [bottomBarH, setBottomBarH] = useState(0)
   const countdownTimer = useRef<ReturnType<typeof setInterval> | null>(null)
   const lastCountdownRoundRef = useRef<string | null>(null)
-  const [submitting, setSubmitting] = useState(false)
+  // Quantos envios estão em fundo. Já não bloqueia nada — serve para o dock
+  // poder dizer que a fotografia ainda está a caminho do servidor.
+  const [saving, setSaving] = useState(0)
+  const uploadChainRef = useRef<Promise<unknown>>(Promise.resolve())
   const [publishing, setPublishing] = useState(false)
   const [published,  setPublished]  = useState(false)
   const [joining, setJoining] = useState(false)
@@ -311,8 +315,6 @@ export default function CircleScreen() {
   currentRoundRef.current = currentRound
   const previewRef = useRef<PendingCapture | null>(null)
   previewRef.current = preview
-  const submittingRef = useRef(false)
-  submittingRef.current = submitting
   const shootingRef = useRef(false)
   shootingRef.current = shooting
   const startingCountdownRef = useRef(false)
@@ -348,6 +350,7 @@ export default function CircleScreen() {
         .sort((a, b) => a.slot - b.slot)
     : []
   const contributorsInRound = new Set(roundCaptures.map((capture) => capture.userId)).size
+
 
   // Caixa real ocupada pela foto em `contentFit="cover"`. Pode ultrapassar o
   // ecrã nos lados ou em cima/baixo; os emojis usam esta geometria para guardar
@@ -398,6 +401,38 @@ export default function CircleScreen() {
   const roundIsActive = !!activeRoundId && publishLeftMs > 0
   const roundAcceptsMyCapture = roundIsActive
     && (!currentRound?.isSolo || currentRound.ownerUserId === myId)
+
+  // ── Alguém já disparou e eu ainda não ──────────────────────────────────────
+  // A ronda dura um minuto. Quem está a enquadrar não repara num número pequeno
+  // a aparecer num avatar de 34pt, por isso o aviso é uma faixa com o relógio a
+  // esvaziar. Sai sozinha assim que eu capturo ou a ronda fecha.
+  const firstOtherCapture = roundCaptures
+    .filter((capture) => capture.userId !== myId)
+    .sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''))[0]
+  const firstShooter = firstOtherCapture
+    ? joinedMembers.find((member) => member.user.id === firstOtherCapture.userId)?.user
+    : undefined
+  const waitingOnMe = roundIsActive
+    && !!firstShooter
+    && myRoundCaptures.length === 0
+    && !preview
+    && countdown === null
+  // Fracção que falta da janela da ronda, para a barra esvaziar com o tempo.
+  const roundLeftFraction = (() => {
+    if (!currentRound?.shotAt || !currentRound.expiresAt) return 0
+    const total = new Date(currentRound.expiresAt).getTime() - new Date(currentRound.shotAt).getTime()
+    if (total <= 0) return 0
+    return Math.max(0, Math.min(1, publishLeftMs / total))
+  })()
+
+  // Uma vibração por ronda: é para dar por ela, não para incomodar.
+  const buzzedRoundRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!waitingOnMe || !activeRoundId) return
+    if (buzzedRoundRef.current === activeRoundId) return
+    buzzedRoundRef.current = activeRoundId
+    Vibration.vibrate(40)
+  }, [waitingOnMe, activeRoundId])
   const visibleMyRoundCaptures = roundIsActive ? myRoundCaptures : []
   const nextCaptureSlot: 1 | 2 = roundAcceptsMyCapture && visibleMyRoundCaptures.some((capture) => capture.slot === 1) ? 2 : 1
   const captureLimitReached = roundAcceptsMyCapture && visibleMyRoundCaptures.length >= MAX_CAPTURES_PER_ROUND
@@ -518,6 +553,7 @@ export default function CircleScreen() {
 
   useFocusEffect(useCallback(() => {
     setFocused(true)
+    setCircleScreenActive(true)
     setStatusBarStyle('light')
     useNotificationStore.getState().setCircleInvite(false)   // viu o convite → limpa badge
     setInitDone(false); setInitError(false)
@@ -592,7 +628,7 @@ export default function CircleScreen() {
       setCurrentRound(round)
       // A ronda nova não pode mudar a identidade de uma foto que já está a ser
       // revista/enviada, nem iniciar uma segunda captura concorrente.
-      if (previewRef.current || submittingRef.current || shootingRef.current) return
+      if (previewRef.current || shootingRef.current) return
       beginCountdown(inMs, roundId)
     }
 
@@ -604,6 +640,7 @@ export default function CircleScreen() {
 
     return () => {
       setFocused(false)
+      setCircleScreenActive(false)
       setCameraReady(false)
       setStatusBarStyle('dark')
       setPreview(null)
@@ -779,7 +816,7 @@ export default function CircleScreen() {
   // absoluto: os relógios dos telemóveis não estão sincronizados entre si.
   function beginCountdown(inMs: number, roundId: string) {
     if (!roundId || !Number.isFinite(inMs)) return
-    if (previewRef.current || submittingRef.current || shootingRef.current) return
+    if (previewRef.current || shootingRef.current) return
     // O pedido HTTP e o socket podem entregar a mesma ronda quase juntos.
     // Identidade do servidor evita reiniciar a animação ou disparar duas vezes.
     if (lastCountdownRoundRef.current === roundId) return
@@ -890,22 +927,29 @@ export default function CircleScreen() {
     setPlaced((p) => p.filter((it) => it.id !== id))
   }
 
-  async function confirmPhoto() {
-    const pending = previewRef.current
-    if (!pending || submittingRef.current) return
+  // Confirmar já não é esperar. A prévia fecha na hora e o envio segue em
+  // segundo plano — a câmara volta pronta para a segunda fotografia. Antes
+  // esperava-se pelo servidor com o ecrã bloqueado e, no fim, a câmara ainda
+  // tinha de arrancar de novo: era esse somatório que fazia o ciclo parecer
+  // eterno.
+  //
+  // Os envios vão em cadeia, nunca em paralelo: é a primeira fotografia que
+  // cria a ronda, e a segunda tem de sair com o id dela. A par, abriam-se duas
+  // rondas solo para o mesmo momento.
+  async function sendCapture(pending: PendingCapture, overlays: EmojiOverlay[], retry = true): Promise<void> {
     const sess = sessionRef.current ?? await ensureSession()
     if (!sess) { Alert.alert(t.circle_errTitle, t.circle_photoFail); return }
-    submittingRef.current = true
-    setSubmitting(true)
+    // Resolvido no envio, não no disparo: se a fotografia anterior criou a
+    // ronda entretanto, esta entra nessa em vez de abrir outra.
+    const roundId = pending.roundId ?? currentRoundRef.current?.id ?? null
     try {
-      const overlays: EmojiOverlay[] = placed.map(({ emoji, x, y }) => ({ emoji, x, y }))
-      const result = await circle.addCirclePhoto(sess.id, pending.uri, overlays, pending.roundId, pending.slot)
+      const result = await circle.addCirclePhoto(sess.id, pending.uri, overlays, roundId, pending.slot)
       if (!result?.capture?.id || !result.roundId) throw new Error(t.circle_photoFail)
 
       // Se uma nova contagem chegou enquanto esta prévia estava aberta, o upload
       // antigo continua válido, mas não volta a UI para trás. Só uma ronda solo
       // recém-criada, ou a ronda que ainda está ativa, assume o dock.
-      const shouldAdoptRound = pending.roundId === null
+      const shouldAdoptRound = roundId === null
         || !currentRoundRef.current
         || currentRoundRef.current.id === result.roundId
       if (shouldAdoptRound) {
@@ -916,8 +960,8 @@ export default function CircleScreen() {
               sessionId: sess.id,
               shotAt: result.capture.createdAt,
               expiresAt: new Date(new Date(result.capture.createdAt).getTime() + publishWindowMs).toISOString(),
-              isSolo: pending.roundId === null,
-              ownerUserId: pending.roundId === null ? myId ?? null : null,
+              isSolo: roundId === null,
+              ownerUserId: roundId === null ? myId ?? null : null,
             }
           : currentRoundRef.current!
         currentRoundRef.current = nextRound
@@ -937,19 +981,32 @@ export default function CircleScreen() {
         }))
         setPublished(false)
       }
-      previewRef.current = null
-      setPreview(null)
-      setCameraReady(false)
-      setPlaced([])
       // É aqui que a foto fica guardada no círculo. Sem este aviso a
       // pré-visualização desaparecia e nada dizia que tinha acontecido.
       toast.success(t.circle_savedTitle, t.circle_savedSub)
     } catch (err: any) {
+      // A prévia já fechou, portanto uma falha de rede perdia a fotografia.
+      // Uma segunda tentativa cobre a falha passageira; só depois é que se
+      // avisa, e aí a fotografia perdeu-se mesmo.
+      if (retry) return sendCapture(pending, overlays, false)
       Alert.alert(t.circle_errTitle, err?.response?.data?.message || err?.message || t.circle_photoFail)
-    } finally {
-      submittingRef.current = false
-      setSubmitting(false)
     }
+  }
+
+  function confirmPhoto() {
+    const pending = previewRef.current
+    if (!pending) return
+    const overlays: EmojiOverlay[] = placed.map(({ emoji, x, y }) => ({ emoji, x, y }))
+
+    previewRef.current = null
+    setPreview(null)
+    setPlaced([])
+    setSaving((count) => count + 1)
+
+    uploadChainRef.current = uploadChainRef.current
+      .catch(() => {})
+      .then(() => sendCapture(pending, overlays))
+      .then(() => setSaving((count) => Math.max(0, count - 1)))
   }
 
   async function handlePublish() {
@@ -1000,8 +1057,11 @@ export default function CircleScreen() {
 
   return (
     <View style={s.screen}>
-      {/* ── Câmara ao vivo (fundo, sempre a filmar) ── */}
-      {focused && !preview && (
+      {/* ── Câmara ao vivo (fundo, sempre a filmar) ──
+             Fica montada TAMBÉM enquanto a prévia está aberta. A prévia é opaca
+             e tapa-a na mesma; o que se ganha é não haver desmontagem e novo
+             arranque da câmara entre a primeira e a segunda fotografia. */}
+      {focused && (
         <CameraView
           ref={camRef}
           style={StyleSheet.absoluteFill}
@@ -1102,6 +1162,34 @@ export default function CircleScreen() {
           </View>
         )}
       </View>
+
+      {/* ── Alguém do círculo já disparou e eu ainda não ── */}
+      {!incoming && waitingOnMe && (
+        <View style={[s.shotAlert, { top: top + 70 }]} pointerEvents="none">
+          <View style={s.shotAlertRow}>
+            <View style={s.shotAlertAvatar}>
+              <AvatarImage
+                uri={firstShooter!.avatar}
+                name={firstShooter!.name}
+                size={34}
+                borderWidth={0}
+                borderColor="transparent"
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.shotAlertName} numberOfLines={1}>
+                {firstShooter!.name.split(' ')[0]} {t.circle_alreadyShot}
+              </Text>
+              <Text style={s.shotAlertSub} numberOfLines={1}>{t.circle_shootTogether}</Text>
+            </View>
+            <Text style={s.shotAlertClock}>{Math.ceil(publishLeftMs / 1000)}s</Text>
+          </View>
+          {/* O tempo lê-se sem contar segundos: a barra esvazia com a ronda. */}
+          <View style={s.shotAlertTrack}>
+            <View style={[s.shotAlertFill, { width: `${roundLeftFraction * 100}%` }]} />
+          </View>
+        </View>
+      )}
 
       {/* ── Chamada recebida (banner flutuante) ── */}
       {incoming && (
@@ -1240,7 +1328,9 @@ export default function CircleScreen() {
             <View>
               <Text style={s.dockEyebrow}>{t.circle_yourCaptures}</Text>
               <Text style={s.dockStatus}>
-                {roundIsActive
+                {saving > 0
+                  ? t.circle_saving
+                  : roundIsActive
                   ? `${roundCaptures.length} ${roundCaptures.length === 1 ? t.circle_perspective : t.circle_perspectives} · ${contributorsInRound}/${joinedCount}`
                   : t.circle_newMoment}
               </Text>
@@ -1414,11 +1504,9 @@ export default function CircleScreen() {
               label={t.circle_retake}
               icon="refresh"
               tone="glass"
-              disabled={submitting}
               onPress={() => {
                 previewRef.current = null
                 setPreview(null)
-                setCameraReady(false)
                 setPlaced([])
               }}
               style={s.previewAction}
@@ -1427,7 +1515,6 @@ export default function CircleScreen() {
               label={t.circle_addToCircle}
               icon="checkmark"
               tone="primary"
-              loading={submitting}
               onPress={confirmPhoto}
               style={s.previewAction}
             />
@@ -1619,6 +1706,28 @@ const s = StyleSheet.create({
   incomingName: { color: '#fff', fontSize: 14, fontFamily: fonts.bold, letterSpacing: -0.2 },
   incomingSub: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontFamily: fonts.regular, marginTop: 1 },
   incomingAction: { minWidth: 70 },
+
+  /* ── Aviso: alguém já disparou nesta ronda ── */
+  shotAlert: {
+    position: 'absolute', left: 14, right: 14, zIndex: 20,
+    backgroundColor: 'rgba(11,20,26,0.92)',
+    borderRadius: radius.xl, padding: 10, gap: 8,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
+    shadowColor: colors.black, shadowOpacity: 0.32, shadowRadius: 18, elevation: 8,
+  },
+  shotAlertRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  shotAlertAvatar: { width: 34, height: 34, borderRadius: 17, overflow: 'hidden' },
+  shotAlertName: { color: '#fff', fontSize: 14, fontFamily: fonts.bold, letterSpacing: -0.2 },
+  shotAlertSub: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontFamily: fonts.regular, marginTop: 1 },
+  shotAlertClock: {
+    color: '#fff', fontSize: 15, fontFamily: fonts.bold,
+    fontVariant: ['tabular-nums'], letterSpacing: -0.2,
+  },
+  shotAlertTrack: {
+    height: 3, borderRadius: 2, overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.16)',
+  },
+  shotAlertFill: { height: '100%', borderRadius: 2, backgroundColor: colors.primary },
 
   /* ── Pessoas e convites ── */
   // `bottom` vem do onLayout da barra de baixo — aqui fica só o valor de recurso

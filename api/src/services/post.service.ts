@@ -271,6 +271,92 @@ async function findVisibleFeedPage(
   return result
 }
 
+// Quantos posts fora da janela de frescura entram em cada página. A feed
+// continua a ser de momentos: no máximo dois em dez, e nunca no topo.
+const REVISIT_PER_PAGE = 2
+
+// Numa cópia, quem ocupa o lugar na feed é o reposter — é o nome dele que ali
+// aparece, e é a repetição DESSE nome que se quer partir.
+const postAuthorId = (post: any): string => String(post?.userId ?? '')
+
+// Página dos que voltam. Ordem estável (do mais recente dos antigos para trás)
+// e salto por página, para que rolar continue a andar para trás na história em
+// vez de repetir os mesmos dois.
+async function findRevisitPage(
+  where: Prisma.PostWhereInput,
+  include: Record<string, unknown>,
+  hiddenUserIds: ReadonlySet<string>,
+  page: number,
+): Promise<any[]> {
+  const raw = await prisma.post.findMany({
+    where,
+    include,
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    skip: Math.max(0, page - 1) * REVISIT_PER_PAGE,
+    take: REVISIT_PER_PAGE,
+  })
+  return withoutHiddenCollectiveCaptures(raw, hiddenUserIds)
+}
+
+// Duas publicações seguidas da mesma pessoa não ficam encostadas uma à outra.
+// A ordem continua a ser a cronológica: só se adia quem repete o autor anterior,
+// para entrar mal apareça outra pessoa. Quem publicou duas vezes seguidas
+// aparece nas duas, mas com alguém pelo meio — que é o que faz a feed parecer
+// um sítio com gente e não o mural de uma pessoa só.
+//
+// Quando só resta o mesmo autor (é o único que publicou nesta página), não há
+// nada a fazer e a ordem cronológica mantém-se.
+function spreadAuthors<T>(posts: T[], authorOf: (post: T) => string): T[] {
+  if (posts.length < 3) return posts
+
+  // Quantas publicações cada pessoa ainda tem por colocar. Entre os candidatos
+  // possíveis escolhe-se sempre quem tem MAIS por colocar: quem publicou em
+  // rajada é intercalado desde o princípio, em vez de sobrar todo para o fim.
+  // Em empate fica o mais antigo — a ordem cronológica só cede o necessário.
+  const pending = new Map<string, number>()
+  for (const post of posts) {
+    const author = authorOf(post)
+    pending.set(author, (pending.get(author) ?? 0) + 1)
+  }
+
+  const remaining = [...posts]
+  const spread: T[] = []
+  let lastAuthor: string | null = null
+  while (remaining.length > 0) {
+    let pick = -1
+    let mostPending = -1
+    for (let index = 0; index < remaining.length; index++) {
+      const author = authorOf(remaining[index])
+      if (author === lastAuthor) continue
+      const count = pending.get(author) ?? 0
+      if (count > mostPending) { mostPending = count; pick = index }
+    }
+    // Só resta quem já lá está: não há com quem intercalar.
+    if (pick < 0) pick = 0
+
+    const [next] = remaining.splice(pick, 1)
+    const author = authorOf(next)
+    pending.set(author, Math.max(0, (pending.get(author) ?? 1) - 1))
+    spread.push(next)
+    lastAuthor = author
+  }
+  return spread
+}
+
+// O topo da página é sempre do mais fresco: os antigos entram depois do quarto
+// e do oitavo momento, quando já se rolou um bocado. Se a página fresca vier
+// curta, vão para o fim em vez de se perderem.
+function mixRevisits<T>(fresh: T[], revisits: T[]): T[] {
+  if (revisits.length === 0) return fresh
+  const queue = [...revisits]
+  const mixed: T[] = []
+  fresh.forEach((post, index) => {
+    mixed.push(post)
+    if ((index === 3 || index === 7) && queue.length > 0) mixed.push(queue.shift() as T)
+  })
+  return [...mixed, ...queue]
+}
+
 // ─── Feed meta helpers ────────────────────────────────────────────────────────
 
 // Fetch up to 5 unique non-author commenters and the caller's interaction
@@ -443,21 +529,36 @@ export async function getFeed(userId: string, page = 1, limit = 10) {
   // Uma cópia pertence ao reposter, mas o conteúdo continua a vir do autor
   // original. Bloquear ou silenciar esse autor também impede que o conteúdo
   // reapareça por meio de um repost de outra ligação.
-  const visibleBaseWhere = hiddenContentIds.size === 0 ? baseWhere : {
+  // Keep these outside each feed branch so an announcement cannot bypass a
+  // viewer's explicit block/mute choice. Valem para o feed fresco e para os
+  // posts antigos que voltam — quem está escondido está escondido nos dois.
+  const hiddenGuards: Prisma.PostWhereInput[] = hiddenContentIds.size === 0 ? [] : [
+    { userId: { notIn: [...hiddenContentIds] } },
+    {
+      OR: [
+        { repostEntry: { is: null } },
+        { repostEntry: { is: { post: { is: { userId: { notIn: [...hiddenContentIds] } } } } } },
+      ],
+    },
+  ]
+  const visibleBaseWhere = hiddenGuards.length === 0 ? baseWhere : {
     ...baseWhere,
-    AND: [
-      ...baseWhere.AND,
-      // Keep this outside each feed branch so an announcement cannot bypass a
-      // viewer's explicit block/mute choice.
-      { userId: { notIn: [...hiddenContentIds] } },
-      {
-        OR: [
-          { repostEntry: { is: null } },
-          { repostEntry: { is: { post: { is: { userId: { notIn: [...hiddenContentIds] } } } } } },
-        ],
-      },
-    ],
+    AND: [...baseWhere.AND, ...hiddenGuards],
   }
+
+  // ── Os que voltam ──────────────────────────────────────────────────────────
+  // Sair da janela de frescura não é ser arquivado para sempre: o post continua
+  // a fazer parte da feed, só que às pinceladas. Entram aqui os que já passaram
+  // as 48h e continuam VIVOS — como a vida inicial é de 24h, estar vivo depois
+  // das 48h quer dizer que alguém lhe estendeu a vida. Ou seja: só voltam os
+  // que alguém quis manter.
+  const revisitWhere = (authorScope: Prisma.PostWhereInput): Prisma.PostWhereInput => ({
+    deletedAt: null,
+    expiresAt: { gt: now },
+    isAnnouncement: false,
+    createdAt: { lt: freshSince },
+    AND: [...hiddenGuards, authorScope],
+  })
 
   // Collect all connected user IDs (both directions, excluding self)
   const connectedSet = new Set<string>()
@@ -472,14 +573,17 @@ export async function getFeed(userId: string, page = 1, limit = 10) {
     // Personalised feed: all connections + own posts, excluding blocked/muted
     // publication authors.
     const allowedIds = [...connectionIds, userId].filter((id) => !hiddenContentIds.has(id))
-    const posts = await findVisibleFeedPage(
-      { ...visibleBaseWhere, OR: [{ userId: { in: allowedIds } }, { isAnnouncement: true }] },
-      include,
-      hiddenContentIds,
-      page,
-      limit,
-    )
-    return attachPostMeta(withThumbnails(posts), userId)
+    const [posts, revisits] = await Promise.all([
+      findVisibleFeedPage(
+        { ...visibleBaseWhere, OR: [{ userId: { in: allowedIds } }, { isAnnouncement: true }] },
+        include,
+        hiddenContentIds,
+        page,
+        limit,
+      ),
+      findRevisitPage(revisitWhere({ userId: { in: allowedIds } }), include, hiddenContentIds, page),
+    ])
+    return attachPostMeta(withThumbnails(mixRevisits(spreadAuthors(posts, postAuthorId), revisits)), userId)
   }
 
   // New user: show posts from people within 40 km (or all if no location)
@@ -508,26 +612,37 @@ export async function getFeed(userId: string, page = 1, limit = 10) {
     if (nearbyIds.length > 0) {
       const nearbyWithSelf = [...new Set([...nearbyIds, userId])]
         .filter((id) => !hiddenContentIds.has(id))
-      const posts = await findVisibleFeedPage(
-        { ...visibleBaseWhere, OR: [{ userId: { in: nearbyWithSelf } }, { isAnnouncement: true }] },
-        include,
-        hiddenContentIds,
-        page,
-        limit,
-      )
-      return attachPostMeta(withThumbnails(posts), userId)
+      const [posts, revisits] = await Promise.all([
+        findVisibleFeedPage(
+          { ...visibleBaseWhere, OR: [{ userId: { in: nearbyWithSelf } }, { isAnnouncement: true }] },
+          include,
+          hiddenContentIds,
+          page,
+          limit,
+        ),
+        findRevisitPage(revisitWhere({ userId: { in: nearbyWithSelf } }), include, hiddenContentIds, page),
+      ])
+      return attachPostMeta(withThumbnails(mixRevisits(spreadAuthors(posts, postAuthorId), revisits)), userId)
     }
   }
 
   // Fallback: global feed — own posts always included
-  const posts = await findVisibleFeedPage(
-    { ...visibleBaseWhere, OR: [{ userId: { notIn: [...hiddenContentIds] } }, { isAnnouncement: true }] },
-    include,
-    hiddenContentIds,
-    page,
-    limit,
-  )
-  return attachPostMeta(withThumbnails(posts), userId)
+  const [posts, revisits] = await Promise.all([
+    findVisibleFeedPage(
+      { ...visibleBaseWhere, OR: [{ userId: { notIn: [...hiddenContentIds] } }, { isAnnouncement: true }] },
+      include,
+      hiddenContentIds,
+      page,
+      limit,
+    ),
+    findRevisitPage(
+      revisitWhere({ userId: { notIn: [...hiddenContentIds] } }),
+      include,
+      hiddenContentIds,
+      page,
+    ),
+  ])
+  return attachPostMeta(withThumbnails(mixRevisits(spreadAuthors(posts, postAuthorId), revisits)), userId)
 }
 
 // Search posts by caption or author identity (case-insensitive), excluding

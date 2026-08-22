@@ -17,6 +17,7 @@ import { useFollowStore } from '../../store/follow.store'
 import type { AppStackParams } from '../../navigation/AppNavigator'
 import { colors, fonts } from '../../theme'
 import { useT } from '../../i18n'
+import { displayHandle } from '../../utils/handle'
 
 type Tab = 'followers' | 'following'
 type Nav = StackNavigationProp<AppStackParams>
@@ -51,7 +52,7 @@ function UserRow({ user, onOpen }: { user: followService.FollowUser; onOpen: () 
           <Text style={s.rowName} numberOfLines={1}>{user.name}</Text>
           {!!(user.username || user.bio) && (
             <Text style={s.rowSub} numberOfLines={1}>
-              {user.username ? `@${user.username}` : user.bio}
+              {user.username ? displayHandle(user.username) : user.bio}
             </Text>
           )}
         </View>

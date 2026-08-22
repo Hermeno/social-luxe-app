@@ -11,10 +11,15 @@ import { Image, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-n
 // tem de manter o alfa — com fundo branco, o tint pinta o retângulo inteiro.
 const SOURCE = require('../../assets/files/luxee-wordmark.png')
 
-// Proporção do ficheiro já aparado (1200 × 395). Fixada aqui para que nenhum
+// Proporção do ficheiro já aparado (1200 × 543). Fixada aqui para que nenhum
 // ecrã invente a sua e achate a caligrafia — num logo manuscrito a distorção
 // lê-se de imediato.
-const RATIO = 1200 / 395
+//
+// A caligrafia actual tem ascendente alto e descendente longo: o corpo das
+// letras ocupa 38% da altura do ficheiro, contra 51% da anterior. Por isso as
+// alturas pedidas pelos ecrãs subiram ~1,34× na troca — para a assinatura ficar
+// do mesmo tamanho aos olhos, não do mesmo número.
+const RATIO = 1200 / 543
 
 type Props = {
   /** Altura da caligrafia em pontos. A largura sai da proporção. */
@@ -50,7 +55,7 @@ export default function Wordmark({
         source={SOURCE}
         resizeMode="contain"
         accessibilityRole="image"
-        accessibilityLabel="Luxee"
+        accessibilityLabel="Luxey"
         style={[StyleSheet.absoluteFillObject, { width: '100%', height: '100%', tintColor: color }]}
       />
     </View>

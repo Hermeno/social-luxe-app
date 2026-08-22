@@ -22,7 +22,11 @@ import Animated, {
 } from 'react-native-reanimated'
 
 import AvatarImage from '../../components/AvatarImage'
+import FeedIcon from '../../components/FeedIcon'
+import SegmentedRing from '../../components/SegmentedRing'
 import { API_BASE } from '../../config'
+import { useT } from '../../i18n'
+import { useAuthStore } from '../../store/auth.store'
 import { colors, fonts, radius } from '../../theme'
 import type {
   CollectiveMomentCapture,
@@ -31,6 +35,27 @@ import type {
 
 const VIRTUAL_RADIUS = 2
 const EMOJI_SIZE_FRACTION = 0.14
+// Anel do avatar — a geometria dos anéis da Luxee: um só peso de traço e uma
+// folga que solta o anel do rosto, com a fotografia a ver-se por essa folga.
+const RING_STROKE = 3.6
+const RING_GAP = 3
+// Fila de quem esteve no momento. As proporções são as da pilha de comentadores
+// (`CommenterStack`): sobreposição de ~32% do diâmetro, borda branca fina e o
+// primeiro rosto por cima. Só a escala muda, porque aqui a fila é do post.
+const GROUP_OVERLAP_RATIO = 0.32
+const GROUP_BORDER = 1.5
+const GROUP_MAX = 5
+// A base do cartão fica onde o desenho a punha antes de a foto crescer: é aí
+// que a identidade do post e a coluna de acções flutuam sobre a mídia, e essa
+// relação não se mexe. A altura que a foto ganhou vem toda de CIMA.
+const CARD_BOTTOM_GAP = 0.12
+// O ar em cima é o que sobra para a fotografia crescer: a base não se mexe, por
+// isso é daqui que sai a altura.
+const CARD_TOP_GAP = 0.03
+// Faixa de baixo intocável. A identidade do post é mais alta do que o palco
+// reserva, por isso a fila do grupo tem um chão próprio, calculado à parte do
+// cartão: nenhum avatar pode chegar ao avatar do postador.
+const GROUP_SAFE_BOTTOM = 80
 
 const SPRING = {
   damping: 19,
@@ -49,7 +74,10 @@ export interface CollectiveMomentCarouselProps {
   /** Dimensões das imagens optimizadas, também paralelas a `captures`. */
   sizes?: Array<{ w: number | null; h: number | null }>
   reduceMotion: boolean
-  onOpen: (index: number) => void
+  /** Só a célula visível guarda uma fotografia aberta em grande. */
+  isActive?: boolean
+  /** Leva ao separador Círculo. Sem isto o cartão de convite não entra no anel. */
+  onCreateCircle?: () => void
   /** Área inferior ocupada pelos metadados e acções do post. */
   contentBottom?: number
 }
@@ -63,7 +91,6 @@ interface CardProps {
   count: number
   virtualPosition: number
   settledVirtual: number
-  twoItemSide: -1 | 1
   tapsLocked: boolean
   position: SharedValue<number>
   cardWidth: number
@@ -76,6 +103,10 @@ interface CardProps {
   onPrevious: () => void
   onNext: () => void
 }
+
+type CardModel =
+  | { kind: 'photo'; logicalIndex: number; virtualPosition: number; key: string }
+  | { kind: 'cta'; virtualPosition: number; key: string }
 
 function modulo(value: number, length: number) {
   return ((value % length) + length) % length
@@ -95,89 +126,20 @@ function participantLabel(participant: CollectiveMomentParticipant | undefined) 
   return participant?.name?.trim() || participant?.username?.trim() || 'Participante'
 }
 
-const CarouselCard = memo(function CarouselCard({
-  capture,
-  participant,
-  uri,
-  mediaSize,
-  logicalIndex,
-  count,
-  virtualPosition,
-  settledVirtual,
-  position,
-  twoItemSide,
-  tapsLocked,
-  cardWidth,
-  cardHeight,
-  cardTop,
-  avatarSize,
-  reduceMotion,
-  onOpen,
-  onCenter,
-  onPrevious,
-  onNext,
-}: CardProps) {
-  const [imageFailed, setImageFailed] = useState(false)
-  const [loadedSize, setLoadedSize] = useState<{ w: number; h: number } | null>(null)
-  const stableOffset = virtualPosition - settledVirtual
-  const twoItem = count === 2
-
-  useEffect(() => {
-    setImageFailed(false)
-    setLoadedSize(null)
-  }, [uri])
-
-  const animatedStyle = useAnimatedStyle(() => {
-    let relative = virtualPosition - position.value
-    let continuityOpacity = 1
-
-    if (twoItem) {
-      const travel = position.value - settledVirtual
-      const progress = Math.min(1, Math.abs(travel))
-      const direction = travel > 0 ? 1 : travel < 0 ? -1 : twoItemSide
-
-      if (stableOffset === 0) {
-        // O cartão que sai acompanha o dedo até à lateral oposta. Depois passa
-        // por trás (opacidade zero), muda de lado e reaparece como a única
-        // lateral do novo centro. É a volta circular com só duas Image views.
-        if (progress <= 0.62) {
-          relative = -direction * interpolate(progress, [0, 0.62], [0, 1], Extrapolation.CLAMP)
-        } else if (progress < 0.76) {
-          relative = interpolate(progress, [0.62, 0.76], [-direction, direction], Extrapolation.CLAMP)
-        } else {
-          relative = direction
-        }
-        continuityOpacity = interpolate(
-          progress,
-          [0, 0.5, 0.63, 0.75, 0.9, 1],
-          [1, 1, 0, 0, 1, 1],
-          Extrapolation.CLAMP,
-        )
-      } else if (direction === twoItemSide) {
-        relative = direction * (1 - progress)
-      } else {
-        // Se o utilizador inverte o sentido, a única lateral troca de bordo
-        // apenas no intervalo em que está invisível.
-        if (progress <= 0.11) {
-          relative = twoItemSide
-        } else if (progress < 0.17) {
-          relative = interpolate(
-            progress,
-            [0.11, 0.17],
-            [twoItemSide, direction * (1 - progress)],
-            Extrapolation.CLAMP,
-          )
-        } else {
-          relative = direction * (1 - progress)
-        }
-        continuityOpacity = interpolate(
-          progress,
-          [0, 0.08, 0.13, 0.19, 0.28, 1],
-          [1, 1, 0, 0, 1, 1],
-          Extrapolation.CLAMP,
-        )
-      }
-    }
+// A posição de um cartão na pilha — usada tanto pelas fotografias como pelo
+// cartão de convite, para os dois viverem no mesmo anel sem se desalinharem.
+function useCardTransform(
+  virtualPosition: number,
+  position: SharedValue<number>,
+  cardWidth: number,
+  cardHeight: number,
+  reduceMotion: boolean,
+) {
+  return useAnimatedStyle(() => {
+    // Cada cartão tem um lugar fixo no anel virtual e só a `position` se move.
+    // Nenhum cartão muda de bordo nem se apaga a meio do gesto — quem trata da
+    // volta circular é o anel, com uma cópia por posição.
+    const relative = virtualPosition - position.value
 
     const absolute = Math.abs(relative)
     const sideX = cardWidth * 0.56
@@ -215,7 +177,7 @@ const CarouselCard = memo(function CarouselCard({
       ? 0
       : interpolate(relative, [-2, -1, 0, 1, 2], [-10, -7, 0, 7, 10], Extrapolation.CLAMP)
 
-    const opacity = continuityOpacity * interpolate(
+    const opacity = interpolate(
       absolute,
       [0, 1, 1.72, 2],
       [1, 0.96, 0.18, 0],
@@ -224,7 +186,10 @@ const CarouselCard = memo(function CarouselCard({
 
     return {
       opacity,
-      zIndex: Math.max(0, 100 - absolute * 24),
+      // Um zIndex fraccionário reordena as subviews nativas a cada frame, o que
+      // por si só já pisca. Em degraus, a pilha só se reorganiza quando o cartão
+      // mais próximo do centro muda mesmo.
+      zIndex: Math.max(0, 100 - Math.round(absolute) * 24),
       transform: [
         { translateX },
         { translateY },
@@ -232,12 +197,54 @@ const CarouselCard = memo(function CarouselCard({
         { rotate: `${rotation}deg` },
       ],
     }
-  }, [cardHeight, cardWidth, reduceMotion, settledVirtual, stableOffset, twoItem, twoItemSide, virtualPosition])
+  }, [cardHeight, cardWidth, reduceMotion, virtualPosition])
+}
+
+// A moldura ocupa sempre o mesmo lugar; só a transformação a move.
+function cardLayer(cardTop: number, cardWidth: number, cardHeight: number) {
+  return {
+    left: '50%' as const,
+    top: cardTop,
+    width: cardWidth,
+    height: cardHeight,
+    marginLeft: -cardWidth / 2,
+  }
+}
+
+const CarouselCard = memo(function CarouselCard({
+  capture,
+  participant,
+  uri,
+  mediaSize,
+  logicalIndex,
+  count,
+  virtualPosition,
+  settledVirtual,
+  position,
+  tapsLocked,
+  cardWidth,
+  cardHeight,
+  cardTop,
+  avatarSize,
+  reduceMotion,
+  onOpen,
+  onCenter,
+  onPrevious,
+  onNext,
+}: CardProps) {
+  const [imageFailed, setImageFailed] = useState(false)
+  const [loadedSize, setLoadedSize] = useState<{ w: number; h: number } | null>(null)
+  const stableOffset = virtualPosition - settledVirtual
+
+  useEffect(() => {
+    setImageFailed(false)
+    setLoadedSize(null)
+  }, [uri])
+
+  const animatedStyle = useCardTransform(virtualPosition, position, cardWidth, cardHeight, reduceMotion)
 
   const isCenter = stableOffset === 0
-  const isInteractive = !tapsLocked && (twoItem
-    ? stableOffset === 0 || stableOffset === twoItemSide
-    : Math.abs(stableOffset) <= 1)
+  const isInteractive = !tapsLocked && Math.abs(stableOffset) <= 1
   const name = participantLabel(participant)
   const cardLabel = `Foto de ${name}, ${logicalIndex + 1} de ${count}`
 
@@ -261,6 +268,9 @@ const CarouselCard = memo(function CarouselCard({
     }
   }, [isCenter, logicalIndex, onNext, onOpen, onPrevious])
 
+  const ringOuter = avatarSize + (RING_GAP + RING_STROKE) * 2
+  const avatarInset = Math.max(10, cardWidth * 0.05)
+
   const hasMediaSize = (mediaSize?.w ?? 0) > 0 && (mediaSize?.h ?? 0) > 0
   const sourceWidth = hasMediaSize ? mediaSize!.w! : loadedSize?.w
   const sourceHeight = hasMediaSize ? mediaSize!.h! : loadedSize?.h
@@ -278,17 +288,7 @@ const CarouselCard = memo(function CarouselCard({
   return (
     <Animated.View
       pointerEvents={isInteractive ? 'auto' : 'none'}
-      style={[
-        s.cardLayer,
-        {
-          left: '50%',
-          top: cardTop,
-          width: cardWidth,
-          height: cardHeight,
-          marginLeft: -cardWidth / 2,
-        },
-        animatedStyle,
-      ]}
+      style={[s.cardLayer, cardLayer(cardTop, cardWidth, cardHeight), animatedStyle]}
     >
       <Pressable
         style={s.pressTarget}
@@ -370,29 +370,273 @@ const CarouselCard = memo(function CarouselCard({
           </View>
         </View>
 
+        {/* O avatar vive dentro da fotografia, no canto esquerdo. O anel fica
+            solto dele — a folga deixa passar a própria foto, como nos anéis do
+            resto da Luxee. */}
         <View
           style={[
             s.avatarRing,
             {
-              width: avatarSize + 6,
-              height: avatarSize + 6,
+              width: ringOuter,
+              height: ringOuter,
               borderRadius: radius.full,
-              top: -(avatarSize + 6) / 2,
-              left: (cardWidth - avatarSize - 6) / 2,
+              top: avatarInset,
+              left: avatarInset,
             },
           ]}
           pointerEvents="none"
         >
-          <AvatarImage
-            uri={participant?.avatar}
-            name={name}
-            size={avatarSize}
-            borderColor="transparent"
-            borderWidth={0}
-          />
+          <SegmentedRing count={1} size={ringOuter} strokeWidth={RING_STROKE} color={colors.white} />
+          <View style={[s.avatarWell, { width: avatarSize, height: avatarSize, borderRadius: radius.full }]}>
+            <AvatarImage
+              uri={participant?.avatar}
+              name={name}
+              size={avatarSize}
+              borderColor="transparent"
+              borderWidth={0}
+            />
+          </View>
         </View>
       </Pressable>
     </Animated.View>
+  )
+})
+
+interface CreateCircleCardProps {
+  virtualPosition: number
+  settledVirtual: number
+  tapsLocked: boolean
+  position: SharedValue<number>
+  cardWidth: number
+  cardHeight: number
+  cardTop: number
+  reduceMotion: boolean
+  onCreate: () => void
+  onCenter: (virtualPosition: number) => void
+}
+
+// O convite fecha o anel: passadas as fotografias do momento, aparece o cartão
+// que leva ao Círculo. Mesma moldura das fotografias — muda o que está dentro.
+const CreateCircleCard = memo(function CreateCircleCard({
+  virtualPosition,
+  settledVirtual,
+  tapsLocked,
+  position,
+  cardWidth,
+  cardHeight,
+  cardTop,
+  reduceMotion,
+  onCreate,
+  onCenter,
+}: CreateCircleCardProps) {
+  const t = useT()
+  const animatedStyle = useCardTransform(virtualPosition, position, cardWidth, cardHeight, reduceMotion)
+
+  const stableOffset = virtualPosition - settledVirtual
+  const isCenter = stableOffset === 0
+  const isInteractive = !tapsLocked && Math.abs(stableOffset) <= 1
+
+  // Quem vê o cartão vê-se a si próprio — é o convite a dizer que falta ele.
+  const me = useAuthStore((state) => state.user)
+  const faceSize = Math.max(52, Math.min(78, cardWidth * 0.26))
+  const faceRingOuter = faceSize + (RING_GAP + RING_STROKE) * 2
+  const inset = Math.max(10, cardWidth * 0.05)
+  // O emblema assenta sobre o anel, na diagonal de baixo — o `+` das acções da
+  // Luxee, com a borda da cor do cartão para se destacar do anel.
+  const badgeSize = Math.max(20, Math.round(faceSize * 0.34))
+  const badgeOffset = faceRingOuter / 2 + faceRingOuter * 0.354 - badgeSize / 2
+
+  const handlePress = useCallback(() => {
+    if (isCenter) onCreate()
+    else onCenter(virtualPosition)
+  }, [isCenter, onCenter, onCreate, virtualPosition])
+
+  return (
+    <Animated.View
+      pointerEvents={isInteractive ? 'auto' : 'none'}
+      style={[s.cardLayer, cardLayer(cardTop, cardWidth, cardHeight), animatedStyle]}
+    >
+      <Pressable
+        style={s.pressTarget}
+        onPress={handlePress}
+        accessible={isInteractive}
+        accessibilityElementsHidden={!isInteractive}
+        importantForAccessibility={isInteractive ? 'yes' : 'no-hide-descendants'}
+        accessibilityRole="button"
+        accessibilityLabel={t.circle_feedCtaTitle}
+        accessibilityHint={isCenter ? t.circle_feedCtaSub : 'Toque para trazer este cartão ao centro.'}
+      >
+        <View style={s.cardShadow}>
+          <View style={s.cardFrame}>
+            <View style={[StyleSheet.absoluteFill, s.ctaSurface]} />
+            {/* O rosto fica em cima, à altura dos rostos dos cartões ao lado;
+                os textos assentam em baixo, onde vive a legenda de um post. */}
+            <View style={[s.ctaBody, { paddingTop: inset, paddingBottom: inset + 6 }]}>
+              <View style={[s.ctaRing, { width: faceRingOuter, height: faceRingOuter, borderRadius: radius.full }]}>
+                <SegmentedRing count={1} size={faceRingOuter} strokeWidth={RING_STROKE} color={colors.white} />
+                <View style={[s.avatarWell, { width: faceSize, height: faceSize, borderRadius: radius.full }]}>
+                  <AvatarImage
+                    uri={me?.avatar}
+                    name={me?.name}
+                    size={faceSize}
+                    borderColor="transparent"
+                    borderWidth={0}
+                  />
+                </View>
+                <View
+                  style={[
+                    s.ctaBadge,
+                    {
+                      width: badgeSize,
+                      height: badgeSize,
+                      borderRadius: radius.full,
+                      left: badgeOffset,
+                      top: badgeOffset,
+                    },
+                  ]}
+                >
+                  <FeedIcon name="baseline-plus" size={badgeSize * 0.62} color={colors.white} weight="medium" />
+                </View>
+              </View>
+
+              <View style={s.ctaWords}>
+                <Text style={s.ctaTitle} numberOfLines={2}>{t.circle_feedCtaTitle}</Text>
+                <Text style={s.ctaSub} numberOfLines={3}>{t.circle_feedCtaSub}</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Pressable>
+    </Animated.View>
+  )
+})
+
+interface ParticipantStackProps {
+  participants: CollectiveMomentParticipant[]
+  size: number
+}
+
+// Quem esteve no momento, logo abaixo das fotografias: a leitura do grupo
+// inteiro sem ter de rodar o carrossel até ao fim.
+const ParticipantStack = memo(function ParticipantStack({
+  participants,
+  size,
+}: ParticipantStackProps) {
+  const shown = participants.slice(0, GROUP_MAX)
+  const rest = participants.length - shown.length
+  const overlap = Math.round(size * GROUP_OVERLAP_RATIO)
+
+  return (
+    <View style={s.groupRow}>
+      {shown.map((participant, index) => (
+        <View
+          key={participant.id}
+          style={[
+            s.groupSlot,
+            { borderRadius: size / 2, zIndex: shown.length - index },
+            index > 0 && { marginLeft: -overlap },
+          ]}
+        >
+          <AvatarImage
+            uri={participant.avatar}
+            name={participantLabel(participant)}
+            size={size}
+            borderWidth={GROUP_BORDER}
+            borderColor={colors.white}
+          />
+        </View>
+      ))}
+
+      {rest > 0 && (
+        <View
+          style={[
+            s.groupSlot,
+            s.groupMore,
+            { width: size, height: size, borderRadius: size / 2, marginLeft: -overlap },
+          ]}
+        >
+          <Text style={[s.groupMoreText, { fontSize: Math.round(size * 0.36) }]}>+{rest}</Text>
+        </View>
+      )}
+    </View>
+  )
+})
+
+interface ZoomedCaptureProps {
+  capture: CollectiveMomentCapture
+  uri: string
+  mediaSize: { w: number | null; h: number | null } | undefined
+  boxWidth: number
+  boxHeight: number
+}
+
+// A fotografia aberta, à altura toda da mídia e SEM cortar: aqui o objectivo é
+// ver, não compor. Por isso `contain` — e a matemática dos emojis é a mesma do
+// cartão, trocando o `max` do `cover` pelo `min`.
+const ZoomedCapture = memo(function ZoomedCapture({
+  capture,
+  uri,
+  mediaSize,
+  boxWidth,
+  boxHeight,
+}: ZoomedCaptureProps) {
+  const [loadedSize, setLoadedSize] = useState<{ w: number; h: number } | null>(null)
+  useEffect(() => { setLoadedSize(null) }, [uri])
+
+  const hasMediaSize = (mediaSize?.w ?? 0) > 0 && (mediaSize?.h ?? 0) > 0
+  const sourceWidth = hasMediaSize ? mediaSize!.w! : loadedSize?.w
+  const sourceHeight = hasMediaSize ? mediaSize!.h! : loadedSize?.h
+  const fitScale = sourceWidth && sourceHeight
+    ? Math.min(boxWidth / sourceWidth, boxHeight / sourceHeight)
+    : 1
+  const renderedWidth = sourceWidth ? sourceWidth * fitScale : boxWidth
+  const renderedHeight = sourceHeight ? sourceHeight * fitScale : boxHeight
+  const offsetX = (boxWidth - renderedWidth) / 2
+  const offsetY = (boxHeight - renderedHeight) / 2
+  const emojiSize = renderedWidth * EMOJI_SIZE_FRACTION
+
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Image
+        source={{ uri }}
+        style={StyleSheet.absoluteFill}
+        contentFit="contain"
+        cachePolicy="disk"
+        recyclingKey={`${capture.id}:zoom`}
+        transition={0}
+        onLoad={(event) => {
+          if (hasMediaSize) return
+          const { width, height } = event.source ?? {}
+          if (!width || !height) return
+          setLoadedSize((current) => (
+            current?.w === width && current.h === height ? current : { w: width, h: height }
+          ))
+        }}
+        accessibilityIgnoresInvertColors
+      />
+
+      {!!sourceWidth && !!sourceHeight && (Array.isArray(capture.overlays) ? capture.overlays : []).map((overlay, index) => {
+        if (!overlay?.emoji) return null
+        const x = Number.isFinite(overlay.x) ? clamp01(overlay.x) : 0.5
+        const y = Number.isFinite(overlay.y) ? clamp01(overlay.y) : 0.5
+        return (
+          <Text
+            key={`${capture.id}:zoom:overlay:${index}`}
+            style={[
+              s.emoji,
+              {
+                left: offsetX + x * renderedWidth - emojiSize / 2,
+                top: offsetY + y * renderedHeight - emojiSize / 2,
+                fontSize: emojiSize,
+                lineHeight: emojiSize * 1.14,
+              },
+            ]}
+          >
+            {overlay.emoji}
+          </Text>
+        )
+      })}
+    </View>
   )
 })
 
@@ -402,12 +646,12 @@ function CarouselContent({
   urls,
   sizes,
   reduceMotion,
-  onOpen,
+  isActive = true,
+  onCreateCircle,
   contentBottom = 0,
 }: CollectiveMomentCarouselProps) {
   const [layout, setLayout] = useState({ width: 0, height: 0 })
   const [settledVirtual, setSettledVirtual] = useState(0)
-  const [twoItemSide, setTwoItemSide] = useState<-1 | 1>(1)
   const [tapsLocked, setTapsLocked] = useState(false)
   const tapsLockedRef = useRef(false)
   const position = useSharedValue(0)
@@ -416,6 +660,8 @@ function CarouselContent({
   const dragTranslationOrigin = useSharedValue(0)
   const panActivated = useSharedValue(false)
   const count = captures.length
+  // O convite é mais um lugar no anel, a seguir à última fotografia.
+  const slots = count + (onCreateCircle ? 1 : 0)
 
   const captureSignature = useMemo(
     () => captures.map((capture) => capture.id).join('|'),
@@ -431,7 +677,6 @@ function CarouselContent({
     panActivated.value = false
     tapsLockedRef.current = false
     setSettledVirtual(0)
-    setTwoItemSide(1)
     setTapsLocked(false)
   }, [captureSignature, dragOrigin, dragTranslationOrigin, panActivated, position, settledPosition])
 
@@ -442,18 +687,34 @@ function CarouselContent({
   }, [participants])
 
   const stageHeight = Math.max(0, layout.height - Math.max(0, contentBottom))
+
+  // Larga, mas nunca de bordo a bordo: fica uma margem de 10% de cada lado, que
+  // é o que mantém o cartão a ler-se como cartão e deixa ver as laterais da
+  // pilha. Bordo a bordo é o que acontece ao tocar — aí sim, ecrã inteiro.
   const cardWidth = Math.min(
-    layout.width * 0.72,
-    Math.max(180, stageHeight * 0.58),
+    layout.width * 0.80,
+    Math.max(180, stageHeight * 0.62),
   )
+  // Mais alta do que era: com o avatar dentro da fotografia, o topo do palco
+  // deixou de ter de guardar espaço para o anel que saía por cima da moldura.
+  // Mas cresce só para cima — a base não invade o que está em baixo.
+  const cardBottomLine = stageHeight * (1 - CARD_BOTTOM_GAP)
   const cardHeight = Math.min(
-    stageHeight * 0.76,
-    cardWidth * 1.38,
+    stageHeight * (1 - CARD_BOTTOM_GAP - CARD_TOP_GAP),
+    cardWidth * 1.62,
   )
-  const avatarSize = Math.max(40, Math.min(58, cardWidth * 0.19))
-  const cardTop = Math.max(
-    avatarSize * 0.58,
-    (stageHeight - cardHeight) / 2 + avatarSize * 0.12,
+  const avatarSize = Math.max(34, Math.min(50, cardWidth * 0.17))
+  const cardTop = Math.max(0, cardBottomLine - cardHeight)
+
+  // A fila do grupo assenta POR CIMA da fotografia, encostada ao fundo do
+  // cartão. Não ocupa altura nenhuma do palco: a foto fica com o tamanho todo e
+  // nada do resto do post se mexe.
+  const showGroup = participants.length > 1
+  const groupSize = Math.round(Math.max(24, Math.min(30, layout.width * 0.072)))
+  const groupInset = Math.max(10, cardWidth * 0.05)
+  const groupTop = Math.min(
+    cardTop + cardHeight - groupSize - groupInset,
+    stageHeight - GROUP_SAFE_BOTTOM - groupSize,
   )
   const gestureStep = Math.max(1, cardWidth * 0.56)
 
@@ -462,26 +723,21 @@ function CarouselContent({
     setTapsLocked(true)
   }, [])
 
-  const finishSettled = useCallback((target: number, nextTwoItemSide: number) => {
+  const finishSettled = useCallback((target: number) => {
     setSettledVirtual(target)
-    if (nextTwoItemSide === -1 || nextTwoItemSide === 1) {
-      setTwoItemSide(nextTwoItemSide)
-    }
     tapsLockedRef.current = false
     setTapsLocked(false)
   }, [])
 
   const centerVirtual = useCallback((target: number) => {
     if (tapsLockedRef.current) return
-    const direction = target > settledVirtual ? 1 : target < settledVirtual ? -1 : 0
-    const nextTwoItemSide: -1 | 1 = direction === 0 ? twoItemSide : direction
 
     cancelAnimation(position)
     if (reduceMotion) {
       position.value = target
       settledPosition.value = target
       dragOrigin.value = target
-      finishSettled(target, nextTwoItemSide)
+      finishSettled(target)
       return
     }
 
@@ -490,14 +746,42 @@ function CarouselContent({
       if (!finished) return
       settledPosition.value = target
       dragOrigin.value = target
-      runOnJS(finishSettled)(target, nextTwoItemSide)
+      runOnJS(finishSettled)(target)
     })
-  }, [dragOrigin, finishSettled, lockInteractions, position, reduceMotion, settledPosition, settledVirtual, twoItemSide])
+  }, [dragOrigin, finishSettled, lockInteractions, position, reduceMotion, settledPosition])
+
+  // ── Ver de perto, sem sair da feed ─────────────────────────────────────────
+  // Tocar na fotografia do centro abre-a aqui mesmo, à altura toda da mídia. O
+  // resto do post — autor, acções, legenda — continua no ecrã por baixo.
+  const [zoomIndex, setZoomIndex] = useState<number | null>(null)
+  const zoomProgress = useSharedValue(0)
 
   const openCapture = useCallback((index: number) => {
     if (tapsLockedRef.current) return
-    onOpen(index)
-  }, [onOpen])
+    setZoomIndex(index)
+  }, [])
+
+  const closeZoom = useCallback(() => setZoomIndex(null), [])
+
+  useEffect(() => {
+    if (zoomIndex === null) {
+      cancelAnimation(zoomProgress)
+      zoomProgress.value = reduceMotion ? 0 : withSpring(0, SPRING)
+      return
+    }
+    cancelAnimation(zoomProgress)
+    zoomProgress.value = reduceMotion ? 1 : withSpring(1, SPRING)
+  }, [zoomIndex, reduceMotion, zoomProgress])
+
+  // Rolar a feed para outro post fecha o que estava aberto: uma fotografia em
+  // grande não pode ficar pendurada sobre um momento que já não se vê.
+  useEffect(() => {
+    if (!isActive) setZoomIndex(null)
+  }, [isActive])
+
+  useEffect(() => {
+    setZoomIndex(null)
+  }, [captureSignature])
 
   const previous = useCallback(() => centerVirtual(settledVirtual - 1), [centerVirtual, settledVirtual])
   const next = useCallback(() => centerVirtual(settledVirtual + 1), [centerVirtual, settledVirtual])
@@ -540,13 +824,12 @@ function CarouselContent({
       const shouldAdvance = Math.abs(distance) > 0.27 || Math.abs(velocity) > 0.5
       const direction = shouldAdvance ? (projected >= 0 ? 1 : -1) : 0
       const target = settledPosition.value + direction
-      const nextTwoItemSide = direction === 0 ? twoItemSide : direction
 
       if (reduceMotion) {
         position.value = target
         settledPosition.value = target
         dragOrigin.value = target
-        runOnJS(finishSettled)(target, nextTwoItemSide)
+        runOnJS(finishSettled)(target)
         return
       }
 
@@ -554,7 +837,7 @@ function CarouselContent({
         if (!finished) return
         settledPosition.value = target
         dragOrigin.value = target
-        runOnJS(finishSettled)(target, nextTwoItemSide)
+        runOnJS(finishSettled)(target)
       })
     })
     .onFinalize((_event, success) => {
@@ -568,14 +851,14 @@ function CarouselContent({
       if (reduceMotion) {
         position.value = target
         dragOrigin.value = target
-        runOnJS(finishSettled)(target, twoItemSide)
+        runOnJS(finishSettled)(target)
         return
       }
 
       position.value = withSpring(target, SPRING, (finished) => {
         if (!finished) return
         dragOrigin.value = target
-        runOnJS(finishSettled)(target, twoItemSide)
+        runOnJS(finishSettled)(target)
       })
     }), [
       dragOrigin,
@@ -587,8 +870,31 @@ function CarouselContent({
       position,
       reduceMotion,
       settledPosition,
-      twoItemSide,
     ])
+
+  // Cresce a partir do cartão: escala uniforme (nunca deforma a foto) e um
+  // deslize vertical do centro do cartão para o centro do palco.
+  const zoomStyle = useAnimatedStyle(() => ({
+    opacity: zoomProgress.value,
+    transform: [
+      {
+        translateY: interpolate(
+          zoomProgress.value,
+          [0, 1],
+          [cardTop + cardHeight / 2 - stageHeight / 2, 0],
+          Extrapolation.CLAMP,
+        ),
+      },
+      {
+        scale: interpolate(
+          zoomProgress.value,
+          [0, 1],
+          [layout.width > 0 ? cardWidth / layout.width : 0.9, 1],
+          Extrapolation.CLAMP,
+        ),
+      },
+    ],
+  }), [cardHeight, cardTop, cardWidth, layout.width, stageHeight])
 
   const onLayout = useCallback((event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout
@@ -599,38 +905,62 @@ function CarouselContent({
     ))
   }, [])
 
-  const cardModels = useMemo(() => {
-    if (count === 1) {
-      return [{ logicalIndex: 0, virtualPosition: settledVirtual, key: `${captures[0].id}:single` }]
+  const cardModels = useMemo<CardModel[]>(() => {
+    if (slots === 1) {
+      return [{
+        kind: 'photo',
+        logicalIndex: 0,
+        virtualPosition: settledVirtual,
+        key: `${captures[0].id}:single`,
+      }]
     }
-    if (count === 2) {
-      const currentLogical = modulo(settledVirtual, count)
-      return captures.map((capture, logicalIndex) => ({
-        logicalIndex,
-        virtualPosition: logicalIndex === currentLogical
-          ? settledVirtual
-          : settledVirtual + twoItemSide,
-        // A identidade nativa acompanha a fotografia ao trocar centro/lateral.
-        key: `${capture.id}:two-item`,
-      }))
-    }
+    // Cada posição do anel tem a sua própria cópia. Com poucas fotografias a
+    // mesma imagem aparece em mais do que um lugar — uma cópia a mais (o mesmo
+    // URI, já em cache) é mais barata do que fazer um cartão saltar de bordo a
+    // meio do gesto.
     return Array.from(
       { length: VIRTUAL_RADIUS * 2 + 1 },
       (_, index) => {
         const virtualPosition = settledVirtual + index - VIRTUAL_RADIUS
-        const logicalIndex = modulo(virtualPosition, count)
+        const slot = modulo(virtualPosition, slots)
+        if (slot === count) {
+          return { kind: 'cta', virtualPosition, key: `cta:virtual:${virtualPosition}` }
+        }
         return {
-          logicalIndex,
+          kind: 'photo',
+          logicalIndex: slot,
           virtualPosition,
-          key: `${captures[logicalIndex].id}:virtual:${virtualPosition}`,
+          key: `${captures[slot].id}:virtual:${virtualPosition}`,
         }
       },
     )
-  }, [captures, count, settledVirtual, twoItemSide])
+  }, [captures, count, settledVirtual, slots])
+
+  const zoomCapture = zoomIndex !== null ? captures[zoomIndex] : undefined
 
   const cards = layout.width > 0 && stageHeight > 0 && cardWidth > 0 && cardHeight > 0 ? (
     <View style={[s.stage, { height: stageHeight }]} collapsable={false}>
-      {cardModels.map(({ key, logicalIndex, virtualPosition }) => {
+      {cardModels.map((model) => {
+        const { key, virtualPosition } = model
+        if (model.kind === 'cta') {
+          if (!onCreateCircle) return null
+          return (
+            <CreateCircleCard
+              key={key}
+              virtualPosition={virtualPosition}
+              settledVirtual={settledVirtual}
+              tapsLocked={tapsLocked}
+              position={position}
+              cardWidth={cardWidth}
+              cardHeight={cardHeight}
+              cardTop={cardTop}
+              reduceMotion={reduceMotion}
+              onCreate={onCreateCircle}
+              onCenter={centerVirtual}
+            />
+          )
+        }
+        const { logicalIndex } = model
         const capture = captures[logicalIndex]
         const participant = participantById.get(capture.userId)
         const uri = resolveMediaUrl(urls[logicalIndex] || capture.mediaUrl)
@@ -647,7 +977,6 @@ function CarouselContent({
             virtualPosition={virtualPosition}
             settledVirtual={settledVirtual}
             position={position}
-            twoItemSide={twoItemSide}
             tapsLocked={tapsLocked}
             cardWidth={cardWidth}
             cardHeight={cardHeight}
@@ -661,12 +990,46 @@ function CarouselContent({
           />
         )
       })}
+
+      {showGroup && zoomIndex === null && (
+        <View
+          style={[s.groupOverlay, { top: groupTop, height: groupSize }]}
+          pointerEvents="none"
+        >
+          <ParticipantStack participants={participants} size={groupSize} />
+        </View>
+      )}
+
+      {/* ── A fotografia aberta, aqui mesmo ── */}
+      {!!zoomCapture && stageHeight > 0 && (
+        <Animated.View style={[s.zoomLayer, { height: stageHeight }, zoomStyle]}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={closeZoom}
+            accessibilityRole="button"
+            accessibilityLabel="Fotografia aberta"
+            accessibilityHint="Toque para fechar."
+          >
+            <ZoomedCapture
+              capture={zoomCapture}
+              uri={resolveMediaUrl(urls[zoomIndex!] || zoomCapture.mediaUrl)}
+              mediaSize={sizes?.[zoomIndex!]}
+              boxWidth={layout.width}
+              boxHeight={stageHeight}
+            />
+          </Pressable>
+        </Animated.View>
+      )}
     </View>
   ) : null
 
   return (
     <View style={s.root} onLayout={onLayout} pointerEvents="box-none">
-      {count > 1 && cards ? <GestureDetector gesture={pan}>{cards}</GestureDetector> : cards}
+      {/* Com uma fotografia aberta o gesto do carrossel sai de cena: deslizar
+          por baixo dela mudaria o centro sem se ver o que se está a fazer. */}
+      {zoomIndex === null && slots > 1 && cards
+        ? <GestureDetector gesture={pan}>{cards}</GestureDetector>
+        : cards}
     </View>
   )
 }
@@ -746,18 +1109,102 @@ const s = StyleSheet.create({
     textShadowRadius: 2,
     textShadowOffset: { width: 0, height: 1 },
   },
+  // Sem fundo e sem recorte: a folga entre o anel e o rosto deixa passar a
+  // fotografia que está por baixo.
   avatarRing: {
     position: 'absolute',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  avatarWell: {
     overflow: 'hidden',
-    borderWidth: 2.5,
-    borderColor: colors.white,
     backgroundColor: colors.feedSurface,
     shadowColor: colors.black,
-    shadowOpacity: 0.35,
+    shadowOpacity: 0.32,
     shadowRadius: 5,
     shadowOffset: { width: 0, height: 2 },
     elevation: 10,
+  },
+  ctaSurface: {
+    backgroundColor: colors.circleInvite,
+  },
+  // Ocupa o palco, não o post inteiro: autor, acções e legenda continuam a
+  // ler-se por baixo, que é o que faz isto ser a feed e não outro ecrã.
+  zoomLayer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 300,
+    backgroundColor: colors.feedSurface,
+  },
+  groupOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // Acima de qualquer cartão: o do centro chega a 100 e passaria à frente.
+    zIndex: 200,
+  },
+  groupRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  // A sombra é o que separa os anéis brancos quando a fila cai sobre uma zona
+  // clara — o mesmo cuidado da pilha de comentadores.
+  groupSlot: {
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  groupMore: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: GROUP_BORDER,
+    borderColor: colors.white,
+    backgroundColor: colors.feedSurfaceSlate,
+  },
+  groupMoreText: {
+    color: colors.white,
+    fontFamily: fonts.semiBold,
+  },
+  ctaBody: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+  },
+  ctaRing: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ctaBadge: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    borderWidth: 1.5,
+    borderColor: colors.circleInvite,
+  },
+  ctaWords: {
+    alignItems: 'center',
+    gap: 5,
+  },
+  ctaTitle: {
+    color: colors.white,
+    fontFamily: fonts.bold,
+    fontSize: 18,
+    lineHeight: 23,
+    textAlign: 'center',
+  },
+  ctaSub: {
+    color: 'rgba(255,255,255,0.72)',
+    fontFamily: fonts.medium,
+    fontSize: 12.5,
+    lineHeight: 17,
+    textAlign: 'center',
   },
 })
