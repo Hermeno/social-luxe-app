@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native'
 import FeedIcon from '../../components/FeedIcon'
-import { fonts } from '../../theme'
+import { fonts, typography } from '../../theme'
 import { useT } from '../../i18n'
 import type { TasteSignal } from '../../services/post.service'
 
@@ -138,7 +138,7 @@ const s = StyleSheet.create({
     ...shadow,
     color: 'rgba(255,255,255,0.72)',
     fontFamily: fonts.medium,
-    fontSize: 11.5,
+    fontSize: typography.meta,
     letterSpacing: -0.1,
     marginBottom: 8,
   },
@@ -166,7 +166,7 @@ const s = StyleSheet.create({
     textAlign: 'center',
     color: 'rgba(255,255,255,0.94)',
     fontFamily: fonts.semiBold,
-    fontSize: 12.5,
+    fontSize: typography.secondary,
     letterSpacing: -0.15,
   },
   thanks: {
@@ -176,7 +176,7 @@ const s = StyleSheet.create({
     right: 0,
     color: 'rgba(255,255,255,0.94)',
     fontFamily: fonts.semiBold,
-    fontSize: 12.5,
+    fontSize: typography.secondary,
     letterSpacing: -0.15,
   },
 })

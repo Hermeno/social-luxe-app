@@ -1,9 +1,9 @@
-import React, { useRef, useEffect, useMemo } from 'react'
-import { View, TouchableOpacity, StyleSheet, Text, Animated } from 'react-native'
+import React, { useRef, useEffect, useMemo, useState } from 'react'
+import { View, TouchableOpacity, StyleSheet, Text, Animated, Easing } from 'react-native'
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import FeedIcon from '../FeedIcon'
-import { colors, fonts } from '../../theme'
+import { colors, fonts, radius, typography } from '../../theme'
 import { useFeedStore } from '../../store/feed.store'
 import { useAuthStore } from '../../store/auth.store'
 import { useMessageBadgeStore } from '../../store/messageBadge.store'
@@ -14,7 +14,12 @@ import { useOverlayStore } from '../../store/overlay.store'
 import { useT } from '../../i18n'
 import AvatarImage from '../AvatarImage'
 import Icon from '../Icon'
-import { TAB_BAR_ROW_HEIGHT, TAB_BAR_TOP_GAP, tabBarBottomInset } from './layout'
+import {
+  FEED_COMPOSER_HEIGHT,
+  TAB_BAR_ROW_HEIGHT,
+  TAB_BAR_TOP_GAP,
+  tabBarBottomInset,
+} from './layout'
 import useReducedMotionPreference from '../../hooks/useReducedMotionPreference'
 
 // O mesmo tamanho da coluna de acções do post (`DEFAULT_RAIL_ICON_SIZE`), para
@@ -63,7 +68,7 @@ function SocialAvatarStack({ users }: { users: SocialPreviewUser[] }) {
 
 function MotionTabButton({
   children, selected, onPress, label, valueText,
-  pulseSignal = 0, reduceMotion,
+  pulseSignal = 0, reduceMotion, role = 'tab',
 }: {
   children: React.ReactNode
   selected: boolean
@@ -72,6 +77,7 @@ function MotionTabButton({
   valueText?: string
   pulseSignal?: number
   reduceMotion: boolean
+  role?: 'tab' | 'button'
 }) {
   const scale = useRef(new Animated.Value(1)).current
   const pulse = useRef(new Animated.Value(0)).current
@@ -120,10 +126,10 @@ function MotionTabButton({
       onPressIn={pressIn}
       onPressOut={pressOut}
       activeOpacity={1}
-      accessibilityRole="tab"
+      accessibilityRole={role}
       accessibilityLabel={label}
       accessibilityValue={valueText ? { text: valueText } : undefined}
-      accessibilityState={{ selected }}
+      accessibilityState={role === 'tab' ? { selected } : undefined}
     >
       <Animated.View
         style={[
@@ -210,9 +216,12 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
   const newPostsCount = useFeedStore((s) => s.newPostsCount)
   const totalUnread   = useMessageBadgeStore((s) => s.totalUnread)
   const openSearch    = useFeedStore((s) => s.openSearch)
+  const searchVisible = useFeedStore((s) => s.searchVisible)
   const bumpHomeTap   = useFeedStore((s) => s.bumpHomeTap)
   const homeTap       = useFeedStore((s) => s.homeTap)
   const commentTarget = useFeedStore((s) => s.activeCommentTarget)
+  // Só vale na feed: nenhum outro separador recolhe a navegação.
+  const immersive = useFeedStore((s) => s.immersive)
   const requestComments = useFeedStore((s) => s.requestComments)
   const clearFocusedPost = useFeedStore((s) => s.clearFocusedPost)
   const requestSuggestions = useMessagesStore((s) => s.requestSuggestions)
@@ -224,6 +233,11 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
   const avatar        = currentUser?.avatar ?? null
   const barVisibility = useRef(new Animated.Value(1)).current
   const commentScale = useRef(new Animated.Value(1)).current
+  // 0 = barra normal · 1 = só o campo de comentar, de margem a margem.
+  const collapse = useRef(new Animated.Value(0)).current
+  // A face clicável muda apenas no fim do crossfade. Assim nunca há um
+  // controlo quase invisível a receber o toque destinado ao que ainda se vê.
+  const [interactiveFace, setInteractiveFace] = useState<'navigation' | 'composer'>('navigation')
 
   const activeRoute = state.routes[state.index]
   const activeTab  = activeRoute.name
@@ -236,10 +250,14 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
     ? (activeRoute.params as { userId?: string } | undefined)?.userId
     : undefined
   const onOwnProfile = onProfile && (!profileUserId || profileUserId === currentUser?.id)
-  // A nav é branca em toda a app, feed incluída — logo os ícones são sempre os
-  // escuros. Eram brancos enquanto a barra acompanhava o fundo da feed.
-  const iconActive = colors.black
-  const iconInactv = colors.gray400
+  // O campo utilitário só existe nestes ecrãs. Sem ele a cápsula da navegação
+  // abre para a largura toda, em vez de ficar encostada à direita a olhar para
+  // um vazio do tamanho de si mesma.
+  const hasUtilityField = onMessages || onCreate || onCircle || onOwnProfile
+  // Na feed a cápsula é só o fio: o fundo é a própria feed, escura, e os ícones
+  // são brancos. Nos outros ecrãs o papel é branco e os ícones voltam a escuros.
+  const iconActive = onFeed ? '#FFFFFF' : colors.black
+  const iconInactv = onFeed ? 'rgba(255,255,255,0.62)' : '#74757B'
 
   useEffect(() => {
     if (currentUser?.id) loadSocialPreview(currentUser.id).catch(() => {})
@@ -259,7 +277,7 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
     if (!event.defaultPrevented) navigation.navigate(tab)
   }
 
-  const homeActive   = activeTab === 'Feed' && !openSearch
+  const homeActive   = activeTab === 'Feed' && !openSearch && !searchVisible
   const msgActive    = activeTab === 'Messages'
   const profActive   = activeTab === 'Profile'
   const commentLabel = commentTarget && commentTarget.authorId !== currentUser?.id
@@ -279,6 +297,38 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
     () => mergePreview(previewFollowing, previewFollowers),
     [previewFollowing, previewFollowers],
   )
+
+  // A Feed mantém uma stage de altura fixa: cinco controlos iguais dão lugar ao
+  // compositor sem alterar a geometria reservada pela mídia e pelo scrubber.
+  const collapsed = onFeed && immersive
+  useEffect(() => {
+    // Outra aba nunca herda um frame transparente/recolhido da Feed.
+    if (!onFeed) {
+      collapse.stopAnimation()
+      collapse.setValue(0)
+      setInteractiveFace('navigation')
+      return
+    }
+    if (reduceMotion) {
+      collapse.stopAnimation()
+      collapse.setValue(collapsed ? 1 : 0)
+      setInteractiveFace(collapsed ? 'composer' : 'navigation')
+      return
+    }
+    collapse.stopAnimation()
+    Animated.timing(collapse, {
+      toValue: collapsed ? 1 : 0,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      // A cor da barra e a margem do compositor acompanham esta transição.
+      useNativeDriver: false,
+    }).start(({ finished }) => {
+      if (finished) setInteractiveFace(collapsed ? 'composer' : 'navigation')
+    })
+  }, [collapsed, collapse, onFeed, reduceMotion])
+
+  const navigationInteractive = !onFeed || interactiveFace === 'navigation'
+  const composerInteractive = onFeed && interactiveFace === 'composer'
 
   function animateCommentField(pressed: boolean) {
     if (reduceMotion) return
@@ -307,6 +357,16 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
     requestConnections()
   }
 
+  // As duas acções da barra da Feed. A pesquisa não navega: levanta a bandeira
+  // que o próprio ecrã atende e mantém o post atual como âncora.
+  function openFeedSearch() {
+    useFeedStore.getState().setOpenSearch(true)
+  }
+
+  function openCreate() {
+    goTo('Create')
+  }
+
   function goToOwnProfile() {
     const route = state.routes.find((item) => item.name === 'Profile')
     if (!route) return
@@ -318,6 +378,66 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
     }
   }
 
+  const primaryTabs = (
+    <>
+      <MotionTabButton
+        onPress={() => {
+          if (activeTab === 'Feed') bumpHomeTap()
+          else { clearFocusedPost(); goTo('Feed') }
+        }}
+        label={t.nav_home}
+        valueText={newPostValue}
+        selected={homeActive}
+        pulseSignal={homeTap}
+        reduceMotion={reduceMotion}
+      >
+        <MessageBadge count={newPostsCount} reduceMotion={reduceMotion} />
+        <FeedIcon
+          name={homeActive ? 'home-rounded' : 'home'}
+          size={SZ}
+          color={homeActive ? iconActive : iconInactv}
+        />
+      </MotionTabButton>
+
+      <MotionTabButton
+        onPress={() => goTo('Messages')}
+        label={t.nav_chat}
+        valueText={unreadValue}
+        selected={msgActive}
+        pulseSignal={totalUnread}
+        reduceMotion={reduceMotion}
+      >
+        <MessageBadge count={totalUnread} reduceMotion={reduceMotion} />
+        <FeedIcon
+          name={msgActive ? 'chat-solid' : 'chat-outline'}
+          size={SZ}
+          color={msgActive ? iconActive : iconInactv}
+        />
+      </MotionTabButton>
+
+      <MotionTabButton
+        onPress={goToOwnProfile}
+        label={t.nav_profile}
+        selected={profActive}
+        reduceMotion={reduceMotion}
+      >
+        {avatar ? (
+          <View style={[s.avatar, !profActive && s.avatarInactive]}>
+            <AvatarImage uri={avatar} name={currentUser?.name} size={SZ} />
+          </View>
+        ) : (
+          <Icon
+            name="user"
+            size={SZ}
+            strokeWidth={profActive ? 2.5 : 2}
+            color={profActive ? iconActive : iconInactv}
+            fill={profActive ? iconActive : 'none'}
+          />
+        )}
+      </MotionTabButton>
+    </>
+  )
+
   return (
     <Animated.View
       style={[
@@ -328,150 +448,142 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
         },
       ]}
       pointerEvents={overlayOpen ? 'none' : 'box-none'}
+      accessibilityElementsHidden={overlayOpen}
+      importantForAccessibility={overlayOpen ? 'no-hide-descendants' : 'auto'}
     >
-      <View
+      <Animated.View
         style={[
           s.bar,
-          s.barLight,
-          { paddingBottom: tabBarBottomInset(bottom) },
+          {
+            paddingBottom: tabBarBottomInset(bottom),
+            paddingHorizontal: onFeed ? 0 : 14,
+            // Na feed a barra não pinta nada: a cápsula flutua sobre a própria
+            // feed, do primeiro ao último estado. Nos outros ecrãs o papel
+            // branco continua a segurar o campo.
+            backgroundColor: onFeed ? 'transparent' : '#FFFFFF',
+          },
         ]}
       >
+        {onFeed ? (
+          <View style={s.feedStage}>
+            {/* Uma única fila, cinco células iguais. Nenhum subgrupo pode
+                introduzir uma largura mínima ou um intervalo diferente. */}
+            <Animated.View
+              style={[
+                s.feedNavigationFace,
+                { opacity: collapse.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }) },
+              ]}
+              pointerEvents={navigationInteractive ? 'auto' : 'none'}
+              accessibilityElementsHidden={!navigationInteractive}
+              importantForAccessibility={navigationInteractive ? 'auto' : 'no-hide-descendants'}
+            >
+              {/* A cápsula ocupa exactamente o rectângulo do campo de comentar:
+                  mesma altura, mesmo raio, mesma margem. No crossfade lê-se como
+                  um só objecto a trocar de conteúdo, não como duas barras. */}
+              <View style={[s.navShell, s.navShellFeed]}>
+                <MotionTabButton
+                  onPress={openFeedSearch}
+                  label={t.feed_top_search}
+                  selected={searchVisible}
+                  reduceMotion={reduceMotion}
+                  role="button"
+                >
+                  <FeedIcon
+                    name="search"
+                    size={SZ}
+                    color={searchVisible ? iconActive : iconInactv}
+                    weight="medium"
+                  />
+                </MotionTabButton>
 
-        {/* Espaço partilhado: comentar, descobrir pessoas ou abrir a rede. */}
-        <View style={s.commentSlot}>
-          {onFeed && (
-            <Animated.View style={[s.utilityMotion, { transform: [{ scale: commentScale }] }]}>
-              <TouchableOpacity
-                style={[s.commentField, !commentTarget && s.commentFieldDisabled]}
-                onPress={() => commentTarget && requestComments(commentTarget.postId)}
-                onPressIn={() => animateCommentField(true)}
-                onPressOut={() => animateCommentField(false)}
-                activeOpacity={0.9}
-                disabled={!commentTarget}
-                accessibilityRole="button"
-                accessibilityLabel={commentLabel}
-                accessibilityState={{ disabled: !commentTarget }}
-              >
-                <AvatarImage
-                  uri={avatar}
-                  name={currentUser?.name}
-                  size={27}
-                  borderWidth={0}
-                  borderColor="transparent"
-                />
-                <Text style={s.commentText} numberOfLines={1}>{commentLabel}</Text>
-                <Icon name="chevron-right" size={14} color="rgba(255,255,255,0.42)" strokeWidth={1.8} />
-              </TouchableOpacity>
-            </Animated.View>
-          )}
+                <MotionTabButton
+                  onPress={openCreate}
+                  label={t.feed_create}
+                  selected={false}
+                  reduceMotion={reduceMotion}
+                  role="button"
+                >
+                  <Icon name="plus" size={28} color={iconInactv} strokeWidth={1.9} />
+                </MotionTabButton>
 
-          {/* Create, Chat e Círculo partilham a entrada branca de descoberta. */}
-          {(onMessages || onCreate || onCircle) && (
-            <Animated.View style={[s.utilityMotion, { transform: [{ scale: commentScale }] }]}>
-              <TouchableOpacity
-                style={s.discoveryField}
-                onPress={openSuggestions}
-                onPressIn={() => animateCommentField(true)}
-                onPressOut={() => animateCommentField(false)}
-                activeOpacity={0.9}
-                hitSlop={{ top: 2, bottom: 2, left: 2, right: 2 }}
-                accessibilityRole="button"
-                accessibilityLabel={`${t.follow}. ${t.nav_suggestions}`}
-              >
-                <SocialAvatarStack users={discoveryPreview} />
-                <Text style={s.discoveryText} numberOfLines={1}>{t.follow}</Text>
-                <Icon name="chevron-right" size={14} color={colors.gray400} strokeWidth={1.8} />
-              </TouchableOpacity>
-            </Animated.View>
-          )}
-
-          {/* No perfil, a pilha representa relações existentes, não sugestões. */}
-          {onOwnProfile && (
-            <Animated.View style={[s.utilityMotion, { transform: [{ scale: commentScale }] }]}>
-              <TouchableOpacity
-                style={s.networkField}
-                onPress={openProfileConnections}
-                onPressIn={() => animateCommentField(true)}
-                onPressOut={() => animateCommentField(false)}
-                activeOpacity={0.9}
-                hitSlop={{ top: 2, bottom: 2, left: 2, right: 2 }}
-                accessibilityRole="button"
-                accessibilityLabel={t.nav_my_network}
-              >
-                <SocialAvatarStack users={networkPreview} />
-                <Text style={s.networkText} numberOfLines={1}>{t.nav_my_network}</Text>
-                <Icon name="chevron-right" size={14} color={colors.gray400} strokeWidth={1.8} />
-              </TouchableOpacity>
-            </Animated.View>
-          )}
-        </View>
-
-        <View style={s.navActions}>
-          {/* Home → Feed. Tocar já no feed refresca (como as apps grandes). */}
-          <MotionTabButton
-            onPress={() => {
-              if (activeTab === 'Feed') bumpHomeTap()
-              else { clearFocusedPost(); goTo('Feed') }
-            }}
-            label={t.nav_home}
-            valueText={newPostValue}
-            selected={homeActive}
-            pulseSignal={homeTap}
-            reduceMotion={reduceMotion}
-          >
-            <MessageBadge count={newPostsCount} reduceMotion={reduceMotion} />
-            {/* Ativo troca para o desenho sólido — nestes ícones o contorno é
-                geometria, não traço, por isso não há `fill` para alternar. */}
-            <FeedIcon
-              name={homeActive ? 'home-rounded' : 'home'}
-              size={SZ}
-              color={homeActive ? iconActive : iconInactv}
-            />
-          </MotionTabButton>
-
-          {/* Messages — badge com total de mensagens não lidas */}
-          <MotionTabButton
-            onPress={() => goTo('Messages')}
-            label={t.nav_chat}
-            valueText={unreadValue}
-            selected={msgActive}
-            pulseSignal={totalUnread}
-            reduceMotion={reduceMotion}
-          >
-            <MessageBadge count={totalUnread} reduceMotion={reduceMotion} />
-            {/* Já nasce com a cauda à direita — dispensa o espelho que aqui estava. */}
-            <FeedIcon
-              name={msgActive ? 'chat-solid' : 'chat-outline'}
-              size={SZ}
-              color={msgActive ? iconActive : iconInactv}
-            />
-          </MotionTabButton>
-
-          {/* Profile */}
-          <MotionTabButton
-            onPress={goToOwnProfile}
-            label={t.nav_profile}
-            selected={profActive}
-            reduceMotion={reduceMotion}
-          >
-            {avatar ? (
-              <View style={[s.avatar, !profActive && s.avatarInactive]}>
-                <AvatarImage uri={avatar} name={currentUser?.name} size={SZ} />
+                {primaryTabs}
               </View>
-            ) : (
-              // Não veio `user` no pacote — fica o ícone da Luxee, que já o tem.
-              <Icon
-                name="user"
-                size={SZ}
-                strokeWidth={profActive ? 2.5 : 2}
-                color={profActive ? iconActive : iconInactv}
-                fill={profActive ? iconActive : 'none'}
-              />
-            )}
-          </MotionTabButton>
+            </Animated.View>
 
-        </View>
-      </View>
+            <Animated.View
+              style={[
+                s.feedComposerFace,
+                {
+                  opacity: collapse,
+                  paddingHorizontal: collapse.interpolate({ inputRange: [0, 1], outputRange: [0, 14] }),
+                },
+              ]}
+              pointerEvents={composerInteractive ? 'auto' : 'none'}
+              accessibilityElementsHidden={!composerInteractive}
+              importantForAccessibility={composerInteractive ? 'auto' : 'no-hide-descendants'}
+            >
+              <Animated.View style={[s.composerMotion, { transform: [{ scale: commentScale }] }]}>
+                <TouchableOpacity
+                  style={[s.commentField, !commentTarget && s.commentFieldDisabled]}
+                  onPress={() => commentTarget && requestComments(commentTarget.postId)}
+                  onPressIn={() => animateCommentField(true)}
+                  onPressOut={() => animateCommentField(false)}
+                  activeOpacity={0.9}
+                  disabled={!commentTarget}
+                  accessibilityRole="button"
+                  accessibilityLabel={commentLabel}
+                  accessibilityState={{ disabled: !commentTarget }}
+                >
+                  <Text style={s.commentText} numberOfLines={1}>{commentLabel}</Text>
+                </TouchableOpacity>
+              </Animated.View>
+            </Animated.View>
+          </View>
+        ) : (
+          <View style={[s.navShell, s.navShellLight]}>
+            {/* Fora da Feed é um campo só: os avatares, o rótulo e as três
+                tabs vivem dentro da mesma borda. Dois campos encostados um ao
+                outro liam-se como dois objectos; isto lê-se como um. */}
+            {(onMessages || onCreate || onCircle) && (
+              <Animated.View style={[s.utilityMotion, { transform: [{ scale: commentScale }] }]}>
+                <TouchableOpacity
+                  style={s.utilityField}
+                  onPress={openSuggestions}
+                  onPressIn={() => animateCommentField(true)}
+                  onPressOut={() => animateCommentField(false)}
+                  activeOpacity={0.9}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${t.follow}. ${t.nav_suggestions}`}
+                >
+                  <SocialAvatarStack users={discoveryPreview} />
+                  <Text style={s.discoveryText} numberOfLines={1}>{t.follow}</Text>
+                  <Icon name="chevron-right" size={14} color={colors.gray400} strokeWidth={1.8} />
+                </TouchableOpacity>
+              </Animated.View>
+            )}
+
+            {onOwnProfile && (
+              <Animated.View style={[s.utilityMotion, { transform: [{ scale: commentScale }] }]}>
+                <TouchableOpacity
+                  style={s.utilityField}
+                  onPress={openProfileConnections}
+                  onPressIn={() => animateCommentField(true)}
+                  onPressOut={() => animateCommentField(false)}
+                  activeOpacity={0.9}
+                  accessibilityRole="button"
+                  accessibilityLabel={t.nav_my_network}
+                >
+                  <SocialAvatarStack users={networkPreview} />
+                  <Text style={s.networkText} numberOfLines={1}>{t.nav_my_network}</Text>
+                  <Icon name="chevron-right" size={14} color={colors.gray400} strokeWidth={1.8} />
+                </TouchableOpacity>
+              </Animated.View>
+            )}
+
+            <View style={[s.navGroup, !hasUtilityField && s.navGroupWide]}>{primaryTabs}</View>
+          </View>
+        )}
+      </Animated.View>
     </Animated.View>
   )
 }
@@ -485,75 +597,88 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingTop: TAB_BAR_TOP_GAP,
-    paddingHorizontal: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
   },
-  // Variante escura: a nav acompanhava o fundo da feed e desaparecia dentro
-  // dele. Fica guardada para o caso de se querer voltar — basta repô-la no
-  // `style` da barra, junto com os ícones claros.
-  barFeed: {
-    backgroundColor: colors.feedSurface,
-    borderTopColor: 'rgba(255,255,255,0.12)',
+  feedStage: {
+    flex: 1,
+    height: FEED_COMPOSER_HEIGHT,
+    position: 'relative',
   },
-  barLight: {
-    backgroundColor: '#FFFFFF',
-    borderTopColor: '#E5E5E9',
-  },
-  commentSlot: {
-    // 5:4 preserva o campo sem deixar cada tab cair abaixo de 44 px.
-    flex: 5,
-    minWidth: 0,
-    height: TAB_BAR_ROW_HEIGHT,
-    justifyContent: 'center',
-    paddingRight: 8,
-  },
-  utilityMotion: { width: '100%', height: TAB_BAR_ROW_HEIGHT },
-  commentField: {
-    height: TAB_BAR_ROW_HEIGHT,
+  feedNavigationFace: {
+    ...StyleSheet.absoluteFillObject,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 10,
-    borderRadius: TAB_BAR_ROW_HEIGHT / 2,
-    backgroundColor: colors.commentField,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#2B3946',
+    paddingHorizontal: 14,
   },
-  commentFieldDisabled: { opacity: 0.54 },
-  discoveryField: {
+  // O campo que segura a navegação: um fio, cantos totalmente redondos e nada
+  // mais. Sem sombra — quem separa a barra do que está por cima é a borda.
+  navShell: {
+    flex: 1,
+    height: '100%',
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    paddingHorizontal: 4,
+    borderRadius: radius.full,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  // Na feed o campo é só contorno: o fundo é a feed que passa por baixo.
+  navShellFeed: {
+    backgroundColor: 'transparent',
+    borderColor: 'rgba(255,255,255,0.22)',
+  },
+  // Fora da feed continua a ser papel branco com o fio do campo de form.
+  navShellLight: {
     height: TAB_BAR_ROW_HEIGHT,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#D8D8D3',
+  },
+  feedComposerFace: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // 5:4 — a mesma proporção de sempre entre o bloco social e as três tabs, só
+  // que agora dentro da mesma borda em vez de dois campos encostados.
+  utilityMotion: { flex: 5, minWidth: 0, alignSelf: 'stretch' },
+  navGroup: { flex: 4, minWidth: 0, flexDirection: 'row', alignSelf: 'stretch' },
+  navGroupWide: { flex: 1 },
+  utilityField: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
-    paddingHorizontal: 9,
-    borderRadius: TAB_BAR_ROW_HEIGHT / 2,
-    backgroundColor: '#FFFFFF',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#D8D8D3',
+    paddingLeft: 5,
+    paddingRight: 10,
   },
+  composerMotion: { width: '100%', height: FEED_COMPOSER_HEIGHT },
+  commentField: {
+    height: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    borderRadius: 999,
+    backgroundColor: 'rgba(24,32,39,0.96)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.16)',
+    shadowColor: '#000',
+    shadowOpacity: 0.34,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
+  },
+  commentFieldDisabled: { opacity: 0.54 },
   discoveryText: {
     flex: 1,
     color: colors.gray800,
     fontFamily: fonts.bold,
-    fontSize: 12.5,
+    fontSize: typography.secondary,
     letterSpacing: -0.15,
-  },
-  networkField: {
-    height: TAB_BAR_ROW_HEIGHT,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-    paddingHorizontal: 9,
-    borderRadius: TAB_BAR_ROW_HEIGHT / 2,
-    backgroundColor: '#FFFFFF',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#D8D8D3',
   },
   networkText: {
     flex: 1,
     color: colors.gray800,
     fontFamily: fonts.semiBold,
-    fontSize: 11.5,
+    fontSize: typography.meta,
     letterSpacing: -0.18,
   },
   socialStack: {
@@ -583,29 +708,25 @@ const s = StyleSheet.create({
   },
   commentText: {
     flex: 1,
-    color: 'rgba(23, 17, 17, 0.64)',
+    color: 'rgba(255,255,255,0.76)',
     fontFamily: fonts.medium,
-    fontSize: 13.5,
-    letterSpacing: -0.15,
-  },
-  navActions: {
-    flex: 4,
-    minWidth: TAB_BAR_ROW_HEIGHT * 3,
-    height: TAB_BAR_ROW_HEIGHT,
-    flexDirection: 'row',
-    alignItems: 'center',
-    position: 'relative',
+    fontSize: typography.body,
+    lineHeight: 20,
+    letterSpacing: -0.24,
   },
   btn: {
     flex: 1,
-    minWidth: TAB_BAR_ROW_HEIGHT,
-    height: TAB_BAR_ROW_HEIGHT,
+    minWidth: 0,
+    alignSelf: 'stretch',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'visible',
   },
   navIconMotion: {
     position: 'relative',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -627,7 +748,7 @@ const s = StyleSheet.create({
   },
   badgeTxt: {
     color: '#fff',
-    fontSize: 9.5,
+    fontSize: typography.badge,
     fontFamily: fonts.bold,
     lineHeight: 12,
     includeFontPadding: false,

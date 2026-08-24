@@ -47,7 +47,10 @@ export function useFeed() {
         const local = await syncFeed((fresh) => {
           setPosts(fresh)
           setPage(1)
-          setHasMore(fresh.length >= 10)
+          // A API mistura duas paginações: até 10 posts frescos e até 2
+          // antigos ainda vivos. Por isso uma página curta não é o fim;
+          // somente uma página vazia confirma que os dois fluxos acabaram.
+          setHasMore(fresh.length > 0)
         })
         if (local.length > 0) setPosts(local)
 
@@ -58,7 +61,7 @@ export function useFeed() {
             .then(fresh => {
               setPosts(fresh)
               setPage(1)
-              setHasMore(fresh.length >= 10)
+              setHasMore(fresh.length > 0)
             })
             .catch(() => {})
         } else {
@@ -87,7 +90,7 @@ export function useFeed() {
     const nextPage = page + 1
     try {
       const data = await postService.getFeed(nextPage)
-      if (data.length < 10) setHasMore(false)
+      setHasMore(data.length > 0)
       await cachePosts(data)
       setPosts((prev) => {
         const ids = new Set(prev.map((p) => p.id))

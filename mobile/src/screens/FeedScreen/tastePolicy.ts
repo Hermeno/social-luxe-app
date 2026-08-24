@@ -23,7 +23,7 @@ import { getCache, setCache } from '../../db/database'
 // Nada disto é aleatório à superfície: a decisão de cada publicação fica
 // memoizada, para o cartão nunca nascer e morrer entre renders.
 
-const CACHE_KEY = 'taste_policy_v1'
+const CACHE_PREFIX = 'taste_policy_v2'
 
 // ⚠️ TESTE DE DESENHO — `true` mostra o cartão em todas as publicações e quase
 // de imediato, ignorando a política inteira. Só para ver o desenho.
@@ -44,6 +44,8 @@ export interface TasteAskContext {
 interface Memory {
   /** Publicações já respondidas. A pergunta nunca se repete. */
   answered: string[]
+  /** Publicações onde o cartão já apareceu, mesmo que tenha sido ignorado. */
+  asked: string[]
   /** Respostas por tipo de conteúdo — mede o que já sabemos de cada um. */
   byKind: Record<string, number>
   /** Cartões seguidos que apareceram e ficaram sem resposta. */
@@ -52,15 +54,15 @@ interface Memory {
   lastAskedAt: number
 }
 
-const EMPTY: Memory = { answered: [], byKind: {}, ignoredStreak: 0, lastAskedAt: 0 }
+function emptyMemory(): Memory {
+  return { answered: [], asked: [], byKind: {}, ignoredStreak: 0, lastAskedAt: 0 }
+}
 
 // ── Números da política ─────────────────────────────────────────────────────
-const ASKS_PER_SESSION   = 2        // teto por utilização da app
-const ASKS_WHEN_KNOWN     = 2       // ... e o mesmo quando já sabemos muito:
-                                    // o gosto muda, e uma pergunta por sessão
-                                    // era pouco para o acompanhar
-const MIN_POSTS_BETWEEN  = 7        // publicações entre dois cartões
-const MIN_MS_BETWEEN     = 90_000   // e tempo, para não caberem todos num minuto
+const ASKS_PER_SESSION   = 3        // teto por utilização real da app
+const ASKS_WHEN_KNOWN     = 2       // com gosto conhecido, manutenção mais leve
+const MIN_POSTS_BETWEEN  = 5        // publicações entre dois cartões
+const MIN_MS_BETWEEN     = 60_000   // e tempo, para não caberem todos num minuto
 const SETTLE_POSTS       = 3        // ninguém é interrompido mal abre a app
 const KNOWN_ENOUGH       = 30       // sinais a partir dos quais se pergunta menos
 const ANSWERED_KEEP      = 500      // histórico local só serve para não repetir
@@ -68,43 +70,88 @@ const ANSWERED_KEEP      = 500      // histórico local só serve para não repe
 // não responde não traz sinal nenhum — mas desaparecer durante dias também não:
 // o feed fica sem forma de aprender e o utilizador sem forma de o afinar. Daí a
 // escala parar nas horas e não nos dias.
-const IGNORE_PAUSE_MS = [0, 0, 45 * 60_000, 2 * 3_600_000, 6 * 3_600_000]
+const IGNORE_PAUSE_MS = [0, 15 * 60_000, 2 * 3_600_000, 12 * 3_600_000, 24 * 3_600_000]
 // Cada janela inteira sem cartão nenhum perdoa uma ignorada. É isto que faltava:
 // a série só descia com uma resposta, portanto três cartões passados à frente
 // calavam a pergunta para sempre — ia crescendo e nunca voltava atrás.
-const STREAK_FORGIVE_MS = 3 * 3_600_000
+const STREAK_FORGIVE_MS = 24 * 3_600_000
 
-let memory: Memory = { ...EMPTY }
+// Uma sessão termina depois de meia hora sem qualquer publicação observada.
+// Antes, "sessão" era a vida do processo JavaScript: em iOS isso pode durar
+// semanas em background e o teto de cartões nunca voltava a abrir.
+const SESSION_IDLE_MS = 30 * 60_000
+
+let memory: Memory = emptyMemory()
 let hydrated = false
+let activeUserId: string | null = null
+let hydrationRun = 0
 
-// Sessão — morre com o processo, de propósito: o teto é por utilização.
+// Sessão real — reinicia por identidade e depois de inatividade suficiente.
 let postsSeenThisSession = 0
 let postsSinceLastAsk = Number.MAX_SAFE_INTEGER
 let asksThisSession = 0
+let lastSessionActivityAt = 0
 
 // Decisão final por publicação. Sem isto, o sorteio corria outra vez a cada
 // render e o cartão piscava.
 const decisions = new Map<string, boolean>()
 
-export async function hydrateTastePolicy(): Promise<void> {
-  if (hydrated) return
+function resetSession(): void {
+  postsSeenThisSession = 0
+  postsSinceLastAsk = Number.MAX_SAFE_INTEGER
+  asksThisSession = 0
+  decisions.clear()
+}
+
+function touchSession(now = Date.now()): void {
+  if (lastSessionActivityAt > 0 && now - lastSessionActivityAt >= SESSION_IDLE_MS) {
+    resetSession()
+  }
+  lastSessionActivityAt = now
+}
+
+export async function hydrateTastePolicy(userId: string | null | undefined): Promise<void> {
+  const nextUserId = userId ?? null
+  if (hydrated && activeUserId === nextUserId) return
+
+  const run = ++hydrationRun
+  activeUserId = nextUserId
+  hydrated = false
+  memory = emptyMemory()
+  lastSessionActivityAt = 0
+  resetSession()
+  if (!nextUserId) return
+
   try {
-    const saved = await getCache<Memory>(CACHE_KEY)
-    if (saved) memory = { ...EMPTY, ...saved, answered: saved.answered ?? [] }
+    const saved = await getCache<Memory>(`${CACHE_PREFIX}:${nextUserId}`)
+    if (run !== hydrationRun || activeUserId !== nextUserId) return
+    if (saved) {
+      memory = {
+        ...emptyMemory(),
+        ...saved,
+        answered: saved.answered ?? [],
+        asked: saved.asked ?? saved.answered ?? [],
+        byKind: saved.byKind ?? {},
+      }
+    }
   } catch {}
+  if (run !== hydrationRun || activeUserId !== nextUserId) return
   hydrated = true
 }
 
 function persist(): void {
-  setCache(CACHE_KEY, memory).catch(() => {})
+  if (!activeUserId) return
+  setCache(`${CACHE_PREFIX}:${activeUserId}`, memory).catch(() => {})
+}
+
+function effectiveIgnoredStreak(now = Date.now()): number {
+  const idleMs = now - memory.lastAskedAt
+  const forgiven = memory.lastAskedAt > 0 ? Math.floor(idleMs / STREAK_FORGIVE_MS) : 0
+  return Math.max(0, memory.ignoredStreak - forgiven)
 }
 
 function ignorePause(): number {
-  // A série é lida já com o perdão do tempo aplicado — não se toca na memória,
-  // para uma sessão longa não apagar o histórico à socapa.
-  const idleMs = Date.now() - memory.lastAskedAt
-  const forgiven = memory.lastAskedAt > 0 ? Math.floor(idleMs / STREAK_FORGIVE_MS) : 0
-  const streak = Math.max(0, memory.ignoredStreak - forgiven)
+  const streak = effectiveIgnoredStreak()
   return IGNORE_PAUSE_MS[Math.min(streak, IGNORE_PAUSE_MS.length - 1)]
 }
 
@@ -135,6 +182,7 @@ function askProbability(ctx: TasteAskContext): number {
 
 export function shouldAskTaste(ctx: TasteAskContext): boolean {
   if (TASTE_DEBUG_ALWAYS) return true
+  touchSession()
   // Sem memória carregada não se pergunta: podíamos repetir uma pergunta que
   // já foi respondida, que é a pior forma de parecer distraído.
   if (!hydrated) return false
@@ -147,6 +195,7 @@ export function shouldAskTaste(ctx: TasteAskContext): boolean {
     || ctx.isAnnouncement
     || ctx.engaged
     || memory.answered.includes(ctx.postId)
+    || memory.asked.includes(ctx.postId)
   if (permanentlyNo) {
     decisions.set(ctx.postId, false)
     return false
@@ -175,6 +224,7 @@ export function tasteDwellMs(kind: TasteKind): number {
 
 /** Uma publicação passou pelos olhos da pessoa. */
 export function noteTastePostSeen(): void {
+  touchSession()
   postsSeenThisSession += 1
   postsSinceLastAsk += 1
 }
@@ -182,9 +232,18 @@ export function noteTastePostSeen(): void {
 /** O cartão apareceu mesmo — a partir daqui contam o teto e a distância. */
 export function noteTasteShown(postId: string): void {
   if (TASTE_DEBUG_ALWAYS) return
+  const now = Date.now()
+  touchSession(now)
   asksThisSession += 1
   postsSinceLastAsk = 0
-  memory.lastAskedAt = Date.now()
+  // Torna o perdão efetivo antes de mover o relógio. Sem isto, uma série antiga
+  // parecia perdoada para mostrar, mas voltava inteira assim que o cartão era
+  // ignorado novamente.
+  memory.ignoredStreak = effectiveIgnoredStreak(now)
+  memory.lastAskedAt = now
+  if (!memory.asked.includes(postId)) {
+    memory.asked = [...memory.asked, postId].slice(-ANSWERED_KEEP)
+  }
   decisions.set(postId, true)
   persist()
 }

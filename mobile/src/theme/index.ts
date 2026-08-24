@@ -26,11 +26,28 @@ export const radius = {
   full: 999,
 }
 
+/**
+ * A escada de texto da app.
+ *
+ * Antes disto havia 32 tamanhos diferentes espalhados por 81 ficheiros, e o
+ * mesmo papel escrito de três maneiras: um `sub` era 12 num ecrã, 12,5 noutro e
+ * 13 num terceiro. A escada não foi inventada — sai dos tamanhos que já
+ * dominavam o código, com os vizinhos a colapsar no degrau mais próximo.
+ *
+ * Cinco degraus com salto real entre eles. Uma régua de 1 em 1 (13, 14, 15) não
+ * é escada nenhuma: os degraus fazem o mesmo trabalho e a escolha passa a ser
+ * gosto do momento.
+ *
+ * `badge` é a excepção deliberada: texto dentro de uma forma de tamanho fixo —
+ * um emblema de 17pt, um contador num círculo. Aí o tamanho é ditado pela forma
+ * e não pela leitura, e forçá-lo para `meta` rebentava a caixa.
+ */
 export const typography = {
-  h1: { fontSize: 24, fontWeight: '700' as const },
-  h2: { fontSize: 20, fontWeight: '700' as const },
-  h3: { fontSize: 17, fontWeight: '600' as const },
-  body: { fontSize: 14, fontWeight: '400' as const },
-  small: { fontSize: 12, fontWeight: '400' as const },
-  caption: { fontSize: 11, fontWeight: '400' as const },
+  badge:     9,    // dentro de uma forma fixa
+  meta:      11,   // contadores, temporizadores, rótulos de secção
+  secondary: 13,   // subtítulos, legendas, rótulos de botão
+  body:      15,   // nomes, campos, o texto que se lê
+  section:   17,   // título de secção dentro de um ecrã
+  screen:    22,   // título de ecrã
+  display:   28,   // números e frases grandes, isolados
 }

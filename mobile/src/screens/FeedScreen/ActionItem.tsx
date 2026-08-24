@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react'
 import { Animated, View, Text, TouchableWithoutFeedback, StyleSheet, Easing } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { colors, fonts } from '../../theme'
+import { colors, fonts, typography } from '../../theme'
 
 type IonName = React.ComponentProps<typeof Ionicons>['name']
 interface Props {
@@ -111,7 +111,7 @@ const s = StyleSheet.create({
   count:        {
     color: colors.white,
     fontFamily: fonts.bold,
-    fontSize: 13,
+    fontSize: typography.secondary,
     letterSpacing: -0.2,
   },
 })

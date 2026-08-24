@@ -23,6 +23,9 @@ interface FeedStore {
   clearFocusedPost: () => void
   openSearch: boolean
   setOpenSearch: (v: boolean) => void
+  // Estado visual do painel; separado do sinal one-shot `openSearch`.
+  searchVisible: boolean
+  setSearchVisible: (value: boolean) => void
   // Tocar em Home (já no feed) refresca: incrementa este sinal, o feed reage.
   homeTap: number
   bumpHomeTap: () => void
@@ -32,6 +35,11 @@ interface FeedStore {
   requestedCommentPostId: string | null
   requestComments: (postId: string) => void
   clearCommentRequest: () => void
+  // A rolar pela feed, a navegação recolhe e o campo de comentar fica com a
+  // barra toda. A altura da barra NÃO muda — só o que está lá dentro — porque
+  // é dela que saem `videoBottom`, `overlayBottom` e a coluna de acções.
+  immersive: boolean
+  setImmersive: (value: boolean) => void
   reset: () => void
 }
 
@@ -41,9 +49,11 @@ const initialFeedState = {
   focusedPost: null,
   focusedPostRequest: 0,
   openSearch: false,
+  searchVisible: false,
   homeTap: 0,
   activeCommentTarget: null,
   requestedCommentPostId: null,
+  immersive: false,
 } satisfies Pick<
   FeedStore,
   | 'pendingPost'
@@ -51,9 +61,11 @@ const initialFeedState = {
   | 'focusedPost'
   | 'focusedPostRequest'
   | 'openSearch'
+  | 'searchVisible'
   | 'homeTap'
   | 'activeCommentTarget'
   | 'requestedCommentPostId'
+  | 'immersive'
 >
 
 export const useFeedStore = create<FeedStore>((set) => ({
@@ -66,8 +78,10 @@ export const useFeedStore = create<FeedStore>((set) => ({
   })),
   clearFocusedPost: () => set({ focusedPost: null }),
   setOpenSearch:    (v)     => set({ openSearch: v }),
+  setSearchVisible: (value) => set({ searchVisible: value }),
   bumpHomeTap:      ()      => set((s) => ({ homeTap: s.homeTap + 1 })),
   setActiveCommentTarget: (target) => set({ activeCommentTarget: target }),
+  setImmersive: (value) => set({ immersive: value }),
   requestComments: (postId) => set({ requestedCommentPostId: postId }),
   clearCommentRequest: () => set({ requestedCommentPostId: null }),
   reset: () => set(initialFeedState),

@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react'
 import {
-  View, Pressable, StyleSheet, Share, Modal, Animated, Easing
+  View, Pressable, StyleSheet, Share, Modal, Animated, Easing, TouchableOpacity
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import FeedIcon, { type FeedIconWeight } from '../../components/FeedIcon'
 
 import { Post, type RepostResult } from '../../types'
-import { colors, fonts } from '../../theme'
+import { colors, fonts, typography } from '../../theme'
 import * as postService from '../../services/post.service'
 import { updateCachedPost, queueLike, enqueueSyncOp } from '../../db/database'
 import { isConnected } from '../../services/netinfo.service'
 import ReactionPicker from '../../components/ReactionPicker'
 import { useT } from '../../i18n'
+import AuthorPostsModal from './AuthorPostsModal'
 import PostOptionsMenu from './PostOptionsMenu'
 
 interface Props {
@@ -186,6 +187,8 @@ export default React.memo(function ActionBar({
   const [repostCount, setRepostCount] = useState(post._count?.reposts ?? 0)
   const [shareCount, setShareCount] = useState(post._count?.shares ?? 0)
   const [showReactions, setShowReactions] = useState(false)
+  const [showAuthorPosts, setShowAuthorPosts] = useState(false)
+  const [optionsBlocking, setOptionsBlocking] = useState(false)
   const [hearts,    setHearts]    = useState<HeartP[]>([])
   const heartIdRef = useRef(0)
   const railEntry = useRef(new Animated.Value(isActive ? 1 : 0)).current
@@ -199,6 +202,19 @@ export default React.memo(function ActionBar({
   const repostOneScale = useRef(new Animated.Value(post.userRepostedVia ? 1 : 0.72)).current
   const repostPendingRef = useRef(false)
   const localRepostStateRef = useRef<boolean | null>(null)
+  const blockingChangeRef = useRef(onOptionsBlockingChange)
+  blockingChangeRef.current = onOptionsBlockingChange
+
+  // As duas folhas pertencem ao mesmo post e pausam a mídia através de uma
+  // única ponte. Uma não pode declarar "fechado" enquanto a outra está aberta.
+  const overlayBlocking = optionsBlocking || showAuthorPosts
+  useEffect(() => {
+    blockingChangeRef.current?.(overlayBlocking)
+  }, [overlayBlocking])
+
+  useEffect(() => () => {
+    blockingChangeRef.current?.(false)
+  }, [])
 
   useEffect(() => {
     railEntry.stopAnimation()
@@ -277,6 +293,8 @@ export default React.memo(function ActionBar({
     repostPendingRef.current = false
     localRepostStateRef.current = null
     setShowReactions(false)
+    setShowAuthorPosts(false)
+    setOptionsBlocking(false)
   }, [post.id])
 
   // Outras células do mesmo original recebem o resultado canónico pelo estado
@@ -571,10 +589,11 @@ export default React.memo(function ActionBar({
           </>
         )}
 
-        {/* Opções — ocupa exatamente a mesma grelha visual das ações. */}
+        {/* As duas utilidades não têm contador. Vivem juntas numa unidade
+            compacta, em vez de herdarem os 15pt vazios das métricas acima. */}
         <Animated.View
           style={[
-            s.actionSlot,
+            s.utilityCluster,
             !reduceMotion && {
               opacity: railEntry.interpolate({
                 inputRange: [0.3, 0.72],
@@ -597,12 +616,29 @@ export default React.memo(function ActionBar({
             onEdited={onEdited}
             onProfileBlocked={onProfileBlocked}
             onAuthorMuted={onAuthorMuted}
-            onBlockingChange={onOptionsBlockingChange}
+            onBlockingChange={setOptionsBlocking}
             rail
+            compactRail
             triggerSize={iconSize}
             // As barras já trazem a espessura exata da referência raster.
             triggerWeight="regular"
           />
+          <TouchableOpacity
+            style={s.utilityHit}
+            onPress={() => setShowAuthorPosts(true)}
+            activeOpacity={0.68}
+            accessibilityRole="button"
+            accessibilityLabel={t.feed_author_posts.replace('{name}', post.user.name.split(' ')[0])}
+          >
+            <View style={s.utilityIconStage}>
+              <FeedIcon
+                name="author-posts"
+                size={Math.max(22, iconSize - 3)}
+                color="#fff"
+                weight={iconWeight}
+              />
+            </View>
+          </TouchableOpacity>
         </Animated.View>
       </Animated.View>
 
@@ -610,6 +646,10 @@ export default React.memo(function ActionBar({
         <Modal transparent animationType="none" visible onRequestClose={() => setShowReactions(false)}>
           <ReactionPicker postId={post.id} currentReaction={undefined} onClose={() => setShowReactions(false)} />
         </Modal>
+      )}
+
+      {showAuthorPosts && (
+        <AuthorPostsModal author={post.user} onClose={() => setShowAuthorPosts(false)} />
       )}
     </>
   )
@@ -632,6 +672,28 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   actionSlot: { width: 64, height: 53 },
+  utilityCluster: {
+    width: 64,
+    alignItems: 'center',
+    gap: 0,
+  },
+  utilityHit: {
+    width: 64,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  utilityIconStage: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    transform: [{ translateY: -2 }],
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.46,
+    shadowRadius: 2,
+  },
   actionVisual: {
     height: 53,
     alignItems: 'center',
@@ -662,7 +724,7 @@ const s = StyleSheet.create({
   railN: {
     color: 'rgba(255,255,255,0.88)',
     fontFamily: fonts.semiBold,
-    fontSize: 11.5,
+    fontSize: typography.meta,
     lineHeight: 15,
     letterSpacing: 0,
     fontVariant: ['tabular-nums'],
@@ -679,7 +741,7 @@ const s = StyleSheet.create({
   repostOne: {
     color: '#fff',
     fontFamily: fonts.extraBold,
-    fontSize: 9.5,
+    fontSize: typography.badge,
     lineHeight: 11,
     textAlign: 'center',
     textShadowColor: 'rgba(0,0,0,0.38)',

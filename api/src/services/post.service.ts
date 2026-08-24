@@ -4,6 +4,13 @@ import { POST_INITIAL_HOURS, POST_EXTENDED_HOURS } from '../types'
 import { sendPush } from './notification.service'
 import { withThumbnail, withThumbnails } from '../utils/cloudinary.util'
 import { emitToUser } from '../socket'
+import {
+  buildTasteProfile,
+  rankFreshPageByTaste,
+  TASTE_HISTORY_LIMIT,
+  TASTE_HISTORY_WINDOW_MS,
+  type TasteProfile,
+} from './tasteRanking'
 
 export async function createPost(
   userId: string,
@@ -288,14 +295,10 @@ async function findRevisitPage(
   hiddenUserIds: ReadonlySet<string>,
   page: number,
 ): Promise<any[]> {
-  const raw = await prisma.post.findMany({
-    where,
-    include,
-    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    skip: Math.max(0, page - 1) * REVISIT_PER_PAGE,
-    take: REVISIT_PER_PAGE,
-  })
-  return withoutHiddenCollectiveCaptures(raw, hiddenUserIds)
+  // Reutiliza a paginação do conjunto já moderado. Fazer skip/take antes
+  // de remover um Momento Coletivo oculto podia devolver zero antigos nesta
+  // página e fazer o mobile concluir que a história tinha acabado.
+  return findVisibleFeedPage(where, include, hiddenUserIds, page, REVISIT_PER_PAGE)
 }
 
 // Duas publicações seguidas da mesma pessoa não ficam encostadas uma à outra.
@@ -477,6 +480,25 @@ export async function attachPostMeta(posts: any[], userId?: string): Promise<any
   })
 }
 
+// Enrich first so repost copies already expose their canonical author to the
+// taste ranker. The two slices preserve the exact fresh/revisit sets selected
+// by pagination; only fresh posts are eligible for local reordering.
+async function assembleFeedPage(
+  freshPosts: any[],
+  revisitPosts: any[],
+  userId: string,
+  tasteProfile: TasteProfile,
+): Promise<any[]> {
+  const enriched = await attachPostMeta(
+    withThumbnails([...freshPosts, ...revisitPosts]),
+    userId,
+  )
+  const fresh = enriched.slice(0, freshPosts.length)
+  const revisits = enriched.slice(freshPosts.length)
+  const tasteRanked = rankFreshPageByTaste(fresh, tasteProfile)
+  return mixRevisits(spreadAuthors(tasteRanked, postAuthorId), revisits)
+}
+
 export async function getFeed(userId: string, page = 1, limit = 10) {
   // Touch lastSeen so other users can see this user is online (fire-and-forget)
   prisma.user.update({ where: { id: userId }, data: { lastSeen: new Date() } }).catch(() => {})
@@ -502,7 +524,7 @@ export async function getFeed(userId: string, page = 1, limit = 10) {
   // A block works in both directions. A mute is private/directional and only
   // hides publications while active; it deliberately does not affect profile,
   // follows or messages.
-  const [blocksGiven, blocksReceived, activeMutes, currentUser, followRows] = await Promise.all([
+  const [blocksGiven, blocksReceived, activeMutes, currentUser, followRows, tasteRows] = await Promise.all([
     prisma.block.findMany({ where: { blockerId: userId }, select: { blockedId: true } }),
     prisma.block.findMany({ where: { blockedId: userId }, select: { blockerId: true } }),
     prisma.userMute.findMany({
@@ -518,7 +540,26 @@ export async function getFeed(userId: string, page = 1, limit = 10) {
       where: { OR: [{ followerId: userId }, { followingId: userId }] },
       select: { followerId: true, followingId: true },
     }),
+    // One bounded, indexed read for the whole page. Taste never enters the
+    // feed WHERE clause: it can reorder candidates, never include/exclude one.
+    prisma.tasteFeedback.findMany({
+      where: {
+        userId,
+        createdAt: { gte: new Date(now.getTime() - TASTE_HISTORY_WINDOW_MS) },
+      },
+      select: {
+        postId: true,
+        authorId: true,
+        mediaType: true,
+        signal: true,
+        dwellMs: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: TASTE_HISTORY_LIMIT,
+    }),
   ])
+  const tasteProfile = buildTasteProfile(tasteRows, now)
 
   const blockedIds = new Set([
     ...blocksGiven.map((b) => b.blockedId),
@@ -583,7 +624,7 @@ export async function getFeed(userId: string, page = 1, limit = 10) {
       ),
       findRevisitPage(revisitWhere({ userId: { in: allowedIds } }), include, hiddenContentIds, page),
     ])
-    return attachPostMeta(withThumbnails(mixRevisits(spreadAuthors(posts, postAuthorId), revisits)), userId)
+    return assembleFeedPage(posts, revisits, userId, tasteProfile)
   }
 
   // New user: show posts from people within 40 km (or all if no location)
@@ -622,7 +663,7 @@ export async function getFeed(userId: string, page = 1, limit = 10) {
         ),
         findRevisitPage(revisitWhere({ userId: { in: nearbyWithSelf } }), include, hiddenContentIds, page),
       ])
-      return attachPostMeta(withThumbnails(mixRevisits(spreadAuthors(posts, postAuthorId), revisits)), userId)
+      return assembleFeedPage(posts, revisits, userId, tasteProfile)
     }
   }
 
@@ -642,7 +683,7 @@ export async function getFeed(userId: string, page = 1, limit = 10) {
       page,
     ),
   ])
-  return attachPostMeta(withThumbnails(mixRevisits(spreadAuthors(posts, postAuthorId), revisits)), userId)
+  return assembleFeedPage(posts, revisits, userId, tasteProfile)
 }
 
 // Search posts by caption or author identity (case-insensitive), excluding

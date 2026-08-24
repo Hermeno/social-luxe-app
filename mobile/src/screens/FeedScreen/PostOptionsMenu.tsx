@@ -21,7 +21,7 @@ import { blockUser } from '../../services/block.service'
 import { muteUser, type MuteDuration } from '../../services/mute.service'
 import { isPostSaved, toggleSavedPost } from '../../services/savedPost.service'
 import { useAuthStore } from '../../store/auth.store'
-import { colors, fonts } from '../../theme'
+import { colors, fonts, typography } from '../../theme'
 import { Post } from '../../types'
 import { saveMediaListToGallery } from '../../utils/download'
 import { toast } from '../../utils/toast'
@@ -34,6 +34,7 @@ interface Props {
   onAuthorMuted?: (userId: string) => void
   onBlockingChange?: (open: boolean) => void
   rail?: boolean
+  compactRail?: boolean
   triggerSize?: number
   triggerWeight?: FeedIconWeight
 }
@@ -90,7 +91,7 @@ function resolveMedia(url: string): string {
 
 export default function PostOptionsMenu({
   post, onDeleted, onEdited, onProfileBlocked, onAuthorMuted, onBlockingChange,
-  rail = false, triggerSize = 25, triggerWeight = 'regular',
+  rail = false, compactRail = false, triggerSize = 25, triggerWeight = 'regular',
 }: Props) {
   const { bottom: safeBottom } = useSafeAreaInsets()
   const t = useT()
@@ -284,14 +285,18 @@ export default function PostOptionsMenu({
   return (
     <>
       <TouchableOpacity
-        style={[s.trigger, rail && s.triggerRail]}
+        style={[s.trigger, rail && s.triggerRail, compactRail && s.triggerRailCompact]}
         onPress={openOptionsMenu}
         activeOpacity={0.75}
         hitSlop={{ top: 9, bottom: 9, left: 9, right: 9 }}
         accessibilityRole="button"
         accessibilityLabel={t.feed_options_title}
       >
-        <View style={[s.triggerIconStage, rail && s.triggerIconStageRail]}>
+        <View style={[
+          s.triggerIconStage,
+          rail && s.triggerIconStageRail,
+          compactRail && s.triggerIconStageRailCompact,
+        ]}>
           <FeedIcon
             name="option"
             size={triggerSize}
@@ -299,7 +304,7 @@ export default function PostOptionsMenu({
             weight={triggerWeight}
           />
         </View>
-        {rail && <View style={s.triggerMetricSlot} pointerEvents="none" />}
+        {rail && !compactRail && <View style={s.triggerMetricSlot} pointerEvents="none" />}
       </TouchableOpacity>
 
       <Modal
@@ -511,6 +516,11 @@ const s = StyleSheet.create({
     justifyContent: 'flex-start',
     gap: 2,
   },
+  triggerRailCompact: {
+    height: 44,
+    justifyContent: 'center',
+    gap: 0,
+  },
   triggerIconStage: {
     width: 34,
     height: 34,
@@ -520,6 +530,10 @@ const s = StyleSheet.create({
   triggerIconStageRail: {
     width: 44,
     height: 36,
+  },
+  triggerIconStageRailCompact: {
+    height: 44,
+    transform: [{ translateY: 2 }],
   },
   triggerMetricSlot: { height: 15 },
   backdrop: {
@@ -560,7 +574,7 @@ const s = StyleSheet.create({
   sheetTitle: {
     color: colors.gray800,
     fontFamily: fonts.bold,
-    fontSize: 17,
+    fontSize: typography.section,
     letterSpacing: -0.35,
   },
   sheetSignal: { flexDirection: 'row', alignItems: 'center', gap: 3 },
@@ -593,7 +607,7 @@ const s = StyleSheet.create({
     flex: 1,
     color: colors.gray800,
     fontFamily: fonts.semiBold,
-    fontSize: 14.5,
+    fontSize: typography.body,
     letterSpacing: -0.16,
   },
   optionLabelDanger: { color: colors.error },
@@ -612,7 +626,7 @@ const s = StyleSheet.create({
     paddingBottom: 3,
     color: colors.gray500,
     fontFamily: fonts.bold,
-    fontSize: 9.5,
+    fontSize: typography.meta,
     letterSpacing: 1.1,
     textTransform: 'uppercase',
   },
@@ -622,7 +636,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 8,
     color: colors.gray500,
     fontFamily: fonts.regular,
-    fontSize: 13,
+    fontSize: typography.secondary,
     lineHeight: 18,
   },
   muteCancel: {
@@ -636,7 +650,7 @@ const s = StyleSheet.create({
   muteCancelText: {
     color: colors.gray600,
     fontFamily: fonts.bold,
-    fontSize: 14,
+    fontSize: typography.body,
   },
   editOverlay: { flex: 1, justifyContent: 'flex-end' },
   editBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.38)' },
@@ -666,7 +680,7 @@ const s = StyleSheet.create({
     backgroundColor: '#F4F4F6',
     color: colors.gray800,
     fontFamily: fonts.regular,
-    fontSize: 15,
+    fontSize: typography.body,
   },
   editSubmit: {
     width: 44,

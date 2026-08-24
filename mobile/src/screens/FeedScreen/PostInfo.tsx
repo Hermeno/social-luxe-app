@@ -8,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { Post, Pairing } from '../../types'
-import { colors, fonts } from '../../theme'
+import { colors, fonts, typography } from '../../theme'
 import { useT } from '../../i18n'
 import { useAuthStore } from '../../store/auth.store'
 import { useFollowStore } from '../../store/follow.store'
@@ -372,14 +372,14 @@ const s = StyleSheet.create({
   nameCol:  { flex: 1, gap: 2, paddingTop: 2 },
   nameLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   username: {
-    color: colors.white, fontFamily: fonts.semiBold, fontSize: 13,
+    color: colors.white, fontFamily: fonts.semiBold, fontSize: typography.secondary,
     letterSpacing: -0.2, flexShrink: 1,
   },
 
   metaLine: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  metaSep:  { color: 'rgba(255,255,255,0.40)', fontFamily: fonts.medium, fontSize: 11 },
+  metaSep:  { color: 'rgba(255,255,255,0.40)', fontFamily: fonts.medium, fontSize: typography.meta },
   metaTxt: {
-    color: 'rgba(255,255,255,0.62)', fontFamily: fonts.medium, fontSize: 10.5,
+    color: 'rgba(255,255,255,0.62)', fontFamily: fonts.medium, fontSize: typography.meta,
     letterSpacing: 0.1, flexShrink: 1,
   },
 
@@ -388,7 +388,7 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(245,158,11,0.88)',
     paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20,
   },
-  announceTxt: { color: '#fff', fontFamily: fonts.semiBold, fontSize: 10, letterSpacing: 0.2 },
+  announceTxt: { color: '#fff', fontFamily: fonts.semiBold, fontSize: typography.meta, letterSpacing: 0.2 },
 
   // Seguir + 3 pontinhos, à direita e no topo
   actions: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 3 },
@@ -397,7 +397,7 @@ const s = StyleSheet.create({
   segToggle: { flexDirection: 'row', gap: 16 },
   segItem: { alignItems: 'center', paddingBottom: 5 },
   segRow:  { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  segTxt: { fontFamily: fonts.semiBold, fontSize: 13, color: 'rgba(0,0,0,0.4)', letterSpacing: -0.1 },
+  segTxt: { fontFamily: fonts.semiBold, fontSize: typography.secondary, color: 'rgba(0,0,0,0.4)', letterSpacing: -0.1 },
   segTxtActive: { color: '#111114' },
   segUnderline: { height: 2, alignSelf: 'stretch', borderRadius: 1, marginTop: 4, backgroundColor: 'transparent' },
   segUnderlineOn: { backgroundColor: '#111114' },
@@ -409,34 +409,34 @@ const s = StyleSheet.create({
   pairingRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   pairingDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: colors.primary },
   pairingRowTxt: {
-    color: 'rgba(255,255,255,0.75)', fontFamily: fonts.medium, fontSize: 11.5, letterSpacing: -0.1,
+    color: 'rgba(255,255,255,0.75)', fontFamily: fonts.medium, fontSize: typography.meta, letterSpacing: -0.1,
   },
 
   extBadge:     { backgroundColor: colors.primary, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
-  extBadgeText: { color: colors.white, fontFamily: fonts.bold, fontSize: 9, letterSpacing: 0.2 },
+  extBadgeText: { color: colors.white, fontFamily: fonts.bold, fontSize: typography.badge, letterSpacing: 0.2 },
 
   statusBadge: {
     borderRadius: 20, paddingHorizontal: 9, paddingVertical: 4,
     maxWidth: 160,
   },
   statusText: {
-    color: 'rgba(255,255,255,0.88)', fontFamily: fonts.medium, fontSize: 11, letterSpacing: 0.1,
+    color: 'rgba(255,255,255,0.88)', fontFamily: fonts.medium, fontSize: typography.meta, letterSpacing: 0.1,
   },
 
   // Legenda alinhada ao avatar; expande para baixo sem empurrar o cabeçalho
   captionWrap: { marginLeft: 46, marginRight: 6 },
-  caption:     { color: 'rgba(255,255,255,0.88)', fontFamily: fonts.regular, fontSize: 13, lineHeight: 19 },
+  caption:     { color: 'rgba(255,255,255,0.88)', fontFamily: fonts.regular, fontSize: typography.secondary, lineHeight: 19 },
   seeMore:     { color: 'rgba(255,255,255,0.50)', fontFamily: fonts.medium },
 
-  timer:      { color: 'rgba(255,255,255,0.65)', fontFamily: fonts.medium, fontSize: 11, letterSpacing: 0.1 },
+  timer:      { color: 'rgba(255,255,255,0.65)', fontFamily: fonts.medium, fontSize: typography.meta, letterSpacing: 0.1 },
   timerDying: { color: '#FF3B30' },
 
   // ── Variante clara (feed): texto escuro sobre a faixa branca, sem sombras ──
-  usernameLight:      { color: '#111114', fontSize: 15, letterSpacing: -0.3 },
+  usernameLight:      { color: '#111114', fontSize: typography.body, letterSpacing: -0.3 },
   metaLightTxt:       { color: 'rgba(0,0,0,0.42)' },
   pairingRowTxtLight: { color: 'rgba(0,0,0,0.55)' },
   captionWrapLight:   { marginLeft: 0, marginTop: 6 },
-  captionLight:       { color: '#2A2A2E', fontSize: 13.5, lineHeight: 19 },
+  captionLight:       { color: '#2A2A2E', fontSize: typography.secondary, lineHeight: 19 },
   seeMoreLight:       { color: 'rgba(0,0,0,0.4)' },
   timerLight:         { color: 'rgba(0,0,0,0.4)' },
 
@@ -461,12 +461,12 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   commenterInitial: {
-    color: '#fff', fontSize: 9, fontFamily: fonts.bold,
+    color: '#fff', fontSize: typography.badge, fontFamily: fonts.bold,
   },
   commentersLabel: {
     color: 'rgba(255,255,255,0.65)',
     fontFamily: fonts.medium,
-    fontSize: 11,
+    fontSize: typography.meta,
     marginLeft: 6,
     letterSpacing: -0.1,
   }

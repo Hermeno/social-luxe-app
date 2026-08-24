@@ -27,7 +27,7 @@ import SegmentedRing from '../../components/SegmentedRing'
 import { API_BASE } from '../../config'
 import { useT } from '../../i18n'
 import { useAuthStore } from '../../store/auth.store'
-import { colors, fonts, radius } from '../../theme'
+import { colors, fonts, radius, typography } from '../../theme'
 import type {
   CollectiveMomentCapture,
   CollectiveMomentParticipant,
@@ -35,15 +35,19 @@ import type {
 
 const VIRTUAL_RADIUS = 2
 const EMOJI_SIZE_FRACTION = 0.14
-// Anel do avatar — a geometria dos anéis da Luxee: um só peso de traço e uma
-// folga que solta o anel do rosto, com a fotografia a ver-se por essa folga.
-const RING_STROKE = 3.6
-const RING_GAP = 3
+// Moldura de fotografia menos “bolha” e com curva contínua no iOS.
+const CARD_CORNER_RADIUS = 20
+// Um anel fino + uma pequena folga escura preservam o rosto mesmo sobre uma
+// fotografia clara. O antigo traço de 3.6pt dominava o avatar.
+const RING_STROKE = 2
+const RING_GAP = 2
+const RING_COLOR = 'rgba(255,255,255,0.92)'
 // Fila de quem esteve no momento. As proporções são as da pilha de comentadores
-// (`CommenterStack`): sobreposição de ~32% do diâmetro, borda branca fina e o
-// primeiro rosto por cima. Só a escala muda, porque aqui a fila é do post.
-const GROUP_OVERLAP_RATIO = 0.32
-const GROUP_BORDER = 1.5
+// (`CommenterStack`), mas com um pequeno “moat” entre foto e contorno para os
+// círculos não se fundirem quando se sobrepõem.
+const GROUP_OVERLAP_RATIO = 0.27
+const GROUP_RING_STROKE = 1
+const GROUP_RING_GAP = 1
 const GROUP_MAX = 5
 // A base do cartão fica onde o desenho a punha antes de a foto crescer: é aí
 // que a identidade do post e a coluna de acções flutuam sobre a mídia, e essa
@@ -367,34 +371,34 @@ const CarouselCard = memo(function CarouselCard({
                 })}
               </View>
             )}
-          </View>
-        </View>
 
-        {/* O avatar vive dentro da fotografia, no canto esquerdo. O anel fica
-            solto dele — a folga deixa passar a própria foto, como nos anéis do
-            resto da Luxee. */}
-        <View
-          style={[
-            s.avatarRing,
-            {
-              width: ringOuter,
-              height: ringOuter,
-              borderRadius: radius.full,
-              top: avatarInset,
-              left: avatarInset,
-            },
-          ]}
-          pointerEvents="none"
-        >
-          <SegmentedRing count={1} size={ringOuter} strokeWidth={RING_STROKE} color={colors.white} />
-          <View style={[s.avatarWell, { width: avatarSize, height: avatarSize, borderRadius: radius.full }]}>
-            <AvatarImage
-              uri={participant?.avatar}
-              name={name}
-              size={avatarSize}
-              borderColor="transparent"
-              borderWidth={0}
-            />
+            {/* Dentro da mesma superfície elevada da fotografia: no Android,
+                dois irmãos com elevations diferentes podiam esconder o anel. */}
+            <View
+              style={[
+                s.avatarRing,
+                s.ringSurface,
+                {
+                  width: ringOuter,
+                  height: ringOuter,
+                  borderRadius: radius.full,
+                  top: avatarInset,
+                  left: avatarInset,
+                },
+              ]}
+              pointerEvents="none"
+            >
+              <SegmentedRing count={1} size={ringOuter} strokeWidth={RING_STROKE} color={RING_COLOR} />
+              <View style={[s.avatarWell, { width: avatarSize, height: avatarSize, borderRadius: radius.full }]}>
+                <AvatarImage
+                  uri={participant?.avatar}
+                  name={name}
+                  size={avatarSize}
+                  borderColor="transparent"
+                  borderWidth={0}
+                />
+              </View>
+            </View>
           </View>
         </View>
       </Pressable>
@@ -472,8 +476,8 @@ const CreateCircleCard = memo(function CreateCircleCard({
             {/* O rosto fica em cima, à altura dos rostos dos cartões ao lado;
                 os textos assentam em baixo, onde vive a legenda de um post. */}
             <View style={[s.ctaBody, { paddingTop: inset, paddingBottom: inset + 6 }]}>
-              <View style={[s.ctaRing, { width: faceRingOuter, height: faceRingOuter, borderRadius: radius.full }]}>
-                <SegmentedRing count={1} size={faceRingOuter} strokeWidth={RING_STROKE} color={colors.white} />
+              <View style={[s.ctaRing, s.ringSurface, { width: faceRingOuter, height: faceRingOuter, borderRadius: radius.full }]}>
+                <SegmentedRing count={1} size={faceRingOuter} strokeWidth={RING_STROKE} color={RING_COLOR} />
                 <View style={[s.avatarWell, { width: faceSize, height: faceSize, borderRadius: radius.full }]}>
                   <AvatarImage
                     uri={me?.avatar}
@@ -525,6 +529,7 @@ const ParticipantStack = memo(function ParticipantStack({
   const shown = participants.slice(0, GROUP_MAX)
   const rest = participants.length - shown.length
   const overlap = Math.round(size * GROUP_OVERLAP_RATIO)
+  const avatarSize = Math.max(1, size - (GROUP_RING_STROKE + GROUP_RING_GAP) * 2)
 
   return (
     <View style={s.groupRow}>
@@ -533,16 +538,21 @@ const ParticipantStack = memo(function ParticipantStack({
           key={participant.id}
           style={[
             s.groupSlot,
-            { borderRadius: size / 2, zIndex: shown.length - index },
+            {
+              width: size,
+              height: size,
+              borderRadius: size / 2,
+              zIndex: shown.length - index,
+            },
             index > 0 && { marginLeft: -overlap },
           ]}
         >
           <AvatarImage
             uri={participant.avatar}
             name={participantLabel(participant)}
-            size={size}
-            borderWidth={GROUP_BORDER}
-            borderColor={colors.white}
+            size={avatarSize}
+            borderWidth={0}
+            borderColor="transparent"
           />
         </View>
       ))}
@@ -1053,11 +1063,6 @@ const s = StyleSheet.create({
   },
   cardLayer: {
     position: 'absolute',
-    shadowColor: colors.black,
-    shadowOpacity: 0.34,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 8,
   },
   pressTarget: {
     width: '100%',
@@ -1065,15 +1070,22 @@ const s = StyleSheet.create({
   },
   cardShadow: {
     flex: 1,
-    borderRadius: radius.xl,
+    borderRadius: CARD_CORNER_RADIUS,
+    borderCurve: 'continuous',
     backgroundColor: colors.feedSurfaceSlate,
+    shadowColor: colors.black,
+    shadowOpacity: 0.27,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 7,
   },
   cardFrame: {
     flex: 1,
     overflow: 'hidden',
-    borderRadius: radius.xl,
+    borderRadius: CARD_CORNER_RADIUS,
+    borderCurve: 'continuous',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.36)',
+    borderColor: 'rgba(255,255,255,0.22)',
     backgroundColor: colors.feedSurfaceSlate,
   },
   imageFallback: {
@@ -1092,14 +1104,14 @@ const s = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.58)',
     color: 'rgba(255,255,255,0.78)',
     fontFamily: fonts.bold,
-    fontSize: 15,
+    fontSize: typography.body,
     lineHeight: 24,
     textAlign: 'center',
   },
   fallbackText: {
     color: 'rgba(255,255,255,0.7)',
     fontFamily: fonts.medium,
-    fontSize: 12,
+    fontSize: typography.secondary,
     textAlign: 'center',
   },
   emoji: {
@@ -1109,21 +1121,24 @@ const s = StyleSheet.create({
     textShadowRadius: 2,
     textShadowOffset: { width: 0, height: 1 },
   },
-  // Sem fundo e sem recorte: a folga entre o anel e o rosto deixa passar a
-  // fotografia que está por baixo.
+  // Posição do anel sobre a mídia; a superfície e a sombra são partilhadas com
+  // o avatar do cartão de convite.
   avatarRing: {
     position: 'absolute',
     alignItems: 'center',
     justifyContent: 'center',
   },
+  ringSurface: {
+    backgroundColor: 'rgba(7,8,10,0.36)',
+    shadowColor: colors.black,
+    shadowOpacity: 0.24,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1.5 },
+    elevation: 3,
+  },
   avatarWell: {
     overflow: 'hidden',
     backgroundColor: colors.feedSurface,
-    shadowColor: colors.black,
-    shadowOpacity: 0.32,
-    shadowRadius: 5,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 10,
   },
   ctaSurface: {
     backgroundColor: colors.circleInvite,
@@ -1154,17 +1169,20 @@ const s = StyleSheet.create({
   // A sombra é o que separa os anéis brancos quando a fila cai sobre uma zona
   // clara — o mesmo cuidado da pilha de comentadores.
   groupSlot: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: GROUP_RING_STROKE,
+    borderColor: 'rgba(255,255,255,0.88)',
+    backgroundColor: 'rgba(7,8,10,0.56)',
     shadowColor: colors.black,
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-    elevation: 3,
+    shadowOpacity: 0.22,
+    shadowRadius: 2,
+    elevation: 2,
   },
   groupMore: {
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: GROUP_BORDER,
-    borderColor: colors.white,
     backgroundColor: colors.feedSurfaceSlate,
   },
   groupMoreText: {
@@ -1196,14 +1214,14 @@ const s = StyleSheet.create({
   ctaTitle: {
     color: colors.white,
     fontFamily: fonts.bold,
-    fontSize: 18,
+    fontSize: typography.section,
     lineHeight: 23,
     textAlign: 'center',
   },
   ctaSub: {
     color: 'rgba(255,255,255,0.72)',
     fontFamily: fonts.medium,
-    fontSize: 12.5,
+    fontSize: typography.secondary,
     lineHeight: 17,
     textAlign: 'center',
   },

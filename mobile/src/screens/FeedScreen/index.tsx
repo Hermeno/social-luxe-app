@@ -1,14 +1,11 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import {
-  View, Text, ActivityIndicator, FlatList, StyleSheet, Dimensions, Keyboard, TouchableOpacity,
-  Animated, Easing,
+  View, Text, ActivityIndicator, FlatList, StyleSheet, Dimensions, Keyboard,
   type LayoutChangeEvent, type ViewToken,
+  type NativeSyntheticEvent, type NativeScrollEvent,
 } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import FeedIcon from '../../components/FeedIcon'
-import Icon from '../../components/Icon'
 import { setStatusBarStyle } from 'expo-status-bar'
-import { useNavigation, useFocusEffect } from '@react-navigation/native'
+import { useNavigation, useFocusEffect, useIsFocused } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { Post, type RepostResult } from '../../types'
 import { useFeed } from '../../hooks/useFeed'
@@ -20,21 +17,17 @@ import * as postService from '../../services/post.service'
 import type { TasteSignal } from '../../services/post.service'
 import { isConnected } from '../../services/netinfo.service'
 import { useT } from '../../i18n'
-import { colors, fonts } from '../../theme'
+import { colors, fonts, typography } from '../../theme'
 import FeedHeader, { FeedUserGroup as UserGroup } from './FeedHeader'
-import Wordmark from '../../components/Wordmark'
 import FeedItem from './FeedItem'
 import { hydrateTastePolicy, noteTastePostSeen } from './tastePolicy'
 import CommentSheet from '../../components/CommentSheet'
 import useReducedMotionPreference from '../../hooks/useReducedMotionPreference'
 import { BLOCKED_USER_IDS_CACHE_KEY, getBlockedUsers } from '../../services/block.service'
 import { MUTED_USER_IDS_CACHE_KEY, getMutedUsers } from '../../services/mute.service'
+import { useAuthStore } from '../../store/auth.store'
 
 const { height: SCREEN_H } = Dimensions.get('window')
-const TOP_ACTION_ICON_SIZE = 27
-// De quanto em quanto tempo o Círculo se vira. Longe o suficiente para ser um
-// aceno e não um enfeite a mexer-se sem parar por cima da feed.
-const FLIP_EVERY_MS = 9000
 
 type Nav = StackNavigationProp<AppStackParams>
 
@@ -75,7 +68,9 @@ export default function FeedScreen() {
   } = useFeed()
   const t   = useT()
   const nav = useNavigation<Nav>()
+  const isFocused = useIsFocused()
   const reduceMotion = useReducedMotionPreference()
+  const tasteUserId = useAuthStore((state) => state.user?.id)
 
   const setNewPostsCount = useFeedStore((s) => s.setNewPostsCount)
   const pendingPost      = useFeedStore((s) => s.pendingPost)
@@ -85,8 +80,11 @@ export default function FeedScreen() {
   const clearFocusedPost = useFeedStore((s) => s.clearFocusedPost)
   const openSearch       = useFeedStore((s) => s.openSearch)
   const setOpenSearch    = useFeedStore((s) => s.setOpenSearch)
+  const setSearchVisible = useFeedStore((s) => s.setSearchVisible)
   const homeTap          = useFeedStore((s) => s.homeTap)
   const setActiveCommentTarget = useFeedStore((s) => s.setActiveCommentTarget)
+  const immersive        = useFeedStore((s) => s.immersive)
+  const setImmersive     = useFeedStore((s) => s.setImmersive)
   const requestedCommentPostId = useFeedStore((s) => s.requestedCommentPostId)
   const clearCommentRequest    = useFeedStore((s) => s.clearCommentRequest)
   const circleInvite           = useNotificationStore((s) => s.circleInvite)
@@ -103,7 +101,6 @@ export default function FeedScreen() {
   const moderationRevisionRef = useRef(0)
 
   const listRef = useRef<FlatList<Post>>(null)
-  const { top: safeTop } = useSafeAreaInsets()
   // Altura real da área da lista (medida). O pager usa-a para a célula, o snap
   // e o layout — assim toda a gente fica alinhada (Dimensions.window no arranque
   // podia não bater certo e desalinhava os posts a partir do 2.º).
@@ -218,9 +215,10 @@ export default function FeedScreen() {
     if (searchModeRef.current) searchRealignPendingRef.current = Keyboard.isVisible()
     Keyboard.dismiss()
     setSearchMode(false)
+    setSearchVisible(false)
     setSearchQuery('')
     setCommentPost(post)
-  }, [])
+  }, [setSearchVisible])
 
   // A TabBar mostra o alvo do post visível, sem guardar o Post inteiro fora da
   // feed. Ao desmontar, limpamos a ponte para não deixar uma referência antiga.
@@ -235,6 +233,7 @@ export default function FeedScreen() {
   useEffect(() => () => {
     useFeedStore.getState().setActiveCommentTarget(null)
     useFeedStore.getState().clearCommentRequest()
+    useFeedStore.getState().setSearchVisible(false)
   }, [])
 
   // Tocar no campo da navegação continua a abrir a folha que pertence à feed.
@@ -254,6 +253,30 @@ export default function FeedScreen() {
     }
   }, [flatPosts.length])
 
+  // ── Modo imersivo ──────────────────────────────────────────────────────────
+  // Depois do primeiro gesto pela feed, a navegação recolhe e o compositor fica
+  // com a largura toda. A seta do cabeçalho é a saída explícita desse modo — não
+  // oscilamos entre as duas barras se o dedo fizer uma pequena correção durante
+  // o mesmo gesto.
+  //
+  // Só conta o gesto do dedo. Os saltos que a própria feed manda fazer
+  // (`scrollToOffset`, `scrollToIndex`) também disparam `onScroll` e, sem esta
+  // guarda, um regresso ao topo recolhia a navegação sozinho.
+  const draggingRef = useRef(false)
+  const lastOffsetRef = useRef(0)
+  const setImmersiveIfChanged = useCallback((value: boolean) => {
+    if (useFeedStore.getState().immersive !== value) setImmersive(value)
+  }, [setImmersive])
+
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offset = event.nativeEvent.contentOffset.y
+    const delta = offset - lastOffsetRef.current
+    lastOffsetRef.current = offset
+    if (offset <= 8) { setImmersiveIfChanged(false); return }
+    if (!draggingRef.current || Math.abs(delta) < 6) return
+    setImmersiveIfChanged(true)
+  }, [setImmersiveIfChanged])
+
   const scrollToIndex = useCallback((idx: number) => {
     const fp = flatPostsRef.current
     const clamped = Math.max(0, Math.min(idx, fp.length - 1))
@@ -267,6 +290,11 @@ export default function FeedScreen() {
     if (id) setCurrentPostId(id)
   }).current
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 80 }).current
+
+  // A política é isolada por conta. Esta inicialização vem antes da contagem do
+  // post ativo: assim o reset síncrono da identidade não apaga a primeira vista
+  // da sessão enquanto a leitura do SQLite termina em segundo plano.
+  useEffect(() => { hydrateTastePolicy(tasteUserId) }, [tasteUserId])
 
   // ── Vistas: marca o post ativo como visto ──────────────────────────────────
   useEffect(() => {
@@ -339,11 +367,6 @@ export default function FeedScreen() {
   useEffect(() => { getViewedPostIds().then(setViewedIds).catch(() => {}) }, [])
 
   // ── Sinal de gosto ─────────────────────────────────────────────────────────
-  // A memória de quem já respondeu, quando se perguntou pela última vez e
-  // quantas vezes o cartão foi ignorado vive na política, em disco. Aqui só se
-  // carrega uma vez e se envia o que a pessoa responder.
-  useEffect(() => { hydrateTastePolicy() }, [])
-
   const handleTasteSignal = useCallback((postId: string, signal: TasteSignal, dwellMs: number) => {
     // Falhar aqui seria perder aprendizagem, não um pixel: a fila reenvia
     // quando houver rede e o servidor faz upsert, portanto repetir é seguro.
@@ -439,20 +462,21 @@ export default function FeedScreen() {
     searchAnchorPostIdRef.current = anchor
     alignPagerToPost(anchor)
     setSearchMode(true)
-  }, [alignPagerToPost])
+    setSearchVisible(true)
+  }, [alignPagerToPost, setSearchVisible])
 
   useFocusEffect(useCallback(() => {
     if (openSearch) { openSearchPanel(); setOpenSearch(false) }
   }, [openSearch, openSearchPanel, setOpenSearch]))
 
-  const handleSearchOpen   = openSearchPanel
   const handleSearchClose  = useCallback(() => {
     searchRealignPendingRef.current = Keyboard.isVisible()
     Keyboard.dismiss()
     setSearchMode(false)
+    setSearchVisible(false)
     setSearchQuery('')
     alignPagerToPost(searchAnchorPostIdRef.current ?? currentPostIdRef.current)
-  }, [alignPagerToPost])
+  }, [alignPagerToPost, setSearchVisible])
   const handleSearchChange = useCallback((q: string) => setSearchQuery(q), [])
   const handleBubblePress  = useCallback((group: UserGroup) => {
     const idx = flatPostsRef.current.findIndex((p) => p.user.id === group.user.id)
@@ -465,38 +489,13 @@ export default function FeedScreen() {
     searchRealignPendingRef.current = Keyboard.isVisible()
     Keyboard.dismiss()
     setSearchMode(false)
+    setSearchVisible(false)
     setSearchQuery('')
-  }, [alignPagerToPost])
-  // ── O giro do Círculo ──────────────────────────────────────────────────────
-  // Uma roda não serve: o desenho é um anel, e rodá-lo no plano do ecrã não se
-  // vê — fica igual em todos os ângulos. O que se vê é virá-lo, como uma moeda:
-  // o anel fecha-se numa linha e reabre do outro lado. Com um golpe de escala a
-  // meio, para parecer que sai do ecrã em vez de girar dentro dele.
-  const circleFlip = useRef(new Animated.Value(0)).current
-  useFocusEffect(useCallback(() => {
-    if (reduceMotion) return
-    let timer: ReturnType<typeof setTimeout> | null = null
-    const flip = () => {
-      circleFlip.setValue(0)
-      Animated.timing(circleFlip, {
-        toValue: 1,
-        duration: 900,
-        easing: Easing.inOut(Easing.cubic),
-        useNativeDriver: true,
-      }).start(({ finished }) => {
-        if (finished) timer = setTimeout(flip, FLIP_EVERY_MS)
-      })
-    }
-    timer = setTimeout(flip, FLIP_EVERY_MS)
-    return () => {
-      if (timer) clearTimeout(timer)
-      circleFlip.stopAnimation()
-      circleFlip.setValue(0)
-    }
-  }, [circleFlip, reduceMotion]))
-
-  const handleCreatePress  = useCallback(() => nav.navigate('Tabs', { screen: 'Create' }), [nav])
+  }, [alignPagerToPost, setSearchVisible])
   const handleCirclePress  = useCallback(() => nav.navigate('Tabs', { screen: 'Circle' }), [nav])
+  const handleRestoreNavigation = useCallback(() => {
+    setImmersiveIfChanged(false)
+  }, [setImmersiveIfChanged])
 
   // Também cobre o gesto de esconder o teclado sem carregar em Cancelar. A
   // pesquisa continua aberta, mas a célula volta já ao seu snap exacto.
@@ -509,7 +508,7 @@ export default function FeedScreen() {
     return () => sub.remove()
   }, [alignPagerToPost])
 
-  // ── Foco: a status bar fica fora da mídia, sobre o papel claro da Feed ──────
+  // ── Foco: status bar clara sobre mídia; escura apenas na pesquisa ───────────
   const refreshRef = useRef(refresh)
   refreshRef.current = refresh
   useFocusEffect(useCallback(() => {
@@ -549,10 +548,22 @@ export default function FeedScreen() {
   }, []))
 
   useFocusEffect(useCallback(() => {
-    setStatusBarStyle('dark')
+    setStatusBarStyle('light')
     refreshRef.current()
-    return () => setStatusBarStyle('dark')
+    return () => {
+      setStatusBarStyle('dark')
+      // Sair da feed repõe sempre a navegação: nenhum outro separador pode
+      // herdar uma barra recolhida.
+      useFeedStore.getState().setImmersive(false)
+    }
   }, []))
+
+  // O topo normal vive sobre a mídia escura; o painel de pesquisa é papel
+  // claro e pede ícones escuros. A mudança acompanha a própria face do header.
+  useEffect(() => {
+    if (!isFocused) return
+    setStatusBarStyle(searchMode ? 'dark' : 'light')
+  }, [isFocused, searchMode])
 
   // ── Tocar em Home (já no feed) → volta ao topo e refresca ───────────────────
   const firstHomeTap = useRef(true)
@@ -582,8 +593,9 @@ export default function FeedScreen() {
       onExpired={handlePostExpired}
       onBlockingChange={NOOP}
       onTasteSignal={handleTasteSignal}
+      tasteBlocked={searchMode || !!commentPost}
     />
-  ), [currentPostId, listH, likedPostIds, commentDeltas, openComments, handleLikeChange, handleRepostChange, handlePostDeleted, handlePostExpired, handleProfileBlocked, handleAuthorMuted, handleTasteSignal, updatePost, reduceMotion])
+  ), [currentPostId, listH, likedPostIds, commentDeltas, searchMode, commentPost, openComments, handleLikeChange, handleRepostChange, handlePostDeleted, handlePostExpired, handleProfileBlocked, handleAuthorMuted, handleTasteSignal, updatePost, reduceMotion])
 
   const getItemLayout = useCallback((_: unknown, index: number) => (
     { length: listH, offset: listH * index, index }
@@ -617,6 +629,10 @@ export default function FeedScreen() {
           // thread, no mesmo frame da mutação. O JS nunca vê a lista deslocada,
           // logo não há frame desenhado fora do sítio.
           maintainVisibleContentPosition={MAINTAIN_VISIBLE_POSITION}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+          onScrollBeginDrag={() => { draggingRef.current = true }}
+          onScrollEndDrag={() => { draggingRef.current = false }}
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
           onEndReached={loadMore}
@@ -635,90 +651,20 @@ export default function FeedScreen() {
         </View>
       )}
 
-      {/* Cabeçalho leve: marca à esquerda, ações livres à direita. */}
-      {searchMode ? (
-        <FeedHeader
-          filteredGroups={filteredGroups}
-          activeUserId={activePost?.user.id}
-          searchMode
-          searchQuery={searchQuery}
-          onSearchClose={handleSearchClose}
-          onSearchChange={handleSearchChange}
-          onSearchPress={handleSearchOpen}
-          onBubblePress={handleBubblePress}
-          onCreatePress={handleCreatePress}
-        />
-      ) : (
-        <>
-          <View style={[s.topBar, { top: safeTop + 2 }]} pointerEvents="box-none">
-            <View style={s.brandLockup}>
-              {/* O Círculo é o gesto que define a app — vive ao lado da marca,
-                  não no grupo das ferramentas do canto oposto. */}
-              <TouchableOpacity
-                style={s.brandCircleBtn}
-                onPress={handleCirclePress}
-                activeOpacity={0.65}
-                hitSlop={12}
-                accessibilityRole="button"
-                accessibilityLabel={circleInvite ? `${t.circle_errTitle}, ${t.pending}` : t.circle_errTitle}
-              >
-                {circleInvite && (
-                  <View style={[s.circleInviteBadge, s.brandCircleBadge]}>
-                    {/* Não veio `camera` no pacote — fica o ícone da Luxee. */}
-                    <Icon name="camera" size={9} strokeWidth={2.5} color="#fff" />
-                  </View>
-                )}
-                <Animated.View
-                  style={{
-                    transform: [
-                      { perspective: 620 },
-                      {
-                        rotateY: circleFlip.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: ['0deg', '360deg'],
-                        }),
-                      },
-                      {
-                        scale: circleFlip.interpolate({
-                          inputRange: [0, 0.5, 1],
-                          outputRange: [1, 1.14, 1],
-                        }),
-                      },
-                    ],
-                  }}
-                >
-                  <FeedIcon name="circle" size={TOP_ACTION_ICON_SIZE} color="#fff" weight="medium" />
-                </Animated.View>
-              </TouchableOpacity>
-
-              <Wordmark height={35} color="#FFFFFF" />
-            </View>
-
-            <View style={s.topRightActions}>
-              <TouchableOpacity
-                style={s.topIconBtn}
-                onPress={handleSearchOpen}
-                activeOpacity={0.65}
-                accessibilityRole="button"
-                accessibilityLabel={t.feed_search_ph}
-              >
-                <FeedIcon name="search" size={TOP_ACTION_ICON_SIZE} color="#fff" weight="medium" />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={s.topIconBtn}
-                onPress={handleCreatePress}
-                activeOpacity={0.65}
-                accessibilityRole="button"
-                accessibilityLabel={t.feed_create}
-              >
-                <FeedIcon name="baseline-plus" size={TOP_ACTION_ICON_SIZE} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-        </>
-      )}
+      {/* Um só dono para as duas faces do topo: marca/Círculo e pesquisa. */}
+      <FeedHeader
+        filteredGroups={filteredGroups}
+        activeUserId={activePost?.user.id}
+        searchMode={searchMode}
+        searchQuery={searchQuery}
+        immersive={immersive}
+        circleInvite={Boolean(circleInvite)}
+        onSearchClose={handleSearchClose}
+        onSearchChange={handleSearchChange}
+        onBubblePress={handleBubblePress}
+        onCirclePress={handleCirclePress}
+        onRestoreNavigation={handleRestoreNavigation}
+      />
 
       {commentPost && (
         <CommentSheet
@@ -734,58 +680,6 @@ export default function FeedScreen() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.feedSurface },
   pager: { flex: 1, backgroundColor: colors.feedSurface },
-  topBar: {
-    position: 'absolute',
-    left: 16,
-    right: 8,
-    zIndex: 30,
-    height: 48,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  brandLockup: { flexDirection: 'row', alignItems: 'flex-end', gap: 11 },
-  // A assinatura assenta pela base, e o corpo das letras fica ~16,5pt acima
-  // dela. Estes 3pt põem o ícone no meio das LETRAS, não no meio da caixa do
-  // ficheiro — que tem ascendente alto e descendente longo.
-  brandCircleBtn: {
-    width: TOP_ACTION_ICON_SIZE,
-    height: TOP_ACTION_ICON_SIZE,
-    marginBottom: 3,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'visible',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.46, shadowRadius: 2
-  },
-  // A caixa aqui é do tamanho do ícone, não os 48 do canto: o emblema encosta
-  // ao canto do desenho em vez de flutuar dentro de um botão maior.
-  brandCircleBadge: { top: -4, right: -4 },
-  topRightActions: {
-    flexDirection: 'row',
-    alignItems: 'center'
-  },
-  topIconBtn: {
-    width: 48,
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'visible',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.46, shadowRadius: 2
-  },
-  circleInviteBadge: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    zIndex: 2,
-    width: 17,
-    height: 17,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(10,10,12,0.9)',
-    backgroundColor: colors.primary,
-  },
   empty:     { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, backgroundColor: colors.feedSurface },
-  emptyTxt:  { fontFamily: fonts.medium, fontSize: 14, color: colors.gray600 }
+  emptyTxt:  { fontFamily: fonts.medium, fontSize: typography.body, color: colors.gray600 }
 })

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View, Text, StyleSheet, Dimensions, Pressable, TouchableOpacity, Animated,
-  ActivityIndicator, PanResponder,
+  ActivityIndicator, Easing, PanResponder,
 } from 'react-native'
 import type { TextLayoutEvent } from 'react-native'
 import { useVideoPlayer, VideoView, VideoPlayerStatus } from 'expo-video'
@@ -13,7 +13,7 @@ import { StackNavigationProp } from '@react-navigation/stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Post, type RepostResult } from '../../types'
-import { colors, fonts } from '../../theme'
+import { colors, fonts, typography } from '../../theme'
 import { parsePostFontKey, postFontStyle } from '../../theme/postFonts'
 import { usePostFontsReady } from '../../store/postFonts.store'
 import { API_BASE } from '../../config'
@@ -70,6 +70,8 @@ interface Props {
   onExpired: (id: string) => void
   onBlockingChange: (open: boolean) => void
   onTasteSignal: (postId: string, signal: TasteSignal, dwellMs: number) => void
+  /** Pesquisa/comentários cobrem a publicação; não gastar uma impressão atrás deles. */
+  tasteBlocked?: boolean
 }
 
 // ─── Uma célula do pager: um momento por ecrã ───────────────────────────────
@@ -80,7 +82,7 @@ interface Props {
 function FeedItem({
   post, reduceMotion, isActive, cellHeight, liked, commentCount,
   onCommentPress, onLikeChange, onRepostChange, onDeleted, onEdited, onProfileBlocked, onAuthorMuted, onExpired, onBlockingChange,
-  onTasteSignal,
+  onTasteSignal, tasteBlocked = false,
 }: Props) {
   const isFocused = useIsFocused()
   const nav = useNavigation<Nav>()
@@ -89,6 +91,7 @@ function FeedItem({
 
   const myId     = useAuthStore((s) => s.user?.id)
   const following = useFollowStore((s) => s.followingIds.has(post.user.id))
+  const followLoaded = useFollowStore((s) => s.loaded)
   const isSelf    = myId === post.user.id
 
   const isVideo = post.mediaType === 'VIDEO'
@@ -122,7 +125,10 @@ function FeedItem({
   // A mídia respeita a status bar. Em baixo, o scrubber tem uma faixa própria
   // entre o fim do post e o início da navegação.
   const TRACK_H    = 3
-  const GAP        = 8
+  // O traço do tempo precisa de respirar, não de uma faixa: com 8 de cada lado
+  // sobravam 19pt de vazio entre o fim do vídeo e o topo da navegação, e era
+  // essa faixa — não a altura da barra — que afastava um do outro.
+  const GAP        = 5
   const navTop        = tabBarOccupiedHeight(safeBottom)
   const trackBottom   = navTop + GAP                         // traço, acima da navegação
   const videoBottom   = trackBottom + TRACK_H + GAP          // post termina antes do traço
@@ -266,17 +272,100 @@ function FeedItem({
   }, [isActive, isFocused, player, isVideo])
 
   // ── Traço do tempo do vídeo + scrubber ──────────────────────────────────────
-  const [progress, setProgress] = useState(0)
+  // O player entrega amostras a cada 100ms; entre elas, a escala é interpolada
+  // no driver nativo. Assim o traço corre continuamente sem renderizar a célula
+  // inteira nem saltar de percentagem inteira em percentagem inteira.
+  const videoProgress = useRef(new Animated.Value(0)).current
+  const videoProgressTarget = useRef(0)
+  const scrubbing = useRef(false)
+
   useEffect(() => {
-    if (!isVideo || !isActive || !isFocused) return
-    const id = setInterval(() => {
+    scrubbing.current = false
+    videoProgress.stopAnimation()
+    videoProgress.setValue(0)
+    videoProgressTarget.current = 0
+  }, [post.id, videoProgress])
+
+  useEffect(() => {
+    if (!isVideo || !isActive || !isFocused) {
+      try { player.timeUpdateEventInterval = 0 } catch {}
+      videoProgress.stopAnimation()
+      return
+    }
+
+    // Alinha imediatamente ao ponto preservado pelo player ao voltar ao post.
+    try {
+      const duration = player.duration
+      if (duration > 0) {
+        const initial = Math.max(0, Math.min(1, player.currentTime / duration))
+        videoProgressTarget.current = initial
+        videoProgress.setValue(initial)
+      }
+    } catch {}
+
+    const sub = player.addListener('timeUpdate', ({ currentTime }) => {
+      if (scrubbing.current) return
       try {
-        const d = player.duration
-        if (d > 0) setProgress(Math.min(1, player.currentTime / d))
+        const duration = player.duration
+        if (!(duration > 0)) return
+        const next = Math.max(0, Math.min(1, currentTime / duration))
+        const looped = next + 0.08 < videoProgressTarget.current
+        videoProgressTarget.current = next
+
+        if (looped) {
+          videoProgress.stopAnimation()
+          videoProgress.setValue(next)
+          return
+        }
+
+        // O traço continua preciso, mas respeita a preferência do sistema sem
+        // introduzir uma animação que o utilizador pediu para reduzir.
+        if (reduceMotion) {
+          videoProgress.stopAnimation()
+          videoProgress.setValue(next)
+          return
+        }
+
+        Animated.timing(videoProgress, {
+          toValue: next,
+          duration: 120,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }).start()
       } catch {}
-    }, 250)
-    return () => clearInterval(id)
-  }, [isVideo, isActive, isFocused, player])
+    })
+
+    // No Android o relógio de `timeUpdate` continua ativo mesmo em pausa. Liga
+    // a amostragem fina apenas durante playback e desliga-a em pausa/modal.
+    const setSampling = (isPlaying: boolean) => {
+      try { player.timeUpdateEventInterval = isPlaying ? (reduceMotion ? 0.25 : 0.1) : 0 } catch {}
+      if (!isPlaying) {
+        videoProgress.stopAnimation()
+        // A última amostra pode estar alguns milissegundos atrás da pausa.
+        // Fecha a barra na posição real antes de desligar o relógio.
+        try {
+          const duration = player.duration
+          if (duration > 0) {
+            const pausedAt = Math.max(0, Math.min(1, player.currentTime / duration))
+            videoProgressTarget.current = pausedAt
+            videoProgress.setValue(pausedAt)
+          }
+        } catch {}
+      }
+    }
+    const playingSub = player.addListener('playingChange', ({ isPlaying }) => {
+      setSampling(isPlaying)
+    })
+    setSampling(player.playing)
+
+    return () => {
+      sub.remove()
+      playingSub.remove()
+      try { player.timeUpdateEventInterval = 0 } catch {}
+      scrubbing.current = false
+      videoProgress.stopAnimation()
+    }
+  }, [isVideo, isActive, isFocused, player, reduceMotion, videoProgress])
 
   // Tocar/arrastar na linha salta no vídeo (voltar ao início ou correr).
   const scrub = useMemo(() => {
@@ -284,16 +373,26 @@ function FeedItem({
       const frac = Math.max(0, Math.min(1, x / trackWidth))
       try {
         const d = player.duration
-        if (d > 0) { player.currentTime = frac * d; setProgress(frac) }
+        if (d > 0) {
+          player.currentTime = frac * d
+          videoProgress.stopAnimation()
+          videoProgressTarget.current = frac
+          videoProgress.setValue(frac)
+        }
       } catch {}
     }
     return PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder:  () => true,
-      onPanResponderGrant: (e) => seekTo(e.nativeEvent.locationX),
+      onPanResponderGrant: (e) => {
+        scrubbing.current = true
+        seekTo(e.nativeEvent.locationX)
+      },
       onPanResponderMove:  (e) => seekTo(e.nativeEvent.locationX),
+      onPanResponderRelease: () => { scrubbing.current = false },
+      onPanResponderTerminate: () => { scrubbing.current = false },
     })
-  }, [player, trackWidth])
+  }, [player, trackWidth, videoProgress])
 
   // ── Vida do momento (efémero) — desaparece quando expira ────────────────────
   useEffect(() => {
@@ -371,6 +470,7 @@ function FeedItem({
 
     activeSinceRef.current = Date.now()
     const id = setTimeout(() => {
+      if (tasteBlocked || menuBlocking.current) return
       if (!shouldAskTaste({
         postId: post.id,
         kind: tasteKind,
@@ -385,7 +485,7 @@ function FeedItem({
       setTasteVisible(true)
     }, tasteDwellMs(tasteKind))
     return () => clearTimeout(id)
-  }, [isActive, isFocused, post.id, tasteKind, isSelf, post.isAnnouncement, liked, post.userReposted, following])
+  }, [isActive, isFocused, post.id, tasteKind, isSelf, post.isAnnouncement, liked, post.userReposted, following, tasteBlocked])
 
   const handleTasteAnswer = useCallback((signal: TasteSignal) => {
     tasteAnsweredRef.current = true
@@ -438,6 +538,7 @@ function FeedItem({
   }
 
   function handleFollow() {
+    if (!useFollowStore.getState().loaded) return
     useFollowStore.getState()
       .toggle(post.user.id, 'forever', { name: post.user.name, avatar: post.user.avatar ?? null })
       .catch(() => {})
@@ -665,6 +766,10 @@ function FeedItem({
               style={[s.followBtn, following && s.followingBtn]}
               hitSlop={8}
               activeOpacity={0.7}
+              disabled={!followLoaded}
+              accessibilityRole="button"
+              accessibilityLabel={`${following ? t.following : t.follow} ${post.user.name}`}
+              accessibilityState={{ disabled: !followLoaded, selected: following }}
             >
               <View style={[s.followNode, following && s.followNodeOn]} />
               <Text style={[s.followTxt, following && s.followingTxt]}>
@@ -776,7 +881,7 @@ function FeedItem({
       {isVideo && (
         <View style={[s.trackRow, { bottom: trackBottom - 9 }]} {...scrub.panHandlers}>
           <View style={[s.track, { height: TRACK_H }]}>
-            <View style={[s.trackFill, { width: `${Math.round(progress * 100)}%` }]} />
+            <Animated.View style={[s.trackFill, { transform: [{ scaleX: videoProgress }] }]} />
           </View>
         </View>
       )}
@@ -800,7 +905,7 @@ const s = StyleSheet.create({
     borderWidth: 2, borderColor: 'rgba(255,255,255,0.78)'
   },
   textWrap:    { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  textContent: { color: '#fff', fontFamily: fonts.bold, fontSize: 26, lineHeight: 34, textAlign: 'center', paddingHorizontal: 36 },
+  textContent: { color: '#fff', fontFamily: fonts.bold, fontSize: typography.display, lineHeight: 38, textAlign: 'center', paddingHorizontal: 36 },
 
   // Autor + descrição
   meta:       { position: 'absolute', left: 16, right: 78, gap: 9 },
@@ -823,8 +928,8 @@ const s = StyleSheet.create({
   momentLabel: {
     color: 'rgba(255,255,255,0.76)',
     fontFamily: fonts.bold,
-    fontSize: 9.5,
-    lineHeight: 12,
+    fontSize: typography.meta,
+    lineHeight: 14,
     letterSpacing: 1.35
   },
   lifeTrack: {
@@ -838,8 +943,8 @@ const s = StyleSheet.create({
   momentTime: {
     color: 'rgba(255,255,255,0.58)',
     fontFamily: fonts.semiBold,
-    fontSize: 10,
-    lineHeight: 12,
+    fontSize: typography.meta,
+    lineHeight: 14,
     fontVariant: ['tabular-nums']
   },
   authorRow:  { minHeight: 43, flexDirection: 'row', alignItems: 'center', gap: 9 },
@@ -868,13 +973,14 @@ const s = StyleSheet.create({
   // nome comprido continua a cortar com reticências em vez de o expulsar.
   authorText: { flexShrink: 1, minWidth: 0, justifyContent: 'center' },
   authorName: {
-    color: '#fff', fontFamily: fonts.bold, fontSize: 14.5, lineHeight: 18, letterSpacing: -0.28
+    color: '#fff', fontFamily: fonts.semiBold, fontSize: typography.body, lineHeight: 20, letterSpacing: -0.3
   },
   authorContext: {
-    color: 'rgba(255,255,255,0.56)', fontFamily: fonts.medium, fontSize: 11.5, lineHeight: 15
+    color: 'rgba(255,255,255,0.68)', fontFamily: fonts.medium, fontSize: typography.meta, lineHeight: 15
   },
   followBtn: {
     minHeight: 32,
+    minWidth: 86,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -884,17 +990,23 @@ const s = StyleSheet.create({
   },
   followNode: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.primary },
   followNodeOn: { backgroundColor: 'rgba(255,255,255,0.42)' },
-  followTxt: { color: '#fff', fontFamily: fonts.bold, fontSize: 11.5, letterSpacing: 0.1 },
+  followTxt: {
+    color: '#FFFFFF',
+    fontFamily: fonts.bold,
+    fontSize: typography.secondary,
+    lineHeight: 17,
+    letterSpacing: 0.05,
+  },
   followingBtn: { borderLeftColor: 'rgba(255,255,255,0.18)' },
-  followingTxt: { color: 'rgba(255,255,255,0.62)' },
+  followingTxt: { color: '#FFFFFF' },
   descriptionWrap: { position: 'relative' },
   description: {
-    color: 'rgba(255,255,255,0.9)', fontFamily: fonts.medium, fontSize: 13.5, lineHeight: 18.5
+    color: 'rgba(255,255,255,0.94)', fontFamily: fonts.regular, fontSize: typography.secondary, lineHeight: 19.5
   },
   descriptionMore: {
-    color: 'rgba(255,255,255,0.6)',
+    color: 'rgba(255,255,255,0.72)',
     fontFamily: fonts.semiBold,
-    fontSize: 12.5,
+    fontSize: typography.secondary,
     marginTop: 2,
   },
   descriptionMeasure: {
@@ -907,9 +1019,9 @@ const s = StyleSheet.create({
   commentsLink: { flex: 1, minHeight: 26, flexDirection: 'row', alignItems: 'center', gap: 3 },
   commentsText: {
     flexShrink: 1,
-    color: 'rgba(255,255,255,0.6)',
+    color: 'rgba(255,255,255,0.68)',
     fontFamily: fonts.medium,
-    fontSize: 11.5,
+    fontSize: typography.meta,
     lineHeight: 15
   },
 
@@ -918,6 +1030,15 @@ const s = StyleSheet.create({
   // Branco porque assenta sobre a feed escura. O sulco fica a 22% para se ler
   // como calha sem competir com o preenchimento.
   track:     { borderRadius: 2, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.22)' },
-  trackFill: { height: '100%', borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.92)' },
+  trackFill: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    width: '100%',
+    transformOrigin: 'left center',
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+  },
   playOverlay: { position: 'absolute', left: 0, right: 0, top: '40%', alignItems: 'center' }
 })

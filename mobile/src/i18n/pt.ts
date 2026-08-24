@@ -216,6 +216,9 @@ export const PT = {
   feed_no_posts: 'Ainda não há publicações',
   feed_create: 'Criar',
   feed_search_ph: 'Pesquisar pessoas...',
+  feed_top_search: 'Pesquisar',
+  feed_top_circle: 'Adicionar círculo',
+  feed_show_navigation: 'Mostrar navegação',
   feed_announcement: 'anúncio oficial · luxee',
 
   // Cartão de gosto — aparece de vez em quando, sobre a publicação
@@ -228,6 +231,10 @@ export const PT = {
   feed_delete_msg: 'Esta ação é permanente.',
   feed_edit_caption: 'Editar legenda',
   feed_options_title: 'Opções da publicação',
+  feed_author_posts: 'Publicações de {name}',
+  feed_author_post_count_one: '1 publicação ativa',
+  feed_author_posts_count: '{count} publicações ativas',
+  feed_author_posts_load_fail: 'Não foi possível carregar estas publicações.',
   feed_save_post: 'Guardar nos salvos',
   feed_remove_saved: 'Remover dos salvos',
   feed_saved_title: 'Guardado',
