@@ -59,22 +59,26 @@ function emptyMemory(): Memory {
 }
 
 // ── Números da política ─────────────────────────────────────────────────────
-const ASKS_PER_SESSION   = 3        // teto por utilização real da app
-const ASKS_WHEN_KNOWN     = 2       // com gosto conhecido, manutenção mais leve
-const MIN_POSTS_BETWEEN  = 5        // publicações entre dois cartões
-const MIN_MS_BETWEEN     = 60_000   // e tempo, para não caberem todos num minuto
-const SETTLE_POSTS       = 3        // ninguém é interrompido mal abre a app
+const ASKS_PER_SESSION   = 6        // teto por utilização real da app
+const ASKS_WHEN_KNOWN     = 3       // com gosto conhecido, manutenção mais leve
+const MIN_POSTS_BETWEEN  = 3        // publicações entre dois cartões
+const MIN_MS_BETWEEN     = 30_000   // e tempo, para não caberem todos num minuto
+const SETTLE_POSTS       = 2        // ninguém é interrompido mal abre a app
 const KNOWN_ENOUGH       = 30       // sinais a partir dos quais se pergunta menos
 const ANSWERED_KEEP      = 500      // histórico local só serve para não repetir
-// Silêncio depois de o cartão ser ignorado N vezes seguidas. Insistir com quem
-// não responde não traz sinal nenhum — mas desaparecer durante dias também não:
-// o feed fica sem forma de aprender e o utilizador sem forma de o afinar. Daí a
-// escala parar nas horas e não nos dias.
-const IGNORE_PAUSE_MS = [0, 15 * 60_000, 2 * 3_600_000, 12 * 3_600_000, 24 * 3_600_000]
-// Cada janela inteira sem cartão nenhum perdoa uma ignorada. É isto que faltava:
-// a série só descia com uma resposta, portanto três cartões passados à frente
-// calavam a pergunta para sempre — ia crescendo e nunca voltava atrás.
-const STREAK_FORGIVE_MS = 24 * 3_600_000
+// Silêncio depois de o cartão ser ignorado N vezes seguidas.
+//
+// A escala esteve em [15min, 2h, 12h, 24h] e era demasiado severa: passar
+// quatro posts à frente — que é o gesto normal de quem não quer responder
+// naquele momento, não uma recusa — calava a pergunta 24 horas. E como o perdão
+// exigia um dia inteiro sem cartões, quem lá chegava não voltava a sair.
+//
+// Passar à frente é uma ausência de resposta, não um "não". A escala recua
+// para minutos: chega para insistir na mesma sessão e não chega para a
+// pergunta desaparecer do produto.
+const IGNORE_PAUSE_MS = [0, 2 * 60_000, 8 * 60_000, 20 * 60_000, 45 * 60_000]
+// Cada janela inteira sem cartão nenhum perdoa uma ignorada.
+const STREAK_FORGIVE_MS = 20 * 60_000
 
 // Uma sessão termina depois de meia hora sem qualquer publicação observada.
 // Antes, "sessão" era a vida do processo JavaScript: em iOS isso pode durar
@@ -162,7 +166,7 @@ function sessionBudget(): number {
 // Probabilidade de gastar a pergunta NESTA publicação, já passadas todas as
 // barreiras. É aqui que mora o "onde é que isto ensina mais".
 function askProbability(ctx: TasteAskContext): number {
-  let p = 0.4
+  let p = 0.6
 
   const counts = Object.values(memory.byKind)
   const total = counts.reduce((sum, n) => sum + n, 0)

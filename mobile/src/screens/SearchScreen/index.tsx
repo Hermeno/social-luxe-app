@@ -1,16 +1,20 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import {
   View, Text, TextInput, FlatList, TouchableOpacity,
-  StyleSheet, ActivityIndicator, ListRenderItemInfo,
+  StyleSheet, ActivityIndicator, ListRenderItemInfo, Dimensions,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
-import { Ionicons } from '@expo/vector-icons'
 import Toast from 'react-native-toast-message'
+import { Image } from 'expo-image'
 import { api } from '../../services/api'
+import { searchPosts } from '../../services/post.service'
+import { Post } from '../../types'
 import { AppStackParams } from '../../navigation/AppNavigator'
-import { colors, fonts } from '../../theme'
+import { colors, fonts, radius, typography } from '../../theme'
+import Icon from '../../components/Icon'
+import { tabBarOccupiedHeight } from '../../components/TabBar/layout'
 import { FollowDuration } from '../../services/follow.service'
 import { getCache, setCache } from '../../db/database'
 import { useFollowStore } from '../../store/follow.store'
@@ -35,6 +39,33 @@ function fmtCount(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000)     return `${(n / 1_000).toFixed(1)}K`
   return String(n)
+}
+
+// ── Célula da grelha de publicações ───────────────────────────────────────────
+const GRID_GAP = 2
+const CELL = (Dimensions.get('window').width - GRID_GAP * 2) / 3
+
+function PostCell({ post, onPress }: { post: Post; onPress: () => void }) {
+  const uri = post.mediaUrls?.[0] ?? post.mediaUrl
+  return (
+    <TouchableOpacity
+      style={s.cell}
+      onPress={onPress}
+      activeOpacity={0.86}
+      accessibilityRole="button"
+      accessibilityLabel={post.caption?.slice(0, 60) || post.user?.name}
+    >
+      {uri ? (
+        <Image source={{ uri }} style={s.cellImage} contentFit="cover" transition={140} />
+      ) : (
+        // Post só de texto: a legenda é a própria miniatura.
+        <View style={s.cellText}>
+          <Text style={s.cellTextBody} numberOfLines={4}>{post.caption}</Text>
+        </View>
+      )}
+      {(post.mediaUrls?.length ?? 0) > 1 && <View style={s.cellAlbum} />}
+    </TouchableOpacity>
+  )
 }
 
 // ── User row ──────────────────────────────────────────────────────────────────
@@ -95,9 +126,13 @@ function SkeletonRow() {
 
 export default function SearchScreen() {
   const nav     = useNavigation<Nav>()
-  const { top } = useSafeAreaInsets()
+  const { top, bottom } = useSafeAreaInsets()
   const t       = useT()
 
+  // Dois âmbitos na mesma pesquisa: quem publica e o que foi publicado.
+  const [scope,         setScope]         = useState<'people' | 'posts'>('people')
+  const [posts,         setPosts]         = useState<Post[]>([])
+  const [loadingPosts,  setLoadingPosts]  = useState(false)
   const [query,         setQuery]         = useState('')
   const [results,       setResults]       = useState<UserResult[]>([])
   const [suggested,     setSuggested]     = useState<UserResult[]>([])
@@ -144,11 +179,29 @@ export default function SearchScreen() {
     }
   }, [])
 
+  const runPostSearch = useCallback(async (q: string) => {
+    if (!q.trim()) { setPosts([]); return }
+    setLoadingPosts(true)
+    try {
+      setPosts(await searchPosts(q))
+    } catch {
+      setPosts([])
+    } finally {
+      setLoadingPosts(false)
+    }
+  }, [])
+
+  // Um só temporizador para os dois âmbitos: escrever dispara a busca do âmbito
+  // aberto, e trocar de âmbito com texto já escrito dispara a que falta. Assim
+  // nunca há duas chamadas por tecla nem um separador vazio à espera de toque.
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => search(query), 300)
+    debounceRef.current = setTimeout(() => {
+      if (scope === 'people') search(query)
+      else runPostSearch(query)
+    }, 300)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
-  }, [query])
+  }, [query, scope])
 
   const handleFollow = useCallback(async (userId: string, duration: FollowDuration = 'forever') => {
     if (followPending.has(userId)) return
@@ -170,8 +223,9 @@ export default function SearchScreen() {
   }, [followPending])
 
   const isSearching = query.trim().length > 0
+  const onPeople    = scope === 'people'
   const displayList = isSearching ? results : suggested
-  const isLoading   = isSearching ? loadingSearch : loadingSug
+  const isLoading   = onPeople ? (isSearching ? loadingSearch : loadingSug) : loadingPosts
 
   const renderItem = useCallback(({ item }: ListRenderItemInfo<UserResult>) => (
     <UserRow
@@ -186,18 +240,15 @@ export default function SearchScreen() {
   return (
     <View style={[s.screen, { paddingTop: top }]}>
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <View style={s.header}>
-        <TouchableOpacity
-          onPress={() => nav.goBack()}
-          style={s.backBtn}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        >
-          <Ionicons name="chevron-back" size={24} color={colors.gray800} />
-        </TouchableOpacity>
+      {/* ── Cabeçalho ──────────────────────────────────────────────────────
+          Sem botão de voltar: isto passou a ser um separador da navegação e
+          não um ecrã empilhado — não há para onde recuar. O título ocupa o
+          lugar que o botão tinha. */}
+      <Text style={s.pageTitle}>{t.feed_top_search}</Text>
 
+      <View style={s.header}>
         <View style={s.searchBar}>
-          <Ionicons name="search-outline" size={16} color={colors.gray400} />
+          <Icon name="search" size={17} color={colors.gray500} strokeWidth={1.9} />
           <TextInput
             ref={inputRef}
             style={s.searchInput}
@@ -205,7 +256,6 @@ export default function SearchScreen() {
             placeholderTextColor={colors.gray400}
             value={query}
             onChangeText={setQuery}
-            autoFocus
             autoCapitalize="none"
             autoCorrect={false}
             returnKeyType="search"
@@ -215,24 +265,56 @@ export default function SearchScreen() {
               onPress={() => { setQuery(''); inputRef.current?.focus() }}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Ionicons name="close-circle" size={16} color={colors.gray400} />
+              <Icon name="close-circle" size={17} color={colors.gray400} strokeWidth={1.9} />
             </TouchableOpacity>
           )}
         </View>
       </View>
 
-      {/* ── Section label ──────────────────────────────────────────────────── */}
-      <View style={s.sectionRow}>
-        <Text style={s.sectionLabel}>
-          {isSearching ? t.search_results : t.search_suggested}
-        </Text>
-        {isSearching && !loadingSearch && (
-          <Text style={s.sectionCount}>{results.length}</Text>
-        )}
+      {/* ── Âmbito ─────────────────────────────────────────────────────────
+          Dois separadores e não uma lista misturada: pessoas e publicações
+          pedem formas diferentes — uma lista com botão de seguir, uma grelha de
+          miniaturas — e misturá-las obrigaria a inventar uma terceira forma que
+          não serve bem nenhuma das duas. */}
+      <View style={s.scopeRow}>
+        {(['people', 'posts'] as const).map((k) => {
+          const on = scope === k
+          return (
+            <TouchableOpacity
+              key={k}
+              style={[s.scopeTab, on && s.scopeTabOn]}
+              onPress={() => setScope(k)}
+              activeOpacity={0.75}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: on }}
+              accessibilityLabel={k === 'people' ? t.search_tab_people : t.search_tab_posts}
+            >
+              <Text style={[s.scopeTxt, on && s.scopeTxtOn]}>
+                {k === 'people' ? t.search_tab_people : t.search_tab_posts}
+              </Text>
+            </TouchableOpacity>
+          )
+        })}
       </View>
 
+      {/* ── Rótulo da secção ───────────────────────────────────────────────
+          Nas publicações só existe enquanto há pesquisa: sem texto escrito não
+          há nada para rotular, e "Sugeridos para ti" pertence às pessoas. */}
+      {(onPeople || isSearching) && (
+        <View style={s.sectionRow}>
+          <Text style={s.sectionLabel}>
+            {isSearching ? t.search_results : t.search_suggested}
+          </Text>
+          {isSearching && !isLoading && (
+            <Text style={s.sectionCount}>
+              {onPeople ? results.length : posts.length}
+            </Text>
+          )}
+        </View>
+      )}
+
       {/* ── Skeleton only when no cached data yet ──────────────────────────── */}
-      {isLoading && !isSearching && suggested.length === 0 && (
+      {onPeople && isLoading && !isSearching && suggested.length === 0 && (
         <View>
           {[0, 1, 2, 3, 4].map((i) => <SkeletonRow key={i} />)}
         </View>
@@ -241,25 +323,25 @@ export default function SearchScreen() {
       {/* ── Search spinner ──────────────────────────────────────────────────── */}
       {isLoading && isSearching && (
         <View style={s.spinnerWrap}>
-          <ActivityIndicator color={colors.primary} />
+          <ActivityIndicator color={colors.gray400} />
         </View>
       )}
 
       {/* ── Empty state ─────────────────────────────────────────────────────── */}
-      {!isLoading && isSearching && results.length === 0 && (
+      {onPeople && !isLoading && isSearching && results.length === 0 && (
         <View style={s.emptyWrap}>
           <View style={s.emptyIcon}>
-            <Ionicons name="search-outline" size={32} color={colors.gray400} />
+            <Icon name="search" size={26} color={colors.gray500} strokeWidth={1.6} />
           </View>
           <Text style={s.emptyTitle}>{t.search_no_results}</Text>
           <Text style={s.emptySub}>{t.search_no_results_sub}</Text>
         </View>
       )}
 
-      {!isLoading && !isSearching && suggested.length === 0 && (
+      {onPeople && !isLoading && !isSearching && suggested.length === 0 && (
         <View style={s.emptyWrap}>
           <View style={s.emptyIcon}>
-            <Ionicons name="people-outline" size={32} color={colors.gray400} />
+            <Icon name="users" size={26} color={colors.gray500} strokeWidth={1.6} />
           </View>
           <Text style={s.emptyTitle}>{t.search_no_suggestions}</Text>
           <Text style={s.emptySub}>{t.search_no_suggestions_sub}</Text>
@@ -267,15 +349,57 @@ export default function SearchScreen() {
       )}
 
       {/* ── List — show even while loading if cache exists ──────────────────── */}
-      {displayList.length > 0 && (
+      {onPeople && displayList.length > 0 && (
         <FlatList
           data={displayList}
           keyExtractor={(u) => u.id}
           renderItem={renderItem}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={s.listContent}
+          // A navegação flutua por cima: sem esta reserva, a última pessoa da
+          // lista fica escondida atrás dela.
+          contentContainerStyle={[s.listContent, { paddingBottom: tabBarOccupiedHeight(bottom) + 12 }]}
           keyboardShouldPersistTaps="handled"
           ItemSeparatorComponent={() => <View style={s.separator} />}
+        />
+      )}
+
+      {/* ── Publicações ────────────────────────────────────────────────────── */}
+      {!onPeople && !isSearching && (
+        <View style={s.emptyWrap}>
+          <View style={s.emptyIcon}>
+            <Icon name="image" size={26} color={colors.gray500} strokeWidth={1.6} />
+          </View>
+          <Text style={s.emptyTitle}>{t.search_start}</Text>
+          <Text style={s.emptySub}>{t.search_start_sub}</Text>
+        </View>
+      )}
+
+      {!onPeople && !isLoading && isSearching && posts.length === 0 && (
+        <View style={s.emptyWrap}>
+          <View style={s.emptyIcon}>
+            <Icon name="image" size={26} color={colors.gray500} strokeWidth={1.6} />
+          </View>
+          <Text style={s.emptyTitle}>{t.search_no_posts}</Text>
+          <Text style={s.emptySub}>{t.search_no_posts_sub}</Text>
+        </View>
+      )}
+
+      {!onPeople && posts.length > 0 && (
+        <FlatList
+          data={posts}
+          key="grid"
+          numColumns={3}
+          keyExtractor={(p) => p.id}
+          renderItem={({ item, index }) => (
+            <PostCell
+              post={item}
+              onPress={() => nav.navigate('PostViewer', { posts, startIndex: index })}
+            />
+          )}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          columnWrapperStyle={s.gridRow}
+          contentContainerStyle={{ paddingBottom: tabBarOccupiedHeight(bottom) + 12 }}
         />
       )}
     </View>
@@ -287,66 +411,139 @@ export default function SearchScreen() {
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.white },
 
-  // Header
+  // ── Cabeçalho ────────────────────────────────────────────────────────────
+  pageTitle: {
+    fontSize: typography.screen,
+    fontFamily: fonts.bold,
+    color: colors.gray800,
+    letterSpacing: -0.6,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 14,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
     gap: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.gray200,
   },
-  backBtn: { padding: 2 },
+  // Um fio em vez de uma caixa cinzenta: sobre papel branco, o contorno define
+  // o campo sem lhe dar peso de bloco. É o mesmo fio dos separadores da lista,
+  // por isso a página inteira assenta numa espessura só.
   searchBar: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.gray100,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 8,
+    minHeight: 44,
+    backgroundColor: colors.white,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.gray300,
+    borderRadius: radius.md,
+    paddingHorizontal: 13,
+    gap: 9,
   },
   searchInput: {
     flex: 1,
-    fontSize: 15,
+    fontSize: typography.body,
     fontFamily: fonts.regular,
     color: colors.gray800,
+    letterSpacing: -0.2,
     padding: 0,
   },
 
-  // Section
+  // ── Âmbito ───────────────────────────────────────────────────────────────
+  // Sublinhado e não pastilha: o traço marca o separador activo sem introduzir
+  // uma forma nova na página, e é a mesma espessura dos outros fios.
+  scopeRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.gray200,
+  },
+  scopeTab: {
+    paddingVertical: 11,
+    marginRight: 24,
+    borderBottomWidth: 1.5,
+    borderBottomColor: 'transparent',
+  },
+  scopeTabOn: { borderBottomColor: colors.gray800 },
+  scopeTxt: {
+    fontSize: typography.secondary,
+    fontFamily: fonts.medium,
+    color: colors.gray500,
+    letterSpacing: -0.1,
+  },
+  scopeTxtOn: { color: colors.gray800, fontFamily: fonts.semiBold },
+
+  // ── Grelha de publicações ────────────────────────────────────────────────
+  gridRow: { gap: GRID_GAP, marginBottom: GRID_GAP },
+  cell: {
+    width: CELL,
+    height: CELL,
+    backgroundColor: colors.gray100,
+    overflow: 'hidden',
+  },
+  cellImage: { width: '100%', height: '100%' },
+  cellText: {
+    flex: 1,
+    padding: 10,
+    justifyContent: 'center',
+    backgroundColor: colors.gray100,
+  },
+  cellTextBody: {
+    fontSize: typography.meta,
+    fontFamily: fonts.medium,
+    color: colors.gray800,
+    lineHeight: 15,
+  },
+  // Marca de álbum: um quadrado branco no canto, sem número nem ícone. Diz que
+  // há mais por baixo e não rouba nada à miniatura.
+  cellAlbum: {
+    position: 'absolute',
+    top: 7, right: 7,
+    width: 9, height: 9,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+    borderRadius: 2,
+  },
+
+  // ── Secção ───────────────────────────────────────────────────────────────
   sectionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 8,
+    paddingTop: 8,
+    paddingBottom: 10,
     gap: 8,
   },
   sectionLabel: {
-    fontSize: 12,
+    fontSize: typography.meta,
     fontFamily: fonts.semiBold,
-    color: colors.gray400,
-    letterSpacing: 0.6,
+    color: colors.gray500,
+    letterSpacing: 0.9,
     textTransform: 'uppercase',
   },
+  // Preto sobre branco, sem pastilha de cor. O número é informação, não um
+  // aviso — a marca fica para onde tem função.
   sectionCount: {
-    fontSize: 12,
+    fontSize: typography.meta,
     fontFamily: fonts.semiBold,
-    color: colors.primary,
-    backgroundColor: `${colors.primary}15`,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 10,
+    color: colors.gray800,
+    fontVariant: ['tabular-nums'],
   },
 
-  // List
-  listContent: { paddingBottom: 40 },
-  separator:   { height: StyleSheet.hairlineWidth, backgroundColor: colors.gray200, marginLeft: 84 },
+  // ── Lista ────────────────────────────────────────────────────────────────
+  listContent: { paddingBottom: 24 },
+  // Alinhado com o texto, não com o avatar: o fio corta debaixo do nome e deixa
+  // a coluna dos rostos livre, que é o que faz a lista respirar.
+  separator: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.gray200,
+    marginLeft: 78,
+  },
 
-  // Row
+  // ── Linha ────────────────────────────────────────────────────────────────
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -363,34 +560,49 @@ const s = StyleSheet.create({
   },
   rowInfo: { flex: 1, minWidth: 0 },
   rowName: {
-    fontSize: 15,
+    fontSize: typography.body,
     fontFamily: fonts.semiBold,
     color: colors.gray800,
-    letterSpacing: -0.2,
+    letterSpacing: -0.25,
   },
   rowSub: {
-    fontSize: 13,
+    fontSize: typography.secondary,
     fontFamily: fonts.regular,
-    color: colors.gray400,
-    marginTop: 2,
+    color: colors.gray500,
+    marginTop: 1,
   },
 
-  // Skeleton
-  skeletonAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.gray200 },
-  skeletonInfo:   { flex: 1, gap: 6 },
-  skeletonName:   { width: '55%', height: 14, borderRadius: 7, backgroundColor: colors.gray200 },
-  skeletonSub:    { width: '35%', height: 11, borderRadius: 6, backgroundColor: colors.gray100 },
-  skeletonBtn:    { width: 84, height: 34, borderRadius: 20, backgroundColor: colors.gray200 },
+  // ── Esqueleto ────────────────────────────────────────────────────────────
+  skeletonAvatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.gray200 },
+  skeletonInfo:   { flex: 1, gap: 7 },
+  skeletonName:   { width: '52%', height: 13, borderRadius: 2, backgroundColor: colors.gray200 },
+  skeletonSub:    { width: '32%', height: 11, borderRadius: 2, backgroundColor: colors.gray100 },
+  skeletonBtn:    { width: 84, height: 34, borderRadius: radius.md, backgroundColor: colors.gray200 },
 
-  // States
-  spinnerWrap: { flex: 1, alignItems: 'center', paddingTop: 60 },
-  emptyWrap:   { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, paddingBottom: 80 },
-  emptyIcon:   {
-    width: 64, height: 64, borderRadius: 32,
-    backgroundColor: colors.gray100,
+  // ── Estados ──────────────────────────────────────────────────────────────
+  spinnerWrap: { flex: 1, alignItems: 'center', paddingTop: 56 },
+  emptyWrap:   { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, paddingBottom: 90 },
+  // Um fio a desenhar o círculo, em vez de um disco cinzento: o estado vazio
+  // não precisa de uma mancha para se anunciar.
+  emptyIcon: {
+    width: 60, height: 60, borderRadius: 30,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.gray300,
     alignItems: 'center', justifyContent: 'center',
-    marginBottom: 4,
+    marginBottom: 6,
   },
-  emptyTitle: { fontSize: 16, fontFamily: fonts.semiBold, color: colors.gray800 },
-  emptySub:   { fontSize: 14, fontFamily: fonts.regular, color: colors.gray400, textAlign: 'center', paddingHorizontal: 40 },
+  emptyTitle: {
+    fontSize: typography.section,
+    fontFamily: fonts.semiBold,
+    color: colors.gray800,
+    letterSpacing: -0.3,
+  },
+  emptySub: {
+    fontSize: typography.secondary,
+    fontFamily: fonts.regular,
+    color: colors.gray500,
+    textAlign: 'center',
+    lineHeight: 19,
+    paddingHorizontal: 44,
+  },
 })

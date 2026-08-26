@@ -46,7 +46,10 @@ export default function GalleryPicker({ visible, onClose, onDone, maxSelection =
   const [loading,  setLoading]  = useState(false)
   const [selected, setSelected] = useState<string[]>([])   // ids, por ordem de escolha
   const [resolving, setResolving] = useState(false)
-  const [albums,   setAlbums]   = useState<MediaLibrary.Album[]>([])
+  // A capa entra no próprio álbum: a chamada que conta os itens já traz a
+  // primeira foto, por isso não custa nada mais e evita uma segunda ronda.
+  type AlbumCard = MediaLibrary.Album & { cover?: string }
+  const [albums,   setAlbums]   = useState<AlbumCard[]>([])
   const [albumId,  setAlbumId]  = useState<string | null>(null)   // null = Recentes (tudo)
   const loadGeneration = useRef(0)
   const loadingRef = useRef(false)
@@ -71,7 +74,20 @@ export default function GalleryPicker({ visible, onClose, onDone, maxSelection =
         after:     reset ? undefined : cursorRef.current,
         album:     albumId ?? undefined,
         mediaType: [MediaLibrary.MediaType.photo, MediaLibrary.MediaType.video],
-        sortBy:    [MediaLibrary.SortBy.creationTime],
+        // `modificationTime` primeiro, e não `creationTime`.
+        //
+        // A data de criação de uma foto vem dos metadados: é quando foi tirada,
+        // não quando entrou neste telemóvel. Uma foto de 2020 descarregada hoje
+        // ordenava-se por 2020 e ia parar ao fim da galeria — que é precisamente
+        // o contrário do que quem acabou de a guardar espera ver.
+        //
+        // A de modificação reflecte a entrada no dispositivo. `creationTime` fica
+        // como desempate, para fotos tiradas no próprio telemóvel (onde as duas
+        // datas coincidem) manterem a ordem certa entre si.
+        sortBy: [
+          [MediaLibrary.SortBy.modificationTime, false],
+          [MediaLibrary.SortBy.creationTime, false],
+        ],
       })
       if (generation !== loadGeneration.current) return
       // Mesmo com o cursor certo, o expo-media-library repete fotos entre
@@ -120,9 +136,9 @@ export default function GalleryPicker({ visible, onClose, onDone, maxSelection =
                 album: a.id, first: 1,
                 mediaType: [MediaLibrary.MediaType.photo, MediaLibrary.MediaType.video],
               })
-              return { album: a, count: page.totalCount }
+              return { album: a, count: page.totalCount, cover: page.assets[0]?.uri }
             } catch {
-              return { album: a, count: 0 }
+              return { album: a, count: 0, cover: undefined }
             }
           }),
         )
@@ -131,7 +147,7 @@ export default function GalleryPicker({ visible, onClose, onDone, maxSelection =
           counted
             .filter((c) => c.count > 0)
             .sort((a, b) => b.count - a.count)
-            .map((c) => ({ ...c.album, assetCount: c.count })),
+            .map((c) => ({ ...c.album, assetCount: c.count, cover: c.cover })),
         )
       })
       .catch(() => {})
@@ -275,33 +291,50 @@ export default function GalleryPicker({ visible, onClose, onDone, maxSelection =
               keyboardShouldPersistTaps="handled"
               scrollEnabled={!resolving}
             >
+              {/* Cada pasta é um quadrado com a sua capa. Antes eram tabs de
+                  texto com um ícone de 14px: alvos estreitos, difíceis de
+                  acertar, e sem qualquer pista do que estava lá dentro. A capa
+                  diz o que a pasta é antes de se ler o nome, e o quadrado dá
+                  uma área de toque que não exige pontaria. */}
               <TouchableOpacity
-                style={s.albumTab}
+                style={s.albumCard}
                 onPress={() => setAlbumId(null)}
                 disabled={resolving}
-                activeOpacity={0.68}
+                activeOpacity={0.78}
                 accessibilityRole="button"
+                accessibilityLabel={t.gal_recent}
                 accessibilityState={{ selected: albumId === null, disabled: resolving }}
               >
-                <Ionicons name="time-outline" size={14} color={albumId === null ? '#FF7A1C' : '#77777D'} />
-                <Text style={[s.albumTxt, albumId === null && s.albumTxtOn]}>{t.gal_recent}</Text>
-                <View style={[s.albumMarker, albumId === null && s.albumMarkerOn]} />
+                <View style={[s.albumThumb, s.albumThumbRecent, albumId === null && s.albumThumbOn]}>
+                  <Ionicons name="time-outline" size={22} color={albumId === null ? '#FFFFFF' : '#8A8A90'} />
+                </View>
+                <Text style={[s.albumTxt, albumId === null && s.albumTxtOn]} numberOfLines={1}>
+                  {t.gal_recent}
+                </Text>
               </TouchableOpacity>
+
               {albums.map((a) => (
                 <TouchableOpacity
                   key={a.id}
-                  style={s.albumTab}
+                  style={s.albumCard}
                   onPress={() => setAlbumId(a.id)}
                   disabled={resolving}
-                  activeOpacity={0.68}
+                  activeOpacity={0.78}
                   accessibilityRole="button"
-                  accessibilityLabel={a.title}
+                  accessibilityLabel={`${a.title}, ${a.assetCount}`}
                   accessibilityState={{ selected: albumId === a.id, disabled: resolving }}
                 >
-                  <Ionicons name="folder-outline" size={14} color={albumId === a.id ? '#FF7A1C' : '#77777D'} />
-                  <Text style={[s.albumTxt, albumId === a.id && s.albumTxtOn]} numberOfLines={1}>{a.title}</Text>
-                  <Text style={s.albumCount}>{a.assetCount}</Text>
-                  <View style={[s.albumMarker, albumId === a.id && s.albumMarkerOn]} />
+                  <View style={[s.albumThumb, albumId === a.id && s.albumThumbOn]}>
+                    {a.cover
+                      ? <Image source={{ uri: a.cover }} style={s.albumCover} contentFit="cover" transition={120} />
+                      : <Ionicons name="folder-outline" size={20} color="#8A8A90" />}
+                    <View style={s.albumCountWrap}>
+                      <Text style={s.albumCount}>{a.assetCount}</Text>
+                    </View>
+                  </View>
+                  <Text style={[s.albumTxt, albumId === a.id && s.albumTxtOn]} numberOfLines={1}>
+                    {a.title}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -418,32 +451,57 @@ const s = StyleSheet.create({
   doneTxt: { color: '#FF7A1C', fontFamily: fonts.semiBold, fontSize: 14 },
 
   albumBarWrap: {
-    height: 52,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#D8D8D5',
   },
-  albumBar: { flexDirection: 'row', alignItems: 'stretch', paddingHorizontal: 4 },
-  albumTab: {
-    height: 51,
-    maxWidth: 200,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
+  albumBar: { flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 10, gap: 12 },
+  // 64 de lado: mais do dobro da área de toque das tabs de texto que aqui
+  // estavam, e o suficiente para a capa se ler como imagem e não como ícone.
+  albumCard: { width: 64, alignItems: 'center', gap: 5 },
+  albumThumb: {
+    width: 64,
+    height: 64,
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: '#ECECEA',
     alignItems: 'center',
-    gap: 6,
-    position: 'relative',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
-  albumTxt: { fontFamily: fonts.medium, fontSize: 13, color: '#77777D', flexShrink: 1 },
-  albumTxtOn: { color: '#1A1A1A', fontFamily: fonts.semiBold },
-  albumCount: { fontFamily: fonts.medium, fontSize: 11, color: '#A0A0A5' },
-  albumMarker: {
+  // A pasta escolhida ganha o contorno, não um sublinhado à parte: a marca fica
+  // no próprio quadrado, que é onde os olhos já estão.
+  albumThumbOn: { borderColor: '#1A1A1A' },
+  albumThumbRecent: { backgroundColor: '#F2F2F0' },
+  albumCover: { width: '100%', height: '100%' },
+  // A contagem assenta sobre a capa, num canto, em vez de disputar a linha do
+  // nome. Fundo escuro translúcido para se ler sobre qualquer fotografia.
+  albumCountWrap: {
     position: 'absolute',
-    left: 12,
-    right: 12,
-    bottom: 0,
-    height: 2,
-    backgroundColor: 'transparent',
+    right: 3,
+    bottom: 3,
+    minWidth: 18,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 4,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
   },
-  albumMarkerOn: { backgroundColor: '#FF7A1C' },
+  albumCount: {
+    fontFamily: fonts.semiBold,
+    fontSize: 10,
+    color: '#FFFFFF',
+    fontVariant: ['tabular-nums'],
+  },
+  albumTxt: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    lineHeight: 14,
+    color: '#77777D',
+    textAlign: 'center',
+    width: '100%',
+  },
+  albumTxtOn: { color: '#1A1A1A', fontFamily: fonts.semiBold },
 
   cameraTile: {
     width: CELL,

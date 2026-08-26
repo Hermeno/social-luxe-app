@@ -25,6 +25,7 @@ import AppearanceScreen from '../screens/AppearanceScreen'
 import LanguageScreen from '../screens/LanguageScreen'
 import HelpScreen from '../screens/HelpScreen'
 import CircleScreen from '../screens/CircleScreen'
+import SearchScreen from '../screens/SearchScreen'
 import HalvesScreen from '../screens/HalvesScreen'
 import DonationsScreen from '../screens/DonationsScreen'
 import CreateDonationScreen from '../screens/DonationsScreen/CreateDonationScreen'
@@ -36,6 +37,7 @@ import { StoryGroup } from '../services/story.service'
 
 export type AppTabParams = {
   Feed: undefined
+  Search: undefined
   Messages: undefined
   Create: undefined          // launched from the feed top actions
   Circle: undefined
@@ -82,6 +84,7 @@ function Tabs({ defaultTab }: { defaultTab: 'Feed' | 'Messages' }) {
       screenOptions={{ headerShown: false, tabBarStyle: { position: 'absolute' } }}
     >
       <Tab.Screen name="Feed"      component={FeedScreen} />
+      <Tab.Screen name="Search"    component={SearchScreen} />
       <Tab.Screen name="Messages"  component={MessagesScreen} />
       <Tab.Screen name="Create"    component={CreateScreen} />
       <Tab.Screen name="Circle"    component={CircleScreen} />

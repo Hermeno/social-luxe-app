@@ -396,6 +396,12 @@ export const EN: { [K in keyof typeof import('./pt').PT]: string } = {
   search_no_suggestions: 'No suggestions',
   search_no_suggestions_sub: 'Use search to find people',
   search_no_network: 'No connection',
+  search_tab_people: 'People',
+  search_tab_posts: 'Posts',
+  search_no_posts: 'No posts',
+  search_no_posts_sub: 'Try other words from the caption',
+  search_start: 'Search posts',
+  search_start_sub: 'Type to find posts by their caption',
   search_follow_err: 'Could not follow.',
   follow_err: 'Could not follow. Try again.',
 

@@ -405,7 +405,7 @@ export const PT = {
   profile_logout_btn: 'Sair',
 
   // Search
-  search_ph: 'Pesquisar pessoas...',
+  search_ph: 'Pesquisar pessoas e publicações...',
   search_results: 'Resultados',
   search_suggested: 'Sugeridos para ti',
   search_no_results: 'Nenhum resultado',
@@ -413,6 +413,12 @@ export const PT = {
   search_no_suggestions: 'Sem sugestões',
   search_no_suggestions_sub: 'Usa a pesquisa para encontrar pessoas',
   search_no_network: 'Sem ligação',
+  search_tab_people: 'Pessoas',
+  search_tab_posts: 'Publicações',
+  search_no_posts: 'Nenhuma publicação',
+  search_no_posts_sub: 'Tenta outras palavras da legenda',
+  search_start: 'Pesquisa publicações',
+  search_start_sub: 'Escreve para encontrar publicações pela legenda',
   search_follow_err: 'Não foi possível seguir.',
   follow_err: 'Não foi possível seguir. Tenta novamente.',
 

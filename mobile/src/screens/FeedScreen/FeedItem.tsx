@@ -7,7 +7,6 @@ import type { TextLayoutEvent } from 'react-native'
 import { useVideoPlayer, VideoView, VideoPlayerStatus } from 'expo-video'
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Ionicons } from '@expo/vector-icons'
 import { useIsFocused, useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -15,6 +14,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Post, type RepostResult } from '../../types'
 import { colors, fonts, typography } from '../../theme'
 import { parsePostFontKey, postFontStyle } from '../../theme/postFonts'
+import Icon from '../../components/Icon'
+import { feedIcon, feedInk, feedTextShadow } from './tokens'
 import { usePostFontsReady } from '../../store/postFonts.store'
 import { API_BASE } from '../../config'
 import * as postService from '../../services/post.service'
@@ -38,7 +39,12 @@ import { useT } from '../../i18n'
 import { displayHandle } from '../../utils/handle'
 
 const { width } = Dimensions.get('window')
-const DESCRIPTION_MAX_LINES = 2
+// Uma linha, com reticências e o "ver mais" a abrir o resto.
+//
+// Duas linhas mais o "ver mais" davam três linhas de texto no bloco do autor —
+// o mesmo espaço que a fotografia perdia. A legenda serve para decidir se vale
+// a pena abrir, e para isso a primeira linha chega.
+const DESCRIPTION_MAX_LINES = 1
 // Quanto tempo uma célula de vídeo tem de ficar parada no ecrã antes de valer a
 // pena gastar dados com ela. Curto para quem pára não notar, longo para quem
 // está a rolar não pagar nada.
@@ -173,6 +179,20 @@ function FeedItem({
   const ambient   = useRef(new Animated.Value(0)).current
   const [clockNow, setClockNow] = useState(Date.now)
 
+  /**
+   * O anel do autor só se acende em publicações das últimas 24 horas.
+   *
+   * Um anel em toda a gente não distingue ninguém — vira moldura. Aceso só no
+   * que é recente, passa a dizer alguma coisa: esta pessoa publicou agora.
+   *
+   * Depende do `clockNow`, que anda de minuto a minuto, por isso apaga-se
+   * sozinho quando a publicação passa a marca sem ser preciso recarregar nada.
+   */
+  const isFresh = useMemo(() => {
+    const at = new Date(post.createdAt).getTime()
+    return Number.isFinite(at) && clockNow - at < 24 * 3_600_000
+  }, [clockNow, post.createdAt])
+
   useEffect(() => {
     metaEntry.stopAnimation()
     if (!isActive || reduceMotion) {
@@ -202,8 +222,9 @@ function FeedItem({
     return () => loop.stop()
   }, [isActive, reduceMotion, ambient])
 
-  // Só o momento visível atualiza o relógio. O traço não é decorativo: mostra
-  // quanta vida ainda resta à publicação e torna a efemeridade uma assinatura.
+  // Só o momento visível atualiza o relógio. Já não há traço de tempo a mover-se
+  // — o que depende disto agora é o anel do autor, que se apaga sozinho quando a
+  // publicação passa as 24 horas.
   useEffect(() => {
     if (!isActive || post.isAnnouncement) return
     setClockNow(Date.now())
@@ -211,27 +232,6 @@ function FeedItem({
     return () => clearInterval(id)
   }, [isActive, post.id, post.isAnnouncement])
 
-  const momentState = useMemo(() => {
-    if (post.isAnnouncement) {
-      return { label: t.feed_official, time: '', progress: 1 }
-    }
-
-    const startsAt = new Date(post.createdAt).getTime()
-    const endsAt = new Date(post.expiresAt).getTime()
-    const lifetime = Math.max(1, endsAt - startsAt)
-    const remaining = Math.max(0, endsAt - clockNow)
-    const progress = Math.max(0, Math.min(1, remaining / lifetime))
-    const hours = Math.floor(remaining / 3_600_000)
-    const minutes = Math.max(1, Math.floor(remaining / 60_000))
-
-    return {
-      label: post.extended ? t.feed_moment_extended : t.feed_moment,
-      time: hours > 0 ? `${hours}h` : `${minutes}m`,
-      progress
-    }
-  }, [clockNow, post.createdAt, post.expiresAt, post.extended, post.isAnnouncement, t.feed_moment, t.feed_moment_extended, t.feed_official])
-
-  const lifeWidth = `${Math.round(momentState.progress * 100)}%` as `${number}%`
   const authorContext = post.user.statusLabel
     ?? (post.user.showDevice ? post.deviceModel : null)
 
@@ -680,12 +680,12 @@ function FeedItem({
         ]}
         pointerEvents="none"
       >
-        <FeedIcon name="heart-solid" size={104} color="rgba(255,255,255,0.94)" />
+        <FeedIcon name="heart-solid" size={feedIcon.burst} color="rgba(255,255,255,0.94)" />
       </Animated.View>
 
       {isVideo && paused && (
         <View style={s.playOverlay} pointerEvents="none">
-          <Ionicons name="play" size={62} color="rgba(255,255,255,0.92)" />
+          <Icon name="play" size={feedIcon.overlay} color="rgba(255,255,255,0.92)" />
         </View>
       )}
 
@@ -709,26 +709,6 @@ function FeedItem({
           />
         )}
 
-        <View style={s.momentRow}>
-          <View style={s.momentIdentity}>
-            <View style={s.liveNode} />
-            {/* Sem rótulo (os momentos normais deixaram de o ter) não se
-                desenha o <Text>: um vazio continuava a ocupar o `gap` da linha
-                e afastava o ponto do traço do tempo. */}
-            {!!momentState.label && (
-              <Text style={s.momentLabel}>{momentState.label}</Text>
-            )}
-          </View>
-          {!post.isAnnouncement && (
-            <>
-              <View style={s.lifeTrack}>
-                <View style={[s.lifeFill, { width: lifeWidth }]} />
-              </View>
-              <Text style={s.momentTime}>{momentState.time}</Text>
-            </>
-          )}
-        </View>
-
         <View style={s.authorRow}>
           <TouchableOpacity
             onPress={() => nav.navigate('Profile', { userId: post.user.id })}
@@ -739,7 +719,7 @@ function FeedItem({
             <Animated.View
               style={{ transform: [{ scale: ambient.interpolate({ inputRange: [0, 1], outputRange: [1, 1.018] }) }] }}
             >
-              <View style={s.avatarRing}>
+              <View style={[s.avatarRing, isFresh && s.avatarRingFresh]}>
                 <View style={s.avatarInner}>
                   <AvatarImage uri={resolveUrl(post.user.avatar)} name={post.user.name} size={34} />
                 </View>
@@ -873,7 +853,7 @@ function FeedItem({
         bottomOffset={videoBottom}
         isActive={isActive}
         reduceMotion={reduceMotion}
-        iconSize={30}
+        iconSize={feedIcon.action}
         iconWeight="medium"
       />
 
@@ -909,54 +889,27 @@ const s = StyleSheet.create({
 
   // Autor + descrição
   meta:       { position: 'absolute', left: 16, right: 78, gap: 9 },
-  momentRow: {
-    height: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8
-  },
-  momentIdentity: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  liveNode: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: colors.primary,
-    shadowColor: colors.primary,
-    shadowOpacity: 0.75,
-    shadowRadius: 4
-  },
-  momentLabel: {
-    color: 'rgba(255,255,255,0.76)',
-    fontFamily: fonts.bold,
-    fontSize: typography.meta,
-    lineHeight: 14,
-    letterSpacing: 1.35
-  },
-  lifeTrack: {
-    width: 38,
-    height: 2,
-    borderRadius: 1,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.22)'
-  },
-  lifeFill: { height: 2, borderRadius: 1, backgroundColor: colors.primary },
-  momentTime: {
-    color: 'rgba(255,255,255,0.58)',
-    fontFamily: fonts.semiBold,
-    fontSize: typography.meta,
-    lineHeight: 14,
-    fontVariant: ['tabular-nums']
-  },
   authorRow:  { minHeight: 43, flexDirection: 'row', alignItems: 'center', gap: 9 },
   // Anel do autor — moldura fixa, nunca gira. Um fio claro a emoldurar a cara,
   // com uma folga escura por dentro para o rosto não colar ao traço e uma
   // sombra curta que o descola de media claro. A vida do post lê-se no traço
   // de tempo acima; à volta da cara basta um desenho limpo e quieto.
+  // Sem publicação recente não fica nada: nem traço, nem folga escura, nem
+  // sombra. O `padding` e o `borderWidth` continuam cá, transparentes, só para
+  // a caixa medir o mesmo nos dois estados — sem isso o avatar mudava de
+  // tamanho e empurrava o nome ao lado quando o anel acendia ou apagava.
   avatarRing: {
     padding: 2.5,
     borderRadius: 999,
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.92)',
+    borderColor: 'transparent',
+  },
+  // Laranja da marca, e só aqui a folga escura e a sombra que a destacam de
+  // fotografia clara. Eram elas que ficavam soltas à volta do avatar antigo:
+  // com a borda transparente por cima, o disco preto por baixo lia-se como uma
+  // sombra a mais em vez do assentamento do anel.
+  avatarRingFresh: {
+    borderColor: colors.primary,
     backgroundColor: 'rgba(0,0,0,0.34)',
     shadowColor: '#000',
     shadowOpacity: 0.3,
@@ -973,10 +926,12 @@ const s = StyleSheet.create({
   // nome comprido continua a cortar com reticências em vez de o expulsar.
   authorText: { flexShrink: 1, minWidth: 0, justifyContent: 'center' },
   authorName: {
-    color: '#fff', fontFamily: fonts.semiBold, fontSize: typography.body, lineHeight: 20, letterSpacing: -0.3
+    ...feedTextShadow,
+    color: feedInk.primary, fontFamily: fonts.semiBold, fontSize: typography.body, lineHeight: 20, letterSpacing: -0.3
   },
   authorContext: {
-    color: 'rgba(255,255,255,0.68)', fontFamily: fonts.medium, fontSize: typography.meta, lineHeight: 15
+    ...feedTextShadow,
+    color: feedInk.muted, fontFamily: fonts.medium, fontSize: typography.meta, lineHeight: 15
   },
   followBtn: {
     minHeight: 32,
@@ -991,8 +946,10 @@ const s = StyleSheet.create({
   followNode: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.primary },
   followNodeOn: { backgroundColor: 'rgba(255,255,255,0.42)' },
   followTxt: {
+    ...feedTextShadow,
     color: '#FFFFFF',
-    fontFamily: fonts.bold,
+    // Um controlo secundário não pode ser mais pesado que o nome que qualifica.
+    fontFamily: fonts.semiBold,
     fontSize: typography.secondary,
     lineHeight: 17,
     letterSpacing: 0.05,
@@ -1001,11 +958,13 @@ const s = StyleSheet.create({
   followingTxt: { color: '#FFFFFF' },
   descriptionWrap: { position: 'relative' },
   description: {
-    color: 'rgba(255,255,255,0.94)', fontFamily: fonts.regular, fontSize: typography.secondary, lineHeight: 19.5
+    ...feedTextShadow,
+    color: feedInk.secondary, fontFamily: fonts.regular, fontSize: typography.secondary, lineHeight: 19.5
   },
   descriptionMore: {
-    color: 'rgba(255,255,255,0.72)',
-    fontFamily: fonts.semiBold,
+    ...feedTextShadow,
+    color: feedInk.secondary,
+    fontFamily: fonts.medium,
     fontSize: typography.secondary,
     marginTop: 2,
   },
@@ -1018,8 +977,9 @@ const s = StyleSheet.create({
   socialRow: { minHeight: 26, flexDirection: 'row', alignItems: 'center', gap: 9 },
   commentsLink: { flex: 1, minHeight: 26, flexDirection: 'row', alignItems: 'center', gap: 3 },
   commentsText: {
+    ...feedTextShadow,
     flexShrink: 1,
-    color: 'rgba(255,255,255,0.68)',
+    color: feedInk.muted,
     fontFamily: fonts.medium,
     fontSize: typography.meta,
     lineHeight: 15

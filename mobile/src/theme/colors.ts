@@ -59,6 +59,23 @@ export const colors = {
 export const gradients = {
   brand:      ['#FF7A1C', '#FF6766', '#FFB173'] as const,
   feedBottom: ['transparent', 'rgba(0,0,0,0.92)'] as const,
+  /**
+   * Véu da feed principal — mais leve que o `feedBottom` das stories.
+   *
+   * Chega a 0.22 — o limiar a partir do qual se começa a notar sobre uma foto
+   * clara. Não é isto que torna o texto legível: quem faz esse trabalho é a
+   * `feedTextShadow`, um halo de 3px colado às letras. O véu só assenta a base
+   * e protege os ícones, que não têm sombra de texto.
+   *
+   * Já esteve em 0.92 (herdado das stories) e em 0.62. Ambos davam melhor
+   * contraste medido, e ambos se viam como uma mancha escura no fundo do ecrã.
+   *
+   * O terceiro ponto repete o segundo de propósito: cria um patamar onde o
+   * bloco do autor assenta, de modo que as quatro linhas de texto tenham todas
+   * o mesmo fundo em vez de a de cima ficar menos protegida que a de baixo.
+   */
+  feedVeil: ['transparent', 'rgba(0,0,0,0.22)', 'rgba(0,0,0,0.22)'] as const,
+  feedVeilStops: [0, 0.44, 1] as const,
   feedTop:    ['rgba(0,0,0,0.28)', 'transparent'] as const,
   tabBar:     ['rgba(0,0,0,0.0)', 'rgba(0,0,0,0.92)'] as const,
 }

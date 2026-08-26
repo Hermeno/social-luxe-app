@@ -5,11 +5,10 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import FeedIcon from '../../components/FeedIcon'
 import Icon from '../../components/Icon'
 import AvatarImage from '../../components/AvatarImage'
 import Wordmark from '../../components/Wordmark'
-import { colors, fonts, typography } from '../../theme'
+import { colors, fonts, radius, typography } from '../../theme'
 import { useAuthStore } from '../../store/auth.store'
 import { type SocialPreviewUser, useSocialPreviewStore } from '../../store/socialPreview.store'
 import { useT } from '../../i18n'
@@ -233,18 +232,18 @@ export default memo(function FeedHeader({
           activeOpacity={0.72}
           hitSlop={{ top: 4, bottom: 4, left: 3, right: 3 }}
           accessibilityRole="button"
-          accessibilityLabel={circleInvite ? `${t.feed_top_circle}, ${t.pending}` : t.feed_top_circle}
+          accessibilityLabel={circleInvite ? `${t.feed_create}, ${t.pending}` : t.feed_create}
         >
           <FriendFaces people={visibleFriends} />
 
-          <View style={s.circleMark}>
-            <FeedIcon name="circle" size={17} color="#FFFFFF" weight="medium" />
-            <View style={s.circlePlus}>
-              <Icon name="plus" size={10} color="#FFFFFF" strokeWidth={2.5} />
-            </View>
+          {/* Um `+` e a palavra, e nada mais. O círculo com o `+` em emblema
+              dizia duas coisas ao mesmo tempo — que era um círculo e que se
+              acrescentava — e o Círculo passou a ter separador próprio na
+              navegação de baixo. Aqui ficou só o que este botão faz: criar. */}
+          <View style={s.circlePill}>
+            <Icon name="plus" size={17} color="#FFFFFF" strokeWidth={2} absoluteStrokeWidth />
+            <Text style={s.circleButtonText} numberOfLines={1}>{t.feed_create}</Text>
           </View>
-
-          <Text style={s.circleButtonText} numberOfLines={1}>{t.circle_errTitle}</Text>
 
           {circleInvite && (
             <View style={s.inviteBadge}>
@@ -256,6 +255,24 @@ export default memo(function FeedHeader({
     </View>
   )
 })
+
+/**
+ * Contorno do botão do Círculo.
+ *
+ * Esteve em `hairlineWidth` (0.33px num @3x) e desaparecia sobre a mídia: fino
+ * de mais não é elegante, é invisível. 1px é o mínimo que se lê como contorno
+ * desenhado em qualquer fundo, e a 46% de branco firma-se sobre foto escura sem
+ * virar linha dura sobre foto clara.
+ *
+ * O raio é `radius.md` e não `full`: uma cápsula de meia-altura lê-se como
+ * etiqueta, e este é um botão. 12 sobre 32 de altura curva o canto o suficiente
+ * para não ser um rectângulo, e pouco o bastante para continuar a ser botão.
+ */
+const outline = {
+  borderWidth: 1,
+  borderColor: 'rgba(255,255,255,0.46)',
+  borderRadius: radius.md,
+} as const
 
 const s = StyleSheet.create({
   topRoot: {
@@ -273,26 +290,40 @@ const s = StyleSheet.create({
     gap: 6,
   },
   restoreSlot: {
-    width: 44,
+    width: 36,
     height: 44,
+    justifyContent: 'center',
   },
   restoreButton: {
-    width: 44,
-    height: 44,
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
   topSpacer: { flex: 1, minWidth: 2 },
+  // A fila inteira: caras à esquerda, cápsula à direita. Sem fio — o fio é da
+  // cápsula, para as caras ficarem soltas sobre a mídia em vez de emolduradas.
   circleButton: {
     flexShrink: 1,
-    minHeight: 44,
-    maxWidth: 150,
-    paddingLeft: 3,
-    paddingRight: 2,
+    height: 36,
+    maxWidth: 168,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    overflow: 'visible',
+  },
+  // Só o botão do Círculo leva o contorno.
+  circlePill: {
+    ...outline,
+    flexShrink: 1,
+    // 32 de desenho dentro de uma fila de 36: o `hitSlop` devolve os 44 de área
+    // tátil. A cápsula fica menor que a altura da linha e lê-se como botão.
+    height: 32,
+    paddingLeft: 7,
+    paddingRight: 11,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    overflow: 'visible',
   },
   friendFaces: {
     flexDirection: 'row',
@@ -304,21 +335,6 @@ const s = StyleSheet.create({
     borderRadius: (FRIEND_AVATAR_SIZE + 2) / 2,
     padding: 1,
     backgroundColor: '#FFFFFF',
-  },
-  circleMark: {
-    width: 24,
-    height: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  circlePlus: {
-    position: 'absolute',
-    right: -2,
-    bottom: -2,
-    width: 12,
-    height: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   circleButtonText: {
     flexShrink: 1,

@@ -24,6 +24,17 @@ export interface FeedIconProps {
   color?: string
   /** Peso visual opt-in. `medium` preserva a caixa e acrescenta só 1% do viewBox. */
   weight?: FeedIconWeight
+  /**
+   * Espessura do traço em px do tamanho renderizado, não em unidades do viewBox.
+   * É isto que iguala desenhos de famílias diferentes: cada um traz a sua caixa,
+   * e um `strokeWidth` de 1 vale coisas diferentes numa caixa de 14 e numa de 256.
+   */
+  strokePx?: number
+  /**
+   * Reforço para desenhos sem traço — aqueles em que o contorno já vem cozido no
+   * preenchimento. Engrossa a forma em exactamente N px do tamanho renderizado.
+   */
+  boostPx?: number
   opacity?: number
 }
 
@@ -38,7 +49,7 @@ export interface FeedIconProps {
  * Fonte dos desenhos: `src/assets/feed-icons/*.svg` (corre `npm run icons:feed`).
  */
 export default function FeedIcon({
-  name, size = 24, color = '#FFFFFF', weight = 'regular', opacity,
+  name, size = 24, color = '#FFFFFF', weight = 'regular', strokePx, boostPx, opacity,
 }: FeedIconProps) {
   const icon = feedIcons[name]
   if (!icon) {
@@ -50,6 +61,8 @@ export default function FeedIcon({
     value === 'currentColor' ? color : (value ?? fallback)
   const viewBoxSide = Number(icon.viewBox.trim().split(/\s+/)[2]) || 24
   const mediumBoost = viewBoxSide * 0.01
+  // px do tamanho renderizado → unidades da caixa deste desenho.
+  const toUnits = (px: number) => (px * viewBoxSide) / size
 
   return (
     <Svg width={size} height={size} viewBox={icon.viewBox} fill="none" opacity={opacity}>
@@ -62,11 +75,23 @@ export default function FeedIcon({
         delete own.fill
         delete own.stroke
 
-        if (weight === 'medium') {
-          if (stroke !== 'none' && stroke !== 'transparent') {
+        const hasStroke = stroke !== 'none' && stroke !== 'transparent'
+        const hasFill = fill !== 'none' && fill !== 'transparent'
+
+        if (strokePx != null && hasStroke) {
+          // Substitui a espessura de origem: o alvo é ótico, em px.
+          own.strokeWidth = String(+toUnits(strokePx).toFixed(4))
+        } else if (boostPx != null && hasFill) {
+          // O traço centra-se no bordo da forma: metade cresce para fora, metade
+          // para dentro do que já está pintado — logo a espessura sobe `boostPx`.
+          stroke = fill
+          own.strokeWidth = String(+toUnits(boostPx).toFixed(4))
+          own.strokeLinejoin ??= 'round'
+        } else if (weight === 'medium') {
+          if (hasStroke) {
             const nativeStroke = Number(own.strokeWidth ?? 1)
             own.strokeWidth = String(+(nativeStroke + mediumBoost).toFixed(4))
-          } else if (fill !== 'none' && fill !== 'transparent') {
+          } else if (hasFill) {
             stroke = fill
             own.strokeWidth = String(+mediumBoost.toFixed(4))
             own.strokeLinejoin ??= 'round'

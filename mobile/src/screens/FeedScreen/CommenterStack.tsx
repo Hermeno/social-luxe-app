@@ -44,13 +44,7 @@ export default function CommenterStack({
             { zIndex: MAX - i },
           ]}
         >
-          <AvatarImage
-            uri={c.avatar}
-            name={c.name}
-            size={SIZE}
-            borderWidth={1.5}
-            borderColor="#FFFFFF"
-          />
+          <AvatarImage uri={c.avatar} name={c.name} size={SIZE} />
         </View>
       ))}
     </TouchableOpacity>
@@ -64,11 +58,13 @@ const s = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   slot: {
-    // A sombra separa os anéis brancos de fundos claros da foto.
+    // Sem anel branco, é a sombra que separa cada cara da que está por baixo e
+    // da fotografia. Apertada ao contorno — raio curto e sem deslocamento — para
+    // dar um bordo em vez de pousar o avatar acima da imagem.
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.45,
+    shadowRadius: 2.5,
     elevation: 3,
     borderRadius: SIZE / 2,
   },

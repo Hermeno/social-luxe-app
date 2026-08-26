@@ -4,6 +4,7 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import FeedIcon, { type FeedIconWeight } from '../../components/FeedIcon'
+import { feedIcon } from './tokens'
 
 import { Post, type RepostResult } from '../../types'
 import { colors, fonts, typography } from '../../theme'
@@ -44,7 +45,7 @@ interface Props {
  * a tinta ocupar a mesma fração (ver scripts/build-feed-icons.mjs). Por isso o mesmo
  * número dá o mesmo tamanho aparente — não voltar a compensar ícone a ícone.
  */
-const DEFAULT_RAIL_ICON_SIZE = 27
+const DEFAULT_RAIL_ICON_SIZE = feedIcon.action
 
 type HeartP = {
   id:  number
@@ -77,7 +78,6 @@ function RailAction({
   entry, order, reduceMotion
 }: RailActionProps) {
   const scale = useRef(new Animated.Value(1)).current
-  const halo  = useRef(new Animated.Value(0)).current
   const metricY = useRef(new Animated.Value(0)).current
   const metricOpacity = useRef(new Animated.Value(1)).current
   const previousCount = useRef(count)
@@ -94,36 +94,27 @@ function RailAction({
     ]).start()
   }, [count, metricOpacity, metricY, reduceMotion])
 
+  // Só a escala responde ao toque. O disco claro que aqui estava por trás do
+  // ícone dava-lhe um fundo que ele não tem em repouso: aparecia uma forma nova
+  // no ecrã em vez de o ícone reagir. Encolher já diz que foi tocado.
   function pressIn() {
-    if (reduceMotion) {
-      halo.setValue(1)
-      return
-    }
-    Animated.parallel([
-      Animated.spring(scale, {
-        toValue: 0.88,
-        speed: 45,
-        bounciness: 4,
-        useNativeDriver: true,
-      }),
-      Animated.timing(halo, { toValue: 1, duration: 80, useNativeDriver: true }),
-    ]).start()
+    if (reduceMotion) return
+    Animated.spring(scale, {
+      toValue: 0.88,
+      speed: 45,
+      bounciness: 4,
+      useNativeDriver: true,
+    }).start()
   }
 
   function pressOut() {
-    if (reduceMotion) {
-      halo.setValue(0)
-      return
-    }
-    Animated.parallel([
-      Animated.spring(scale, {
-        toValue: 1,
-        speed: 22,
-        bounciness: 10,
-        useNativeDriver: true,
-      }),
-      Animated.timing(halo, { toValue: 0, duration: 180, useNativeDriver: true }),
-    ]).start()
+    if (reduceMotion) return
+    Animated.spring(scale, {
+      toValue: 1,
+      speed: 22,
+      bounciness: 10,
+      useNativeDriver: true,
+    }).start()
   }
 
   const start = order * 0.1
@@ -152,7 +143,6 @@ function RailAction({
       >
         <Animated.View style={[s.actionVisual, { transform: [{ scale }] }]}>
           <View style={s.iconStage}>
-            <Animated.View style={[s.pressHalo, { opacity: halo }]} />
             {children}
           </View>
           <View style={s.metricSlot}>
@@ -633,7 +623,7 @@ export default React.memo(function ActionBar({
             <View style={s.utilityIconStage}>
               <FeedIcon
                 name="author-posts"
-                size={Math.max(22, iconSize - 3)}
+                size={iconSize}
                 color="#fff"
                 weight={iconWeight}
               />
@@ -707,15 +697,6 @@ const s = StyleSheet.create({
     overflow: 'visible',
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.46, shadowRadius: 2
   },
-  pressHalo: {
-    position: 'absolute',
-    top: -2,
-    left: 2,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.13)',
-  },
   metricSlot: {
     height: 15,
     alignItems: 'center',
@@ -740,7 +721,8 @@ const s = StyleSheet.create({
   },
   repostOne: {
     color: '#fff',
-    fontFamily: fonts.extraBold,
+    // extraBold num contador de 11px era o peso mais alto de toda a feed.
+    fontFamily: fonts.semiBold,
     fontSize: typography.badge,
     lineHeight: 11,
     textAlign: 'center',

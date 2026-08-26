@@ -16,12 +16,17 @@ export async function register(body: RegisterBody) {
 
   const hashed = await hashPassword(password)
 
-  // @handle: base do nome + número. Se o utilizador escolheu uma opção válida
-  // (mesma base) e ainda livre, usamos essa; senão geramos uma.
+  // @handle: o que a pessoa escolheu, se estiver livre; senão o melhor que o
+  // nome dá.
+  //
+  // A escolha já não tem de começar pela base do nome. Enquanto as opções eram
+  // `base + número` isso fazia sentido — eram todas prefixadas. Agora que as
+  // variações vêm do nome inteiro (`h.silva`, `hsilva`), exigir o prefixo
+  // recusaria opções que o próprio servidor sugeriu.
   const usernameBase = slugifyUsername(name)
   const cleanChosen  = chosen ? slugifyUsername(chosen) : ''
   let username: string
-  if (cleanChosen && cleanChosen.startsWith(usernameBase)) {
+  if (cleanChosen) {
     const taken = await prisma.user.findUnique({ where: { username: cleanChosen }, select: { id: true } })
     username = taken ? await generateUsername(usernameBase, false) : cleanChosen
   } else {

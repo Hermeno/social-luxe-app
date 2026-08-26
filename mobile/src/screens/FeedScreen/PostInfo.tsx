@@ -4,11 +4,12 @@ import {
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { Post, Pairing } from '../../types'
 import { colors, fonts, typography } from '../../theme'
+import Icon from '../../components/Icon'
+import { feedIcon, FEED_STROKE } from './tokens'
 import { useT } from '../../i18n'
 import { useAuthStore } from '../../store/auth.store'
 import { useFollowStore } from '../../store/follow.store'
@@ -266,7 +267,7 @@ export default function PostInfo({
             <View style={s.metaLine}>
               {post.isAnnouncement ? (
                 <View style={s.announceBadge}>
-                  <Ionicons name="megaphone-outline" size={10} color="#fff" />
+                  <Icon name="megaphone" size={feedIcon.inline} color="#fff" strokeWidth={FEED_STROKE} absoluteStrokeWidth />
                   <Text style={s.announceTxt}>{t.feed_announcement}</Text>
                 </View>
               ) : (
@@ -278,7 +279,7 @@ export default function PostInfo({
               {post.user.showDevice && !post.isAnnouncement && (
                 <>
                   <Text style={[s.metaSep, light && s.metaLightTxt]}>·</Text>
-                  <Ionicons name="phone-portrait-outline" size={9.5} color="rgba(255,255,255,0.62)" />
+                  <Icon name="smartphone" size={feedIcon.inline} color="rgba(255,255,255,0.62)" strokeWidth={FEED_STROKE} absoluteStrokeWidth />
                   <Text style={[s.metaTxt, light && s.metaLightTxt]} numberOfLines={1}>
                     {t.feed_posted_by} {post.deviceModel ?? 'Mobile'}
                   </Text>

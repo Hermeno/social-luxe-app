@@ -492,7 +492,8 @@ export default function FeedScreen() {
     setSearchVisible(false)
     setSearchQuery('')
   }, [alignPagerToPost, setSearchVisible])
-  const handleCirclePress  = useCallback(() => nav.navigate('Tabs', { screen: 'Circle' }), [nav])
+  // O botão do topo cria; o Círculo tem separador próprio na barra de baixo.
+  const handleCirclePress  = useCallback(() => nav.navigate('Tabs', { screen: 'Create' }), [nav])
   const handleRestoreNavigation = useCallback(() => {
     setImmersiveIfChanged(false)
   }, [setImmersiveIfChanged])
