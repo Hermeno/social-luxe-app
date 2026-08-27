@@ -276,7 +276,7 @@ export default function GalleryPicker({ visible, onClose, onDone, maxSelection =
               accessibilityState={{ disabled: resolving, busy: resolving }}
             >
               {resolving
-                ? <ActivityIndicator color="#FF7A1C" size="small" />
+                ? <ActivityIndicator color={colors.black} size="small" />
                 : <Text style={s.doneTxt}>{t.gal_add}</Text>}
             </TouchableOpacity>
           ) : <View style={s.headerSide} />}
@@ -347,7 +347,7 @@ export default function GalleryPicker({ visible, onClose, onDone, maxSelection =
               <View style={s.permSignalLine} />
               <View style={s.permSignalDot} />
             </View>
-            <Ionicons name="images-outline" size={32} color="#FF7A1C" />
+            <Ionicons name="images-outline" size={32} color={colors.black} />
             <Text style={s.permTitle}>{t.gal_permTitle}</Text>
             <Text style={s.permSub}>{t.gal_permSub}</Text>
             <TouchableOpacity
@@ -444,11 +444,11 @@ const s = StyleSheet.create({
     gap: 5,
   },
   brandSignal: { height: 4, flexDirection: 'row', alignItems: 'center', gap: 3 },
-  brandSignalLine: { width: 18, height: 2, backgroundColor: '#FF7A1C' },
-  brandSignalDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: '#FF7A1C' },
+  brandSignalLine: { width: 18, height: 2, backgroundColor: colors.black },
+  brandSignalDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: colors.black },
   cancel: { fontFamily: fonts.medium, fontSize: 14, color: '#5C5C63' },
   title: { fontFamily: fonts.semiBold, fontSize: 15, color: '#1A1A1A', letterSpacing: -0.2 },
-  doneTxt: { color: '#FF7A1C', fontFamily: fonts.semiBold, fontSize: 14 },
+  doneTxt: { color: colors.black, fontFamily: fonts.semiBold, fontSize: 14 },
 
   albumBarWrap: {
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -517,7 +517,7 @@ const s = StyleSheet.create({
     left: 12,
     width: 18,
     height: 2,
-    backgroundColor: '#FF7A1C',
+    backgroundColor: colors.black,
   },
   cameraTxt: { color: '#fff', fontFamily: fonts.semiBold, fontSize: 12 },
 
@@ -533,7 +533,7 @@ const s = StyleSheet.create({
     borderWidth: 1.5, borderColor: '#fff', backgroundColor: 'rgba(0,0,0,0.18)',
     alignItems: 'center', justifyContent: 'center',
   },
-  selBadgeOn: { backgroundColor: '#FF7A1C', borderColor: '#fff' },
+  selBadgeOn: { backgroundColor: colors.black, borderColor: '#fff' },
   selNum: { color: '#fff', fontSize: 11, fontFamily: fonts.bold },
 
   permWrap: {
@@ -544,8 +544,8 @@ const s = StyleSheet.create({
     gap: 10,
   },
   permSignal: { height: 4, flexDirection: 'row', alignItems: 'center', gap: 3, marginBottom: 8 },
-  permSignalLine: { width: 24, height: 2, backgroundColor: '#FF7A1C' },
-  permSignalDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: '#FF7A1C' },
+  permSignalLine: { width: 24, height: 2, backgroundColor: colors.black },
+  permSignalDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: colors.black },
   permTitle: { fontFamily: fonts.bold, fontSize: 18, color: colors.black },
   permSub: { fontFamily: fonts.regular, fontSize: 13.5, color: colors.gray500, textAlign: 'center', lineHeight: 20 },
   permBtn: {
@@ -563,7 +563,7 @@ const s = StyleSheet.create({
     left: 16,
     width: 18,
     height: 2,
-    backgroundColor: '#FF7A1C',
+    backgroundColor: colors.black,
   },
   permBtnTxt: { color: '#fff', fontFamily: fonts.bold, fontSize: 14.5 },
 })

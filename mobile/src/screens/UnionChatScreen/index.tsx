@@ -23,7 +23,7 @@ import { useT } from '../../i18n'
 type Nav   = StackNavigationProp<AppStackParams>
 type Route = RouteProp<AppStackParams, 'UnionChat'>
 
-const MINE_COLOR   = '#FF7A1C'
+const MINE_COLOR   = colors.black
 const THEIRS_COLOR = '#F0F2F5'
 
 function formatTime(iso: string) {
@@ -577,7 +577,7 @@ const j = StyleSheet.create({
   // Banner pill
   pill: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: '#FFF0F4',
+    backgroundColor: '#F7F7F7',
     borderBottomWidth: 1, borderBottomColor: `${colors.primary}20`,
     paddingHorizontal: 16, paddingVertical: 10,
   },

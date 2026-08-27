@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import AvatarImage from '../../components/AvatarImage'
 import { getConnections } from '../../services/follow.service'
-import { fonts } from '../../theme'
+import { colors, fonts } from '../../theme'
 import { useT } from '../../i18n'
 
 type Person = { id: string; name: string; avatar: string | null }
@@ -81,7 +81,7 @@ export default function TargetPicker({ visible, onClose, onPick }: Props) {
           accessibilityLabel={t.create_target_open}
         >
           <View style={s.openSignal} />
-          <Ionicons name="globe-outline" size={20} color="#FF7A1C" />
+          <Ionicons name="globe-outline" size={20} color={colors.black} />
           <View style={s.openCopy}>
             <Text style={s.openTitle}>{t.create_target_open}</Text>
             <Text style={s.openSub}>{t.create_target_open_sub}</Text>
@@ -104,7 +104,7 @@ export default function TargetPicker({ visible, onClose, onPick }: Props) {
         <Text style={s.sectionLabel}>{t.ep_connections}</Text>
 
         {loading ? (
-          <View style={s.center}><ActivityIndicator color="#FF7A1C" /></View>
+          <View style={s.center}><ActivityIndicator color={colors.black} /></View>
         ) : (
           <FlatList
             data={filtered}
@@ -158,8 +158,8 @@ const s = StyleSheet.create({
     gap: 5,
   },
   brandSignal: { height: 4, flexDirection: 'row', alignItems: 'center', gap: 3 },
-  brandSignalLine: { width: 18, height: 2, backgroundColor: '#FF7A1C' },
-  brandSignalDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: '#FF7A1C' },
+  brandSignalLine: { width: 18, height: 2, backgroundColor: colors.black },
+  brandSignalDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: colors.black },
   cancelTxt: { fontSize: 14, fontFamily: fonts.medium, color: '#5C5C63' },
   title: { fontSize: 15, fontFamily: fonts.semiBold, color: '#1A1A1A', letterSpacing: -0.2 },
   sub: {
@@ -181,7 +181,7 @@ const s = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#D8D8D5',
   },
-  openSignal: { width: 2, height: 24, backgroundColor: '#FF7A1C' },
+  openSignal: { width: 2, height: 24, backgroundColor: colors.black },
   openCopy: { flex: 1, minWidth: 0 },
   openTitle: { fontSize: 14, fontFamily: fonts.semiBold, color: '#1A1A1A' },
   openSub: { fontSize: 12, fontFamily: fonts.regular, color: '#86868C', marginTop: 2 },

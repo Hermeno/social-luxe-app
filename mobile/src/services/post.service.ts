@@ -12,6 +12,14 @@ export async function searchPosts(query: string): Promise<Post[]> {
   return res.data.data
 }
 
+// Sugestões de publicações — o que a pesquisa mostra antes de se escrever nada.
+// Ordenadas pela vida que a comunidade deu a cada post e reordenadas pelo perfil
+// de interesses de quem está a ver (ver `discoverPosts` na API).
+export async function getDiscoverPosts(): Promise<Post[]> {
+  const res = await api.get<ApiResponse<Post[]>>('/posts/discover')
+  return res.data.data
+}
+
 // Álbum: várias fotos numa publicação → grelha na feed
 export async function createAlbum(uris: string[], caption?: string, deviceModel?: string): Promise<Post> {
   const form = new FormData()

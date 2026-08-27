@@ -19,8 +19,14 @@
   --border:     #E5E5EA;
   --on-ink:     #FFFFFF;
 
-  /* Único acento — reservado */
-  --accent:     #CA2851;
+  /* Paleta oficial, amostrada da referência azul → violeta → magenta. */
+  --brand-blue:    #2F49FD;
+  --brand-indigo:  #5948F9;
+  --brand-violet:  #7A47F5;
+  --brand-purple:  #9C45EE;
+  --brand-magenta: #C246E6;
+  --accent:        var(--brand-blue);
+  --brand-gradient: linear-gradient(90deg, var(--brand-blue), var(--brand-violet), var(--brand-magenta));
 
   /* Espaçamento */
   --margin-mobile:   20px;
@@ -179,7 +185,7 @@ section { padding: 80px 0; }
 .tier-need { font-size: 13px; color: var(--muted); white-space: nowrap; }
 /* O único momento de cor de todo o site */
 .tier.is-forever .tier-name { color: var(--accent); font-weight: 600; }
-.tier.is-forever .tier-fill { background: var(--accent); }
+.tier.is-forever .tier-fill { background: var(--brand-gradient); }
 
 /* ── Pilares (ícone + texto, sem caixas) ─────────────────────────────────── */
 .pillars {

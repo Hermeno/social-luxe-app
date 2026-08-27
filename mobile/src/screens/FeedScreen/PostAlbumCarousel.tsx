@@ -5,7 +5,9 @@ import {
 } from 'react-native'
 import { Image } from 'expo-image'
 import { API_BASE } from '../../config'
-import { colors } from '../../theme'
+import { colors, radius, spacing } from '../../theme'
+import { useT } from '../../i18n'
+import { feedFill, feedLine } from './tokens'
 
 const EMOJI_FRAC = 0.14
 
@@ -17,7 +19,7 @@ function resolve(url: string) {
 
 // Uma foto do carrossel — full-bleed, com os emojis fixados por cima.
 function Slide({
-  url, overlays, width, height, size, onPress,
+  url, overlays, width, height, size, onPress, label,
 }: {
   url: string
   overlays?: Overlay[]
@@ -26,6 +28,8 @@ function Slide({
   /** Dimensões vindas do servidor. Sem elas o slide fica cheio, como antes. */
   size?: { w: number | null; h: number | null }
   onPress?: () => void
+  /** O que o leitor de ecrã anuncia — "foto 2 de 5". */
+  label?: string
 }) {
   // A altura vem sempre da proporção da foto, nunca da altura do slide. Quando
   // o servidor a manda (`size`), acerta logo no primeiro desenho. Quando não —
@@ -44,7 +48,12 @@ function Slide({
   const es = width * EMOJI_FRAC
 
   return (
-    <Pressable style={{ width, height }} onPress={onPress}>
+    <Pressable
+      style={{ width, height }}
+      onPress={onPress}
+      accessibilityRole="imagebutton"
+      accessibilityLabel={label}
+    >
       <Image
         source={{ uri: resolve(url) }}
         style={{
@@ -83,6 +92,7 @@ interface Props {
 
 // Carrossel estilo Instagram — desliza esquerda↔direita, pontinhos em baixo.
 export default function PostAlbumCarousel({ urls, sizes, overlays, onOpen, dotsBottom = 14 }: Props) {
+  const t = useT()
   // Mede-se aqui uma vez e passa-se aos slides. Cada slide a medir-se a si
   // próprio criava um impasse: sem altura não desenhava, sem desenhar não media.
   const [box, setBox]     = useState({ w: 0, h: 0 })
@@ -109,7 +119,15 @@ export default function PostAlbumCarousel({ urls, sizes, overlays, onOpen, dotsB
           getItemLayout={(_, i) => ({ length: w, offset: w * i, index: i })}
           onMomentumScrollEnd={onScrollEnd}
           renderItem={({ item, index: i }) => (
-            <Slide url={item} overlays={overlays?.[i]} width={w} height={box.h} size={sizes?.[i]} onPress={() => onOpen?.(i)} />
+            <Slide
+              url={item}
+              overlays={overlays?.[i]}
+              width={w}
+              height={box.h}
+              size={sizes?.[i]}
+              onPress={() => onOpen?.(i)}
+              label={t.feed_album_photo.replace('{i}', String(i + 1)).replace('{n}', String(n))}
+            />
           )}
         />
       )}
@@ -133,15 +151,15 @@ const s = StyleSheet.create({
     left: 0, right: 0,
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 5,
+    gap: spacing.xs2,
   },
   dot: {
-    width: 5, height: 5, borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.45)',
+    width: 5, height: 5, borderRadius: radius.full,
+    backgroundColor: feedLine.strong,
     shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 2, shadowOffset: { width: 0, height: 0 },
   },
   dotOn: {
-    width: 6, height: 6, borderRadius: 3,
-    backgroundColor: '#fff',
+    width: 6, height: 6, borderRadius: radius.full,
+    backgroundColor: feedFill.solid,
   },
 })

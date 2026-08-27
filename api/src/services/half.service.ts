@@ -168,7 +168,7 @@ export async function completeHalf(userId: string, halfId: string, mediaUrl: str
       },
       include: {
         user:        { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true, showDevice: true, statusLabel: true } },
-        partnerUser: { select: { id: true, name: true, username: true, avatar: true } },
+        partnerUser: { select: { id: true, name: true, username: true, avatar: true, isVerified: true } },
         _count:      { select: { likes: true, comments: true, shares: true, reposts: true, views: true } },
       },
     })

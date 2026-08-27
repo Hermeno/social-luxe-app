@@ -140,7 +140,7 @@ async function nearbyMutuals(userId: string, lat?: number | null, lng?: number |
   if (lat == null || lng == null) {
     return prisma.user.findMany({
       where:  { id: { in: mutualIds } },
-      select: { id: true, name: true, username: true, avatar: true },
+      select: { id: true, name: true, username: true, avatar: true, isVerified: true },
       take:   12,
     })
   }

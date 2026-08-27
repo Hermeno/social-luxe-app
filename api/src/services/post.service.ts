@@ -32,7 +32,7 @@ export async function createPost(
     data: { userId, mediaUrl, mediaType, caption, bgColor, fontKey: fontKey ?? null, expiresAt, partnerUserId: partnerUserId ?? null, isAnnouncement: isAnnouncement ?? false, deviceModel: deviceModel ?? null, mediaWidth: mediaWidth ?? null, mediaHeight: mediaHeight ?? null },
     include: {
       user:        { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true, showDevice: true, statusLabel: true } },
-      partnerUser: { select: { id: true, name: true, username: true, avatar: true } },
+      partnerUser: { select: { id: true, name: true, username: true, avatar: true, isVerified: true } },
       _count:      { select: { likes: true, comments: true, shares: true, reposts: true, views: true } },
     },
   })
@@ -104,7 +104,7 @@ export async function createAlbumPost(
   }
   const include = {
     user:        { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true, showDevice: true, statusLabel: true } },
-    partnerUser: { select: { id: true, name: true, username: true, avatar: true } },
+    partnerUser: { select: { id: true, name: true, username: true, avatar: true, isVerified: true } },
     _count:      { select: { likes: true, comments: true, shares: true, reposts: true, views: true } },
   } as const
 
@@ -516,8 +516,8 @@ export async function getFeed(userId: string, page = 1, limit = 10) {
     AND: [{ OR: [{ createdAt: { gte: freshSince } }, { isAnnouncement: true }] }],
   }
   const include = {
-    user:        { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true, isAdmin: true, showDevice: true, statusLabel: true, lastSeen: true } },
-    partnerUser: { select: { id: true, name: true, username: true, avatar: true } },
+    user:        { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true, isAdmin: true, isVerified: true, showDevice: true, statusLabel: true, lastSeen: true } },
+    partnerUser: { select: { id: true, name: true, username: true, avatar: true, isVerified: true } },
     _count:      { select: { likes: true, comments: true, shares: true, reposts: true, views: true } },
   }
 
@@ -730,14 +730,100 @@ export async function searchPosts(query: string, userId: string) {
       ],
     },
     include: {
-      user:        { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true, isAdmin: true, showDevice: true, statusLabel: true, lastSeen: true } },
-      partnerUser: { select: { id: true, name: true, username: true, avatar: true } },
+      user:        { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true, isAdmin: true, isVerified: true, showDevice: true, statusLabel: true, lastSeen: true } },
+      partnerUser: { select: { id: true, name: true, username: true, avatar: true, isVerified: true } },
       _count:      { select: { likes: true, comments: true, shares: true, reposts: true, views: true } },
     },
     orderBy: { createdAt: 'desc' },
     take: 30,
   })
   return attachPostMeta(withThumbnails(withoutHiddenCollectiveCaptures(posts, new Set(hiddenContentIds))), userId)
+}
+
+/**
+ * Sugestões de publicações para o separador de pesquisa — a vitrina que se vê
+ * antes de escrever seja o que for.
+ *
+ * A ordem não é cronológica de propósito. O que ordena é `expiresAt`: nesta app
+ * a vida de um post não é uma constante, é o que a comunidade lhe deu — cada
+ * vista, gosto, comentário ou partilha empurra-o para o escalão seguinte
+ * (3 → 10 → 30 dias → 1 ano → para sempre, ver `LIFE_TIERS`). Um post com
+ * expiração longe é, por definição, um post que muita gente manteve vivo. É o
+ * sinal de mérito que a app já calcula, e não havia razão para inventar outro
+ * ranking ao lado dele.
+ *
+ * Sobre essa base corre o mesmo `rankFreshPageByTaste` da feed, que reordena
+ * dentro de blocos segundo os interesses de quem está a ver. Como na feed, o
+ * gosto reordena e nunca filtra: ninguém desaparece daqui por não bater certo
+ * com o perfil.
+ *
+ * Fica de fora: o próprio (sugerir-se a si mesmo não é sugestão), quem bloqueou
+ * ou foi bloqueado, quem está silenciado, e os anúncios — um anúncio é um
+ * comunicado dirigido, não conteúdo para descobrir.
+ */
+export async function discoverPosts(userId: string, limit = 30) {
+  const now = new Date()
+  const [blocksGiven, blocksReceived, activeMutes, tasteRows] = await Promise.all([
+    prisma.block.findMany({ where: { blockerId: userId }, select: { blockedId: true } }),
+    prisma.block.findMany({ where: { blockedId: userId }, select: { blockerId: true } }),
+    prisma.userMute.findMany({
+      where: {
+        muterId: userId,
+        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      },
+      select: { mutedId: true },
+    }),
+    prisma.tasteFeedback.findMany({
+      where: {
+        userId,
+        createdAt: { gte: new Date(now.getTime() - TASTE_HISTORY_WINDOW_MS) },
+      },
+      select: {
+        postId: true,
+        authorId: true,
+        mediaType: true,
+        signal: true,
+        dwellMs: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: TASTE_HISTORY_LIMIT,
+    }),
+  ])
+
+  const hiddenContentIds = [...new Set([
+    ...blocksGiven.map((b) => b.blockedId),
+    ...blocksReceived.map((b) => b.blockerId),
+    ...activeMutes.map((mute) => mute.mutedId),
+  ])]
+
+  const posts = await prisma.post.findMany({
+    where: {
+      deletedAt: null,
+      expiresAt: { gt: now },
+      isAnnouncement: false,
+      userId: { notIn: [...hiddenContentIds, userId] },
+      // Uma cópia repostada de alguém escondido continua a ser conteúdo dessa
+      // pessoa — a mesma fronteira que a pesquisa já aplica.
+      OR: [
+        { repostEntry: { is: null } },
+        { repostEntry: { is: { post: { is: { userId: { notIn: hiddenContentIds } } } } } },
+      ],
+    },
+    include: {
+      user:        { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true, isAdmin: true, isVerified: true, showDevice: true, statusLabel: true, lastSeen: true } },
+      partnerUser: { select: { id: true, name: true, username: true, avatar: true, isVerified: true } },
+      _count:      { select: { likes: true, comments: true, shares: true, reposts: true, views: true } },
+    },
+    orderBy: [{ expiresAt: 'desc' }, { createdAt: 'desc' }],
+    take: limit,
+  })
+
+  const tasteProfile = buildTasteProfile(tasteRows, now)
+  const ranked = rankFreshPageByTaste(posts, tasteProfile)
+  // Sem isto, um autor com cinco posts vivos enche a primeira linha da grelha.
+  const spread = spreadAuthors(ranked, (post) => post.userId)
+  return attachPostMeta(withThumbnails(withoutHiddenCollectiveCaptures(spread, new Set(hiddenContentIds))), userId)
 }
 
 // Extend a post's expiry by `minutes`. Announcements are never touched.
@@ -971,7 +1057,7 @@ async function resolveRepostOriginal(postId: string) {
 
 const REPOSTED_POST_INCLUDE = {
   user:        { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true, showDevice: true, statusLabel: true } },
-  partnerUser: { select: { id: true, name: true, username: true, avatar: true } },
+  partnerUser: { select: { id: true, name: true, username: true, avatar: true, isVerified: true } },
   _count:      { select: { likes: true, comments: true, shares: true, reposts: true, views: true } },
 } as const
 

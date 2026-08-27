@@ -5,11 +5,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useT } from '../../i18n'
-import { fonts } from '../../theme'
+import { colors, fonts } from '../../theme'
 
 const T_C = '#1A1A1A'
 const M   = '#ABABAB'
-const B   = '#FF7A1C'
+const B   = colors.black
 const BD  = '#E5E5EA'
 const BG  = '#FFFFFF'
 const SX  = '#F9F9FB'

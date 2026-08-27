@@ -154,7 +154,7 @@ export async function getMyFollowers(req: Request, res: Response) {
     const rows = await prisma.follow.findMany({
       where:   { followingId: req.user!.userId, ...activeFollow() },
       orderBy: { createdAt: 'desc' },
-      select:  { follower: { select: { id: true, name: true, username: true, avatar: true, bio: true } }, createdAt: true, expiresAt: true },
+      select:  { follower: { select: { id: true, name: true, username: true, avatar: true, bio: true, isVerified: true } }, createdAt: true, expiresAt: true },
     })
     return ok(res, rows.map((r) => ({ ...r.follower, followedAt: r.createdAt, expiresAt: r.expiresAt })))
   } catch (err) {
@@ -167,7 +167,7 @@ export async function getMyFollowing(req: Request, res: Response) {
     const rows = await prisma.follow.findMany({
       where:   { followerId: req.user!.userId, ...activeFollow() },
       orderBy: { createdAt: 'desc' },
-      select:  { following: { select: { id: true, name: true, username: true, avatar: true, bio: true } }, createdAt: true, expiresAt: true },
+      select:  { following: { select: { id: true, name: true, username: true, avatar: true, bio: true, isVerified: true } }, createdAt: true, expiresAt: true },
     })
     return ok(res, rows.map((r) => ({ ...r.following, followedAt: r.createdAt, expiresAt: r.expiresAt })))
   } catch (err) {
@@ -180,7 +180,7 @@ export async function getUserFollowers(req: Request, res: Response) {
     const rows = await prisma.follow.findMany({
       where:   { followingId: req.params.id, ...activeFollow() },
       orderBy: { createdAt: 'desc' },
-      select:  { follower: { select: { id: true, name: true, username: true, avatar: true, bio: true } }, createdAt: true, expiresAt: true },
+      select:  { follower: { select: { id: true, name: true, username: true, avatar: true, bio: true, isVerified: true } }, createdAt: true, expiresAt: true },
     })
     return ok(res, rows.map((r) => ({ ...r.follower, followedAt: r.createdAt, expiresAt: r.expiresAt })))
   } catch (err) {
@@ -193,7 +193,7 @@ export async function getUserFollowing(req: Request, res: Response) {
     const rows = await prisma.follow.findMany({
       where:   { followerId: req.params.id, ...activeFollow() },
       orderBy: { createdAt: 'desc' },
-      select:  { following: { select: { id: true, name: true, username: true, avatar: true, bio: true } }, createdAt: true, expiresAt: true },
+      select:  { following: { select: { id: true, name: true, username: true, avatar: true, bio: true, isVerified: true } }, createdAt: true, expiresAt: true },
     })
     return ok(res, rows.map((r) => ({ ...r.following, followedAt: r.createdAt, expiresAt: r.expiresAt })))
   } catch (err) {

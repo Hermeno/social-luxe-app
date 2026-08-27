@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native'
 import FeedIcon from '../../components/FeedIcon'
-import { fonts, typography } from '../../theme'
+import { colors, fonts, leading, radius, spacing, typography } from '../../theme'
+import { feedIcon, feedInk, feedLine, feedTextShadow } from './tokens'
 import { useT } from '../../i18n'
 import type { TasteSignal } from '../../services/post.service'
 
@@ -116,7 +117,7 @@ export default function TasteCard({ reduceMotion, onAnswer, onDone }: Props) {
             <Text style={s.pillTxt} numberOfLines={2}>{t.taste_more}</Text>
             {/* O sinal só está do lado do "sim": este é o caminho que continua,
                 o outro é o que fecha. A seta diz isso sem gastar palavras. */}
-            <FeedIcon name="chevron-right" size={13} color="rgba(255,255,255,0.9)" />
+            <FeedIcon name="chevron-right" size={feedIcon.inline} color={feedInk.secondary} />
           </Pressable>
         </View>
       </Animated.View>
@@ -126,57 +127,56 @@ export default function TasteCard({ reduceMotion, onAnswer, onDone }: Props) {
 
 // A sombra do texto é o que substitui o fundo: sem ela, uma foto clara por
 // baixo comia as letras — e o pedido era mesmo não haver caixa nenhuma.
-const shadow = {
-  textShadowColor: 'rgba(0,0,0,0.55)',
-  textShadowOffset: { width: 0, height: 1 },
-  textShadowRadius: 3,
-} as const
+// É a `feedTextShadow` da Feed; esteve aqui copiada valor a valor.
 
 const s = StyleSheet.create({
-  wrap: { marginBottom: 12, justifyContent: 'center' },
+  wrap: { marginBottom: spacing.sm2, justifyContent: 'center' },
   question: {
-    ...shadow,
-    color: 'rgba(255,255,255,0.72)',
-    fontFamily: fonts.medium,
+    ...feedTextShadow,
+    color: feedInk.muted,
+    fontFamily: fonts.regular,
     fontSize: typography.meta,
+    lineHeight: leading.meta,
     letterSpacing: -0.1,
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   pill: {
     // Metade da largura para cada lado — dois pesos iguais, e nenhum rótulo
     // cortado a meio em ecrãs estreitos (a legenda passa a duas linhas).
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: spacing.sm2,
+    paddingVertical: spacing.sm,
     // Cantos suaves, não uma cápsula: o traço acompanha o resto da feed em vez
     // de virar um botão de ação.
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.62)',
+    borderColor: feedLine.strong,
     backgroundColor: 'transparent',
   },
   // O lado do "sim" leva a seta ao lado do texto, sem sair do centro.
-  pillMore: { flexDirection: 'row', gap: 5 },
-  pillPressed: { borderColor: '#FFFFFF' },
+  pillMore: { flexDirection: 'row', gap: spacing.xs2 },
+  pillPressed: { borderColor: colors.white },
   pillTxt: {
-    ...shadow,
+    ...feedTextShadow,
     textAlign: 'center',
-    color: 'rgba(255,255,255,0.94)',
-    fontFamily: fonts.semiBold,
+    color: feedInk.secondary,
+    fontFamily: fonts.regular,
     fontSize: typography.secondary,
+    lineHeight: leading.secondary,
     letterSpacing: -0.15,
   },
   thanks: {
-    ...shadow,
+    ...feedTextShadow,
     position: 'absolute',
     left: 0,
     right: 0,
-    color: 'rgba(255,255,255,0.94)',
-    fontFamily: fonts.semiBold,
+    color: feedInk.secondary,
+    fontFamily: fonts.regular,
     fontSize: typography.secondary,
+    lineHeight: leading.secondary,
     letterSpacing: -0.15,
   },
 })

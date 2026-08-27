@@ -5,7 +5,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
-import { fonts } from '../../theme'
+import { colors, fonts } from '../../theme'
 import { useT, useI18n } from '../../i18n'
 import { PT } from '../../i18n/pt'
 import { EN } from '../../i18n/en'
@@ -13,7 +13,7 @@ import { EN } from '../../i18n/en'
 const T  = '#1A1A1A'
 const S  = '#6E6E73'
 const M  = '#ABABAB'
-const B  = '#FF7A1C'
+const B  = colors.black
 const BD = '#E5E5EA'
 const BG = '#FFFFFF'
 const SX = '#F9F9FB'
@@ -109,7 +109,7 @@ export default function HelpScreen() {
           </TouchableOpacity>
           <TouchableOpacity style={s.contactRow} onPress={() => openLink('mailto:herminiomacamo6@gmail.com?subject=luxee%20Reportar%20Problema')} activeOpacity={0.75}>
             <View style={s.contactIcon}>
-              <Ionicons name="flag-outline" size={18} color="#FF4B6E" />
+              <Ionicons name="flag-outline" size={18} color={colors.black} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={s.contactTitle}>{t.hp_report}</Text>
@@ -151,14 +151,14 @@ const s = StyleSheet.create({
 
   contactRow:  { flexDirection: 'row', alignItems: 'center', gap: 13, padding: 14, paddingHorizontal: 14 },
   contactSep:  { borderBottomWidth: 1, borderBottomColor: SEP },
-  contactIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(76,140,228,0.12)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  contactIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.06)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   contactTitle:{ fontFamily: fonts.bold, fontSize: 15, color: T },
   contactSub:  { fontFamily: fonts.medium, fontSize: 12, color: M, marginTop: 2 },
 
   devCard: {
     flexDirection: 'row', alignItems: 'center', gap: 13,
     marginTop: 20, padding: 14, borderRadius: 18,
-    backgroundColor: 'rgba(76,140,228,0.06)', borderWidth: 1, borderColor: 'rgba(76,140,228,0.18)',
+    backgroundColor: 'rgba(0,0,0,0.025)', borderWidth: 1, borderColor: 'rgba(0,0,0,0.10)',
   },
   devBadge:    { width: 42, height: 42, borderRadius: 12, backgroundColor: B, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   devBadgeTxt: { fontFamily: fonts.extraBold, fontSize: 16, color: BG },

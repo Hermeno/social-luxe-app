@@ -227,7 +227,7 @@ const s = StyleSheet.create({
     backgroundColor: authUi.surface,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  handleOptionSelected: { borderColor: authUi.signal, backgroundColor: '#FFF8F2' },
+  handleOptionSelected: { borderColor: authUi.signal, backgroundColor: '#FAF8F6' },
   handleText: { color: authUi.muted, fontFamily: fonts.semiBold, fontSize: 14 },
   handleTextSelected: { color: authUi.ink },
   spacer: { flex: 1, minHeight: 28 },

@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { AppStackParams } from '../../navigation/AppNavigator'
-import { fonts } from '../../theme'
+import { colors, fonts } from '../../theme'
 import { useT, useI18n } from '../../i18n'
 import { PT } from '../../i18n/pt'
 import { EN } from '../../i18n/en'
@@ -18,7 +18,7 @@ type Nav = StackNavigationProp<AppStackParams>
 const T  = '#1A1A1A'
 const S  = '#6E6E73'
 const M  = '#ABABAB'
-const B  = '#FF7A1C'
+const B  = colors.black
 const BD = '#E5E5EA'
 const BG = '#FFFFFF'
 const SX = '#F9F9FB'
@@ -104,12 +104,12 @@ export default function AboutScreen() {
 
         <View style={[s.card, { marginTop: 12 }]}>
           <LinkRow
-            iconBg="rgba(76,140,228,0.12)" iconColor={B} iconName="call-outline"
+            iconBg="rgba(0,0,0,0.06)" iconColor={B} iconName="call-outline"
             title="+258 84 205 9826" action="Ligar"
             onPress={() => openLink('tel:+258842059826')}
           />
           <LinkRow
-            iconBg="rgba(76,140,228,0.12)" iconColor={B} iconName="mail-outline"
+            iconBg="rgba(0,0,0,0.06)" iconColor={B} iconName="mail-outline"
             title="herminiomacamo6@gmail.com" action="Email"
             onPress={() => openLink('mailto:herminiomacamo6@gmail.com')}
             isLast
@@ -118,17 +118,17 @@ export default function AboutScreen() {
 
         <View style={[s.card, { marginTop: 12 }]}>
           <LinkRow
-            iconBg="rgba(76,140,228,0.12)" iconColor={B} iconName="document-text-outline"
+            iconBg="rgba(0,0,0,0.06)" iconColor={B} iconName="document-text-outline"
             title={t.about_terms}
             onPress={() => {}}
           />
           <LinkRow
-            iconBg="rgba(76,140,228,0.12)" iconColor={B} iconName="lock-closed-outline"
+            iconBg="rgba(0,0,0,0.06)" iconColor={B} iconName="lock-closed-outline"
             title={t.about_privacyLink}
             onPress={() => {}}
           />
           <LinkRow
-            iconBg="rgba(76,140,228,0.12)" iconColor={B} iconName="star-outline"
+            iconBg="rgba(0,0,0,0.06)" iconColor={B} iconName="star-outline"
             title={t.about_rate} isLast
             onPress={() => {}}
           />
@@ -136,7 +136,7 @@ export default function AboutScreen() {
 
         <View style={s.footer}>
           <Text style={s.footerTxt}>{t.feito_com} </Text>
-          <Ionicons name="heart" size={14} color="#FF3B30" />
+          <Ionicons name="heart" size={14} color={colors.heart} />
           <Text style={s.footerTxt}> {t.about_footer} 🇲🇿</Text>
         </View>
         <Text style={s.copyright}>{t.about_copyright}</Text>
@@ -169,8 +169,8 @@ const s = StyleSheet.create({
   devCard: {
     flexDirection: 'row', alignItems: 'center', gap: 13,
     padding: 14, borderRadius: 18,
-    backgroundColor: 'rgba(76,140,228,0.06)',
-    borderWidth: 1, borderColor: 'rgba(76,140,228,0.18)',
+    backgroundColor: 'rgba(0,0,0,0.025)',
+    borderWidth: 1, borderColor: 'rgba(0,0,0,0.10)',
     marginBottom: 0,
   },
   devInitials: { width: 46, height: 46, borderRadius: 14, backgroundColor: B, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },

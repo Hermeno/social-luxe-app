@@ -10,6 +10,7 @@ router.use(authMiddleware)
 
 router.get('/feed',            postController.getFeed)
 router.get('/search',          postController.searchPosts)
+router.get('/discover',        postController.discoverPosts)
 router.get('/flashback',       postController.getFlashback)
 router.get('/partner-pending', postController.getPartnerPostInvites)
 router.put('/:id/partner-accept', postController.acceptPostPartner)

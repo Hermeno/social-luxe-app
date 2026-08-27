@@ -20,7 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   Canvas, ImageShader, Rect, Shader, Skia, type SkImage,
 } from '@shopify/react-native-skia'
-import { fonts } from '../../theme'
+import { brandPalette, fonts } from '../../theme'
 import { useT } from '../../i18n'
 import { toast } from '../../utils/toast'
 import CropOverlay from './CropOverlay'
@@ -41,7 +41,7 @@ interface Props {
 
 type Tab = 'crop' | 'adjust' | 'filter'
 
-const ACCENT = '#FF7A1C'
+const ACCENT = brandPalette.blue
 const THUMB  = 64
 
 function fitRect(iw: number, ih: number, boxW: number, boxH: number) {
@@ -586,7 +586,7 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', flexDirection: 'row',
     backgroundColor: '#191B1D', borderWidth: 1, borderColor: 'transparent',
   },
-  chipOn:  { borderColor: ACCENT, backgroundColor: 'rgba(255,122,28,0.14)' },
+  chipOn:  { borderColor: ACCENT, backgroundColor: 'rgba(47,73,253,0.14)' },
   chipTxt: { fontFamily: fonts.medium, fontSize: 13, color: '#9A9AA0' },
   chipTxtOn: { color: '#FFFFFF', fontFamily: fonts.semiBold },
   chipDot: { width: 4, height: 4, borderRadius: 2, marginLeft: 6, backgroundColor: '#9A9AA0' },

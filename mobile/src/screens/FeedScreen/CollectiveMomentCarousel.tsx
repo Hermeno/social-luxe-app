@@ -22,12 +22,13 @@ import Animated, {
 } from 'react-native-reanimated'
 
 import AvatarImage from '../../components/AvatarImage'
+import AuthorAvatar from '../../components/AuthorAvatar'
 import FeedIcon from '../../components/FeedIcon'
-import SegmentedRing from '../../components/SegmentedRing'
 import { API_BASE } from '../../config'
 import { useT } from '../../i18n'
 import { useAuthStore } from '../../store/auth.store'
-import { colors, fonts, radius, typography } from '../../theme'
+import { colors, fonts, leading, radius, spacing, typography } from '../../theme'
+import { feedInk, feedLine } from './tokens'
 import type {
   CollectiveMomentCapture,
   CollectiveMomentParticipant,
@@ -36,12 +37,11 @@ import type {
 const VIRTUAL_RADIUS = 2
 const EMOJI_SIZE_FRACTION = 0.14
 // Moldura de fotografia menos “bolha” e com curva contínua no iOS.
-const CARD_CORNER_RADIUS = 20
+const CARD_CORNER_RADIUS = radius.xl
 // Um anel fino + uma pequena folga escura preservam o rosto mesmo sobre uma
 // fotografia clara. O antigo traço de 3.6pt dominava o avatar.
 const RING_STROKE = 2
 const RING_GAP = 2
-const RING_COLOR = 'rgba(255,255,255,0.92)'
 // Fila de quem esteve no momento. As proporções são as da pilha de comentadores
 // (`CommenterStack`), mas com um pequeno “moat” entre foto e contorno para os
 // círculos não se fundirem quando se sobrepõem.
@@ -374,31 +374,22 @@ const CarouselCard = memo(function CarouselCard({
 
             {/* Dentro da mesma superfície elevada da fotografia: no Android,
                 dois irmãos com elevations diferentes podiam esconder o anel. */}
-            <View
+            <AuthorAvatar
+              uri={participant?.avatar}
+              name={name}
+              avatarSize={avatarSize}
+              ringWidth={RING_STROKE}
+              gap={RING_GAP}
+              wellColor="rgba(11,20,26,0.84)"
+              elevated
               style={[
                 s.avatarRing,
-                s.ringSurface,
                 {
-                  width: ringOuter,
-                  height: ringOuter,
-                  borderRadius: radius.full,
                   top: avatarInset,
                   left: avatarInset,
                 },
               ]}
-              pointerEvents="none"
-            >
-              <SegmentedRing count={1} size={ringOuter} strokeWidth={RING_STROKE} color={RING_COLOR} />
-              <View style={[s.avatarWell, { width: avatarSize, height: avatarSize, borderRadius: radius.full }]}>
-                <AvatarImage
-                  uri={participant?.avatar}
-                  name={name}
-                  size={avatarSize}
-                  borderColor="transparent"
-                  borderWidth={0}
-                />
-              </View>
-            </View>
+            />
           </View>
         </View>
       </Pressable>
@@ -476,17 +467,16 @@ const CreateCircleCard = memo(function CreateCircleCard({
             {/* O rosto fica em cima, à altura dos rostos dos cartões ao lado;
                 os textos assentam em baixo, onde vive a legenda de um post. */}
             <View style={[s.ctaBody, { paddingTop: inset, paddingBottom: inset + 6 }]}>
-              <View style={[s.ctaRing, s.ringSurface, { width: faceRingOuter, height: faceRingOuter, borderRadius: radius.full }]}>
-                <SegmentedRing count={1} size={faceRingOuter} strokeWidth={RING_STROKE} color={RING_COLOR} />
-                <View style={[s.avatarWell, { width: faceSize, height: faceSize, borderRadius: radius.full }]}>
-                  <AvatarImage
-                    uri={me?.avatar}
-                    name={me?.name}
-                    size={faceSize}
-                    borderColor="transparent"
-                    borderWidth={0}
-                  />
-                </View>
+              <View style={[s.ctaRing, { width: faceRingOuter, height: faceRingOuter, borderRadius: radius.full }]}>
+                <AuthorAvatar
+                  uri={me?.avatar}
+                  name={me?.name}
+                  avatarSize={faceSize}
+                  ringWidth={RING_STROKE}
+                  gap={RING_GAP}
+                  wellColor={colors.circleInvite}
+                  elevated
+                />
                 <View
                   style={[
                     s.ctaBadge,
@@ -1085,15 +1075,15 @@ const s = StyleSheet.create({
     borderRadius: CARD_CORNER_RADIUS,
     borderCurve: 'continuous',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.22)',
+    borderColor: feedLine.subtle,
     backgroundColor: colors.feedSurfaceSlate,
   },
   imageFallback: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 7,
-    paddingHorizontal: 16,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
     backgroundColor: colors.feedSurfaceSlate,
   },
   fallbackMark: {
@@ -1101,17 +1091,18 @@ const s = StyleSheet.create({
     height: 26,
     borderRadius: radius.full,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.58)',
-    color: 'rgba(255,255,255,0.78)',
-    fontFamily: fonts.bold,
+    borderColor: feedLine.strong,
+    color: feedInk.muted,
+    fontFamily: fonts.medium,
     fontSize: typography.body,
-    lineHeight: 24,
+    lineHeight: leading.body,
     textAlign: 'center',
   },
   fallbackText: {
-    color: 'rgba(255,255,255,0.7)',
+    color: feedInk.muted,
     fontFamily: fonts.medium,
     fontSize: typography.secondary,
+    lineHeight: leading.secondary,
     textAlign: 'center',
   },
   emoji: {
@@ -1127,18 +1118,6 @@ const s = StyleSheet.create({
     position: 'absolute',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  ringSurface: {
-    backgroundColor: 'rgba(7,8,10,0.36)',
-    shadowColor: colors.black,
-    shadowOpacity: 0.24,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1.5 },
-    elevation: 3,
-  },
-  avatarWell: {
-    overflow: 'hidden',
-    backgroundColor: colors.feedSurface,
   },
   ctaSurface: {
     backgroundColor: colors.circleInvite,
@@ -1172,7 +1151,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: GROUP_RING_STROKE,
-    borderColor: 'rgba(255,255,255,0.88)',
+    borderColor: feedLine.bright,
     backgroundColor: 'rgba(7,8,10,0.56)',
     shadowColor: colors.black,
     shadowOffset: { width: 0, height: 1 },
@@ -1187,13 +1166,13 @@ const s = StyleSheet.create({
   },
   groupMoreText: {
     color: colors.white,
-    fontFamily: fonts.semiBold,
+    fontFamily: fonts.medium,
   },
   ctaBody: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 18,
+    paddingHorizontal: spacing.md2,
   },
   ctaRing: {
     alignItems: 'center',
@@ -1209,20 +1188,20 @@ const s = StyleSheet.create({
   },
   ctaWords: {
     alignItems: 'center',
-    gap: 5,
+    gap: spacing.xs2,
   },
   ctaTitle: {
     color: colors.white,
-    fontFamily: fonts.bold,
+    fontFamily: fonts.medium,
     fontSize: typography.section,
-    lineHeight: 23,
+    lineHeight: leading.section,
     textAlign: 'center',
   },
   ctaSub: {
-    color: 'rgba(255,255,255,0.72)',
+    color: feedInk.muted,
     fontFamily: fonts.medium,
     fontSize: typography.secondary,
-    lineHeight: 17,
+    lineHeight: leading.secondary,
     textAlign: 'center',
   },
 })

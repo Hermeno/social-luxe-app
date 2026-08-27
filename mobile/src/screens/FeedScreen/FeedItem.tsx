@@ -12,15 +12,16 @@ import { StackNavigationProp } from '@react-navigation/stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Post, type RepostResult } from '../../types'
-import { colors, fonts, typography } from '../../theme'
+import { colors, fonts, leading, postGradientColors, radius, spacing, typography } from '../../theme'
 import { parsePostFontKey, postFontStyle } from '../../theme/postFonts'
 import Icon from '../../components/Icon'
-import { feedIcon, feedInk, feedTextShadow } from './tokens'
+import { feedFill, feedIcon, feedInk, feedLine, feedTextShadow, RAIL_CLEARANCE } from './tokens'
 import { usePostFontsReady } from '../../store/postFonts.store'
 import { API_BASE } from '../../config'
 import * as postService from '../../services/post.service'
 import type { TasteSignal } from '../../services/post.service'
-import AvatarImage from '../../components/AvatarImage'
+import AuthorAvatar from '../../components/AuthorAvatar'
+import VerifiedBadge from '../../components/VerifiedBadge'
 import ActionBar from './ActionBar'
 import TasteCard from './TasteCard'
 import {
@@ -552,10 +553,10 @@ function FeedItem({
     [post.fontKey, postFontsReady],
   )
 
-  const textGradient = useMemo<[string, string]>(() => {
-    const parts = post.bgColor?.split('|') ?? []
-    return parts.length === 2 ? [parts[0], parts[1]] : ['#FF6B35', '#E63946']
-  }, [post.bgColor])
+  const textGradient = useMemo(
+    () => postGradientColors(post.bgColor),
+    [post.bgColor],
+  )
 
   // A legenda mantém as duas linhas compactas do feed. Medimos uma cópia
   // invisível sem corte para que o toque só exista quando há texto por revelar.
@@ -650,11 +651,11 @@ function FeedItem({
       {/* Camada de toque — duplo toque para gostar.
              Nos carrosséis não a pomos: bloquearia o gesto horizontal. */}
       {!isAlbum && !isCollective && (
-        <Pressable style={[s.tapLayer, videoFrame]} onPress={handleTapMedia} />
+        <Pressable style={[s.tapLayer, videoFrame]} onPress={handleTapMedia} accessible={false} />
       )}
 
       {buffering && (
-        <ActivityIndicator style={s.spinner} size="large" color={colors.primary} pointerEvents="none" />
+        <ActivityIndicator style={s.spinner} size="large" color={feedInk.primary} pointerEvents="none" />
       )}
 
       <Animated.View
@@ -680,12 +681,12 @@ function FeedItem({
         ]}
         pointerEvents="none"
       >
-        <FeedIcon name="heart-solid" size={feedIcon.burst} color="rgba(255,255,255,0.94)" />
+        <FeedIcon name="heart-solid" size={feedIcon.burst} color={feedInk.secondary} />
       </Animated.View>
 
       {isVideo && paused && (
         <View style={s.playOverlay} pointerEvents="none">
-          <Icon name="play" size={feedIcon.overlay} color="rgba(255,255,255,0.92)" />
+          <Icon name="play" size={feedIcon.overlay} color={feedInk.secondary} />
         </View>
       )}
 
@@ -719,11 +720,16 @@ function FeedItem({
             <Animated.View
               style={{ transform: [{ scale: ambient.interpolate({ inputRange: [0, 1], outputRange: [1, 1.018] }) }] }}
             >
-              <View style={[s.avatarRing, isFresh && s.avatarRingFresh]}>
-                <View style={s.avatarInner}>
-                  <AvatarImage uri={resolveUrl(post.user.avatar)} name={post.user.name} size={34} />
-                </View>
-              </View>
+              <AuthorAvatar
+                uri={resolveUrl(post.user.avatar)}
+                name={post.user.name}
+                avatarSize={34}
+                ringWidth={1.5}
+                gap={2.5}
+                ringVisible={isFresh}
+                wellColor="rgba(11,20,26,0.84)"
+                elevated
+              />
             </Animated.View>
           </TouchableOpacity>
 
@@ -731,10 +737,15 @@ function FeedItem({
             style={s.authorText}
             onPress={() => nav.navigate('Profile', { userId: post.user.id })}
             activeOpacity={0.78}
+            accessibilityRole="button"
+            accessibilityLabel={post.user.name}
           >
-            <Text style={s.authorName} numberOfLines={1}>
-              {post.user.username ? displayHandle(post.user.username) : post.user.name}
-            </Text>
+            <View style={s.authorNameLine}>
+              <Text style={s.authorName} numberOfLines={1}>
+                {post.user.username ? displayHandle(post.user.username) : post.user.name}
+              </Text>
+              {post.user.isVerified && <VerifiedBadge />}
+            </View>
             {!!authorContext && (
               <Text style={s.authorContext} numberOfLines={1}>{authorContext}</Text>
             )}
@@ -828,7 +839,7 @@ function FeedItem({
                   ? t.feed_view_comment
                   : `${t.feed_view_comments} ${commentCount} ${t.comment_many}`}
               </Text>
-              <FeedIcon name="chevron-right" size={13} color="rgba(255,255,255,0.56)" />
+              <FeedIcon name="chevron-right" size={feedIcon.inline} color={feedInk.muted} />
             </TouchableOpacity>
           </View>
         )}
@@ -881,92 +892,71 @@ const s = StyleSheet.create({
   bigHeart: { position: 'absolute', left: 0, right: 0, alignItems: 'center', top: '34%' },
   heartHalo: {
     position: 'absolute', alignSelf: 'center', top: '34%',
-    width: 108, height: 108, borderRadius: 54,
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.78)'
+    width: 108, height: 108, borderRadius: radius.full,
+    borderWidth: 2, borderColor: feedLine.bright
   },
   textWrap:    { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  textContent: { color: '#fff', fontFamily: fonts.bold, fontSize: typography.display, lineHeight: 38, textAlign: 'center', paddingHorizontal: 36 },
+  textContent: {
+    color: feedInk.primary, fontFamily: fonts.regular,
+    fontSize: typography.display, lineHeight: leading.display,
+    textAlign: 'center', paddingHorizontal: spacing.xl,
+  },
 
   // Autor + descrição
-  meta:       { position: 'absolute', left: 16, right: 78, gap: 9 },
-  authorRow:  { minHeight: 43, flexDirection: 'row', alignItems: 'center', gap: 9 },
-  // Anel do autor — moldura fixa, nunca gira. Um fio claro a emoldurar a cara,
-  // com uma folga escura por dentro para o rosto não colar ao traço e uma
-  // sombra curta que o descola de media claro. A vida do post lê-se no traço
-  // de tempo acima; à volta da cara basta um desenho limpo e quieto.
-  // Sem publicação recente não fica nada: nem traço, nem folga escura, nem
-  // sombra. O `padding` e o `borderWidth` continuam cá, transparentes, só para
-  // a caixa medir o mesmo nos dois estados — sem isso o avatar mudava de
-  // tamanho e empurrava o nome ao lado quando o anel acendia ou apagava.
-  avatarRing: {
-    padding: 2.5,
-    borderRadius: 999,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-  },
-  // Laranja da marca, e só aqui a folga escura e a sombra que a destacam de
-  // fotografia clara. Eram elas que ficavam soltas à volta do avatar antigo:
-  // com a borda transparente por cima, o disco preto por baixo lia-se como uma
-  // sombra a mais em vez do assentamento do anel.
-  avatarRingFresh: {
-    borderColor: colors.primary,
-    backgroundColor: 'rgba(0,0,0,0.34)',
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 3,
-  },
-  // Corta a foto num círculo exato dentro da folga — sem isto, um avatar
-  // quadrado encostava aos cantos e o anel deixava de parecer desenhado.
-  avatarInner: { borderRadius: 999, overflow: 'hidden' },
+  meta:       { position: 'absolute', left: spacing.md, right: RAIL_CLEARANCE, gap: spacing.sm },
+  authorRow:  { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   // `flexShrink` e não `flex: 1`: com `flex: 1` o bloco do nome esticava para
   // toda a largura livre e empurrava o botão de seguir para a borda oposta.
   // A encolher, ocupa só o que o nome mede — o botão fica logo ao lado — e um
   // nome comprido continua a cortar com reticências em vez de o expulsar.
   authorText: { flexShrink: 1, minWidth: 0, justifyContent: 'center' },
+  // O selo ao lado do nome, não por baixo: `flexShrink` no texto para um nome
+  // comprido cortar com reticências em vez de empurrar o selo para fora.
+  authorNameLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   authorName: {
+    flexShrink: 1,
     ...feedTextShadow,
-    color: feedInk.primary, fontFamily: fonts.semiBold, fontSize: typography.body, lineHeight: 20, letterSpacing: -0.3
+    color: feedInk.primary, fontFamily: fonts.regular, fontSize: typography.body, lineHeight: leading.body, letterSpacing: -0.12
   },
   authorContext: {
     ...feedTextShadow,
-    color: feedInk.muted, fontFamily: fonts.medium, fontSize: typography.meta, lineHeight: 15
+    color: feedInk.muted, fontFamily: fonts.regular, fontSize: typography.meta, lineHeight: leading.meta
   },
   followBtn: {
     minHeight: 32,
     minWidth: 86,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingLeft: 11,
+    gap: spacing.xs2,
+    paddingLeft: spacing.sm2,
     borderLeftWidth: StyleSheet.hairlineWidth,
-    borderLeftColor: 'rgba(255,255,255,0.28)'
+    borderLeftColor: feedLine.medium
   },
-  followNode: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.primary },
-  followNodeOn: { backgroundColor: 'rgba(255,255,255,0.42)' },
+  followNode: { width: 4, height: 4, borderRadius: radius.full, backgroundColor: feedInk.primary },
+  followNodeOn: { backgroundColor: feedLine.strong },
   followTxt: {
     ...feedTextShadow,
-    color: '#FFFFFF',
+    color: feedInk.primary,
     // Um controlo secundário não pode ser mais pesado que o nome que qualifica.
-    fontFamily: fonts.semiBold,
+    fontFamily: fonts.regular,
     fontSize: typography.secondary,
-    lineHeight: 17,
+    lineHeight: leading.secondary,
     letterSpacing: 0.05,
   },
-  followingBtn: { borderLeftColor: 'rgba(255,255,255,0.18)' },
-  followingTxt: { color: '#FFFFFF' },
+  followingBtn: { borderLeftColor: feedLine.subtle },
+  followingTxt: { color: feedInk.primary },
   descriptionWrap: { position: 'relative' },
   description: {
     ...feedTextShadow,
-    color: feedInk.secondary, fontFamily: fonts.regular, fontSize: typography.secondary, lineHeight: 19.5
+    color: feedInk.secondary, fontFamily: fonts.regular, fontSize: typography.secondary, lineHeight: leading.secondary
   },
   descriptionMore: {
     ...feedTextShadow,
     color: feedInk.secondary,
-    fontFamily: fonts.medium,
+    fontFamily: fonts.regular,
     fontSize: typography.secondary,
-    marginTop: 2,
+    lineHeight: leading.secondary,
+    marginTop: spacing.xxs,
   },
   descriptionMeasure: {
     position: 'absolute',
@@ -974,22 +964,22 @@ const s = StyleSheet.create({
     right: 0,
     opacity: 0
   },
-  socialRow: { minHeight: 26, flexDirection: 'row', alignItems: 'center', gap: 9 },
-  commentsLink: { flex: 1, minHeight: 26, flexDirection: 'row', alignItems: 'center', gap: 3 },
+  socialRow: { minHeight: 22, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  commentsLink: { flex: 1, minHeight: 22, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   commentsText: {
     ...feedTextShadow,
     flexShrink: 1,
     color: feedInk.muted,
-    fontFamily: fonts.medium,
+    fontFamily: fonts.regular,
     fontSize: typography.meta,
-    lineHeight: 15
+    lineHeight: leading.meta
   },
 
   // Traço do tempo do vídeo — scrubber (área de toque de 22px, linha ao centro)
-  trackRow:  { position: 'absolute', left: 14, right: 14, height: 22, justifyContent: 'center' },
+  trackRow:  { position: 'absolute', left: spacing.md, right: spacing.md, height: 22, justifyContent: 'center' },
   // Branco porque assenta sobre a feed escura. O sulco fica a 22% para se ler
   // como calha sem competir com o preenchimento.
-  track:     { borderRadius: 2, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.22)' },
+  track:     { borderRadius: radius.full, overflow: 'hidden', backgroundColor: feedFill.track },
   trackFill: {
     position: 'absolute',
     top: 0,
@@ -997,8 +987,8 @@ const s = StyleSheet.create({
     left: 0,
     width: '100%',
     transformOrigin: 'left center',
-    borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderRadius: radius.full,
+    backgroundColor: feedFill.solid,
   },
   playOverlay: { position: 'absolute', left: 0, right: 0, top: '40%', alignItems: 'center' }
 })

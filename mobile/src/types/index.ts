@@ -22,6 +22,7 @@ export interface User {
   statusLabel?: string | null
   interests?: string[]
   isAdmin?: boolean
+  isVerified?: boolean          // selo ao lado do nome
   lastSeen?: string | null
   // Conta profissional / comercial
   accountType?: 'PERSONAL' | 'PROFESSIONAL'
@@ -96,7 +97,7 @@ export interface Post {
   /** Autor do conteúdo original de um repost. Usado pela moderação para
    *  não reintroduzir conteúdo ocultado através da cópia de outra pessoa. */
   repostOriginalAuthorId?: string | null
-  user: Pick<User, 'id' | 'name' | 'username' | 'avatar' | 'viewsPublic' | 'showDevice' | 'statusLabel' | 'lastSeen'>
+  user: Pick<User, 'id' | 'name' | 'username' | 'avatar' | 'viewsPublic' | 'showDevice' | 'statusLabel' | 'lastSeen' | 'isVerified'>
   _count: { likes: number; comments: number; shares: number; reposts: number; views: number }
   recentCommenters?: Array<{ id: string; name: string; avatar: string | null }>
   hasVotedExtend?: boolean
@@ -153,7 +154,7 @@ export interface Comment {
   content: string
   parentId: string | null
   createdAt: string
-  user: Pick<User, 'id' | 'name' | 'username' | 'avatar'>
+  user: Pick<User, 'id' | 'name' | 'username' | 'avatar' | 'isVerified'>
   replies?: Comment[]
   likeCount?: number
   likedByMe?: boolean
@@ -181,7 +182,7 @@ export interface Message {
 }
 
 export interface Connection {
-  user: Pick<User, 'id' | 'name' | 'username' | 'avatar'>
+  user: Pick<User, 'id' | 'name' | 'username' | 'avatar' | 'isVerified'>
   lastMessage: {
     id: string
     content: string | null

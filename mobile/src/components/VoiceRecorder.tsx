@@ -4,18 +4,18 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
-import { colors, fonts } from '../theme'
+import { colors, fonts, gradients } from '../theme'
 import { useT } from '../i18n'
 import { useVoiceRecorder } from './VoiceMessage/useVoiceRecorder'
 import { VoicePhase } from './VoiceMessage/types'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const PRIMARY   = '#FF7A1C'
+const PRIMARY   = colors.primary
 const REC_BARS  = 28
 const PREV_BARS = 36
 const BAR_H     = 22
 const BAR_W     = 3
-const GRAD      = ['#FF7A1C', '#FF6766', '#FFB173']
+const GRAD      = gradients.brand
 
 function fmtMs(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000))
@@ -104,7 +104,7 @@ function PreviewWave({
               w.bar,
               {
                 height:          BAR_H * h,
-                backgroundColor: played ? PRIMARY : 'rgba(202,40,81,0.22)',
+                backgroundColor: played ? PRIMARY : 'rgba(0,0,0,0.18)',
               },
             ]}
           />
@@ -234,14 +234,14 @@ export default function VoiceRecorder({ onSend, onCancel }: Props) {
   if (phase === 'ERROR') {
     return (
       <View style={s.row}>
-        <Ionicons name="alert-circle" size={18} color="#FF3B30" />
-        <Text style={[s.uploadTxt, { color: '#FF3B30', flex: 1 }]} numberOfLines={1}>
+        <Ionicons name="alert-circle" size={18} color={colors.error} />
+        <Text style={[s.uploadTxt, { color: colors.error, flex: 1 }]} numberOfLines={1}>
           {state.error ?? t.vr_send_fail}
         </Text>
         <TouchableOpacity onPress={handleRetry} style={s.retryBtn} activeOpacity={0.75}>
           <Text style={s.retryTxt}>{t.dn_try_again}</Text>
         </TouchableOpacity>
-        <IconBtn name="trash-outline" size={18} color="#FF3B30" onPress={handleDelete} />
+        <IconBtn name="trash-outline" size={18} color={colors.error} onPress={handleDelete} />
       </View>
     )
   }
@@ -252,7 +252,7 @@ export default function VoiceRecorder({ onSend, onCancel }: Props) {
     return (
       <View style={s.row}>
         {/* Delete */}
-        <IconBtn name="trash-outline" size={22} color="#FF3B30" onPress={handleDelete} />
+        <IconBtn name="trash-outline" size={22} color={colors.error} onPress={handleDelete} />
 
         {/* Live waveform */}
         <RecordingWave active={!isPaused} />
@@ -280,7 +280,7 @@ export default function VoiceRecorder({ onSend, onCancel }: Props) {
     return (
       <View style={s.row}>
         {/* Delete */}
-        <IconBtn name="trash-outline" size={22} color="#FF3B30" onPress={handleDelete} />
+        <IconBtn name="trash-outline" size={22} color={colors.error} onPress={handleDelete} />
 
         {/* Preview waveform with playback progress */}
         <PreviewWave uri={state.uri!} progress={progress} />

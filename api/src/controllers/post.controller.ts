@@ -173,6 +173,13 @@ export async function searchPosts(req: AuthRequest, res: Response) {
   } catch (err) { return handleError(res, err) }
 }
 
+export async function discoverPosts(req: AuthRequest, res: Response) {
+  try {
+    const posts = await postService.discoverPosts(req.user!.userId)
+    return ok(res, posts)
+  } catch (err) { return handleError(res, err) }
+}
+
 export async function likePost(req: AuthRequest, res: Response) {
   try {
     const result = await postService.likePost(req.user!.userId, req.params.id)

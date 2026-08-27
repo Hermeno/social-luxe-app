@@ -93,7 +93,7 @@ export default function ChatHeader({
         <Text style={s.name} numberOfLines={1}>{userHandle ? displayHandle(userHandle) : userName}</Text>
         <View style={s.statusRow}>
           {(isOnline || isTyping) && <View style={s.onlineDot} />}
-          <Text style={[s.status, { color: isOnline || isTyping ? '#22C55E' : colors.gray400 }]}>
+          <Text style={[s.status, { color: isOnline || isTyping ? colors.success : colors.gray400 }]}>
             {statusText}
           </Text>
         </View>
@@ -134,7 +134,7 @@ const s = StyleSheet.create({
   name:   { fontSize: 16, fontFamily: fonts.semiBold, color: colors.gray800, letterSpacing: -0.3 },
 
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 1 },
-  onlineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#22C55E' },
+  onlineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.success },
   status:    { fontSize: 12, fontFamily: fonts.regular },
   handle:    { fontSize: 12.5, fontFamily: fonts.regular, color: colors.gray400 },
 
@@ -151,8 +151,8 @@ const s = StyleSheet.create({
     paddingVertical:  7,
     borderRadius:    11,
   },
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#22C55E' },
-  pendingDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#FFB173' },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.success },
+  pendingDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.heart },
   chipTxt: { fontSize: 12.5, fontFamily: fonts.semiBold, color: '#0A0A0A' },
 
   pendingActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },

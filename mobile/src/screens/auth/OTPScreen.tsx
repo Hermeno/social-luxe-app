@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { AuthStackParams } from '../../navigation/AuthNavigator'
-import { fonts } from '../../theme'
+import { colors, fonts } from '../../theme'
 import { useT } from '../../i18n'
 
 type Nav   = StackNavigationProp<AuthStackParams>
@@ -18,8 +18,8 @@ type Route = RouteProp<AuthStackParams, 'OTP'>
 const T  = '#1A1A1A'
 const S  = '#6E6E73'
 const M  = '#ABABAB'
-const B  = '#FF7A1C'
-const E  = '#FF3B30'
+const B  = colors.black
+const E  = colors.error
 const BD = '#E5E5EA'
 const BG = '#FFFFFF'
 const SX = '#F9F9FB'

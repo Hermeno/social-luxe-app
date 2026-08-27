@@ -10,7 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { setStatusBarStyle } from 'expo-status-bar'
 import { PublicPost } from '../../types'
 import { useGuestStore } from '../../store/guest.store'
-import { colors, fonts } from '../../theme'
+import { colors, fonts, postGradientColors } from '../../theme'
 import { API_BASE } from '../../config'
 import { useT } from '../../i18n'
 import AvatarImage from '../../components/AvatarImage'
@@ -74,7 +74,7 @@ function GuestItem({
   return (
     <View style={[s.cell, { height: cellHeight }]}>
       {isText ? (
-        <View style={[s.media, { backgroundColor: post.bgColor || colors.black }]}>
+        <View style={[s.media, { backgroundColor: postGradientColors(post.bgColor, [colors.black, colors.black])[0] }]}>
           <Text style={s.textPost}>{post.caption}</Text>
         </View>
       ) : isVideo ? (

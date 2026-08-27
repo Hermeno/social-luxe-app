@@ -16,13 +16,13 @@ import {
   type MutedUser,
   unmuteUser,
 } from '../../services/mute.service'
-import { fonts } from '../../theme'
+import { colors, fonts } from '../../theme'
 import { toast } from '../../utils/toast'
 
 const TEXT = '#1A1A1A'
 const SECONDARY = '#6E6E73'
 const MUTED = '#ABABAB'
-const BRAND = '#FF7A1C'
+const BRAND = colors.black
 const BORDER = '#E5E5EA'
 const WHITE = '#FFFFFF'
 const SURFACE = '#F9F9FB'

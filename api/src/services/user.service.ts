@@ -4,6 +4,7 @@ import { attachPostMeta, withoutHiddenCollectiveCaptures } from './post.service'
 
 const USER_SELECT = {
   id: true, name: true, username: true, avatar: true, bio: true, availability: true,
+  isVerified: true,
   _count: { select: { followers: true, posts: true } },
 } as const
 
@@ -56,7 +57,7 @@ const PROFILE_SELECT = {
   avatar: true, bio: true, availability: true, viewsPublic: true,
   contact: true, defaultFollowDuration: true, city: true, district: true,
   autoReply: true, showDevice: true, statusLabel: true, interests: true,
-  isAdmin: true, createdAt: true,
+  isAdmin: true, isVerified: true, createdAt: true,
   accountType: true, businessCategory: true, businessAddress: true,
   businessHours: true, whatsapp: true, profileActions: true,
   socialLinks: true,
@@ -123,7 +124,7 @@ export async function getUserPosts(userId: string, viewerId?: string) {
     prisma.post.findMany({
       where: { userId, deletedAt: null, expiresAt: { gt: new Date() } },
       include: {
-        user: { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true, isAdmin: true, showDevice: true, statusLabel: true } },
+        user: { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true, isAdmin: true, isVerified: true, showDevice: true, statusLabel: true } },
         _count: { select: { likes: true, comments: true, views: true, shares: true, reposts: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -195,7 +196,7 @@ export async function getMutualConnections(viewerId: string, targetId: string, l
   // Só os primeiros são precisos para os avatares; `total` carrega a contagem.
   const users = await prisma.user.findMany({
     where:  { id: { in: ids.slice(0, limit) } },
-    select: { id: true, name: true, username: true, avatar: true },
+    select: { id: true, name: true, username: true, avatar: true, isVerified: true },
   })
 
   return { total: ids.length, users }

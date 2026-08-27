@@ -14,7 +14,7 @@ import Svg, { Circle, Line, Text as SvgText, Image as SvgImage, Defs, ClipPath, 
 import { getFriends } from '../../services/friendship.service'
 import { useAuthStore } from '../../store/auth.store'
 import { Friendship } from '../../types'
-import { colors, fonts, spacing } from '../../theme'
+import { brandPalette, colors, fonts, spacing } from '../../theme'
 import { useT } from '../../i18n'
 import { API_BASE } from '../../config'
 
@@ -26,7 +26,13 @@ const CENTER_RADIUS = 36
 const NODE_RADIUS = 26
 
 
-const TIER_COLORS = ['#FF4B6E', '#FF8C42', '#FFD700', '#7EC8E3', '#B39DDB']
+const TIER_COLORS = [
+  brandPalette.blue,
+  brandPalette.indigo,
+  brandPalette.violet,
+  brandPalette.purple,
+  brandPalette.magenta,
+]
 
 function resolveAvatar(avatar: string | null) {
   if (!avatar) return null

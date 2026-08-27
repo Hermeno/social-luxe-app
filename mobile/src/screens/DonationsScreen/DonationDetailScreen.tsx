@@ -9,7 +9,7 @@ import { StackNavigationProp } from '@react-navigation/stack'
 import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import Toast from 'react-native-toast-message'
-import { colors, fonts } from '../../theme'
+import { brandPalette, colors, fonts, gradients } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
 import { useAuthStore } from '../../store/auth.store'
 import {
@@ -23,14 +23,14 @@ type Route = RouteProp<AppStackParams, 'DonationDetail'>
 
 const TYPE_KEY   = { ITEM: 'dn_type_item', FINANCIAL: 'dn_type_financial' } as const
 const STATUS_KEY = { AVAILABLE: 'dn_status_available', RESERVED: 'dn_status_reserved', DELIVERED: 'dn_status_delivered', EXPIRED: 'dn_status_expired' } as const satisfies Record<string, keyof Strings>
-const STATUS_COLOR = { AVAILABLE: colors.primary, RESERVED: '#B8860B', DELIVERED: '#22C55E', EXPIRED: colors.gray400 } as const
+const STATUS_COLOR = { AVAILABLE: colors.black, RESERVED: brandPalette.violet, DELIVERED: brandPalette.blue, EXPIRED: colors.gray400 } as const
 
 function Stars({ value, onChange }: { value: number; onChange?: (n: number) => void }) {
   return (
     <View style={{ flexDirection: 'row', gap: 4 }}>
       {[1, 2, 3, 4, 5].map((n) => (
         <TouchableOpacity key={n} disabled={!onChange} onPress={() => onChange?.(n)} hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}>
-          <Ionicons name={n <= value ? 'star' : 'star-outline'} size={onChange ? 28 : 14} color={n <= value ? '#F5A623' : colors.gray300} />
+          <Ionicons name={n <= value ? 'star' : 'star-outline'} size={onChange ? 28 : 14} color={n <= value ? brandPalette.violet : colors.gray300} />
         </TouchableOpacity>
       ))}
     </View>
@@ -143,7 +143,7 @@ export default function DonationDetailScreen() {
         {photo ? (
           <Image source={{ uri: photo }} style={s.hero} />
         ) : (
-          <LinearGradient colors={['#FF7A1C', '#FF6766', '#FFB173']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.hero}>
+          <LinearGradient colors={gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.hero}>
             <Ionicons name={donation.type === 'ITEM' ? 'gift' : 'cash'} size={40} color="#fff" />
           </LinearGradient>
         )}

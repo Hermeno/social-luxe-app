@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ActivityIndicator, Animated, Modal, Pressable,
+  ActivityIndicator, Animated, Easing, Modal, Pressable,
   StyleSheet, Text, TextInput, TouchableOpacity, View,
+  useWindowDimensions,
 } from 'react-native'
 // O KeyboardAvoidingView do React Native falha em edge-to-edge e, no Android,
 // não faz nada sem `behavior`. Este lê o inset real do teclado (WindowInsets
@@ -12,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import FeedIcon, { type FeedIconWeight } from '../../components/FeedIcon'
 import Icon, { type IconName } from '../../components/Icon'
+import { feedIcon, feedInk, FEED_STROKE } from './tokens'
 import { confirm } from '../../components/confirm'
 import { API_BASE } from '../../config'
 import { deleteCachedPostsByUser } from '../../db/database'
@@ -21,7 +23,7 @@ import { blockUser } from '../../services/block.service'
 import { muteUser, type MuteDuration } from '../../services/mute.service'
 import { isPostSaved, toggleSavedPost } from '../../services/savedPost.service'
 import { useAuthStore } from '../../store/auth.store'
-import { colors, fonts, typography } from '../../theme'
+import { colors, fonts, leading, radius, sheet, spacing, typography } from '../../theme'
 import { Post } from '../../types'
 import { saveMediaListToGallery } from '../../utils/download'
 import { toast } from '../../utils/toast'
@@ -49,6 +51,65 @@ interface OptionRowProps {
   loading?: boolean
 }
 
+/**
+ * Mantém o Modal montado até a superfície terminar de sair.
+ *
+ * O `animationType="fade"` nativo anexava/desanexava a janela inteira e o cartão
+ * branco parecia piscar. Aqui a janela fica imóvel: só o backdrop ganha opacidade
+ * e só a folha se desloca no eixo Y.
+ */
+function useSheetMotion(visible: boolean, reduceMotion: boolean) {
+  const { height: windowHeight } = useWindowDimensions()
+  const [mounted, setMounted] = useState(visible)
+  const progress = useRef(new Animated.Value(visible ? 1 : 0)).current
+
+  useEffect(() => {
+    if (visible && !mounted) setMounted(true)
+  }, [mounted, visible])
+
+  useEffect(() => {
+    if (!mounted) return
+    progress.stopAnimation()
+
+    if (reduceMotion) {
+      progress.setValue(visible ? 1 : 0)
+      if (!visible) setMounted(false)
+      return
+    }
+
+    const animation = visible
+      ? Animated.spring(progress, {
+          toValue: 1,
+          damping: 26,
+          stiffness: 240,
+          mass: 0.9,
+          useNativeDriver: true,
+        })
+      : Animated.timing(progress, {
+          toValue: 0,
+          duration: 230,
+          easing: Easing.in(Easing.cubic),
+          useNativeDriver: true,
+        })
+
+    animation.start(({ finished }) => {
+      if (finished && !visible) setMounted(false)
+    })
+  }, [mounted, progress, reduceMotion, visible])
+
+  useEffect(() => () => progress.stopAnimation(), [progress])
+
+  return {
+    mounted,
+    backdropOpacity: progress,
+    translateY: progress.interpolate({
+      inputRange: [0, 1],
+      outputRange: [windowHeight, 0],
+      extrapolate: 'clamp',
+    }),
+  }
+}
+
 function OptionRow({ icon, label, onPress, selected, danger, disabled, loading }: OptionRowProps) {
   // Todos os ícones desta folha são pretos — sem variante de cor por estado.
   // O que distingue a linha é o rótulo e o sinal de selecionado, não o ícone.
@@ -66,9 +127,9 @@ function OptionRow({ icon, label, onPress, selected, danger, disabled, loading }
       <View style={s.optionIcon}>
         {icon === 'bookmark' ? (
           // Único destes que veio no pacote de SVG do Herminio.
-          <FeedIcon name="bookmark" size={21} color={color} />
+          <FeedIcon name="bookmark" size={feedIcon.control} color={color} />
         ) : (
-          <Icon name={icon} size={21} strokeWidth={1.8} color={color} fill="none" />
+          <Icon name={icon} size={feedIcon.control} strokeWidth={FEED_STROKE} absoluteStrokeWidth color={color} fill="none" />
         )}
       </View>
       <Text style={[s.optionLabel, danger && s.optionLabelDanger]} numberOfLines={1}>{label}</Text>
@@ -114,8 +175,9 @@ export default function PostOptionsMenu({
   // O campo já não precisa da área segura do fundo quando o teclado a cobre.
   const keyboardOpen = useKeyboardState().isVisible
 
-  const menuScale = useRef(new Animated.Value(0.92)).current
-  const menuOp = useRef(new Animated.Value(0)).current
+  const menuMotion = useSheetMotion(showMenu, reduceMotion)
+  const muteMotion = useSheetMotion(showMuteChoices, reduceMotion)
+  const editMotion = useSheetMotion(editMode, reduceMotion)
 
   const mediaUrls = useMemo(() => {
     if (post.mediaType === 'TEXT') return []
@@ -124,25 +186,17 @@ export default function PostOptionsMenu({
   }, [post.mediaType, post.mediaUrl, post.mediaUrls])
 
   useEffect(() => {
-    if (!showMenu) return
-    if (reduceMotion) {
-      menuScale.setValue(1)
-      menuOp.setValue(1)
-      return
-    }
-    menuScale.setValue(0.96)
-    menuOp.setValue(0)
-    Animated.parallel([
-      Animated.spring(menuScale, { toValue: 1, useNativeDriver: true, damping: 22, stiffness: 250 }),
-      Animated.timing(menuOp, { toValue: 1, duration: 150, useNativeDriver: true }),
-    ]).start()
-  }, [menuOp, menuScale, reduceMotion, showMenu])
-
-  useEffect(() => {
-    onBlockingChange?.(showMenu || showMuteChoices || editMode || confirming || blocking || !!muting)
+    onBlockingChange?.(
+      menuMotion.mounted
+      || muteMotion.mounted
+      || editMotion.mounted
+      || confirming
+      || blocking
+      || !!muting,
+    )
     // A identidade do callback não representa uma mudança de bloqueio.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [blocking, confirming, editMode, muting, showMenu, showMuteChoices])
+  }, [blocking, confirming, editMotion.mounted, menuMotion.mounted, muteMotion.mounted, muting])
 
   useEffect(() => {
     let active = true
@@ -308,21 +362,22 @@ export default function PostOptionsMenu({
       </TouchableOpacity>
 
       <Modal
-        visible={showMenu}
+        visible={menuMotion.mounted}
         transparent
         statusBarTranslucent
-        animationType={reduceMotion ? 'none' : 'fade'}
+        animationType="none"
         onRequestClose={() => setShowMenu(false)}
       >
-        <Pressable
-          style={[s.backdrop, { paddingBottom: Math.max(safeBottom, 12) }]}
-          onPress={() => setShowMenu(false)}
-        >
+        <View style={[s.backdrop, { paddingBottom: Math.max(safeBottom, 12) }]}>
+          <Animated.View style={[s.backdropShade, { opacity: menuMotion.backdropOpacity }]}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowMenu(false)} accessible={false} />
+          </Animated.View>
           <Animated.View
-            style={[s.sheet, { opacity: menuOp, transform: [{ scale: menuScale }] }]}
+            style={[s.sheet, { transform: [{ translateY: menuMotion.translateY }] }]}
             onStartShouldSetResponder={() => true}
             accessibilityViewIsModal
             importantForAccessibility="yes"
+            renderToHardwareTextureAndroid
           >
             <View style={s.grabber} />
             <View style={s.sheetHeader}>
@@ -396,25 +451,30 @@ export default function PostOptionsMenu({
               )}
             </View>
           </Animated.View>
-        </Pressable>
+        </View>
       </Modal>
 
       <Modal
-        visible={showMuteChoices}
+        visible={muteMotion.mounted}
         transparent
         statusBarTranslucent
-        animationType={reduceMotion ? 'none' : 'fade'}
+        animationType="none"
         onRequestClose={() => { if (!muting) setShowMuteChoices(false) }}
       >
-        <Pressable
-          style={[s.backdrop, { paddingBottom: Math.max(safeBottom, 12) }]}
-          onPress={() => { if (!muting) setShowMuteChoices(false) }}
-        >
-          <View
-            style={s.sheet}
+        <View style={[s.backdrop, { paddingBottom: Math.max(safeBottom, 12) }]}>
+          <Animated.View style={[s.backdropShade, { opacity: muteMotion.backdropOpacity }]}>
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={() => { if (!muting) setShowMuteChoices(false) }}
+              accessible={false}
+            />
+          </Animated.View>
+          <Animated.View
+            style={[s.sheet, { transform: [{ translateY: muteMotion.translateY }] }]}
             onStartShouldSetResponder={() => true}
             accessibilityViewIsModal
             importantForAccessibility="yes"
+            renderToHardwareTextureAndroid
           >
             <View style={s.grabber} />
             <View style={s.sheetHeader}>
@@ -454,20 +514,31 @@ export default function PostOptionsMenu({
             >
               <Text style={s.muteCancelText}>{t.cancel}</Text>
             </TouchableOpacity>
-          </View>
-        </Pressable>
+          </Animated.View>
+        </View>
       </Modal>
 
       <Modal
-        visible={editMode}
+        visible={editMotion.mounted}
         transparent
         statusBarTranslucent
-        animationType={reduceMotion ? 'none' : 'slide'}
+        animationType="none"
         onRequestClose={() => setEditMode(false)}
       >
         <KeyboardAvoidingView style={s.editOverlay} behavior="padding">
-          <Pressable style={s.editBackdrop} onPress={() => setEditMode(false)} />
-          <View style={[s.editSheet, { paddingBottom: keyboardOpen ? 14 : Math.max(safeBottom, 14) }]}>
+          <Animated.View style={[s.editBackdrop, { opacity: editMotion.backdropOpacity }]}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={() => setEditMode(false)} accessible={false} />
+          </Animated.View>
+          <Animated.View
+            style={[
+              s.editSheet,
+              {
+                paddingBottom: keyboardOpen ? 14 : Math.max(safeBottom, 14),
+                transform: [{ translateY: editMotion.translateY }],
+              },
+            ]}
+            renderToHardwareTextureAndroid
+          >
             <View style={s.editGrabber} />
             <View style={s.editRow}>
               <TextInput
@@ -487,10 +558,10 @@ export default function PostOptionsMenu({
                 accessibilityRole="button"
                 accessibilityLabel={t.save}
               >
-                <Icon name="send" size={19} strokeWidth={2.2} color="#fff" />
+                <Icon name="send" size={feedIcon.control} strokeWidth={FEED_STROKE} absoluteStrokeWidth color={feedInk.primary} />
               </TouchableOpacity>
             </View>
-          </View>
+          </Animated.View>
         </KeyboardAvoidingView>
       </Modal>
     </>
@@ -501,20 +572,20 @@ const s = StyleSheet.create({
   trigger: {
     width: 34,
     height: 34,
-    borderRadius: 17,
+    borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.45,
-    shadowRadius: 2,
+    shadowOpacity: 0.38,
+    shadowRadius: 1.8,
   },
   triggerRail: {
     width: 64,
     height: 53,
     borderRadius: 0,
     justifyContent: 'flex-start',
-    gap: 2,
+    gap: spacing.xxs,
   },
   triggerRailCompact: {
     height: 44,
@@ -533,24 +604,26 @@ const s = StyleSheet.create({
   },
   triggerIconStageRailCompact: {
     height: 44,
-    transform: [{ translateY: 2 }],
   },
-  triggerMetricSlot: { height: 15 },
+  triggerMetricSlot: { height: leading.meta },
   backdrop: {
     flex: 1,
     justifyContent: 'flex-end',
-    paddingHorizontal: 10,
+    paddingHorizontal: spacing.sm2,
+  },
+  backdropShade: {
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.28)',
   },
   sheet: {
     width: '100%',
     maxWidth: 430,
     alignSelf: 'center',
-    paddingHorizontal: 12,
-    paddingTop: 9,
-    paddingBottom: 12,
-    borderRadius: 26,
-    backgroundColor: '#FCFCFA',
+    paddingHorizontal: spacing.sm2,
+    paddingTop: spacing.sm2,
+    paddingBottom: spacing.sm2,
+    borderRadius: radius.xl,
+    backgroundColor: sheet.surface,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.16,
@@ -560,132 +633,137 @@ const s = StyleSheet.create({
   grabber: {
     width: 34,
     height: 3,
-    borderRadius: 2,
+    borderRadius: radius.full,
     alignSelf: 'center',
-    backgroundColor: '#D5D5D1',
+    backgroundColor: sheet.lineStrong,
   },
   sheetHeader: {
     minHeight: 48,
-    paddingHorizontal: 8,
+    paddingHorizontal: spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   sheetTitle: {
     color: colors.gray800,
-    fontFamily: fonts.bold,
+    fontFamily: fonts.medium,
     fontSize: typography.section,
+    lineHeight: leading.section,
     letterSpacing: -0.35,
   },
-  sheetSignal: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  sheetSignalLine: { width: 16, height: 2, borderRadius: 1, backgroundColor: colors.primary },
-  sheetSignalDot: { width: 3, height: 3, borderRadius: 2, backgroundColor: colors.primary },
+  sheetSignal: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  sheetSignalLine: { width: 16, height: 2, borderRadius: radius.full, backgroundColor: colors.primary },
+  sheetSignalDot: { width: 3, height: 3, borderRadius: radius.full, backgroundColor: colors.primary },
   optionList: {
     overflow: 'hidden',
-    borderRadius: 18,
+    borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#E1E1DD',
-    backgroundColor: '#FFFFFF',
+    borderColor: sheet.line,
+    backgroundColor: colors.white,
   },
   optionRow: {
     minHeight: 58,
-    paddingHorizontal: 13,
+    paddingHorizontal: spacing.sm2,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: spacing.sm2,
   },
   optionDisabled: { opacity: 0.42 },
   optionIcon: {
     width: 34,
     height: 34,
-    borderRadius: 11,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F4F4F1',
+    backgroundColor: sheet.surfaceSunk,
   },
   optionLabel: {
     flex: 1,
     color: colors.gray800,
-    fontFamily: fonts.semiBold,
+    fontFamily: fonts.regular,
     fontSize: typography.body,
+    lineHeight: leading.body,
     letterSpacing: -0.16,
   },
   optionLabelDanger: { color: colors.error },
-  selectedSignal: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  selectedLine: { width: 13, height: 2, borderRadius: 1, backgroundColor: colors.primary },
-  selectedDot: { width: 3, height: 3, borderRadius: 2, backgroundColor: colors.primary },
+  selectedSignal: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  selectedLine: { width: 13, height: 2, borderRadius: radius.full, backgroundColor: colors.primary },
+  selectedDot: { width: 3, height: 3, borderRadius: radius.full, backgroundColor: colors.primary },
   divider: {
     height: StyleSheet.hairlineWidth,
     marginLeft: 59,
-    backgroundColor: '#E7E7E3',
+    backgroundColor: sheet.line,
   },
-  sectionBreak: { height: 9, backgroundColor: '#F3F3F0' },
+  sectionBreak: { height: spacing.sm, backgroundColor: sheet.surfaceSunk },
   sectionLabel: {
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 3,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm2,
+    paddingBottom: spacing.xs,
     color: colors.gray500,
-    fontFamily: fonts.bold,
+    fontFamily: fonts.medium,
     fontSize: typography.meta,
+    lineHeight: leading.meta,
     letterSpacing: 1.1,
     textTransform: 'uppercase',
   },
   muteDescription: {
     marginTop: -2,
-    marginBottom: 12,
-    paddingHorizontal: 8,
+    marginBottom: spacing.sm2,
+    paddingHorizontal: spacing.sm,
     color: colors.gray500,
     fontFamily: fonts.regular,
     fontSize: typography.secondary,
-    lineHeight: 18,
+    lineHeight: leading.secondary,
   },
   muteCancel: {
     minHeight: 48,
-    marginTop: 9,
+    marginTop: spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 16,
-    backgroundColor: '#F1F1EE',
+    borderRadius: radius.lg,
+    backgroundColor: sheet.surfaceSunk,
   },
   muteCancelText: {
     color: colors.gray600,
-    fontFamily: fonts.bold,
+    fontFamily: fonts.regular,
     fontSize: typography.body,
+    lineHeight: leading.body,
   },
   editOverlay: { flex: 1, justifyContent: 'flex-end' },
   editBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.38)' },
   editSheet: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm2,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
     backgroundColor: colors.white,
   },
   editGrabber: {
     width: 38,
     height: 4,
-    marginBottom: 14,
-    borderRadius: 2,
+    marginBottom: spacing.md,
+    borderRadius: radius.full,
     alignSelf: 'center',
     backgroundColor: colors.gray200,
   },
-  editRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
+  editRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm2 },
   editInput: {
     flex: 1,
     minHeight: 44,
     maxHeight: 120,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    borderRadius: 16,
-    backgroundColor: '#F4F4F6',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm2,
+    borderRadius: radius.lg,
+    backgroundColor: sheet.surfaceSunk,
     color: colors.gray800,
     fontFamily: fonts.regular,
     fontSize: typography.body,
+    lineHeight: leading.body,
   },
   editSubmit: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.primary,

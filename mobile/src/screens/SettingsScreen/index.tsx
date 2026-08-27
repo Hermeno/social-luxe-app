@@ -8,7 +8,7 @@ import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { useAuthStore } from '../../store/auth.store'
 import { AppStackParams } from '../../navigation/AppNavigator'
-import { fonts } from '../../theme'
+import { colors, fonts } from '../../theme'
 import { API_BASE } from '../../config'
 import { useT, useI18n } from '../../i18n'
 
@@ -17,7 +17,7 @@ type Nav = StackNavigationProp<AppStackParams>
 const T_C = '#1A1A1A'
 const S   = '#6E6E73'
 const M   = '#ABABAB'
-const B   = '#FF7A1C'
+const B   = colors.black
 const BD  = '#E5E5EA'
 const BG  = '#FFFFFF'
 const SX  = '#F9F9FB'
@@ -147,7 +147,7 @@ export default function SettingsScreen() {
         </View>
 
         <TouchableOpacity style={s.logoutBtn} onPress={handleLogout} activeOpacity={0.75}>
-          <Ionicons name="log-out-outline" size={19} color="#FF3B30" />
+          <Ionicons name="log-out-outline" size={19} color={colors.error} />
           <Text style={s.logoutTxt}>{t.logout}</Text>
         </TouchableOpacity>
 
@@ -177,6 +177,6 @@ const s = StyleSheet.create({
   card:  { backgroundColor: BG, borderWidth: 1, borderColor: CARD_BD, borderRadius: 18, overflow: 'hidden' },
 
   logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, padding: 14, borderRadius: 18, backgroundColor: BG, borderWidth: 1, borderColor: CARD_BD, marginTop: 10 },
-  logoutTxt: { fontFamily: fonts.bold, fontSize: 15, color: '#FF3B30' },
+  logoutTxt: { fontFamily: fonts.bold, fontSize: 15, color: colors.error },
   version:   { textAlign: 'center', fontFamily: fonts.medium, fontSize: 12, color: M, marginTop: 8 },
 })

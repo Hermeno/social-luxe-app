@@ -4,14 +4,15 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import FeedIcon, { type FeedIconWeight } from '../../components/FeedIcon'
-import { feedIcon } from './tokens'
+import { feedIcon, feedInk, feedTextShadow } from './tokens'
 
 import { Post, type RepostResult } from '../../types'
-import { colors, fonts, typography } from '../../theme'
+import { colors, fonts, leading, spacing, typography } from '../../theme'
 import * as postService from '../../services/post.service'
 import { updateCachedPost, queueLike, enqueueSyncOp } from '../../db/database'
 import { isConnected } from '../../services/netinfo.service'
 import ReactionPicker from '../../components/ReactionPicker'
+import SharePostSheet from '../../components/SharePostSheet'
 import { useT } from '../../i18n'
 import AuthorPostsModal from './AuthorPostsModal'
 import PostOptionsMenu from './PostOptionsMenu'
@@ -55,7 +56,17 @@ type HeartP = {
   o:   Animated.Value
 }
 
-function fmt(n: number) {
+/**
+ * O contador de uma acção — ou nada, quando ainda não há nada para contar.
+ *
+ * Um "0" por baixo de cada ícone não informa: diz que a contagem existe e está
+ * vazia, o que o próprio ícone apagado já dizia. Quatro zeros em coluna num post
+ * acabado de publicar leem-se como um formulário por preencher. Devolvendo
+ * `undefined`, a `RailAction` não desenha texto nenhum — e o `metricSlot`
+ * mantém a altura, para os ícones não saltarem quando o primeiro número chega.
+ */
+function fmt(n: number): string | undefined {
+  if (n <= 0)         return undefined
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000)     return `${(n / 1_000).toFixed(1)}K`
   return String(n)
@@ -177,6 +188,7 @@ export default React.memo(function ActionBar({
   const [repostCount, setRepostCount] = useState(post._count?.reposts ?? 0)
   const [shareCount, setShareCount] = useState(post._count?.shares ?? 0)
   const [showReactions, setShowReactions] = useState(false)
+  const [showShare, setShowShare] = useState(false)
   const [showAuthorPosts, setShowAuthorPosts] = useState(false)
   const [optionsBlocking, setOptionsBlocking] = useState(false)
   const [hearts,    setHearts]    = useState<HeartP[]>([])
@@ -346,13 +358,22 @@ export default React.memo(function ActionBar({
     }
   }
 
-  async function handleShare() {
+  // Toque: a folha de dentro, com quem segues. Toque longo: a folha do sistema,
+  // para o mundo lá fora. As duas contam a mesma partilha.
+  function handleShare() {
+    setShowShare(true)
+  }
+
+  function countShare() {
+    postService.sharePost(post.id).then(() => setShareCount((c) => c + 1)).catch(() => {})
+  }
+
+  async function handleShareExternal() {
     try {
       const result = await Share.share({
         message: `${post.caption ? `"${post.caption}" — ` : ''}${t.feed_share_msg}`,
       })
-      if (result.action === Share.sharedAction)
-        postService.sharePost(post.id).then(() => setShareCount((c) => c + 1)).catch(() => {})
+      if (result.action === Share.sharedAction) countShare()
     } catch {}
   }
 
@@ -497,7 +518,7 @@ export default React.memo(function ActionBar({
                 <FeedIcon
                   name={liked ? 'heart-solid' : 'heart'}
                   size={iconSize}
-                  color={liked ? colors.heart : '#fff'}
+                  color={liked ? colors.heart : feedInk.primary}
                   weight={liked ? 'regular' : iconWeight}
                 />
               </Animated.View>
@@ -508,7 +529,7 @@ export default React.memo(function ActionBar({
                   accessible={false}
                   style={[s.burstHeart, { opacity: h.o, transform: [{ translateX: h.tx }, { translateY: h.ty }, { scale: h.s }] }]}
                 >
-                  <FeedIcon name="heart-solid" size={14} color={colors.heart} />
+                  <FeedIcon name="heart-solid" size={feedIcon.inline} color={colors.heart} />
                 </Animated.View>
               ))}
             </RailAction>
@@ -523,7 +544,7 @@ export default React.memo(function ActionBar({
               reduceMotion={reduceMotion}
             >
               {/* Já nasce com a cauda à direita — dispensa o espelho que aqui estava. */}
-              <FeedIcon name="chat-outline" size={iconSize} color="#fff" weight={iconWeight} />
+              <FeedIcon name="chat-outline" size={iconSize} color={feedInk.primary} weight={iconWeight} />
             </RailAction>
 
             {/* Repost: o glifo completa uma volta; só depois nasce o "1".
@@ -551,7 +572,7 @@ export default React.memo(function ActionBar({
                   <FeedIcon
                     name="repost"
                     size={iconSize}
-                    color="#fff"
+                    color={feedInk.primary}
                     // O SVG já tem o peso dentro da geometria preenchida; o
                     // reforço `medium` deixava-o mais grosso que os vizinhos.
                     weight="regular"
@@ -573,8 +594,8 @@ export default React.memo(function ActionBar({
             </RailAction>
 
             {/* Partilhar */}
-            <RailAction label={t.mo_share} count={fmt(shareCount)} onPress={handleShare} entry={railEntry} order={3} reduceMotion={reduceMotion}>
-              <FeedIcon name="share" size={iconSize} color="#fff" weight={iconWeight} />
+            <RailAction label={t.mo_share} count={fmt(shareCount)} onPress={handleShare} onLongPress={handleShareExternal} entry={railEntry} order={3} reduceMotion={reduceMotion}>
+              <FeedIcon name="share" size={iconSize} color={feedInk.primary} weight={iconWeight} />
             </RailAction>
           </>
         )}
@@ -624,7 +645,7 @@ export default React.memo(function ActionBar({
               <FeedIcon
                 name="author-posts"
                 size={iconSize}
-                color="#fff"
+                color={feedInk.primary}
                 weight={iconWeight}
               />
             </View>
@@ -636,6 +657,14 @@ export default React.memo(function ActionBar({
         <Modal transparent animationType="none" visible onRequestClose={() => setShowReactions(false)}>
           <ReactionPicker postId={post.id} currentReaction={undefined} onClose={() => setShowReactions(false)} />
         </Modal>
+      )}
+
+      {showShare && (
+        <SharePostSheet
+          post={post}
+          onShared={countShare}
+          onClose={() => setShowShare(false)}
+        />
       )}
 
       {showAuthorPosts && (
@@ -652,7 +681,7 @@ const s = StyleSheet.create({
     right: 0,
     width: 64,
     alignItems: 'center',
-    gap: 4,
+    gap: spacing.xs,
     zIndex: 20
   },
   actionHit: {
@@ -678,16 +707,15 @@ const s = StyleSheet.create({
     height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    transform: [{ translateY: -2 }],
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.46,
-    shadowRadius: 2,
+    shadowOpacity: 0.38,
+    shadowRadius: 1.8,
   },
   actionVisual: {
     height: 53,
     alignItems: 'center',
-    gap: 2,
+    gap: spacing.xxs,
   },
   iconStage: {
     width: 44,
@@ -695,18 +723,19 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'visible',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.46, shadowRadius: 2
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.38, shadowRadius: 1.8
   },
   metricSlot: {
-    height: 15,
+    height: leading.meta,
     alignItems: 'center',
     justifyContent: 'center',
   },
   railN: {
-    color: 'rgba(255,255,255,0.88)',
-    fontFamily: fonts.semiBold,
+    ...feedTextShadow,
+    color: feedInk.secondary,
+    fontFamily: fonts.regular,
     fontSize: typography.meta,
-    lineHeight: 15,
+    lineHeight: leading.meta,
     letterSpacing: 0,
     fontVariant: ['tabular-nums'],
   },
@@ -720,11 +749,11 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   repostOne: {
-    color: '#fff',
+    color: feedInk.primary,
     // extraBold num contador de 11px era o peso mais alto de toda a feed.
-    fontFamily: fonts.semiBold,
+    fontFamily: fonts.medium,
     fontSize: typography.badge,
-    lineHeight: 11,
+    lineHeight: leading.badge,
     textAlign: 'center',
     textShadowColor: 'rgba(0,0,0,0.38)',
     textShadowOffset: { width: 0, height: 0.5 },

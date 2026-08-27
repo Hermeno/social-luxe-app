@@ -23,8 +23,8 @@ export const authUi = {
   line: '#E8E8E8',
   lineStrong: '#D8D8D8',
   signal: colors.primary,
-  danger: '#C62828',
-  success: '#198754',
+  danger: colors.error,
+  success: colors.success,
 }
 
 export function AuthBrand({ light = false }: { light?: boolean }) {

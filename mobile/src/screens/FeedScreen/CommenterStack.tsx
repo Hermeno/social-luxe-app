@@ -1,11 +1,12 @@
 import React from 'react'
 import { View, StyleSheet, TouchableOpacity } from 'react-native'
 import AvatarImage from '../../components/AvatarImage'
+import { radius } from '../../theme'
 
 export type CommenterThumb = { id: string; name: string; avatar: string | null }
 
-const SIZE = 22
-const OVERLAP = 7      // compacto: contexto social, não uma segunda navegação
+const SIZE = 18
+const OVERLAP = 5      // contexto social discreto, sem competir com o autor
 const MAX = 3
 
 /**
@@ -58,14 +59,7 @@ const s = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   slot: {
-    // Sem anel branco, é a sombra que separa cada cara da que está por baixo e
-    // da fotografia. Apertada ao contorno — raio curto e sem deslocamento — para
-    // dar um bordo em vez de pousar o avatar acima da imagem.
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.45,
-    shadowRadius: 2.5,
-    elevation: 3,
-    borderRadius: SIZE / 2,
+    borderRadius: radius.full,
+    overflow: 'hidden',
   },
 })

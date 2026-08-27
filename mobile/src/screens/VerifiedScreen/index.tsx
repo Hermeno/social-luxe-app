@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { AppStackParams } from '../../navigation/AppNavigator'
-import { fonts } from '../../theme'
+import { colors, fonts } from '../../theme'
 import { useT } from '../../i18n'
 
 type Nav = StackNavigationProp<AppStackParams>
@@ -15,8 +15,8 @@ type Nav = StackNavigationProp<AppStackParams>
 const T  = '#1A1A1A'
 const S  = '#6E6E73'
 const M  = '#ABABAB'
-const B  = '#FF7A1C'
-const G  = '#22C55E'
+const B  = colors.black
+const G  = colors.success
 const BD = '#E5E5EA'
 const BG = '#FFFFFF'
 const SX = '#F9F9FB'
@@ -119,7 +119,7 @@ const s = StyleSheet.create({
   content: { paddingHorizontal: 16, gap: 14 },
 
   hero:       { alignItems: 'center', gap: 14 },
-  shieldCircle: { width: 84, height: 84, borderRadius: 999, backgroundColor: 'rgba(76,140,228,0.12)', alignItems: 'center', justifyContent: 'center' },
+  shieldCircle: { width: 84, height: 84, borderRadius: 999, backgroundColor: 'rgba(47,73,253,0.12)', alignItems: 'center', justifyContent: 'center' },
   heroTitle:  { fontFamily: fonts.extraBold, fontSize: 24, letterSpacing: -0.6, color: T, textAlign: 'center' },
   heroSub:    { fontFamily: fonts.medium, fontSize: 14, lineHeight: 21, color: S, textAlign: 'center', paddingHorizontal: 8 },
 
@@ -140,9 +140,9 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 13,
     padding: 16, borderRadius: 18,
     borderWidth: 1.5, borderColor: B, borderStyle: 'dashed',
-    backgroundColor: 'rgba(76,140,228,0.05)',
+    backgroundColor: 'rgba(47,73,253,0.05)',
   },
-  uploadIcon:  { width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(76,140,228,0.14)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  uploadIcon:  { width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(47,73,253,0.14)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   uploadTitle: { fontFamily: fonts.bold, fontSize: 15, color: T },
   uploadSub:   { fontFamily: fonts.medium, fontSize: 12, color: S, marginTop: 2 },
 

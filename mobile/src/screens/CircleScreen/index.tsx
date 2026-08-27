@@ -1614,12 +1614,12 @@ const s = StyleSheet.create({
   controlButtonCompact: { minHeight: 36, paddingHorizontal: 12, paddingVertical: 7 },
   controlButtonPrimary: {
     backgroundColor: colors.primary,
-    borderColor: 'rgba(255,177,115,0.72)',
+    borderColor: 'rgba(194,70,230,0.72)',
   },
   controlButtonSoft: { backgroundColor: 'rgba(255,255,255,0.14)' },
   controlButtonDanger: {
-    backgroundColor: 'rgba(255,59,48,0.2)',
-    borderColor: 'rgba(255,91,82,0.58)',
+    backgroundColor: 'rgba(156,69,238,0.2)',
+    borderColor: 'rgba(156,69,238,0.58)',
   },
   controlButtonDisabled: { opacity: 0.44 },
   controlButtonPressed: { opacity: 0.76, transform: [{ scale: 0.98 }] },
@@ -1637,7 +1637,7 @@ const s = StyleSheet.create({
   },
   iconButtonPrimary: { backgroundColor: colors.primary, borderColor: colors.primaryLight },
   iconButtonSoft: { backgroundColor: 'rgba(255,255,255,0.14)' },
-  iconButtonDanger: { backgroundColor: 'rgba(255,59,48,0.24)', borderColor: 'rgba(255,91,82,0.58)' },
+  iconButtonDanger: { backgroundColor: 'rgba(156,69,238,0.24)', borderColor: 'rgba(156,69,238,0.58)' },
 
   // ── Contagem decrescente ──
   countdownWrap: {
@@ -1847,8 +1847,8 @@ const s = StyleSheet.create({
   roundTimer: {
     height: 30, paddingHorizontal: 10, borderRadius: radius.full,
     flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: 'rgba(255,122,28,0.2)',
-    borderWidth: 1, borderColor: 'rgba(255,177,115,0.38)',
+    backgroundColor: 'rgba(47,73,253,0.2)',
+    borderWidth: 1, borderColor: 'rgba(194,70,230,0.38)',
   },
   roundTimerText: { color: '#fff', fontFamily: fonts.bold, fontSize: 12 },
   dockMainRow: { flexDirection: 'row', alignItems: 'center', minHeight: 92 },
@@ -1900,8 +1900,8 @@ const s = StyleSheet.create({
   },
   publishedPill: {
     minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
-    borderRadius: radius.full, backgroundColor: 'rgba(34,197,94,0.18)',
-    borderWidth: 1, borderColor: 'rgba(34,197,94,0.4)',
+    borderRadius: radius.full, backgroundColor: 'rgba(47,73,253,0.18)',
+    borderWidth: 1, borderColor: 'rgba(47,73,253,0.4)',
   },
   publishedPillText: { color: '#fff', fontFamily: fonts.bold, fontSize: 13 },
 
@@ -1915,7 +1915,7 @@ const s = StyleSheet.create({
   previewBadge: {
     alignSelf: 'center', height: 30, paddingHorizontal: 12, borderRadius: radius.full,
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: 'rgba(255,122,28,0.22)', borderWidth: 1, borderColor: 'rgba(255,177,115,0.42)',
+    backgroundColor: 'rgba(47,73,253,0.22)', borderWidth: 1, borderColor: 'rgba(194,70,230,0.42)',
   },
   previewBadgeText: { color: '#fff', fontFamily: fonts.bold, fontSize: 11.5 },
   emojiBar: { maxHeight: 52 },

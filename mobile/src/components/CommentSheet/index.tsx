@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useLayoutEffect, useState, useRef } from 'react'
 import {
-  View, Text, TouchableOpacity, FlatList, StyleSheet, Animated,
+  View, Text, TouchableOpacity, FlatList, StyleSheet, Animated, Easing,
   Keyboard, Pressable, ActivityIndicator, TextInput,
   useWindowDimensions,
 } from 'react-native'
@@ -11,11 +11,11 @@ import { Post, Comment } from '../../types'
 import { useComments } from '../../hooks/useComments'
 import CommentItem from './CommentItem'
 import CommentInputArea from './CommentInputArea'
-import { colors, fonts } from '../../theme'
+import { colors, fonts, radius } from '../../theme'
 import { useT } from '../../i18n'
 import { useOverlayStore } from '../../store/overlay.store'
 import useReducedMotionPreference from '../../hooks/useReducedMotionPreference'
-import AvatarImage from '../AvatarImage'
+import AuthorAvatar from '../AuthorAvatar'
 import FollowSplitButton, { type FollowDuration } from '../FollowSplitButton'
 import { useAuthStore } from '../../store/auth.store'
 import { useFollowStore } from '../../store/follow.store'
@@ -85,13 +85,16 @@ export default function CommentSheet({ post, onClose, onCommentAdded }: Props) {
   const myId = useAuthStore((st) => st.user?.id)
 
   // ── Entrada ────────────────────────────────────────────────────────────────
-  const slide   = useRef(new Animated.Value(1)).current   // 1 = fora, 0 = no sítio
-  const fade    = useRef(new Animated.Value(0)).current
-  const sheetScale = useRef(new Animated.Value(0.86)).current
+  // A folha nasce uma janela inteira abaixo do viewport. Assim o primeiro frame
+  // já é transparente; não há uma superfície branca a ser redimensionada antes
+  // de a animação começar.
+  const sheetY = useRef(new Animated.Value(winH)).current
+  const fade = useRef(new Animated.Value(0)).current
+  const closingRef = useRef(false)
 
   // Enquanto a folha existir, a barra de separadores desaparece — senão pinta
   // por cima do campo de escrever (e no Android sobe com o teclado).
-  useEffect(() => {
+  useLayoutEffect(() => {
     const { push, pop } = useOverlayStore.getState()
     push()
     return pop
@@ -102,27 +105,67 @@ export default function CommentSheet({ post, onClose, onCommentAdded }: Props) {
   }, [load])
 
   useEffect(() => {
+    sheetY.stopAnimation()
+    fade.stopAnimation()
     if (reduceMotion) {
-      slide.setValue(0)
+      sheetY.setValue(0)
       fade.setValue(1)
-      sheetScale.setValue(1)
       return
     }
     Animated.parallel([
-      Animated.spring(slide, { toValue: 0, useNativeDriver: true, damping: 22, stiffness: 220 }),
-      Animated.timing(fade,  { toValue: 1, duration: 180, useNativeDriver: true }),
-      Animated.spring(sheetScale, { toValue: 1, useNativeDriver: true, damping: 24, stiffness: 240 }),
+      Animated.spring(sheetY, {
+        toValue: 0,
+        damping: 26,
+        stiffness: 240,
+        mass: 0.9,
+        useNativeDriver: true,
+      }),
+      Animated.timing(fade, {
+        toValue: 1,
+        duration: 190,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
     ]).start()
-  }, [fade, reduceMotion, sheetScale, slide])
+    return () => {
+      sheetY.stopAnimation()
+      fade.stopAnimation()
+    }
+  }, [fade, reduceMotion, sheetY])
 
   function close() {
-    Keyboard.dismiss()
-    if (reduceMotion) { onClose(); return }
+    if (closingRef.current) return
+    closingRef.current = true
+    if (reduceMotion) {
+      Keyboard.dismiss()
+      onClose()
+      return
+    }
+    sheetY.stopAnimation()
+    fade.stopAnimation()
     Animated.parallel([
-      Animated.timing(slide, { toValue: 1, duration: 200, useNativeDriver: true }),
-      Animated.timing(fade,  { toValue: 0, duration: 160, useNativeDriver: true }),
-      Animated.timing(sheetScale, { toValue: 0.92, duration: 190, useNativeDriver: true }),
-    ]).start(onClose)
+      Animated.timing(sheetY, {
+        toValue: winH,
+        duration: 230,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(fade, {
+        toValue: 0,
+        duration: 190,
+        easing: Easing.in(Easing.quad),
+        useNativeDriver: true,
+      }),
+    ]).start(({ finished }) => {
+      if (!finished) {
+        closingRef.current = false
+        return
+      }
+      // O teclado só muda a geometria depois de a folha ter saído. Fechá-lo no
+      // início fazia `sheetH` crescer durante a animação e criava o flash branco.
+      Keyboard.dismiss()
+      onClose()
+    })
   }
 
   // ── Teclado ────────────────────────────────────────────────────────────────
@@ -193,18 +236,16 @@ export default function CommentSheet({ post, onClose, onCommentAdded }: Props) {
         <Pressable style={StyleSheet.absoluteFill} onPress={close} />
       </Animated.View>
 
-      <KeyboardAvoidingView behavior="padding">
+      <KeyboardAvoidingView style={s.keyboardLayer} behavior="padding">
         <Animated.View
           style={[
             s.sheet,
             {
               height: sheetH,
-              transform: [
-                { translateY: slide.interpolate({ inputRange: [0, 1], outputRange: [0, winH] }) },
-                { scaleX: sheetScale },
-              ],
+              transform: [{ translateY: sheetY }],
             },
           ]}
+          renderToHardwareTextureAndroid
         >
         {/* Cabeçalho */}
         <View style={s.grabberWrap}><View style={s.grabber} /></View>
@@ -219,7 +260,14 @@ export default function CommentSheet({ post, onClose, onCommentAdded }: Props) {
             a ti mesmo não existe, e o avatar sozinho não valia a linha. */}
         {!!author && !isMine && (
           <View style={s.authorBar}>
-            <AvatarImage uri={author.avatar} name={author.name} size={34} />
+            <AuthorAvatar
+              uri={author.avatar}
+              name={author.name}
+              avatarSize={30}
+              ringWidth={1.5}
+              gap={1.25}
+              wellColor={colors.white}
+            />
             <View style={s.authorInfo}>
               <Text style={s.authorName} numberOfLines={1}>{author.name}</Text>
               {!!author.username && (
@@ -292,11 +340,12 @@ export default function CommentSheet({ post, onClose, onCommentAdded }: Props) {
 const s = StyleSheet.create({
   overlay:      { ...StyleSheet.absoluteFillObject, zIndex: 100, justifyContent: 'flex-end' },
   backdropFill: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.32)' },
+  keyboardLayer: { width: '100%', justifyContent: 'flex-end' },
 
   sheet: {
     backgroundColor: colors.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
     overflow: 'hidden',
   },
 
@@ -310,7 +359,7 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12,
   },
-  title: { fontFamily: fonts.semiBold, fontSize: 15.5, color: colors.black, letterSpacing: -0.2 },
+  title: { fontFamily: fonts.medium, fontSize: 15.5, color: colors.black, letterSpacing: -0.16 },
 
   rule: { height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(0,0,0,0.09)' },
 
@@ -320,7 +369,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 18, paddingBottom: 12,
   },
   authorInfo:   { flex: 1, minWidth: 0 },
-  authorName:   { fontSize: 14.5, fontFamily: fonts.semiBold, color: colors.gray800, letterSpacing: -0.2 },
+  authorName:   { fontSize: 14.5, fontFamily: fonts.regular, color: colors.gray800, letterSpacing: -0.08 },
   authorHandle: { fontSize: 12, fontFamily: fonts.regular, color: colors.gray400, marginTop: 1 },
 
   listContent: { paddingVertical: 6 },
@@ -329,7 +378,7 @@ const s = StyleSheet.create({
     flex: 1, alignItems: 'center', justifyContent: 'center',
     gap: 7, paddingHorizontal: 40, paddingBottom: 30,
   },
-  emptyTitle: { fontFamily: fonts.semiBold, fontSize: 14, color: 'rgba(0,0,0,0.55)' },
+  emptyTitle: { fontFamily: fonts.regular, fontSize: 14, color: 'rgba(0,0,0,0.55)' },
   emptySub: {
     fontFamily: fonts.regular, fontSize: 12.5, color: 'rgba(0,0,0,0.35)',
     textAlign: 'center', lineHeight: 17,

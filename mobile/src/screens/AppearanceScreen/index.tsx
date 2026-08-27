@@ -5,11 +5,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useT } from '../../i18n'
-import { fonts } from '../../theme'
+import { brandPalette, colors, fonts } from '../../theme'
 
 const T_C = '#1A1A1A'
 const M   = '#ABABAB'
-const B   = '#FF7A1C'
+const B   = colors.black
 const BD  = '#E5E5EA'
 const BG  = '#FFFFFF'
 const SX  = '#F9F9FB'
@@ -23,13 +23,16 @@ export default function AppearanceScreen() {
   const t = useT()
 
   const [theme,    setTheme]    = useState<Theme>('auto')
-  const [accent,   setAccent]   = useState('#FF7A1C')
+  const [accent,   setAccent]   = useState(brandPalette.blue)
   const [textSize, setTextSize] = useState(3)
 
   useEffect(() => {
     AsyncStorage.multiGet(['@theme', '@accent_color', '@text_size']).then(([th, ac, sz]) => {
       if (th[1]) setTheme(th[1] as Theme)
-      if (ac[1]) setAccent(ac[1])
+      const storedAccent = ac[1]?.toUpperCase()
+      const officialAccents = new Set<string>(Object.values(brandPalette))
+      if (storedAccent && officialAccents.has(storedAccent)) setAccent(storedAccent)
+      else if (ac[1]) AsyncStorage.setItem('@accent_color', brandPalette.blue)
       if (sz[1]) setTextSize(Number(sz[1]))
     })
   }, [])
@@ -39,10 +42,11 @@ export default function AppearanceScreen() {
   function saveSize(v: number)  { setTextSize(v); AsyncStorage.setItem('@text_size', String(v)) }
 
   const ACCENTS = [
-    { color: '#FF7A1C', label: t.ac_blue   },
-    { color: '#7C5FE6', label: t.ac_purple },
-    { color: '#22C55E', label: t.ac_green  },
-    { color: '#FF4B6E', label: t.ac_red    },
+    { color: brandPalette.blue,    label: t.ac_blue },
+    { color: brandPalette.indigo,  label: t.ac_indigo },
+    { color: brandPalette.violet,  label: t.ac_violet },
+    { color: brandPalette.purple,  label: t.ac_purple },
+    { color: brandPalette.magenta, label: t.ac_magenta },
   ]
 
   return (

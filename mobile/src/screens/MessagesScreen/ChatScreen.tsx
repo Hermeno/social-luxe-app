@@ -49,7 +49,7 @@ type NavProp = StackNavigationProp<AppStackParams>
 
 const CHAT_BG        = '#FFFFFF'
 // Bolhas ao estilo do design: a minha na cor da marca, a do outro clara.
-const MINE_COLOR     = '#FF7A1C'
+const MINE_COLOR     = colors.black
 const THEIRS_COLOR   = '#F0F2F5'
 const REACTION_EMOJIS = ['❤️', '😂', '😮', '😢', '🔥', '👏']
 
@@ -383,11 +383,11 @@ function MessageBubble({ msg, mine, isFirst, isLast, myUserId, partnerAvatar, pa
               </Text>
               {mine && (
                 msg._failed
-                  ? <Ionicons name="alert-circle"    size={12} color="#FF6B6B" />
+                  ? <Ionicons name="alert-circle"    size={12} color={colors.error} />
                   : msg._pending
                     ? <Ionicons name="checkmark"      size={12} color="rgba(255,255,255,0.4)" />
                     : msg.readAt
-                      ? <Ionicons name="checkmark-done" size={12} color="#7DD3FC" />
+                      ? <Ionicons name="checkmark-done" size={12} color={colors.success} />
                       : <Ionicons name="checkmark-done" size={12} color="rgba(255,255,255,0.55)" />
               )}
             </View>
@@ -1179,7 +1179,7 @@ export default function ChatScreen() {
                     handleDeleteMessage(contextMenuMsg.id)
                     setContextMenuMsg(null)
                   }}>
-                    <Ionicons name="trash-outline" size={20} color="#FF3B30" />
+                    <Ionicons name="trash-outline" size={20} color={colors.error} />
                     <Text style={[t.ctxLabel, t.ctxLabelDanger]}>{tr.delete}</Text>
                   </TouchableOpacity>
                 )}
@@ -1439,7 +1439,7 @@ const t = StyleSheet.create({
   },
   ctxItemDanger: { borderBottomWidth: 0 },
   ctxLabel:      { fontSize: 15, fontFamily: fonts.medium, color: colors.gray800 },
-  ctxLabelDanger:{ color: '#FF3B30' },
+  ctxLabelDanger:{ color: colors.error },
 
   // ── Typing dots ───────────────────────────────────────────────────────────
   typingWrap:   { paddingHorizontal: 12, paddingBottom: 4 },

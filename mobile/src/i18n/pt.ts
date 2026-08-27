@@ -179,9 +179,10 @@ export const PT = {
   ap_textSize: 'TAMANHO DO TEXTO',
   ap_accent: 'COR DE DESTAQUE',
   ac_blue: 'Azul',
+  ac_indigo: 'Índigo',
+  ac_violet: 'Violeta',
   ac_purple: 'Roxo',
-  ac_green: 'Verde',
-  ac_red: 'Vermelho',
+  ac_magenta: 'Magenta',
 
   // Language
   ln_title: 'Idioma',
@@ -234,6 +235,7 @@ export const PT = {
   feed_author_posts: 'Publicações de {name}',
   feed_author_post_count_one: '1 publicação ativa',
   feed_author_posts_count: '{count} publicações ativas',
+  feed_album_photo: 'Foto {i} de {n}',
   feed_author_posts_load_fail: 'Não foi possível carregar estas publicações.',
   feed_save_post: 'Guardar nos salvos',
   feed_remove_saved: 'Remover dos salvos',
@@ -406,6 +408,12 @@ export const PT = {
 
   // Search
   search_ph: 'Pesquisar pessoas e publicações...',
+  share_sheet_title: 'Enviar para',
+  share_send: 'Enviar',
+  share_sent: 'Enviado',
+  share_fail: 'Não foi possível enviar.',
+  share_no_following: 'Ainda não segues ninguém',
+  share_no_following_sub: 'Segue alguém e podes partilhar publicações directamente com essa pessoa.',
   search_results: 'Resultados',
   search_suggested: 'Sugeridos para ti',
   search_no_results: 'Nenhum resultado',
@@ -417,6 +425,8 @@ export const PT = {
   search_tab_posts: 'Publicações',
   search_no_posts: 'Nenhuma publicação',
   search_no_posts_sub: 'Tenta outras palavras da legenda',
+  search_no_discover: 'Ainda não há nada para sugerir',
+  search_no_discover_sub: 'Assim que houver publicações a circular, aparecem aqui.',
   search_start: 'Pesquisa publicações',
   search_start_sub: 'Escreve para encontrar publicações pela legenda',
   search_follow_err: 'Não foi possível seguir.',

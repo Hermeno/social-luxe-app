@@ -73,7 +73,7 @@ export default function CommentInputArea({
       )}
 
       <View style={s.row}>
-        <AvatarImage uri={me?.avatar ?? null} name={me?.name ?? ''} size={30} />
+        <AvatarImage uri={me?.avatar ?? null} name={me?.name ?? ''} size={26} />
 
         <Animated.View
           style={[
@@ -131,7 +131,7 @@ const s = StyleSheet.create({
   },
   replyBar:  { width: 2.5, height: 16, borderRadius: 2, backgroundColor: colors.primary },
   replyTxt:  { flex: 1, fontFamily: fonts.regular, fontSize: 12, color: 'rgba(0,0,0,0.45)' },
-  replyName: { fontFamily: fonts.semiBold, color: colors.black },
+  replyName: { fontFamily: fonts.medium, color: colors.black },
 
   row: { flexDirection: 'row', alignItems: 'flex-end', gap: 9 },
 

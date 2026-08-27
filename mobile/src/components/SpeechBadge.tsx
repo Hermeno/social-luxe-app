@@ -1,15 +1,13 @@
 import React, { useEffect, useRef } from 'react'
 import { View, Text, StyleSheet, Animated } from 'react-native'
-import { fonts } from '../theme'
+import { colors, fonts } from '../theme'
 
 interface Props {
   count: number
   color?: string
 }
 
-const RED = '#FF3040'
-
-export default function SpeechBadge({ count, color = RED }: Props) {
+export default function SpeechBadge({ count, color = colors.error }: Props) {
   const scale = useRef(new Animated.Value(0)).current
   const prevCount = useRef(count)
 

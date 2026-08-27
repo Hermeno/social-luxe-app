@@ -12,7 +12,7 @@ import {
 } from '../../services/half.service'
 import AvatarImage from '../../components/AvatarImage'
 import { toast } from '../../utils/toast'
-import { fonts } from '../../theme'
+import { colors, fonts } from '../../theme'
 import { API_BASE } from '../../config'
 import { useT } from '../../i18n'
 
@@ -23,7 +23,7 @@ function resolveMedia(url: string) {
 const T_C = '#1A1A1A'
 const S   = '#6E6E73'
 const M   = '#ABABAB'
-const B   = '#FF7A1C'
+const B   = colors.black
 const BG  = '#FFFFFF'
 const SEP = '#F0F0F3'
 const CARD_BD = '#EDEDF1'

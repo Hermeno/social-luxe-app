@@ -19,7 +19,7 @@ import AvatarImage from '../../components/AvatarImage'
 import FollowSplitButton from '../../components/FollowSplitButton'
 import { useFollowStore } from '../../store/follow.store'
 import { api } from '../../services/api'
-import { colors, fonts, spacing, radius } from '../../theme'
+import { brandPalette, colors, fonts, spacing, radius } from '../../theme'
 import { useT } from '../../i18n'
 import { displayHandle } from '../../utils/handle'
 
@@ -88,17 +88,17 @@ function notifIcon(type: AppNotification['type']): string {
 
 function notifColor(type: AppNotification['type']): string {
   switch (type) {
-    case 'like':            return '#FF7A1C'
-    case 'comment':         return '#3B82F6'
-    case 'reaction':        return '#F59E0B'
-    case 'message':         return '#10B981'
-    case 'coin':            return '#8B5CF6'
-    case 'extend_vote':     return '#FF7A1C'
-    case 'union_invite':    return '#FF4B6E'
-    case 'follow':          return '#1A1A1A'
-    case 'pairing_invite':  return '#0A0A0A'
-    case 'pairing_accept':  return '#0A0A0A'
-    default:                return '#6B7280'
+    case 'like':            return brandPalette.magenta
+    case 'comment':         return colors.black
+    case 'reaction':        return colors.black
+    case 'message':         return colors.black
+    case 'coin':            return colors.gray800
+    case 'extend_vote':     return colors.black
+    case 'union_invite':    return brandPalette.magenta
+    case 'follow':          return colors.black
+    case 'pairing_invite':  return colors.black
+    case 'pairing_accept':  return colors.black
+    default:                return colors.gray600
   }
 }
 
@@ -242,7 +242,7 @@ export default function NotificationsScreen() {
             {(loadingPartner || unionInvites.length > 0) && (
               <View style={s.partnerSection}>
                 <View style={s.sectionTitleRow}>
-                  <Ionicons name="heart-circle" size={16} color="#FF4B6E" />
+                  <Ionicons name="heart-circle" size={16} color={colors.heart} />
                   <Text style={s.sectionTitle}>{t.notifs_partner_reqs}</Text>
                 </View>
 
@@ -287,7 +287,7 @@ export default function NotificationsScreen() {
 
             {/* Post partner invites */}
             {postInvites.length > 0 && (
-              <View style={[s.partnerSection, { backgroundColor: '#F0F4FF', marginTop: 8 }]}>
+              <View style={[s.partnerSection, { backgroundColor: '#F5F5F7', marginTop: 8 }]}>
                 <View style={s.sectionTitleRow}>
                   <Ionicons name="images-outline" size={15} color={colors.primary} />
                   <Text style={[s.sectionTitle, { color: colors.primary }]}>{t.notifs_collab}</Text>
@@ -377,7 +377,7 @@ const s = StyleSheet.create({
   hBtn:         { width: 36, alignItems: 'center' },
   title:        { flex: 1, textAlign: 'center', color: colors.gray800, fontFamily: fonts.bold, fontSize: 18 },
   badge:        {
-    backgroundColor: '#FF4B6E', borderRadius: radius.full,
+    backgroundColor: colors.black, borderRadius: radius.full,
     paddingHorizontal: 7, paddingVertical: 2,
     minWidth: 22, alignItems: 'center',
   },
@@ -388,14 +388,14 @@ const s = StyleSheet.create({
 
   // Partner requests
   partnerSection: {
-    backgroundColor: '#FFF5F6',
+    backgroundColor: '#F7F7F7',
     borderRadius: 16,
     padding: 16,
     marginBottom: 8,
     gap: 12,
   },
   sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  sectionTitle:    { fontSize: 11, fontFamily: fonts.bold, color: '#FF4B6E', letterSpacing: 1 },
+  sectionTitle:    { fontSize: 11, fontFamily: fonts.bold, color: colors.heart, letterSpacing: 1 },
 
   partnerCard: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
@@ -427,7 +427,7 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,
     paddingVertical: 12,
   },
-  notifUnread:  { backgroundColor: 'rgba(202,40,81,0.04)', marginHorizontal: -spacing.md, paddingHorizontal: spacing.md, borderRadius: 12 },
+  notifUnread:  { backgroundColor: 'rgba(0,0,0,0.025)', marginHorizontal: -spacing.md, paddingHorizontal: spacing.md, borderRadius: 12 },
   avatarWrap:   { width: 46, height: 46 },
   avatarFallback: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.gray100, alignItems: 'center', justifyContent: 'center' },
   typeBadge:    {

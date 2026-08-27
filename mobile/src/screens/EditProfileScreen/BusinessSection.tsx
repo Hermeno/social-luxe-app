@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, FlatList, Pressable,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { fonts } from '../../theme'
+import { colors, fonts } from '../../theme'
 import { useT, useI18n } from '../../i18n'
 import {
   BUSINESS_CATEGORIES, categoryLabel, DayHours, WEEKDAY_KEYS,
@@ -13,7 +13,7 @@ import {
 const T  = '#1A1A1A'
 const S  = '#6E6E73'
 const M  = '#ABABAB'
-const B  = '#FF7A1C'
+const B  = colors.black
 const BD = '#E5E5EA'
 const BG = '#FFFFFF'
 const SX = '#F9F9FB'

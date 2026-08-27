@@ -17,7 +17,7 @@ import { useAuthStore } from '../../store/auth.store'
 import { api } from '../../services/api'
 import type { Post, User } from '../../types'
 import type { AppStackParams } from '../../navigation/AppNavigator'
-import { colors, fonts } from '../../theme'
+import { colors, fonts, gradients, postGradientColors } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
 import AvatarStack from '../../components/AvatarStack'
 import SegmentedRing from '../../components/SegmentedRing'
@@ -130,8 +130,7 @@ function PostThumb({
       style={{ width, height }}
     >
       {post.mediaType === 'TEXT' ? (() => {
-        const parts = post.bgColor?.split('|') ?? []
-        const gc: [string, string] = parts.length === 2 ? [parts[0], parts[1]] : ['#FF6B35', '#E63946']
+        const gc = postGradientColors(post.bgColor)
         return (
           <LinearGradient
             colors={gc}
@@ -164,7 +163,7 @@ function PostThumb({
       {life && (
         elite ? (
           <LinearGradient
-            colors={['#FF7A1C', '#FF6766']}
+            colors={gradients.brand}
             start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
             style={g.lifeBadge}
             pointerEvents="none"
@@ -826,7 +825,7 @@ export default function ProfileScreen() {
         {displayUri ? (
           <RNImage source={{ uri: displayUri }} style={StyleSheet.absoluteFill} blurRadius={22} resizeMode="cover" />
         ) : (
-          <LinearGradient colors={['#FF7A1C', '#FF6766', '#FFB173']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+          <LinearGradient colors={gradients.brand} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
         )}
         <LinearGradient
           colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.55)', '#ffffff']}
@@ -946,7 +945,7 @@ export default function ProfileScreen() {
             </View>
           )}
           {hasUnion && otherMember && (
-            <LinearGradient colors={['#FF7A1C', '#FF6766']} style={m.partnerPill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+            <LinearGradient colors={gradients.brand} style={m.partnerPill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
               <Ionicons name="heart" size={11} color="#fff" />
               <Text style={m.partnerTxt}>Parceiro · {otherMember.name}</Text>
             </LinearGradient>
@@ -1050,7 +1049,7 @@ export default function ProfileScreen() {
               <TouchableOpacity style={[m.outlineBtn, { flex: 1 }]} onPress={() => setPendingAvatarUri(null)} activeOpacity={0.8}>
                 <Text style={m.outlineBtnTxt}>{t.cancel}</Text>
               </TouchableOpacity>
-              <LinearGradient colors={['#FF7A1C', '#FF6766']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[m.gradBtn, { flex: 1 }]}>
+              <LinearGradient colors={[colors.black, colors.black]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[m.gradBtn, { flex: 1 }]}>
                 <TouchableOpacity onPress={savePendingAvatar} disabled={savingAvatar} activeOpacity={0.85} style={m.gradBtnInner}>
                   {savingAvatar
                     ? <ActivityIndicator size="small" color="#fff" />
@@ -1082,7 +1081,7 @@ export default function ProfileScreen() {
                 }
               </TouchableOpacity>
             ) : (
-              <LinearGradient colors={['#FF7A1C', '#FF6766']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[m.gradBtn, { flex: 1 }]}>
+              <LinearGradient colors={[colors.black, colors.black]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[m.gradBtn, { flex: 1 }]}>
                 <TouchableOpacity onPress={handleFollow} disabled={followLoading} activeOpacity={0.85} style={m.gradBtnInner}>
                   {followLoading
                     ? <ActivityIndicator size="small" color="#fff" />
@@ -1122,7 +1121,7 @@ export default function ProfileScreen() {
               <View style={um.hairline} />
               <TouchableOpacity style={um.item} activeOpacity={0.6} onPress={handleToggleBlock}>
                 <Text style={[um.itemText, um.itemDanger]}>{isBlocked ? t.pf_unblock : t.pf_block}</Text>
-                <Ionicons name="ban-outline" size={20} color="#FF3B30" />
+                <Ionicons name="ban-outline" size={20} color={colors.error} />
               </TouchableOpacity>
             </View>
             <TouchableOpacity style={um.cancel} activeOpacity={0.6} onPress={() => setShowUserMenu(false)}>
@@ -1233,8 +1232,8 @@ export default function ProfileScreen() {
             <View style={m.sheetDiv} />
             <TouchableOpacity style={m.sheetRow} activeOpacity={0.75}
               onPress={() => menuPost && handleDeletePost(menuPost)}>
-              <Ionicons name="trash-outline" size={20} color="#FF3B30" />
-              <Text style={[m.sheetRowTxt, { color: '#FF3B30' }]}>{t.profile_del_title}</Text>
+              <Ionicons name="trash-outline" size={20} color={colors.error} />
+              <Text style={[m.sheetRowTxt, { color: colors.error }]}>{t.profile_del_title}</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -1420,7 +1419,7 @@ const m = StyleSheet.create({
     height: 42, borderRadius: 21,
     alignItems: 'center', justifyContent: 'center',
     ...Platform.select({
-      ios: { shadowColor: '#FF7A1C', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
+      ios: { shadowColor: colors.black, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.16, shadowRadius: 6 },
       android: { elevation: 4 },
     }),
   },
@@ -1523,7 +1522,7 @@ const um = StyleSheet.create({
   },
   item:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 17 },
   itemText: { fontSize: 16.5, fontFamily: fonts.medium, color: colors.gray800, letterSpacing: -0.2 },
-  itemDanger:{ color: '#FF3B30', fontFamily: fonts.semiBold },
+  itemDanger:{ color: colors.error, fontFamily: fonts.semiBold },
   hairline: { height: StyleSheet.hairlineWidth, backgroundColor: '#E8E8EA', marginLeft: 20 },
   cancel:   {
     backgroundColor: '#FFFFFF', borderRadius: 20, paddingVertical: 17, alignItems: 'center',

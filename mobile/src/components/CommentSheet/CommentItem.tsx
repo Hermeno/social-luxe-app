@@ -62,7 +62,7 @@ export default function CommentItem({
 
   return (
     <View style={[s.row, depth > 0 && s.nested]}>
-      <AvatarImage uri={comment.user.avatar} name={comment.user.name} size={depth > 0 ? 28 : 34} />
+      <AvatarImage uri={comment.user.avatar} name={comment.user.name} size={depth > 0 ? 24 : 30} />
 
       <View style={s.body}>
         {/* Bolha: nome e texto juntos, como uma unidade de leitura */}
@@ -143,7 +143,7 @@ export default function CommentItem({
         <FeedIcon
           name={comment.likedByMe ? 'heart-solid' : 'heart'}
           size={15}
-          color={comment.likedByMe ? colors.primary : 'rgba(0,0,0,0.28)'}
+          color={comment.likedByMe ? colors.heart : 'rgba(0,0,0,0.28)'}
           weight={comment.likedByMe ? 'regular' : 'medium'}
         />
         {likes > 0 && (
@@ -171,7 +171,7 @@ const s = StyleSheet.create({
   },
   bubblePending: { opacity: 0.55 },
 
-  name: { fontFamily: fonts.semiBold, fontSize: 12.5, color: colors.black, letterSpacing: -0.1 },
+  name: { fontFamily: fonts.medium, fontSize: 12.5, color: colors.black, letterSpacing: -0.08 },
   text: { fontFamily: fonts.regular, fontSize: 14, color: '#333', lineHeight: 19 },
 
   editInput: {
@@ -181,11 +181,11 @@ const s = StyleSheet.create({
 
   actions: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingLeft: 4 },
   time:    { fontFamily: fonts.regular, fontSize: 11.5, color: 'rgba(0,0,0,0.35)' },
-  action:  { fontFamily: fonts.semiBold, fontSize: 11.5, color: 'rgba(0,0,0,0.45)' },
+  action:  { fontFamily: fonts.regular, fontSize: 11.5, color: 'rgba(0,0,0,0.45)' },
   actionStrong: { color: colors.primary },
-  actionDanger: { color: 'rgba(255,59,48,0.85)' },
+  actionDanger: { color: colors.error },
 
   like:        { alignItems: 'center', paddingTop: 12, gap: 2, width: 26 },
-  likeCount:   { fontFamily: fonts.semiBold, fontSize: 10.5, color: 'rgba(0,0,0,0.35)' },
-  likeCountOn: { color: colors.primary },
+  likeCount:   { fontFamily: fonts.regular, fontSize: 10.5, color: 'rgba(0,0,0,0.35)' },
+  likeCountOn: { color: colors.heart },
 })

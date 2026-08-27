@@ -1,32 +1,52 @@
+/**
+ * Paleta cromática oficial.
+ *
+ * Os cinco pontos foram amostrados da imagem de referência adicionada em
+ * 27/08/2026. Nada fora desta faixa azul → violeta → magenta deve entrar na
+ * interface. Preto, branco e cinzas continuam a formar a base neutra.
+ */
+export const brandPalette = {
+  blue:    '#2F49FD',
+  indigo:  '#5948F9',
+  violet:  '#7A47F5',
+  purple:  '#9C45EE',
+  magenta: '#C246E6',
+  // Sem `as const`: com ele cada valor ganhava o seu próprio tipo literal e um
+  // `useState(brandPalette.blue)` passava a só aceitar `'#2F49FD'` — o ecrã de
+  // Aparência, que guarda o acento escolhido, deixava de compilar.
+}
+
 export const colors = {
-  primary:      '#FF7A1C',
-  primaryMid:   '#FF6766',
-  primaryLight: '#FFB173',
-  secondary:    '#FFB173',
-  accent:       '#FF7A1C',
+  // A interface é neutra por defeito. Cor de marca exige um papel explícito
+  // (`accent`, `heart`, estado semântico ou gradiente), nunca um botão genérico.
+  primary:      '#000000',
+  primaryMid:   '#1A1A1A',
+  primaryLight: '#D1D1D6',
+  secondary:    '#555555',
+  accent:       brandPalette.blue,
 
   black:        '#000000',
   white:        '#FFFFFF',
-  offWhite:     '#F7F7F7',
+  offWhite:     '#FAF8F6',
 
   // Campo de comentário embutido na navigation
-  commentField: '#fff',
+  commentField: 'rgba(24,32,39,0.96)',
 
   // Fundo da feed principal — e SÓ da feed. É o que se vê por trás dos posts,
   // nas faixas acima e abaixo de imagens que não enchem a altura, e na tab bar
   // enquanto a feed está aberta. O resto da app continua branco.
   //
   // Ponto único: toda a feed lê daqui (célula, media, álbum, ecrã vazio e tab
-  // bar), por isso trocar é mexer numa linha só. Em experimentação — os valores
-  // já testados ficam abaixo e nenhum se apaga enquanto a escolha não assentar.
-  // feedSurface: '#1F2C34',
+  // bar). É uma das duas excepções cromáticas mantidas por decisão de produto.
   feedSurface: '#0B141A',
-  feedSurfaceSlate:    '#1C252C',   // azul-ardósia — o original, até 19/08/2026
-  feedSurfaceGraphite: '#111314',   // grafite frio — 19/08/2026
+  // Aliases antigos permanecem por compatibilidade, mas já não introduzem
+  // outras cores na plataforma.
+  feedSurfaceSlate:    '#0B141A',
+  feedSurfaceGraphite: '#0B141A',
 
   // Cartão de convite ao Círculo, dentro do carrossel do momento colectivo.
   // Um degrau acima do fundo da feed: lê-se como cartão sem virar mancha clara.
-  circleInvite: '#121B22',
+  circleInvite: '#0B141A',
 
   gray100: '#F7F7F7',
   gray200: '#EAEAEA',
@@ -46,36 +66,60 @@ export const colors = {
   overlayLight: 'rgba(0,0,0,0.2)',
   transparent:  'transparent',
 
-  // Cores funcionais — uma de cada, sempre estas
-  error:   '#FF3B30',
-  success: '#22C55E',
-  warning: '#F59E0B',
+  // Estados funcionais usam geometria, texto e posição para comunicar o papel;
+  // a cor fica deliberadamente dentro da paleta oficial.
+  error:   brandPalette.purple,
+  success: brandPalette.blue,
+  warning: brandPalette.violet,
+  info:    brandPalette.indigo,
 
   // Cores semânticas de features
-  heart: '#FF4B6E',   // likes / love no feed escuro
-  gold:  '#B8860B',   // reservado / destaque premium
+  heart: brandPalette.magenta,
+  gold:  brandPalette.violet,
 }
 
+/**
+ * As folhas claras que assentam sobre a Feed escura.
+ *
+ * O painel de pesquisa, a folha de opções do post e o modal de publicações do
+ * autor são superfícies claras dentro de um ecrã escuro, e cada uma tinha
+ * inventado os seus cinzentos: quarenta hexadecimais espalhados por três
+ * ficheiros, com quatro contornos entre `#D1D1CC` e `#E7E7E3` e sete pretos
+ * entre `#0A0A0A` e `#343538`. Nenhum par distinguível a olho, todos diferentes
+ * no código — que é a definição de valor arbitrário.
+ *
+ * Sete degraus cobrem os quarenta. São cinzentos quentes de propósito: a marca
+ * é fria (azul→magenta) e uma folha morna afasta-se dela em vez de lhe competir.
+ */
+export const sheet = {
+  /** Fundo da folha. */
+  surface:     '#FCFCFA',
+  /** Um degrau abaixo — campo de pesquisa, linha seleccionada, célula vazia. */
+  surfaceSunk: '#F2F2EF',
+  /** Contorno e separadores. */
+  line:        '#E1E1DD',
+  /** Contorno que precisa de se ler sobre `surfaceSunk`. */
+  lineStrong:  '#D5D4D0',
+  /** Título, nome, ícone de navegação. */
+  ink:         '#17181B',
+  /** Corpo de texto — um degrau abaixo do título, ainda a preto. */
+  inkSoft:     '#2A2A2E',
+  /** Legenda, contexto, rótulo secundário. */
+  inkMuted:    '#77787C',
+  /** Marca de água — ícone de imagem em falta, estado vazio. */
+  inkFaint:    '#A8AAAD',
+} as const
+
 export const gradients = {
-  brand:      ['#FF7A1C', '#FF6766', '#FFB173'] as const,
+  brand:      [brandPalette.blue, brandPalette.indigo, brandPalette.violet, brandPalette.purple, brandPalette.magenta] as const,
+  /** Único gradiente permitido em anéis de autor. */
+  avatarRing: [brandPalette.blue, brandPalette.indigo, brandPalette.violet, brandPalette.purple, brandPalette.magenta] as const,
   feedBottom: ['transparent', 'rgba(0,0,0,0.92)'] as const,
-  /**
-   * Véu da feed principal — mais leve que o `feedBottom` das stories.
-   *
-   * Chega a 0.22 — o limiar a partir do qual se começa a notar sobre uma foto
-   * clara. Não é isto que torna o texto legível: quem faz esse trabalho é a
-   * `feedTextShadow`, um halo de 3px colado às letras. O véu só assenta a base
-   * e protege os ícones, que não têm sombra de texto.
-   *
-   * Já esteve em 0.92 (herdado das stories) e em 0.62. Ambos davam melhor
-   * contraste medido, e ambos se viam como uma mancha escura no fundo do ecrã.
-   *
-   * O terceiro ponto repete o segundo de propósito: cria um patamar onde o
-   * bloco do autor assenta, de modo que as quatro linhas de texto tenham todas
-   * o mesmo fundo em vez de a de cima ficar menos protegida que a de baixo.
-   */
-  feedVeil: ['transparent', 'rgba(0,0,0,0.22)', 'rgba(0,0,0,0.22)'] as const,
-  feedVeilStops: [0, 0.44, 1] as const,
+  // O véu da feed (`feedVeil`/`feedVeilStops`) viveu aqui com vinte linhas de
+  // raciocínio e zero utilizações: o scrim foi removido por decisão de produto —
+  // a mancha escura via-se — e o contraste passou para `feedTextShadow`, um halo
+  // colado às letras. Um token morto com raciocínio escrito é pior que nenhum:
+  // lê-se como se estivesse em uso. Se o scrim voltar, volta com ele.
   feedTop:    ['rgba(0,0,0,0.28)', 'transparent'] as const,
   tabBar:     ['rgba(0,0,0,0.0)', 'rgba(0,0,0,0.92)'] as const,
 }

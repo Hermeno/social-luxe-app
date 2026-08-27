@@ -5,11 +5,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useT } from '../../i18n'
-import { fonts } from '../../theme'
+import { colors, fonts } from '../../theme'
 
 const T_C = '#1A1A1A'
 const M   = '#ABABAB'
-const B   = '#FF7A1C'
+const B   = colors.black
 const BD  = '#E5E5EA'
 const BG  = '#FFFFFF'
 const SX  = '#F9F9FB'
@@ -122,11 +122,11 @@ const s = StyleSheet.create({
   content: { paddingHorizontal: 16, gap: 8, paddingTop: 4 },
 
   pauseCard:    { flexDirection: 'row', alignItems: 'center', gap: 13, padding: 16, borderRadius: 18, backgroundColor: BG, borderWidth: 1, borderColor: CARD_BD },
-  pauseCardOn:  { backgroundColor: 'rgba(202,40,81,0.06)', borderColor: 'rgba(202,40,81,0.22)' },
+  pauseCardOn:  { backgroundColor: 'rgba(0,0,0,0.035)', borderColor: 'rgba(0,0,0,0.18)' },
   pauseTitle:   { fontFamily: fonts.bold, fontSize: 15, color: T_C },
   pauseTitleOn: { color: B },
   pauseSub:     { fontFamily: fonts.medium, fontSize: 12, color: M, marginTop: 2 },
-  pauseSubOn:   { color: '#FF7A1CAA' },
+  pauseSubOn:   { color: 'rgba(0,0,0,0.66)' },
 
   sectionLabel: { fontFamily: fonts.bold, fontSize: 11, color: M, letterSpacing: 1, textTransform: 'uppercase', paddingLeft: 6, paddingBottom: 8, paddingTop: 2 },
   card:         { backgroundColor: BG, borderWidth: 1, borderColor: CARD_BD, borderRadius: 18, overflow: 'hidden' },

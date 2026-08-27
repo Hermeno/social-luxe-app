@@ -1,13 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
-  View, Text, StyleSheet, Animated, Pressable, TouchableOpacity,
+  View, Text, StyleSheet, Animated, Easing, Pressable, TouchableOpacity,
   FlatList, useWindowDimensions, ActivityIndicator,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import type { StackNavigationProp } from '@react-navigation/stack'
-import { colors, fonts } from '../theme'
+import { colors, fonts, radius } from '../theme'
 import AvatarImage from './AvatarImage'
 import AvatarStack from './AvatarStack'
 import FollowSplitButton from './FollowSplitButton'
@@ -108,28 +108,44 @@ export default function SuggestionsSheet({ onClose }: { onClose: () => void }) {
   const { bottom: safeBottom, top: safeTop } = useSafeAreaInsets()
   const { height: winH } = useWindowDimensions()
 
-  const slide = useRef(new Animated.Value(1)).current   // 1 = fora, 0 = no sítio
-  const fade  = useRef(new Animated.Value(0)).current
+  const sheetY = useRef(new Animated.Value(winH)).current
+  const fade = useRef(new Animated.Value(0)).current
+  const closingRef = useRef(false)
   const [users, setUsers]     = useState<SuggestUser[]>([])
   const [followers, setFollowers] = useState<SuggestUser[]>([])
   const [loading, setLoading] = useState(true)
 
   // Esconde a TabBar enquanto a folha vive.
-  useEffect(() => { const { push, pop } = useOverlayStore.getState(); push(); return pop }, [])
+  useLayoutEffect(() => { const { push, pop } = useOverlayStore.getState(); push(); return pop }, [])
 
   useEffect(() => {
-    slide.stopAnimation()
+    sheetY.stopAnimation()
     fade.stopAnimation()
     if (reduceMotion) {
-      slide.setValue(0)
+      sheetY.setValue(0)
       fade.setValue(1)
       return
     }
     Animated.parallel([
-      Animated.spring(slide, { toValue: 0, useNativeDriver: true, damping: 22, stiffness: 220 }),
-      Animated.timing(fade,  { toValue: 1, duration: 180, useNativeDriver: true }),
+      Animated.spring(sheetY, {
+        toValue: 0,
+        useNativeDriver: true,
+        damping: 26,
+        stiffness: 240,
+        mass: 0.9,
+      }),
+      Animated.timing(fade, {
+        toValue: 1,
+        duration: 190,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
     ]).start()
-  }, [fade, reduceMotion, slide])
+    return () => {
+      sheetY.stopAnimation()
+      fade.stopAnimation()
+    }
+  }, [fade, reduceMotion, sheetY])
 
   useEffect(() => {
     // Quem te segue e ainda não segues → "Seguir de volta"; depois, sugeridos.
@@ -155,6 +171,8 @@ export default function SuggestionsSheet({ onClose }: { onClose: () => void }) {
   }, [])
 
   function close(afterClose?: () => void) {
+    if (closingRef.current) return
+    closingRef.current = true
     const finish = () => {
       onClose()
       afterClose?.()
@@ -163,10 +181,25 @@ export default function SuggestionsSheet({ onClose }: { onClose: () => void }) {
       finish()
       return
     }
+    sheetY.stopAnimation()
+    fade.stopAnimation()
     Animated.parallel([
-      Animated.timing(slide, { toValue: 1, duration: 200, useNativeDriver: true }),
-      Animated.timing(fade,  { toValue: 0, duration: 160, useNativeDriver: true }),
-    ]).start(finish)
+      Animated.timing(sheetY, {
+        toValue: winH,
+        duration: 230,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(fade, {
+        toValue: 0,
+        duration: 190,
+        easing: Easing.in(Easing.quad),
+        useNativeDriver: true,
+      }),
+    ]).start(({ finished }) => {
+      if (finished) finish()
+      else closingRef.current = false
+    })
   }
 
   const sheetH = Math.min(winH * 0.82, winH - safeTop - 40)
@@ -183,9 +216,10 @@ export default function SuggestionsSheet({ onClose }: { onClose: () => void }) {
           {
             height: sheetH,
             paddingBottom: Math.max(safeBottom, 12),
-            transform: [{ translateY: slide.interpolate({ inputRange: [0, 1], outputRange: [0, winH] }) }],
+            transform: [{ translateY: sheetY }],
           },
         ]}
+        renderToHardwareTextureAndroid
       >
         <View style={s.grabberWrap}><View style={s.grabber} /></View>
 
@@ -251,7 +285,7 @@ const s = StyleSheet.create({
 
   sheet: {
     backgroundColor: colors.white,
-    borderTopLeftRadius: 22, borderTopRightRadius: 22,
+    borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl,
     overflow: 'hidden',
   },
   grabberWrap: { alignItems: 'center', paddingTop: 8, paddingBottom: 4 },

@@ -9,7 +9,7 @@ import { StackNavigationProp } from '@react-navigation/stack'
 import Toast from 'react-native-toast-message'
 import { Image } from 'expo-image'
 import { api } from '../../services/api'
-import { searchPosts } from '../../services/post.service'
+import { getDiscoverPosts, searchPosts } from '../../services/post.service'
 import { Post } from '../../types'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { colors, fonts, radius, typography } from '../../theme'
@@ -20,6 +20,7 @@ import { getCache, setCache } from '../../db/database'
 import { useFollowStore } from '../../store/follow.store'
 import { isConnected } from '../../services/netinfo.service'
 import AvatarImage from '../../components/AvatarImage'
+import VerifiedBadge from '../../components/VerifiedBadge'
 import FollowSplitButton from '../../components/FollowSplitButton'
 import { useT } from '../../i18n'
 import { displayHandle } from '../../utils/handle'
@@ -32,6 +33,7 @@ interface UserResult {
   username?: string | null
   avatar: string | null
   bio: string | null
+  isVerified?: boolean
   _count?: { followers: number }
 }
 
@@ -89,7 +91,10 @@ function UserRow({ user, followed, loadingFollow, onFollow, onPress }: RowProps)
       <TouchableOpacity style={s.rowLeft} onPress={onPress} activeOpacity={0.7}>
         <AvatarImage uri={user.avatar} name={user.name} size={48} />
         <View style={s.rowInfo}>
-          <Text style={s.rowName} numberOfLines={1}>{user.username ? displayHandle(user.username) : user.name}</Text>
+          <View style={s.rowNameLine}>
+            <Text style={s.rowName} numberOfLines={1}>{user.username ? displayHandle(user.username) : user.name}</Text>
+            {user.isVerified && <VerifiedBadge />}
+          </View>
           {!!sub && <Text style={s.rowSub} numberOfLines={1}>{sub}</Text>}
         </View>
       </TouchableOpacity>
@@ -105,23 +110,6 @@ function UserRow({ user, followed, loadingFollow, onFollow, onPress }: RowProps)
   )
 }
 
-// ── Skeleton placeholder ───────────────────────────────────────────────────────
-
-function SkeletonRow() {
-  return (
-    <View style={[s.row, { opacity: 0.45 }]}>
-      <View style={s.rowLeft}>
-        <View style={s.skeletonAvatar} />
-        <View style={s.skeletonInfo}>
-          <View style={s.skeletonName} />
-          <View style={s.skeletonSub} />
-        </View>
-      </View>
-      <View style={s.skeletonBtn} />
-    </View>
-  )
-}
-
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function SearchScreen() {
@@ -130,13 +118,18 @@ export default function SearchScreen() {
   const t       = useT()
 
   // Dois âmbitos na mesma pesquisa: quem publica e o que foi publicado.
+  //
+  // O âmbito só entra em jogo depois de haver texto escrito. Sem pesquisa não há
+  // dois âmbitos para escolher: há uma grelha do que anda a circular, e mais
+  // nada. Por isso este estado nasce em `people` — é onde a pesquisa começa —
+  // mas antes de se escrever não decide coisa nenhuma.
   const [scope,         setScope]         = useState<'people' | 'posts'>('people')
   const [posts,         setPosts]         = useState<Post[]>([])
   const [loadingPosts,  setLoadingPosts]  = useState(false)
+  const [discover,      setDiscover]      = useState<Post[]>([])
+  const [loadingDisc,   setLoadingDisc]   = useState(true)
   const [query,         setQuery]         = useState('')
   const [results,       setResults]       = useState<UserResult[]>([])
-  const [suggested,     setSuggested]     = useState<UserResult[]>([])
-  const [loadingSug,    setLoadingSug]    = useState(true)
   const [loadingSearch, setLoadingSearch] = useState(false)
   const followingIds    = useFollowStore((s) => s.followingIds)
   const [followPending, setFollowPending] = useState<Set<string>>(new Set())
@@ -144,26 +137,30 @@ export default function SearchScreen() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputRef    = useRef<TextInput>(null)
 
-  // Load suggestions — cache-first (offline-first)
+  // As sugestões de pessoas (`/users/suggested`) viviam aqui. Deixaram de ter
+  // onde aparecer: sem pesquisa escrita o ecrã é a grelha, e com pesquisa o que
+  // se mostra são resultados. Ficava uma chamada de rede a cada abertura para
+  // encher uma lista que ninguém via.
+
+  // Sugestões de publicações — a mesma estratégia das pessoas: o que estiver em
+  // cache desenha já, a rede só actualiza por trás. Abrir a pesquisa sem rede
+  // continua a mostrar alguma coisa.
   useEffect(() => {
-    async function loadSuggested() {
-      // 1. Serve cache immediately — no wait
-      const cached = await getCache<UserResult[]>('suggested_users').catch(() => null)
+    async function loadDiscover() {
+      const cached = await getCache<Post[]>('discover_posts').catch(() => null)
       if (cached && cached.length > 0) {
-        setSuggested(cached)
-        setLoadingSug(false)
+        setDiscover(cached)
+        setLoadingDisc(false)
       }
-      // 2. Background network sync
-      if (!isConnected()) { setLoadingSug(false); return }
+      if (!isConnected()) { setLoadingDisc(false); return }
       try {
-        const r = await api.get('/users/suggested')
-        const fresh: UserResult[] = r.data.data ?? r.data ?? []
-        setSuggested(fresh)
-        setCache('suggested_users', fresh).catch(() => {})
+        const fresh = await getDiscoverPosts()
+        setDiscover(fresh)
+        setCache('discover_posts', fresh).catch(() => {})
       } catch {}
-      setLoadingSug(false)
+      setLoadingDisc(false)
     }
-    loadSuggested()
+    loadDiscover()
   }, [])
 
   const search = useCallback(async (q: string) => {
@@ -223,9 +220,14 @@ export default function SearchScreen() {
   }, [followPending])
 
   const isSearching = query.trim().length > 0
-  const onPeople    = scope === 'people'
-  const displayList = isSearching ? results : suggested
-  const isLoading   = onPeople ? (isSearching ? loadingSearch : loadingSug) : loadingPosts
+  // Sem pesquisa é sempre a grelha, seja qual for o âmbito guardado.
+  const onPeople    = isSearching && scope === 'people'
+  const displayList = results
+  // Sem pesquisa escrita, a grelha mostra sugestões; com pesquisa, resultados.
+  const postList    = isSearching ? posts : discover
+  const isLoading   = onPeople
+    ? loadingSearch
+    : (isSearching ? loadingPosts : loadingDisc)
 
   const renderItem = useCallback(({ item }: ListRenderItemInfo<UserResult>) => (
     <UserRow
@@ -276,6 +278,7 @@ export default function SearchScreen() {
           pedem formas diferentes — uma lista com botão de seguir, uma grelha de
           miniaturas — e misturá-las obrigaria a inventar uma terceira forma que
           não serve bem nenhuma das duas. */}
+      {isSearching && (
       <View style={s.scopeRow}>
         {(['people', 'posts'] as const).map((k) => {
           const on = scope === k
@@ -296,27 +299,20 @@ export default function SearchScreen() {
           )
         })}
       </View>
+      )}
 
       {/* ── Rótulo da secção ───────────────────────────────────────────────
-          Nas publicações só existe enquanto há pesquisa: sem texto escrito não
-          há nada para rotular, e "Sugeridos para ti" pertence às pessoas. */}
-      {(onPeople || isSearching) && (
+          Só com pesquisa. Antes de haver texto escrito o ecrã é uma grelha e
+          nada mais: um rótulo por cima dela estaria a nomear a única coisa que
+          lá está, que é o mesmo que não dizer nada. */}
+      {isSearching && (
         <View style={s.sectionRow}>
-          <Text style={s.sectionLabel}>
-            {isSearching ? t.search_results : t.search_suggested}
-          </Text>
-          {isSearching && !isLoading && (
+          <Text style={s.sectionLabel}>{t.search_results}</Text>
+          {!isLoading && (
             <Text style={s.sectionCount}>
               {onPeople ? results.length : posts.length}
             </Text>
           )}
-        </View>
-      )}
-
-      {/* ── Skeleton only when no cached data yet ──────────────────────────── */}
-      {onPeople && isLoading && !isSearching && suggested.length === 0 && (
-        <View>
-          {[0, 1, 2, 3, 4].map((i) => <SkeletonRow key={i} />)}
         </View>
       )}
 
@@ -338,16 +334,6 @@ export default function SearchScreen() {
         </View>
       )}
 
-      {onPeople && !isLoading && !isSearching && suggested.length === 0 && (
-        <View style={s.emptyWrap}>
-          <View style={s.emptyIcon}>
-            <Icon name="users" size={26} color={colors.gray500} strokeWidth={1.6} />
-          </View>
-          <Text style={s.emptyTitle}>{t.search_no_suggestions}</Text>
-          <Text style={s.emptySub}>{t.search_no_suggestions_sub}</Text>
-        </View>
-      )}
-
       {/* ── List — show even while loading if cache exists ──────────────────── */}
       {onPeople && displayList.length > 0 && (
         <FlatList
@@ -364,13 +350,21 @@ export default function SearchScreen() {
       )}
 
       {/* ── Publicações ────────────────────────────────────────────────────── */}
-      {!onPeople && !isSearching && (
+      {/* Sem pesquisa escrita isto já não é um ecrã de instruções: é a grelha
+          de sugestões. O vazio só aparece quando não há mesmo nada. */}
+      {!onPeople && isLoading && !isSearching && discover.length === 0 && (
+        <View style={s.spinnerWrap}>
+          <ActivityIndicator color={colors.gray400} />
+        </View>
+      )}
+
+      {!onPeople && !isLoading && !isSearching && discover.length === 0 && (
         <View style={s.emptyWrap}>
           <View style={s.emptyIcon}>
             <Icon name="image" size={26} color={colors.gray500} strokeWidth={1.6} />
           </View>
-          <Text style={s.emptyTitle}>{t.search_start}</Text>
-          <Text style={s.emptySub}>{t.search_start_sub}</Text>
+          <Text style={s.emptyTitle}>{t.search_no_discover}</Text>
+          <Text style={s.emptySub}>{t.search_no_discover_sub}</Text>
         </View>
       )}
 
@@ -384,16 +378,16 @@ export default function SearchScreen() {
         </View>
       )}
 
-      {!onPeople && posts.length > 0 && (
+      {!onPeople && postList.length > 0 && (
         <FlatList
-          data={posts}
+          data={postList}
           key="grid"
           numColumns={3}
           keyExtractor={(p) => p.id}
           renderItem={({ item, index }) => (
             <PostCell
               post={item}
-              onPress={() => nav.navigate('PostViewer', { posts, startIndex: index })}
+              onPress={() => nav.navigate('PostViewer', { posts: postList, startIndex: index })}
             />
           )}
           showsVerticalScrollIndicator={false}
@@ -559,6 +553,7 @@ const s = StyleSheet.create({
     minWidth: 0,
   },
   rowInfo: { flex: 1, minWidth: 0 },
+  rowNameLine: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   rowName: {
     fontSize: typography.body,
     fontFamily: fonts.semiBold,
@@ -573,11 +568,6 @@ const s = StyleSheet.create({
   },
 
   // ── Esqueleto ────────────────────────────────────────────────────────────
-  skeletonAvatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.gray200 },
-  skeletonInfo:   { flex: 1, gap: 7 },
-  skeletonName:   { width: '52%', height: 13, borderRadius: 2, backgroundColor: colors.gray200 },
-  skeletonSub:    { width: '32%', height: 11, borderRadius: 2, backgroundColor: colors.gray100 },
-  skeletonBtn:    { width: 84, height: 34, borderRadius: radius.md, backgroundColor: colors.gray200 },
 
   // ── Estados ──────────────────────────────────────────────────────────────
   spinnerWrap: { flex: 1, alignItems: 'center', paddingTop: 56 },

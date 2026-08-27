@@ -4,6 +4,7 @@
  */
 import React, { useCallback, useMemo, useRef, useState } from 'react'
 import { PanResponder, StyleSheet, View } from 'react-native'
+import { brandPalette } from '../../theme'
 
 interface Props {
   value: number
@@ -83,7 +84,7 @@ export default function Slider({ value, min, max, onChange, bipolar = false }: P
 const s = StyleSheet.create({
   hit:   { height: 44, justifyContent: 'center' },
   track: { height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.18)' },
-  fill:  { position: 'absolute', height: 3, borderRadius: 2, backgroundColor: '#FF7A1C' },
+  fill:  { position: 'absolute', height: 3, borderRadius: 2, backgroundColor: brandPalette.blue },
   zero:  { position: 'absolute', width: 1, height: 11, backgroundColor: 'rgba(255,255,255,0.4)' },
   knob:  {
     position: 'absolute',

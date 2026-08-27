@@ -1,9 +1,10 @@
-import React, { useRef, useEffect, useMemo, useState } from 'react'
+import React, { useRef, useEffect, useLayoutEffect, useState } from 'react'
 import { View, TouchableOpacity, StyleSheet, Text, Animated, Easing } from 'react-native'
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import FeedIcon, { feedIcons, type FeedIconName } from '../FeedIcon'
-import { colors, fonts, typography } from '../../theme'
+import { colors, fonts, leading, radius, spacing, typography } from '../../theme'
+import { feedInk, feedLine } from '../../screens/FeedScreen/tokens'
 import { useFeedStore } from '../../store/feed.store'
 import { useAuthStore } from '../../store/auth.store'
 import { useMessageBadgeStore } from '../../store/messageBadge.store'
@@ -21,10 +22,6 @@ import {
 import useReducedMotionPreference from '../../hooks/useReducedMotionPreference'
 import useComposerReveal from './useComposerReveal'
 import useNavSkin from './useNavSkin'
-
-// O mesmo tamanho da coluna de acções do post (`DEFAULT_RAIL_ICON_SIZE`), para
-// os dois conjuntos de ícones da feed se lerem como um só sistema.
-const SZ = 27
 
 // ─── Calibração ótica dos ícones da navegação ───────────────────────────────
 //
@@ -105,6 +102,58 @@ const revealSize = (geometry: number) => +(((REVEAL_INK - STROKE) * 24) / geomet
 const SZ_REVEAL_CIRCLE = revealSize(18)    // circle-add ⇒ 18 de lado
 const SZ_REVEAL_PLUS = revealSize(15.5)    // plus ⇒ 15.5 de lado
 
+function NavIconSwap({
+  selected, reduceMotion, inactive, active,
+}: {
+  selected: boolean
+  reduceMotion: boolean
+  inactive: React.ReactNode
+  active: React.ReactNode
+}) {
+  const progress = useRef(new Animated.Value(selected ? 1 : 0)).current
+
+  useEffect(() => {
+    progress.stopAnimation()
+    if (reduceMotion) {
+      progress.setValue(selected ? 1 : 0)
+      return
+    }
+    Animated.timing(progress, {
+      toValue: selected ? 1 : 0,
+      duration: 170,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start()
+  }, [progress, reduceMotion, selected])
+
+  return (
+    <View style={s.navGlyphSwap} pointerEvents="none">
+      <Animated.View
+        style={[
+          s.navGlyphLayer,
+          {
+            opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
+            transform: [{ scale: progress.interpolate({ inputRange: [0, 1], outputRange: [1, 0.9] }) }],
+          },
+        ]}
+      >
+        {inactive}
+      </Animated.View>
+      <Animated.View
+        style={[
+          s.navGlyphLayer,
+          {
+            opacity: progress,
+            transform: [{ scale: progress.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] }) }],
+          },
+        ]}
+      >
+        {active}
+      </Animated.View>
+    </View>
+  )
+}
+
 function MotionTabButton({
   children, selected, onPress, label, valueText,
   pulseSignal = 0, reduceMotion, role = 'tab',
@@ -133,8 +182,8 @@ function MotionTabButton({
       return
     }
     if (!selected) return
-    scale.setValue(0.9)
-    Animated.spring(scale, { toValue: 1, speed: 26, bounciness: 10, useNativeDriver: true }).start()
+    scale.setValue(0.94)
+    Animated.spring(scale, { toValue: 1, speed: 28, bounciness: 6, useNativeDriver: true }).start()
   }, [reduceMotion, scale, selected])
 
   useEffect(() => {
@@ -150,7 +199,7 @@ function MotionTabButton({
 
   function pressIn() {
     if (reduceMotion) return
-    Animated.spring(scale, { toValue: 0.88, speed: 42, bounciness: 3, useNativeDriver: true }).start()
+    Animated.spring(scale, { toValue: 0.92, speed: 42, bounciness: 2, useNativeDriver: true }).start()
   }
 
   function pressOut() {
@@ -177,7 +226,7 @@ function MotionTabButton({
             opacity: pulse.interpolate({ inputRange: [0, 0.42, 1], outputRange: [1, 0.78, 1] }),
             transform: [
               { scale },
-              { scale: pulse.interpolate({ inputRange: [0, 0.42, 1], outputRange: [1, 1.08, 1] }) },
+              { scale: pulse.interpolate({ inputRange: [0, 0.42, 1], outputRange: [1, 1.05, 1] }) },
             ],
           },
         ]}
@@ -276,11 +325,8 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
   const activeRoute = state.routes[state.index]
   const activeTab  = activeRoute.name
   const onFeed     = activeTab === 'Feed'
-  const onMessages = activeTab === 'Messages'
-  const onCreate   = activeTab === 'Create'
   const onCircle   = activeTab === 'Circle'
   const onSearch   = activeTab === 'Search'
-  const onProfile  = activeTab === 'Profile'
   // A cápsula é branca em todos os ecrãs, feed incluída, por isso a tinta é
   // sempre escura — não há mais o par claro/escuro que dependia do fundo.
   // Preto nos dois estados. Quem distingue o separador activo é a forma — o
@@ -301,11 +347,23 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
   const iconActive = clear ? '#FFFFFF' : colors.black
   const iconInactv = clear ? '#FFFFFF' : colors.black
 
-  useEffect(() => {
-    const target = overlayOpen ? 0 : 1
+  useLayoutEffect(() => {
     barVisibility.stopAnimation()
-    if (reduceMotion) { barVisibility.setValue(target); return }
-    Animated.timing(barVisibility, { toValue: target, duration: overlayOpen ? 150 : 210, useNativeDriver: true }).start()
+    // Uma folha que sobe já ocupa a atenção e a barra pode estar branca. Sumir
+    // imediatamente impede a faixa de competir com o primeiro frame da folha.
+    // Na volta, sim, a barra reaparece com movimento porque já não há superfície
+    // a atravessá-la.
+    if (overlayOpen) {
+      barVisibility.setValue(0)
+      return
+    }
+    if (reduceMotion) { barVisibility.setValue(1); return }
+    Animated.timing(barVisibility, {
+      toValue: 1,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start()
   }, [barVisibility, overlayOpen, reduceMotion])
 
   function goTo(tab: string) {
@@ -378,8 +436,8 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
       // Longo de propósito. A abertura não responde a nenhum toque — ninguém
       // está à espera dela — por isso pode demorar o tempo de se ler como
       // movimento em vez de aparecer como um salto.
-      duration: revealLevel === 0 ? 380 : 460,
-      easing: Easing.inOut(Easing.cubic),
+      duration: revealLevel === 0 ? 340 : 420,
+      easing: revealLevel === 0 ? Easing.inOut(Easing.cubic) : Easing.out(Easing.cubic),
       useNativeDriver: false,
     }).start()
   }, [revealLevel, reduceMotion, revealWidth])
@@ -402,16 +460,6 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
     commentScale.stopAnimation()
     commentScale.setValue(1)
   }, [commentScale, reduceMotion])
-
-  // As duas acções da barra da Feed. A pesquisa não navega: levanta a bandeira
-  // que o próprio ecrã atende e mantém o post atual como âncora.
-  function openFeedSearch() {
-    useFeedStore.getState().setOpenSearch(true)
-  }
-
-  function goToCircle() {
-    goTo('Circle')
-  }
 
   function goToOwnProfile() {
     const route = state.routes.find((item) => item.name === 'Profile')
@@ -440,11 +488,15 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
       reduceMotion={reduceMotion}
     >
       <MessageBadge count={newPostsCount} reduceMotion={reduceMotion} />
-      <FeedIcon
-        name={homeActive ? 'play-list-4-solid' : 'play-list-4'}
-        size={homeActive ? SZ_SOLID : SZ_PLAY}
-        color={homeActive ? iconActive : iconInactv}
-        strokePx={homeActive ? undefined : STROKE}
+      <NavIconSwap
+        selected={homeActive}
+        reduceMotion={reduceMotion}
+        inactive={(
+          <FeedIcon name="play-list-4" size={SZ_PLAY} color={iconInactv} strokePx={STROKE} />
+        )}
+        active={(
+          <FeedIcon name="play-list-4-solid" size={SZ_SOLID} color={iconActive} />
+        )}
       />
     </MotionTabButton>
   )
@@ -460,11 +512,15 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
       reduceMotion={reduceMotion}
     >
       <MessageBadge count={totalUnread} reduceMotion={reduceMotion} />
-      <FeedIcon
-        name={msgActive ? 'chat-teardrop-fill' : 'chat-teardrop-light'}
-        size={msgActive ? SZ_SOLID : SZ_CHAT}
-        color={msgActive ? iconActive : iconInactv}
-        boostPx={msgActive ? undefined : CHAT_BOOST}
+      <NavIconSwap
+        selected={msgActive}
+        reduceMotion={reduceMotion}
+        inactive={(
+          <FeedIcon name="chat-teardrop-light" size={SZ_CHAT} color={iconInactv} boostPx={CHAT_BOOST} />
+        )}
+        active={(
+          <FeedIcon name="chat-teardrop-fill" size={SZ_SOLID} color={iconActive} />
+        )}
       />
     </MotionTabButton>
   )
@@ -483,13 +539,15 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
         </View>
       ) : (
         <View style={{ transform: [{ translateY: USER_NUDGE }] }}>
-          <Icon
-            name="user"
-            size={SZ_USER}
-            strokeWidth={STROKE}
-            absoluteStrokeWidth
-            color={profActive ? iconActive : iconInactv}
-            fill={profActive ? iconActive : 'none'}
+          <NavIconSwap
+            selected={profActive}
+            reduceMotion={reduceMotion}
+            inactive={(
+              <Icon name="user" size={SZ_USER} strokeWidth={STROKE} absoluteStrokeWidth color={iconInactv} />
+            )}
+            active={(
+              <Icon name="user" size={SZ_USER} strokeWidth={STROKE} absoluteStrokeWidth color={iconActive} fill={iconActive} />
+            )}
           />
         </View>
       )}
@@ -576,7 +634,12 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
             <Animated.View
               style={[
                 s.feedNavigationFace,
-                { opacity: collapse.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }) },
+                {
+                  opacity: collapse.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
+                  transform: [{
+                    translateY: collapse.interpolate({ inputRange: [0, 1], outputRange: [0, 8] }),
+                  }],
+                },
               ]}
               pointerEvents={navigationInteractive ? 'auto' : 'none'}
               accessibilityElementsHidden={!navigationInteractive}
@@ -596,6 +659,9 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
                 {
                   opacity: collapse,
                   paddingHorizontal: collapse.interpolate({ inputRange: [0, 1], outputRange: [0, 14] }),
+                  transform: [{
+                    translateY: collapse.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }),
+                  }],
                 },
               ]}
               pointerEvents={composerInteractive ? 'auto' : 'none'}
@@ -635,7 +701,24 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
                       accessibilityRole="button"
                       accessibilityLabel={t.feed_create}
                     >
-                      <Icon name="plus" size={SZ_REVEAL_PLUS} color={iconActive} strokeWidth={STROKE} absoluteStrokeWidth />
+                      <Animated.View
+                        style={{
+                          opacity: revealWidth.interpolate({
+                            inputRange: [REVEAL_SLOT + 8, REVEAL_SLOT * 2 - 8],
+                            outputRange: [0, 1],
+                            extrapolate: 'clamp',
+                          }),
+                          transform: [{
+                            translateX: revealWidth.interpolate({
+                              inputRange: [REVEAL_SLOT, REVEAL_SLOT * 2],
+                              outputRange: [10, 0],
+                              extrapolate: 'clamp',
+                            }),
+                          }],
+                        }}
+                      >
+                        <Icon name="plus" size={SZ_REVEAL_PLUS} color={iconActive} strokeWidth={STROKE} absoluteStrokeWidth />
+                      </Animated.View>
                     </TouchableOpacity>
 
                     <TouchableOpacity
@@ -647,7 +730,24 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
                       accessibilityRole="button"
                       accessibilityLabel={t.feed_top_circle}
                     >
-                      <Icon name="circle-add" size={SZ_REVEAL_CIRCLE} color={iconActive} strokeWidth={STROKE} absoluteStrokeWidth />
+                      <Animated.View
+                        style={{
+                          opacity: revealWidth.interpolate({
+                            inputRange: [8, REVEAL_SLOT - 8],
+                            outputRange: [0, 1],
+                            extrapolate: 'clamp',
+                          }),
+                          transform: [{
+                            translateX: revealWidth.interpolate({
+                              inputRange: [0, REVEAL_SLOT],
+                              outputRange: [10, 0],
+                              extrapolate: 'clamp',
+                            }),
+                          }],
+                        }}
+                      >
+                        <Icon name="circle-add" size={SZ_REVEAL_CIRCLE} color={iconActive} strokeWidth={STROKE} absoluteStrokeWidth />
+                      </Animated.View>
                     </TouchableOpacity>
                   </View>
                 </Animated.View>
@@ -661,6 +761,8 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
     </Animated.View>
   )
 }
+
+/** Um degrau acima do fundo da Feed — lê-se como campo sem virar cartão. */
 
 const s = StyleSheet.create({
   root: {
@@ -745,24 +847,23 @@ const s = StyleSheet.create({
     height: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 18,
-    borderRadius: 999,
-    backgroundColor: 'rgba(24,32,39,0.96)',
+    paddingHorizontal: spacing.md2,
+    borderRadius: radius.full,
+    backgroundColor: colors.commentField,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.16)',
-    shadowColor: '#000',
-    shadowOpacity: 0.34,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 5,
+    // O contorno chega. A sombra que aqui estava — 8px de raio, 34% de preto,
+    // deslocada 3px — descolava o campo da barra como se fosse um cartão a
+    // flutuar, e o campo de resposta é a última coisa da Feed que deve chamar
+    // atenção. Por baixo dele corre o gradiente da barra, que já o assenta.
+    borderColor: feedLine.subtle,
   },
   commentFieldDisabled: { opacity: 0.54 },
   commentText: {
     flex: 1,
-    color: 'rgba(255,255,255,0.76)',
+    color: feedInk.muted,
     fontFamily: fonts.medium,
     fontSize: typography.body,
-    lineHeight: 20,
+    lineHeight: leading.body,
     letterSpacing: -0.24,
   },
   btn: {
@@ -782,6 +883,17 @@ const s = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navGlyphSwap: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navGlyphLayer: {
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
   },

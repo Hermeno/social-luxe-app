@@ -9,7 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
-import { colors, fonts } from '../../theme'
+import { colors, fonts, gradients } from '../../theme'
 import { confirm } from '../../components/confirm'
 import { toast } from '../../utils/toast'
 import * as unionService from '../../services/union.service'
@@ -127,11 +127,11 @@ export default function UnionProfileScreen() {
 
         {/* Cover / Avatar */}
         <View style={s.coverWrap}>
-          <LinearGradient colors={['#FF7A1C', '#FF6766', '#FFB173']} style={s.cover} />
+          <LinearGradient colors={gradients.brand} style={s.cover} />
           <View style={s.unionAvatarWrap}>
             {union.avatar
               ? <Image source={{ uri: union.avatar }} style={s.unionAvatar} contentFit="cover" />
-              : <LinearGradient colors={['#FF7A1C', '#FF6766']} style={s.unionAvatar}>
+              : <LinearGradient colors={gradients.brand} style={s.unionAvatar}>
                   <Text style={s.unionAvatarEmoji}>💑</Text>
                 </LinearGradient>
             }
@@ -173,8 +173,8 @@ export default function UnionProfileScreen() {
 
           {isMember && (
             <TouchableOpacity style={[s.actionBtn, s.actionBtnDanger]} onPress={handleDissolve} activeOpacity={0.85}>
-              <Ionicons name="trash-outline" size={20} color="#E53935" />
-              <Text style={[s.actionBtnTxt, { color: '#E53935' }]}>{t.un_dissolve}</Text>
+              <Ionicons name="trash-outline" size={20} color={colors.error} />
+              <Text style={[s.actionBtnTxt, { color: colors.error }]}>{t.un_dissolve}</Text>
             </TouchableOpacity>
           )}
         </View>

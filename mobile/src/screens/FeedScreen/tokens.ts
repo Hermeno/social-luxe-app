@@ -10,10 +10,26 @@
  * diferente, não porque alguém precisou de um valor intermédio.
  */
 export const feedIcon = {
+  /**
+   * Dentro de uma forma pequena e fixa — o emblema de câmara sobre o botão de
+   * criar, de 17px. A mesma excepção que `typography.badge` abre para o texto:
+   * aqui o tamanho é ditado pela forma que o contém, não pela leitura.
+   */
+  badge: 9,
   /** Emblemas dentro de uma forma de tamanho fixo — megafone, dispositivo. */
   inline: 12,
   /** Ícones que acompanham texto numa linha — setas, chevrons. */
   small: 16,
+  /**
+   * Glifos dentro de um controlo — cabeçalho, campo de pesquisa, linhas de menu.
+   *
+   * O degrau que faltava. Entre `small` e `action` havia um vão de 12px que a
+   * interface real precisava de preencher, e preenchia-o à mão: 17, 19, 20 e 21
+   * em treze sítios diferentes, todos a desenhar o mesmo papel. Quatro valores
+   * a disputar uma posição é o sintoma de um degrau em falta, não de quatro
+   * decisões.
+   */
+  control: 20,
   /** Coluna de acções do post e navegação. O mesmo valor nos dois, que era a
    *  intenção original escrita na TabBar e que se tinha perdido (rail a 30). */
   action: 28,
@@ -81,3 +97,43 @@ export const feedTextShadow = {
   textShadowOffset: { width: 0, height: 1 },
   textShadowRadius: 3,
 } as const
+
+/**
+ * Os traços e as folgas claras sobre a mídia — tudo o que é desenho e não texto.
+ *
+ * O `feedInk` acima resolve a tinta; os contornos e os preenchimentos ficaram de
+ * fora e continuaram a multiplicar-se: 0.14, 0.18, 0.22, 0.28, 0.42, 0.45, 0.46,
+ * 0.85, 0.88, 0.92, 0.95. Forçá-los para dentro do `feedInk` seria errado — um
+ * contorno de 1px e uma letra não precisam do mesmo contraste para se lerem — mas
+ * deixá-los soltos era o mesmo problema com outro nome.
+ */
+export const feedLine = {
+  /** Anel à volta de um rosto, halo do duplo toque — traço que se quer ver. */
+  bright: 'rgba(255,255,255,0.88)',
+  /** Contorno de um botão sobre a mídia. Abaixo disto some-se em foto clara. */
+  strong: 'rgba(255,255,255,0.46)',
+  /** Separador entre dois controlos da mesma linha. */
+  medium: 'rgba(255,255,255,0.28)',
+  /** O mesmo separador quando o estado já não precisa de se anunciar. */
+  subtle: 'rgba(255,255,255,0.18)',
+} as const
+
+export const feedFill = {
+  /** Preenchimento activo — traço de progresso, ponto da página actual. */
+  solid: 'rgba(255,255,255,0.92)',
+  /** A calha por baixo do preenchimento. Lê-se como sulco, não como barra. */
+  track: 'rgba(255,255,255,0.22)',
+  /** Realce enquanto o dedo está em cima. */
+  press: 'rgba(255,255,255,0.14)',
+} as const
+
+/**
+ * A folga que o conteúdo deixa à coluna de acções, do lado direito.
+ *
+ * A rail mede 64 e encosta à margem. O texto do autor parava a 78, os avatares
+ * de quem comentou a 74 e o traço do tempo atravessava por baixo dos dois — três
+ * respostas para a mesma pergunta, e só uma pode estar certa. 78 dá 14px de ar
+ * entre a legenda e o primeiro ícone: chega para não se tocarem e não desperdiça
+ * largura de leitura.
+ */
+export const RAIL_CLEARANCE = 78

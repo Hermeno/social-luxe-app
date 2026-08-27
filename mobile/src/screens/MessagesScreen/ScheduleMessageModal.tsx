@@ -146,7 +146,7 @@ export default function ScheduleMessageModal({
 
         {/* Cancel CTA */}
         <TouchableOpacity style={m.cancelCta} onPress={onCancelScheduled} activeOpacity={0.8}>
-          <Ionicons name="trash-outline" size={17} color="#FF3B30" />
+          <Ionicons name="trash-outline" size={17} color={colors.error} />
           <Text style={m.cancelCtaTxt}>{t.sched_cancel_sched}</Text>
         </TouchableOpacity>
 
@@ -238,7 +238,7 @@ export default function ScheduleMessageModal({
           <Ionicons
             name={isPast ? 'alert-circle-outline' : 'checkmark-circle-outline'}
             size={13}
-            color={isPast ? '#FF3B30' : colors.gray500}
+            color={isPast ? colors.error : colors.gray500}
           />
           <Text style={[m.statusTxt, isPast && m.statusTxtWarn]}>
             {isPast ? t.sched_past_time : `${chosen.label} · ${hStr}:${mStr}`}
@@ -327,9 +327,9 @@ const m = StyleSheet.create({
   cancelCta: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     borderRadius: 25, paddingVertical: 15, marginBottom: 12,
-    backgroundColor: 'rgba(255,59,48,0.08)',
+    backgroundColor: 'rgba(156,69,238,0.08)',
   },
-  cancelCtaTxt: { fontSize: 15, fontFamily: fonts.semiBold, color: '#FF3B30' },
+  cancelCtaTxt: { fontSize: 15, fontFamily: fonts.semiBold, color: colors.error },
   premiumTeaser: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 6, paddingBottom: 4,
@@ -369,9 +369,9 @@ const m = StyleSheet.create({
   wheelNum:  { fontSize: 25, fontFamily: fonts.bold, color: colors.gray800, letterSpacing: -0.5, lineHeight: 32 },
   colon:     { fontSize: 26, fontFamily: fonts.bold, color: colors.gray300, marginBottom: 2 },
   statusTag: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: FIELD, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9 },
-  statusTagWarn: { backgroundColor: 'rgba(255,59,48,0.08)' },
+  statusTagWarn: { backgroundColor: 'rgba(156,69,238,0.08)' },
   statusTxt:     { fontSize: 12.5, fontFamily: fonts.semiBold, color: colors.gray600, flexShrink: 1 },
-  statusTxtWarn: { color: '#FF3B30' },
+  statusTxtWarn: { color: colors.error },
 
   /* CTA */
   cta: {

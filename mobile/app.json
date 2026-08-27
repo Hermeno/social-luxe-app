@@ -2,6 +2,7 @@
   "expo": {
     "name": "luxee",
     "slug": "luxee",
+    "scheme": "luxee",
     "version": "1.0.0",
     "sdkVersion": "54.0.0",
     "orientation": "portrait",
@@ -87,7 +88,7 @@
         "expo-notifications",
         {
           "icon": "./assets/files/luxee-chat-icon-1024.png",
-          "color": "#CA2851",
+          "color": "#C246E6",
           "defaultChannel": "messages"
         }
       ],

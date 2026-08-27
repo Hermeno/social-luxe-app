@@ -17,7 +17,7 @@ import * as postService from '../../services/post.service'
 import type { TasteSignal } from '../../services/post.service'
 import { isConnected } from '../../services/netinfo.service'
 import { useT } from '../../i18n'
-import { colors, fonts, typography } from '../../theme'
+import { colors, fonts, spacing, typography } from '../../theme'
 import FeedHeader, { FeedUserGroup as UserGroup } from './FeedHeader'
 import FeedItem from './FeedItem'
 import { hydrateTastePolicy, noteTastePostSeen } from './tastePolicy'
@@ -478,6 +478,12 @@ export default function FeedScreen() {
     alignPagerToPost(searchAnchorPostIdRef.current ?? currentPostIdRef.current)
   }, [alignPagerToPost, setSearchVisible])
   const handleSearchChange = useCallback((q: string) => setSearchQuery(q), [])
+  // As caras do topo levam à lista de onde saíram — seguidores ou seguidos,
+  // conforme o que a legenda por baixo delas está a mostrar.
+  const handleRelationPress = useCallback((mode: 'following' | 'followers') => {
+    nav.navigate('Followers', { mode })
+  }, [nav])
+
   const handleBubblePress  = useCallback((group: UserGroup) => {
     const idx = flatPostsRef.current.findIndex((p) => p.user.id === group.user.id)
     if (idx >= 0) {
@@ -665,6 +671,7 @@ export default function FeedScreen() {
         onBubblePress={handleBubblePress}
         onCirclePress={handleCirclePress}
         onRestoreNavigation={handleRestoreNavigation}
+        onRelationPress={handleRelationPress}
       />
 
       {commentPost && (
@@ -681,6 +688,6 @@ export default function FeedScreen() {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.feedSurface },
   pager: { flex: 1, backgroundColor: colors.feedSurface },
-  empty:     { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, backgroundColor: colors.feedSurface },
+  empty:     { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, backgroundColor: colors.feedSurface },
   emptyTxt:  { fontFamily: fonts.medium, fontSize: typography.body, color: colors.gray600 }
 })

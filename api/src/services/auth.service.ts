@@ -66,7 +66,7 @@ export async function getProfile(userId: string) {
       viewsPublic: true, contact: true,
       defaultFollowDuration: true, city: true, district: true,
       autoReply: true, showDevice: true, statusLabel: true, interests: true,
-      isAdmin: true, createdAt: true,
+      isAdmin: true, isVerified: true, createdAt: true,
       // Sem estes, o próprio dono não via a sua conta profissional: o perfil
       // dele vem do /auth/me, não do /users/:id.
       accountType: true, businessCategory: true, businessAddress: true,

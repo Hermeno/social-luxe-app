@@ -237,10 +237,10 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   actionBtnActive: {
-    backgroundColor: '#FF7A1C',
+    backgroundColor: colors.black,
     ...Platform.select({
       ios: {
-        shadowColor: '#FF7A1C',
+        shadowColor: colors.black,
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.35,
         shadowRadius: 8,

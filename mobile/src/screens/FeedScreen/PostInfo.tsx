@@ -7,9 +7,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { Post, Pairing } from '../../types'
-import { colors, fonts, typography } from '../../theme'
+import { brandPalette, colors, fonts, leading, radius, sheet, spacing, typography } from '../../theme'
 import Icon from '../../components/Icon'
-import { feedIcon, FEED_STROKE } from './tokens'
+import { feedIcon, feedInk, feedLine, feedTextShadow, FEED_STROKE, RAIL_CLEARANCE } from './tokens'
 import { useT } from '../../i18n'
 import { useAuthStore } from '../../store/auth.store'
 import { useFollowStore } from '../../store/follow.store'
@@ -20,6 +20,8 @@ import * as postService from '../../services/post.service'
 import * as pairingService from '../../services/pairing.service'
 import { API_BASE } from '../../config'
 import AvatarImage from '../../components/AvatarImage'
+import VerifiedBadge from '../../components/VerifiedBadge'
+import AuthorAvatar from '../../components/AuthorAvatar'
 import FollowSplitButton, { FollowDuration } from '../../components/FollowSplitButton'
 import { AppStackParams } from '../../navigation/AppNavigator'
 
@@ -219,18 +221,37 @@ export default function PostInfo({
         {/* ── Esquerda: avatar + nome + meta ─────────────────────────────────── */}
         <View style={s.identity}>
           <View style={s.avatarStack}>
-            <TouchableOpacity onPress={() => nav.navigate('Profile', { userId: post.user.id })} activeOpacity={0.8}>
-              <View style={s.avatarRing}>
-                <AvatarImage uri={post.user.avatar} size={30} />
-              </View>
+            <TouchableOpacity
+              onPress={() => nav.navigate('Profile', { userId: post.user.id })}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={post.user.name}
+            >
+              <AuthorAvatar
+                uri={post.user.avatar}
+                name={post.user.name}
+                avatarSize={30}
+                ringWidth={1.25}
+                gap={2.75}
+                wellColor={light ? sheet.surface : colors.feedSurface}
+              />
             </TouchableOpacity>
             {post.partnerUser && post.partnerAccepted && (
               <TouchableOpacity
                 onPress={() => nav.navigate('Profile', { userId: post.partnerUser!.id })}
                 activeOpacity={0.8}
                 style={s.partnerAvatarOverlap}
+                accessibilityRole="button"
+                accessibilityLabel={post.partnerUser.name}
               >
-                <AvatarImage uri={post.partnerUser.avatar} size={28} borderColor="rgba(255,255,255,0.95)" borderWidth={2} />
+                <AuthorAvatar
+                  uri={post.partnerUser.avatar}
+                  name={post.partnerUser.name}
+                  avatarSize={24}
+                  ringWidth={1.25}
+                  gap={0.75}
+                  wellColor={light ? sheet.surface : colors.feedSurface}
+                />
               </TouchableOpacity>
             )}
           </View>
@@ -239,9 +260,14 @@ export default function PostInfo({
             {/* Nome (ou estado) + selo de vida prolongada */}
             <View style={s.nameLine}>
               {post.user.statusLabel ? (
-                <TouchableOpacity onPress={() => nav.navigate('Profile', { userId: post.user.id })} activeOpacity={0.8}>
+                <TouchableOpacity
+                  onPress={() => nav.navigate('Profile', { userId: post.user.id })}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${post.user.name}, ${post.user.statusLabel}`}
+                >
                   <LinearGradient
-                    colors={['rgba(8,8,40,0.10)', 'rgba(16,16,64,0.12)']}
+                    colors={[STATUS_TINT, STATUS_TINT]}
                     start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                     style={s.statusBadge}
                   >
@@ -249,10 +275,18 @@ export default function PostInfo({
                   </LinearGradient>
                 </TouchableOpacity>
               ) : (
-                <TouchableOpacity onPress={() => nav.navigate('Profile', { userId: post.user.id })} activeOpacity={0.8}>
-                  <Text style={[s.username, light && s.usernameLight]} numberOfLines={1}>
-                    {post.user.name}{post.partnerUser && post.partnerAccepted ? ` & ${post.partnerUser.name}` : ''}
-                  </Text>
+                <TouchableOpacity
+                  onPress={() => nav.navigate('Profile', { userId: post.user.id })}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel={post.user.name}
+                >
+                  <View style={s.nameWithBadge}>
+                    <Text style={[s.username, light && s.usernameLight]} numberOfLines={1}>
+                      {post.user.name}{post.partnerUser && post.partnerAccepted ? ` & ${post.partnerUser.name}` : ''}
+                    </Text>
+                    {post.user.isVerified && <VerifiedBadge />}
+                  </View>
                 </TouchableOpacity>
               )}
 
@@ -267,7 +301,7 @@ export default function PostInfo({
             <View style={s.metaLine}>
               {post.isAnnouncement ? (
                 <View style={s.announceBadge}>
-                  <Icon name="megaphone" size={feedIcon.inline} color="#fff" strokeWidth={FEED_STROKE} absoluteStrokeWidth />
+                  <Icon name="megaphone" size={feedIcon.inline} color={feedInk.primary} strokeWidth={FEED_STROKE} absoluteStrokeWidth />
                   <Text style={s.announceTxt}>{t.feed_announcement}</Text>
                 </View>
               ) : (
@@ -279,7 +313,7 @@ export default function PostInfo({
               {post.user.showDevice && !post.isAnnouncement && (
                 <>
                   <Text style={[s.metaSep, light && s.metaLightTxt]}>·</Text>
-                  <Icon name="smartphone" size={feedIcon.inline} color="rgba(255,255,255,0.62)" strokeWidth={FEED_STROKE} absoluteStrokeWidth />
+                  <Icon name="smartphone" size={feedIcon.inline} color={feedInk.muted} strokeWidth={FEED_STROKE} absoluteStrokeWidth />
                   <Text style={[s.metaTxt, light && s.metaLightTxt]} numberOfLines={1}>
                     {t.feed_posted_by} {post.deviceModel ?? 'Mobile'}
                   </Text>
@@ -293,6 +327,8 @@ export default function PostInfo({
                 onPress={() => nav.navigate('Profile', { userId: pairingService.pairingPartner(authorPairing, post.user.id).id })}
                 activeOpacity={0.8}
                 style={s.pairingRow}
+                accessibilityRole="button"
+                accessibilityLabel={`${pairingService.pairingLabel(authorPairing)} · ${pairingService.pairingPartner(authorPairing, post.user.id).name}`}
               >
                 <View style={s.pairingDot} />
                 <Text style={[s.pairingRowTxt, light && s.pairingRowTxtLight]} numberOfLines={1}>
@@ -307,11 +343,25 @@ export default function PostInfo({
         <View style={s.actions}>
           {!isSelf && (light ? (
             <View style={s.segToggle}>
-              <TouchableOpacity style={s.segItem} activeOpacity={0.8} onPress={() => { if (following) handleFollow('forever') }}>
+              <TouchableOpacity
+                style={s.segItem}
+                activeOpacity={0.8}
+                onPress={() => { if (following) handleFollow('forever') }}
+                accessibilityRole="button"
+                accessibilityLabel={`${t.follow} ${post.user.name}`}
+                accessibilityState={{ selected: !following }}
+              >
                 <Text style={[s.segTxt, !following && s.segTxtActive]}>{t.follow}</Text>
                 <View style={[s.segUnderline, !following && s.segUnderlineOn]} />
               </TouchableOpacity>
-              <TouchableOpacity style={s.segItem} activeOpacity={0.8} onPress={() => { if (!following) handleFollow('forever') }}>
+              <TouchableOpacity
+                style={s.segItem}
+                activeOpacity={0.8}
+                onPress={() => { if (!following) handleFollow('forever') }}
+                accessibilityRole="button"
+                accessibilityLabel={`${t.following} ${post.user.name}`}
+                accessibilityState={{ selected: following }}
+              >
                 {/* "Seguindo" + avatares ao lado; o traço passa por baixo de ambos */}
                 <View style={s.segRow}>
                   <Text style={[s.segTxt, following && s.segTxtActive]}>{t.following}</Text>
@@ -341,7 +391,14 @@ export default function PostInfo({
 
       {/* Legenda — expande para baixo ao toque */}
       {!hideCaption && caption.length > 0 && post.mediaType !== 'TEXT' && (
-        <TouchableOpacity onPress={() => setExpanded((e) => !e)} activeOpacity={0.8} style={[s.captionWrap, light && s.captionWrapLight]}>
+        <TouchableOpacity
+          onPress={() => setExpanded((e) => !e)}
+          activeOpacity={0.8}
+          style={[s.captionWrap, light && s.captionWrapLight]}
+          accessibilityRole="button"
+          accessibilityLabel={caption}
+          accessibilityState={{ expanded }}
+        >
           <Text style={[s.caption, light && s.captionLight]} numberOfLines={light && !expanded ? 1 : undefined}>
             {displayed}
             {isLong && !expanded && <Text style={[s.seeMore, light && s.seeMoreLight]}> {t.see_more}</Text>}
@@ -354,98 +411,127 @@ export default function PostInfo({
   )
 }
 
+/**
+ * O véu do selo de estado e o fundo de um avatar em falta.
+ *
+ * Estavam escritos como `rgba(89,72,249,…)` e `rgba(194,70,230,…)` — o `indigo`
+ * e o `magenta` da paleta copiados à mão em decimal. Escritos assim, sobrevivem
+ * intactos à próxima troca de paleta: foi o que aconteceu quando a marca passou
+ * de carmim a laranja e de laranja a azul, e estes ficaram para trás.
+ */
+const STATUS_TINT     = `${brandPalette.indigo}1F`
+const AVATAR_FALLBACK = `${brandPalette.magenta}B3`
+
 const s = StyleSheet.create({
   // Bloco do autor — agora ancorado em baixo (nome + Seguir por cima dos ícones)
-  container: { position: 'absolute', left: 16, right: 14, gap: 8, zIndex: 30 },
+  container: { position: 'absolute', left: spacing.md, right: spacing.md, gap: spacing.sm, zIndex: 30 },
 
-  topRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  topRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm2 },
 
-  identity:    { flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  identity:    { flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   avatarStack: { flexDirection: 'row', alignItems: 'flex-start' },
-  avatarRing: {
-    width: 38, height: 38, borderRadius: 19,
-    borderWidth: 1.3, borderColor: 'rgba(255,255,255,0.85)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  partnerAvatarOverlap: { marginLeft: -14, marginTop: 9, zIndex: 1 },
+  partnerAvatarOverlap: { marginLeft: -14, marginTop: spacing.sm, zIndex: 1 },
 
   // Coluna nome → meta → pareamento, alinhada ao centro óptico do avatar
-  nameCol:  { flex: 1, gap: 2, paddingTop: 2 },
-  nameLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  nameCol:  { flex: 1, gap: spacing.xxs, paddingTop: spacing.xxs },
+  nameLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs2 },
+  // `body`, o mesmo degrau que o nome do autor na Feed. Esteve em `secondary`,
+  // que é o degrau da legenda: nome e legenda ficavam do mesmo tamanho e a
+  // hierarquia entre quem publica e o que publicou passava a ser só o peso.
+  nameWithBadge: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flexShrink: 1 },
   username: {
-    color: colors.white, fontFamily: fonts.semiBold, fontSize: typography.secondary,
-    letterSpacing: -0.2, flexShrink: 1,
+    ...feedTextShadow,
+    color: feedInk.primary, fontFamily: fonts.medium, fontSize: typography.body,
+    lineHeight: leading.body, letterSpacing: -0.2, flexShrink: 1,
   },
 
-  metaLine: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  metaSep:  { color: 'rgba(255,255,255,0.40)', fontFamily: fonts.medium, fontSize: typography.meta },
+  metaLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  metaSep:  { ...feedTextShadow, color: feedInk.muted, fontFamily: fonts.regular, fontSize: typography.meta, lineHeight: leading.meta },
   metaTxt: {
-    color: 'rgba(255,255,255,0.62)', fontFamily: fonts.medium, fontSize: typography.meta,
-    letterSpacing: 0.1, flexShrink: 1,
+    ...feedTextShadow,
+    color: feedInk.muted, fontFamily: fonts.regular, fontSize: typography.meta,
+    lineHeight: leading.meta, letterSpacing: 0.1, flexShrink: 1,
   },
 
   announceBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: 'rgba(245,158,11,0.88)',
-    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20,
+    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
+    backgroundColor: `${brandPalette.violet}E0`,
+    paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.full,
   },
-  announceTxt: { color: '#fff', fontFamily: fonts.semiBold, fontSize: typography.meta, letterSpacing: 0.2 },
+  announceTxt: {
+    color: feedInk.primary, fontFamily: fonts.medium,
+    fontSize: typography.meta, lineHeight: leading.meta, letterSpacing: 0.2,
+  },
 
   // Seguir + 3 pontinhos, à direita e no topo
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 3 },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingTop: spacing.xs },
 
   // Interruptor Seguir | Seguindo — o foco é uma linha por baixo, sem cor
-  segToggle: { flexDirection: 'row', gap: 16 },
-  segItem: { alignItems: 'center', paddingBottom: 5 },
-  segRow:  { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  segTxt: { fontFamily: fonts.semiBold, fontSize: typography.secondary, color: 'rgba(0,0,0,0.4)', letterSpacing: -0.1 },
-  segTxtActive: { color: '#111114' },
-  segUnderline: { height: 2, alignSelf: 'stretch', borderRadius: 1, marginTop: 4, backgroundColor: 'transparent' },
-  segUnderlineOn: { backgroundColor: '#111114' },
+  segToggle: { flexDirection: 'row', gap: spacing.md },
+  segItem: { minHeight: 44, justifyContent: 'center', alignItems: 'center', paddingBottom: spacing.xs2 },
+  segRow:  { flexDirection: 'row', alignItems: 'center', gap: spacing.xs2 },
+  segTxt: { fontFamily: fonts.medium, fontSize: typography.secondary, lineHeight: leading.secondary, color: sheet.inkFaint, letterSpacing: -0.08 },
+  segTxtActive: { color: sheet.ink },
+  segUnderline: { height: 2, alignSelf: 'stretch', borderRadius: radius.full, marginTop: spacing.xs, backgroundColor: 'transparent' },
+  segUnderlineOn: { backgroundColor: sheet.ink },
 
   // Avatares dos seguidores — pequenos, ao lado do "Seguindo"
   followerStack:  { flexDirection: 'row', alignItems: 'center' },
-  followerOverlap:{ marginLeft: -5 },
+  followerOverlap:{ marginLeft: -spacing.xs2 },
 
-  pairingRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  pairingDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: colors.primary },
+  pairingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs2 },
+  pairingDot: { width: 5, height: 5, borderRadius: radius.full, backgroundColor: feedInk.primary },
   pairingRowTxt: {
-    color: 'rgba(255,255,255,0.75)', fontFamily: fonts.medium, fontSize: typography.meta, letterSpacing: -0.1,
+    ...feedTextShadow,
+    color: feedInk.muted, fontFamily: fonts.regular, fontSize: typography.meta,
+    lineHeight: leading.meta, letterSpacing: -0.1,
   },
 
-  extBadge:     { backgroundColor: colors.primary, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
-  extBadgeText: { color: colors.white, fontFamily: fonts.bold, fontSize: typography.badge, letterSpacing: 0.2 },
+  extBadge:     { backgroundColor: colors.primary, borderRadius: radius.full, paddingHorizontal: spacing.xs2, paddingVertical: 1 },
+  extBadgeText: { color: colors.white, fontFamily: fonts.medium, fontSize: typography.badge, lineHeight: leading.badge, letterSpacing: 0.2 },
 
   statusBadge: {
-    borderRadius: 20, paddingHorizontal: 9, paddingVertical: 4,
+    borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs,
     maxWidth: 160,
   },
   statusText: {
-    color: 'rgba(255,255,255,0.88)', fontFamily: fonts.medium, fontSize: typography.meta, letterSpacing: 0.1,
+    ...feedTextShadow,
+    color: feedInk.secondary, fontFamily: fonts.regular, fontSize: typography.meta,
+    lineHeight: leading.meta, letterSpacing: 0.1,
   },
 
   // Legenda alinhada ao avatar; expande para baixo sem empurrar o cabeçalho
-  captionWrap: { marginLeft: 46, marginRight: 6 },
-  caption:     { color: 'rgba(255,255,255,0.88)', fontFamily: fonts.regular, fontSize: typography.secondary, lineHeight: 19 },
-  seeMore:     { color: 'rgba(255,255,255,0.50)', fontFamily: fonts.medium },
+  captionWrap: { marginLeft: 46, marginRight: spacing.xs2 },
+  caption:     {
+    ...feedTextShadow,
+    color: feedInk.secondary, fontFamily: fonts.regular,
+    fontSize: typography.secondary, lineHeight: leading.secondary,
+  },
+  seeMore:     { color: feedInk.muted, fontFamily: fonts.regular },
 
-  timer:      { color: 'rgba(255,255,255,0.65)', fontFamily: fonts.medium, fontSize: typography.meta, letterSpacing: 0.1 },
-  timerDying: { color: '#FF3B30' },
+  timer:      {
+    ...feedTextShadow,
+    color: feedInk.muted, fontFamily: fonts.regular,
+    fontSize: typography.meta, lineHeight: leading.meta, letterSpacing: 0.1,
+  },
+  timerDying: { color: brandPalette.purple },
 
   // ── Variante clara (feed): texto escuro sobre a faixa branca, sem sombras ──
-  usernameLight:      { color: '#111114', fontSize: typography.body, letterSpacing: -0.3 },
-  metaLightTxt:       { color: 'rgba(0,0,0,0.42)' },
-  pairingRowTxtLight: { color: 'rgba(0,0,0,0.55)' },
-  captionWrapLight:   { marginLeft: 0, marginTop: 6 },
-  captionLight:       { color: '#2A2A2E', fontSize: typography.secondary, lineHeight: 19 },
-  seeMoreLight:       { color: 'rgba(0,0,0,0.4)' },
-  timerLight:         { color: 'rgba(0,0,0,0.4)' },
+  // A variante clara herda os tamanhos de cima e só troca a tinta — sem sombra,
+  // que sobre branco só suja as letras.
+  usernameLight:      { color: sheet.ink, letterSpacing: -0.3, textShadowColor: 'transparent' },
+  metaLightTxt:       { color: sheet.inkMuted, textShadowColor: 'transparent' },
+  pairingRowTxtLight: { color: sheet.inkMuted, textShadowColor: 'transparent' },
+  captionWrapLight:   { marginLeft: 0, marginTop: spacing.xs2 },
+  captionLight:       { color: sheet.inkSoft, textShadowColor: 'transparent' },
+  seeMoreLight:       { color: sheet.inkFaint },
+  timerLight:         { color: sheet.inkFaint, textShadowColor: 'transparent' },
 
   // ── Commenter avatars ────────────────────────────────────────────────────────
   // Ancorado ao fundo-esquerda; à direita deixa espaço para a coluna de ações.
   commentersBottom: {
     position: 'absolute',
-    left: 16, right: 74,
+    left: spacing.md, right: RAIL_CLEARANCE,
     zIndex: 30,
   },
   commentersRow: {
@@ -453,22 +539,24 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   commenterAvatar: {
-    width: 22, height: 22, borderRadius: 11,
+    width: 22, height: 22, borderRadius: radius.full,
     overflow: 'hidden',
   },
   commenterImg: { width: '100%', height: '100%' },
   commenterFallback: {
-    backgroundColor: 'rgba(202,40,81,0.7)',
+    backgroundColor: AVATAR_FALLBACK,
     alignItems: 'center', justifyContent: 'center',
   },
   commenterInitial: {
-    color: '#fff', fontSize: typography.badge, fontFamily: fonts.bold,
+    color: feedInk.primary, fontSize: typography.badge, lineHeight: leading.badge, fontFamily: fonts.medium,
   },
   commentersLabel: {
-    color: 'rgba(255,255,255,0.65)',
-    fontFamily: fonts.medium,
+    ...feedTextShadow,
+    color: feedInk.muted,
+    fontFamily: fonts.regular,
     fontSize: typography.meta,
-    marginLeft: 6,
+    lineHeight: leading.meta,
+    marginLeft: spacing.xs2,
     letterSpacing: -0.1,
   }
 })

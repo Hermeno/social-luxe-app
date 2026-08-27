@@ -1,12 +1,12 @@
 import { Ionicons } from '@expo/vector-icons'
+import { colors } from '../theme'
 
 // ─── Redes sociais do perfil ──────────────────────────────────────────────────
 // Guardamos handles, nunca URLs — o link é construído aqui. Colar
 // "instagram.com/joao?igsh=..." não pode virar um link partido.
 //
-// As cores são as das próprias marcas, não invenções nossas: é o que torna cada
-// botão reconhecível de relance. A paleta da luxee continua a mandar em tudo o
-// resto do ecrã.
+// A identificação vem do glifo e do rótulo. Os botões ficam monocromáticos para
+// as cores das marcas externas não competirem com os poucos acentos da Luxee.
 
 export type SocialKey =
   | 'whatsapp' | 'instagram' | 'facebook' | 'github'
@@ -25,42 +25,42 @@ export interface SocialDef {
 export const SOCIALS: SocialDef[] = [
   {
     key: 'instagram', label: 'Instagram', icon: 'logo-instagram',
-    color: '#E1306C', prefix: '@',
+    color: colors.black, prefix: '@',
     url: (h) => `https://instagram.com/${h}`,
   },
   {
     key: 'facebook', label: 'Facebook', icon: 'logo-facebook',
-    color: '#1877F2', prefix: '/',
+    color: colors.black, prefix: '/',
     url: (h) => `https://facebook.com/${h}`,
   },
   {
     key: 'github', label: 'GitHub', icon: 'logo-github',
-    color: '#181717', prefix: '@',
+    color: colors.black, prefix: '@',
     url: (h) => `https://github.com/${h}`,
   },
   {
     key: 'linkedin', label: 'LinkedIn', icon: 'logo-linkedin',
-    color: '#0A66C2', prefix: '/in/',
+    color: colors.black, prefix: '/in/',
     url: (h) => `https://linkedin.com/in/${h}`,
   },
   {
     key: 'tiktok', label: 'TikTok', icon: 'musical-notes',
-    color: '#010101', prefix: '@',
+    color: colors.black, prefix: '@',
     url: (h) => `https://tiktok.com/@${h}`,
   },
   {
     key: 'youtube', label: 'YouTube', icon: 'logo-youtube',
-    color: '#FF0000', prefix: '@',
+    color: colors.black, prefix: '@',
     url: (h) => `https://youtube.com/@${h}`,
   },
   {
     key: 'x', label: 'X', icon: 'close',
-    color: '#000000', prefix: '@',
+    color: colors.black, prefix: '@',
     url: (h) => `https://x.com/${h}`,
   },
   {
     key: 'website', label: 'Website', icon: 'globe-outline',
-    color: '#5B5B60', prefix: '',
+    color: colors.gray600, prefix: '',
     // O utilizador escreve o domínio; o esquema entra aqui se faltar
     url: (h) => (/^https?:\/\//i.test(h) ? h : `https://${h}`),
   },

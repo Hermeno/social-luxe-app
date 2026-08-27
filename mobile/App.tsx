@@ -19,6 +19,7 @@ import { useGuestStore } from './src/store/guest.store'
 import { usePostFontsStore } from './src/store/postFonts.store'
 import { getMyFollowerCount } from './src/services/follow.service'
 import { api, onTokenExpired } from './src/services/api'
+import { gradients } from './src/theme'
 
 // Hold the native splash screen open until we explicitly release it.
 // Must be called before any rendering occurs.
@@ -154,12 +155,12 @@ export default function App() {
       <SafeAreaProvider style={s.root}>
         <StatusBar style="light" />
         {!ready ? (
-          // Cobertura de arranque com o gradiente laranja da marca. Visível no
+          // Cobertura de arranque com o gradiente oficial da marca. Visível no
           // Expo Go (onde a splash nativa não é controlável); invisível em builds
           // standalone (a splash nativa cobre antes do hideAsync).
           <View style={s.cover}>
             <LinearGradient
-              colors={['#FF6A00', '#FF7A1C', '#FFC58A']}
+              colors={gradients.brand}
               locations={[0, 0.5, 1]}
               style={StyleSheet.absoluteFill}
             />

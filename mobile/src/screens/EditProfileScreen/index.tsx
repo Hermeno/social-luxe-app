@@ -12,7 +12,7 @@ import * as ImagePicker from 'expo-image-picker'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useAuthStore } from '../../store/auth.store'
 import { AppStackParams } from '../../navigation/AppNavigator'
-import { fonts } from '../../theme'
+import { colors, fonts } from '../../theme'
 import { API_BASE } from '../../config'
 import { api } from '../../services/api'
 import { enqueueSyncOp, cacheUser } from '../../db/database'
@@ -38,12 +38,12 @@ type Nav = StackNavigationProp<AppStackParams>
 const T  = '#1A1A1A'
 const S  = '#6E6E73'
 const M  = '#ABABAB'
-const B  = '#FF7A1C'
+const B  = colors.black
 const BD = '#E5E5EA'
 const BG = '#FFFFFF'
 const SX = '#F9F9FB'
 const CARD_BD = '#EDEDF1'
-const G  = '#22C55E'
+const G  = colors.success
 
 // `value` is the stored badge (never translate it); `en` is the English display.
 const STATUS_PRESETS: { emoji: string; value: string; en: string }[] = [
@@ -396,7 +396,7 @@ export default function EditProfileScreen() {
           <View style={s.card}>
             {/* Device toggle */}
             <TouchableOpacity style={s.identRow} onPress={() => setShowDevice((v) => !v)} activeOpacity={0.8}>
-              <View style={[s.identIcon, { backgroundColor: 'rgba(76,140,228,0.12)' }]}>
+              <View style={[s.identIcon, { backgroundColor: 'rgba(0,0,0,0.06)' }]}>
                 <Ionicons name="phone-portrait-outline" size={16} color={B} />
               </View>
               <View style={{ flex: 1 }}>
@@ -408,8 +408,8 @@ export default function EditProfileScreen() {
 
             {/* Status badge */}
             <TouchableOpacity style={[s.identRow, s.identRowLast]} onPress={() => setStatusModal(true)} activeOpacity={0.8}>
-              <View style={[s.identIcon, { backgroundColor: 'rgba(255,200,60,0.15)' }]}>
-                <Ionicons name="ribbon-outline" size={16} color="#B8860B" />
+              <View style={[s.identIcon, { backgroundColor: 'rgba(122,71,245,0.15)' }]}>
+                <Ionicons name="ribbon-outline" size={16} color={colors.warning} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={s.identTitle}>{t.ep_status_badge}</Text>
@@ -692,8 +692,8 @@ const sm = StyleSheet.create({
 
   chip:           { flex: 1, backgroundColor: SX, borderWidth: 1, borderColor: CARD_BD, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12, alignItems: 'center' },
   chipSelected:   { backgroundColor: `${B}15`, borderColor: B },
-  chipRemove:     { backgroundColor: 'rgba(255,59,48,0.07)', borderColor: 'rgba(255,59,48,0.2)' },
+  chipRemove:     { backgroundColor: 'rgba(156,69,238,0.07)', borderColor: 'rgba(156,69,238,0.2)' },
   chipTxt:        { fontFamily: fonts.medium, fontSize: 13, color: T, textAlign: 'center' },
   chipTxtSelected:{ color: B, fontFamily: fonts.bold },
-  chipTxtRemove:  { color: '#FF3B30' },
+  chipTxtRemove:  { color: colors.error },
 })

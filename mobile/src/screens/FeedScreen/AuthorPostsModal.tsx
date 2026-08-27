@@ -18,9 +18,10 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { useNavigation } from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import AvatarImage from '../../components/AvatarImage'
+import AuthorAvatar from '../../components/AuthorAvatar'
 import FeedIcon from '../../components/FeedIcon'
 import Icon from '../../components/Icon'
+import { feedIcon, feedInk, FEED_STROKE } from './tokens'
 import { API_BASE } from '../../config'
 import { getCache, setCache } from '../../db/database'
 import useReducedMotionPreference from '../../hooks/useReducedMotionPreference'
@@ -28,13 +29,20 @@ import { useT } from '../../i18n'
 import { isConnected } from '../../services/netinfo.service'
 import { getUserPosts } from '../../services/user.service'
 import { useFeedStore } from '../../store/feed.store'
-import { colors, fonts, typography } from '../../theme'
+import { colors, fonts, leading, postGradientColors, radius, sheet as sheetInk, spacing, typography } from '../../theme'
 import type { Post } from '../../types'
 import { displayHandle } from '../../utils/handle'
 
+/** Fundo de um post de texto sem cor própria — dois pretos, para a grelha
+ *  não ficar com uma célula chapada. */
+const TEXT_POST_FALLBACK: [string, string] = ['#222222', '#111111']
+
 const GRID_GAP = 1.5
 
-function compactMetric(value: number): string {
+// Zero não se escreve: numa miniatura, um "0" ao lado do coração ocupa o mesmo
+// espaço que um número verdadeiro e não diz nada que a ausência não diga melhor.
+function compactMetric(value: number): string | null {
+  if (value <= 0) return null
   if (value >= 9_950_000) return `${Math.round(value / 1_000_000)}M`
   if (value >= 999_500) return `${(value / 1_000_000).toFixed(1).replace('.0', '')}M`
   if (value >= 9_950) return `${Math.round(value / 1_000)}K`
@@ -81,10 +89,7 @@ function PostTile({ post, size, label, likeLabel, commentLabel, onPress }: {
     ? videoGridFrame(post.mediaUrl ?? post.mediaUrls?.[0], post.thumbnailUrl)
     : (post.mediaUrl ?? post.mediaUrls?.[0] ?? post.thumbnailUrl)
   const uri = resolveMedia(mediaSource)
-  const gradientParts = post.bgColor?.split('|').filter(Boolean) ?? []
-  const gradient: [string, string] = gradientParts.length >= 2
-    ? [gradientParts[0], gradientParts[1]]
-    : [gradientParts[0] ?? '#222930', gradientParts[0] ?? '#111519']
+  const gradient = postGradientColors(post.bgColor, TEXT_POST_FALLBACK)
   const likes = post._count?.likes ?? 0
   const comments = post._count?.comments ?? 0
   const tileLabel = `${post.caption || label}. ${likes} ${likeLabel}. ${comments} ${commentLabel}`
@@ -117,7 +122,7 @@ function PostTile({ post, size, label, likeLabel, commentLabel, onPress }: {
         />
       ) : (
         <View style={[s.tileMedia, s.tileFallback]}>
-          <Icon name="image" size={20} color="#A8AAAD" strokeWidth={1.6} />
+          <Icon name="image" size={feedIcon.control} color={sheetInk.inkFaint} strokeWidth={FEED_STROKE} absoluteStrokeWidth />
         </View>
       )}
 
@@ -134,14 +139,18 @@ function PostTile({ post, size, label, likeLabel, commentLabel, onPress }: {
           style={StyleSheet.absoluteFillObject}
         />
         <View style={s.tileStatsRow}>
-          <View style={s.tileMetric}>
-            <FeedIcon name="heart-solid" size={13} color="#FFFFFF" weight="regular" />
-            <Text style={s.tileMetricText}>{compactMetric(likes)}</Text>
-          </View>
-          <View style={s.tileMetric}>
-            <FeedIcon name="chat-solid" size={12} color="#FFFFFF" weight="regular" />
-            <Text style={s.tileMetricText}>{compactMetric(comments)}</Text>
-          </View>
+          {!!compactMetric(likes) && (
+            <View style={s.tileMetric}>
+              <FeedIcon name="heart-solid" size={feedIcon.inline} color={feedInk.primary} weight="regular" />
+              <Text style={s.tileMetricText}>{compactMetric(likes)}</Text>
+            </View>
+          )}
+          {!!compactMetric(comments) && (
+            <View style={s.tileMetric}>
+              <FeedIcon name="chat-solid" size={feedIcon.inline} color={feedInk.primary} weight="regular" />
+              <Text style={s.tileMetricText}>{compactMetric(comments)}</Text>
+            </View>
+          )}
         </View>
       </View>
     </TouchableOpacity>
@@ -325,7 +334,7 @@ export default memo(function AuthorPostsModal({ author, onClose }: Props) {
               accessibilityRole="button"
               accessibilityLabel={t.circle_close}
             >
-              <Icon name="arrow-left" size={20} color="#17181B" strokeWidth={2} />
+              <Icon name="arrow-left" size={feedIcon.control} color={sheetInk.ink} strokeWidth={FEED_STROKE} absoluteStrokeWidth />
             </TouchableOpacity>
 
             <View style={s.topCopy}>
@@ -334,14 +343,19 @@ export default memo(function AuthorPostsModal({ author, onClose }: Props) {
             </View>
 
             <View style={s.topAction} pointerEvents="none" importantForAccessibility="no-hide-descendants">
-              <FeedIcon name="author-posts" size={21} color="#17181B" weight="medium" />
+              <FeedIcon name="author-posts" size={feedIcon.control} color={sheetInk.ink} weight="medium" />
             </View>
           </View>
 
           <View style={s.identityRow}>
-            <View style={s.avatarRing}>
-              <AvatarImage uri={author.avatar} name={author.name} size={46} borderWidth={0} borderColor="transparent" />
-            </View>
+            <AuthorAvatar
+              uri={author.avatar}
+              name={author.name}
+              avatarSize={46}
+              ringWidth={1.5}
+              gap={1.5}
+              wellColor={sheetInk.surface}
+            />
             <View style={s.identityCopy}>
               <Text style={s.identityName} numberOfLines={1}>{author.name}</Text>
               <Text style={s.identityMeta} numberOfLines={1}>
@@ -355,7 +369,7 @@ export default memo(function AuthorPostsModal({ author, onClose }: Props) {
           </View>
 
           <View style={s.gridTab}>
-            <FeedIcon name="author-posts" size={19} color="#17181B" weight="medium" />
+            <FeedIcon name="author-posts" size={feedIcon.control} color={sheetInk.ink} weight="medium" />
             <Text style={s.gridTabText}>{subtitle}</Text>
             <View style={s.gridTabAccent} />
           </View>
@@ -367,9 +381,15 @@ export default memo(function AuthorPostsModal({ author, onClose }: Props) {
               </View>
             ) : failed && posts.length === 0 ? (
               <View style={s.state}>
-                <Icon name="image" size={28} color="#929397" strokeWidth={1.5} />
+                <Icon name="image" size={feedIcon.action} color={sheetInk.inkFaint} strokeWidth={FEED_STROKE} absoluteStrokeWidth />
                 <Text style={s.stateText}>{t.feed_author_posts_load_fail}</Text>
-                <TouchableOpacity style={s.retryButton} onPress={() => setRetry((value) => value + 1)} activeOpacity={0.76}>
+                <TouchableOpacity
+                  style={s.retryButton}
+                  onPress={() => setRetry((value) => value + 1)}
+                  activeOpacity={0.76}
+                  accessibilityRole="button"
+                  accessibilityLabel={t.msg_try_again}
+                >
                   <Text style={s.retryText}>{t.msg_try_again}</Text>
                 </TouchableOpacity>
               </View>
@@ -392,7 +412,7 @@ export default memo(function AuthorPostsModal({ author, onClose }: Props) {
                 contentContainerStyle={posts.length === 0 ? s.emptyContent : s.gridContent}
                 ListEmptyComponent={(
                   <View style={s.state}>
-                    <Icon name="image" size={30} color="#ADAFB2" strokeWidth={1.5} />
+                    <Icon name="image" size={feedIcon.action} color={sheetInk.inkFaint} strokeWidth={FEED_STROKE} absoluteStrokeWidth />
                     <Text style={s.stateText}>{t.profile_no_posts}</Text>
                   </View>
                 )}
@@ -418,9 +438,9 @@ const s = StyleSheet.create({
   sheet: {
     width: '100%',
     overflow: 'hidden',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    backgroundColor: '#FAFAF8',
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    backgroundColor: sheetInk.surface,
     shadowColor: '#000',
     shadowOpacity: 0.28,
     shadowRadius: 24,
@@ -431,14 +451,14 @@ const s = StyleSheet.create({
     alignSelf: 'center',
     width: 36,
     height: 4,
-    marginTop: 8,
-    marginBottom: 3,
-    borderRadius: 2,
-    backgroundColor: '#D1D1CC',
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+    borderRadius: radius.full,
+    backgroundColor: sheetInk.lineStrong,
   },
   topBar: {
     height: 52,
-    paddingHorizontal: 8,
+    paddingHorizontal: spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -448,85 +468,77 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  topCopy: { flex: 1, alignItems: 'center', paddingHorizontal: 6 },
+  topCopy: { flex: 1, alignItems: 'center', paddingHorizontal: spacing.xs2 },
   topTitle: {
     maxWidth: '100%',
-    color: '#17181B',
-    fontFamily: fonts.semiBold,
+    color: sheetInk.ink,
+    fontFamily: fonts.regular,
     fontSize: typography.body,
-    lineHeight: 19,
+    lineHeight: leading.body,
     letterSpacing: -0.3,
   },
   topSubtitle: {
     marginTop: 1,
-    color: '#85868A',
-    fontFamily: fonts.medium,
+    color: sheetInk.inkMuted,
+    fontFamily: fonts.regular,
     fontSize: typography.badge,
-    lineHeight: 14,
+    lineHeight: leading.badge,
     letterSpacing: 0.3,
     textTransform: 'uppercase',
   },
   identityRow: {
     minHeight: 76,
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 11,
-  },
-  avatarRing: {
-    width: 52,
-    height: 52,
-    padding: 2,
-    borderRadius: 26,
-    borderWidth: 1.5,
-    borderColor: colors.primary,
+    gap: spacing.sm2,
   },
   identityCopy: { flex: 1, minWidth: 0 },
   identityName: {
-    color: '#17181B',
-    fontFamily: fonts.semiBold,
-    fontSize: 17,
-    lineHeight: 21,
+    color: sheetInk.ink,
+    fontFamily: fonts.medium,
+    fontSize: typography.section,
+    lineHeight: leading.section,
     letterSpacing: -0.35,
   },
   identityMeta: {
     marginTop: 2,
-    color: '#77787C',
-    fontFamily: fonts.medium,
+    color: sheetInk.inkMuted,
+    fontFamily: fonts.regular,
     fontSize: typography.meta,
-    lineHeight: 16,
+    lineHeight: leading.meta,
   },
   postStat: { minWidth: 66, alignItems: 'center' },
   postStatValue: {
-    color: '#17181B',
-    fontFamily: fonts.bold,
-    fontSize: 19,
-    lineHeight: 22,
+    color: sheetInk.ink,
+    fontFamily: fonts.medium,
+    fontSize: typography.section,
+    lineHeight: leading.section,
     fontVariant: ['tabular-nums'],
   },
   postStatLabel: {
     marginTop: 1,
-    color: '#7C7D81',
-    fontFamily: fonts.medium,
+    color: sheetInk.inkMuted,
+    fontFamily: fonts.regular,
     fontSize: typography.badge,
-    lineHeight: 14,
+    lineHeight: leading.badge,
   },
   gridTab: {
-    height: 43,
+    height: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 7,
+    gap: spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#E1E1DD',
+    borderTopColor: sheetInk.line,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#DEDEDA',
+    borderBottomColor: sheetInk.line,
   },
   gridTabText: {
-    color: '#343538',
-    fontFamily: fonts.semiBold,
+    color: sheetInk.inkSoft,
+    fontFamily: fonts.regular,
     fontSize: typography.meta,
-    lineHeight: 16,
+    lineHeight: leading.meta,
     letterSpacing: -0.15,
   },
   gridTabAccent: {
@@ -536,27 +548,27 @@ const s = StyleSheet.create({
     width: 34,
     height: 2,
     marginLeft: -17,
-    borderRadius: 1,
+    borderRadius: radius.full,
     backgroundColor: colors.primary,
   },
-  gridWrap: { flex: 1, backgroundColor: '#ECECE9' },
-  gridContent: { paddingTop: GRID_GAP, paddingBottom: 20, gap: GRID_GAP },
+  gridWrap: { flex: 1, backgroundColor: sheetInk.surfaceSunk },
+  gridContent: { paddingTop: GRID_GAP, paddingBottom: spacing.md2, gap: GRID_GAP },
   gridRow: { gap: GRID_GAP },
-  tile: { overflow: 'hidden', backgroundColor: '#DFDFDB' },
+  tile: { overflow: 'hidden', backgroundColor: sheetInk.line },
   tileMedia: { width: '100%', height: '100%' },
   tileTextMedia: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingBottom: 28,
+    paddingBottom: spacing.lg,
   },
   tileFallback: { alignItems: 'center', justifyContent: 'center' },
   tileText: {
-    color: '#FFFFFF',
-    fontFamily: fonts.semiBold,
+    color: colors.white,
+    fontFamily: fonts.medium,
     fontSize: typography.meta,
-    lineHeight: 15,
+    lineHeight: leading.meta,
     textAlign: 'center',
-    paddingHorizontal: 7,
+    paddingHorizontal: spacing.sm,
   },
   tileStats: {
     position: 'absolute',
@@ -565,29 +577,29 @@ const s = StyleSheet.create({
     left: 0,
     height: 38,
     justifyContent: 'flex-end',
-    paddingHorizontal: 7,
-    paddingBottom: 6,
+    paddingHorizontal: spacing.sm,
+    paddingBottom: spacing.xs2,
   },
   tileStatsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: spacing.sm2,
   },
   tileMetric: {
     minWidth: 30,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    shadowColor: '#000000',
+    gap: spacing.xs,
+    shadowColor: colors.black,
     shadowOpacity: 0.42,
     shadowRadius: 2,
     shadowOffset: { width: 0, height: 1 },
   },
   tileMetricText: {
-    color: '#FFFFFF',
-    fontFamily: fonts.semiBold,
-    fontSize: 10.5,
-    lineHeight: 13,
+    color: colors.white,
+    fontFamily: fonts.regular,
+    fontSize: typography.badge,
+    lineHeight: leading.badge,
     letterSpacing: -0.1,
     fontVariant: ['tabular-nums'],
     textShadowColor: 'rgba(0,0,0,0.42)',
@@ -596,11 +608,11 @@ const s = StyleSheet.create({
   },
   videoBadge: {
     position: 'absolute',
-    top: 7,
-    right: 7,
+    top: spacing.sm,
+    right: spacing.sm,
     width: 20,
     height: 20,
-    borderRadius: 10,
+    borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.48)',
@@ -614,36 +626,37 @@ const s = StyleSheet.create({
     borderLeftWidth: 7,
     borderTopColor: 'transparent',
     borderBottomColor: 'transparent',
-    borderLeftColor: '#FFFFFF',
+    borderLeftColor: colors.white,
   },
   state: {
     flex: 1,
     minHeight: 220,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
-    paddingHorizontal: 30,
-    backgroundColor: '#FAFAF8',
+    gap: spacing.sm2,
+    paddingHorizontal: spacing.xl,
+    backgroundColor: sheetInk.surface,
   },
   stateText: {
-    color: '#727378',
+    color: sheetInk.inkMuted,
     fontFamily: fonts.medium,
     fontSize: typography.secondary,
-    lineHeight: 19,
+    lineHeight: leading.secondary,
     textAlign: 'center',
   },
   retryButton: {
-    minHeight: 42,
-    paddingHorizontal: 18,
+    minHeight: 44,
+    paddingHorizontal: spacing.md2,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 21,
-    backgroundColor: '#17181B',
+    borderRadius: radius.full,
+    backgroundColor: sheetInk.ink,
   },
   retryText: {
-    color: '#FFFFFF',
-    fontFamily: fonts.semiBold,
+    color: colors.white,
+    fontFamily: fonts.medium,
     fontSize: typography.secondary,
+    lineHeight: leading.secondary,
   },
-  emptyContent: { flexGrow: 1, backgroundColor: '#FAFAF8' },
+  emptyContent: { flexGrow: 1, backgroundColor: sheetInk.surface },
 })

@@ -7,6 +7,7 @@ export interface FollowUser {
   username?: string | null
   avatar: string | null
   bio: string | null
+  isVerified?: boolean
   followedAt: string
 }
 

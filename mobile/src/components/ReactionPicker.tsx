@@ -161,7 +161,7 @@ const s = StyleSheet.create({
   emojiBtn:     {
     alignItems: 'center', padding: 8, borderRadius: radius.md,
   },
-  emojiActive:  { backgroundColor: 'rgba(255,75,110,0.2)' },
+  emojiActive:  { backgroundColor: 'rgba(255,255,255,0.12)' },
   emoji:        { fontSize: 28 },
   emojiLabel:   { color: 'rgba(255,255,255,0.5)', fontFamily: fonts.regular, fontSize: 9, marginTop: 2 },
   anonRow:      { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: 4 },
@@ -170,7 +170,7 @@ const s = StyleSheet.create({
     borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.3)',
     alignItems: 'center', justifyContent: 'center',
   },
-  checkboxActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  checkboxActive: { backgroundColor: colors.accent, borderColor: colors.accent },
   checkmark:    { color: colors.white, fontSize: 12, fontFamily: fonts.bold },
   anonText:     { color: 'rgba(255,255,255,0.65)', fontFamily: fonts.regular, fontSize: 12 },
 })

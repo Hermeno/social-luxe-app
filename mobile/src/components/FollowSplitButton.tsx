@@ -119,14 +119,14 @@ const s = StyleSheet.create({
   },
 
   pillLight: {
-    backgroundColor: '#FF7A1C',   // laranja dos designs
+    backgroundColor: colors.black,
     paddingHorizontal: 18,
     paddingVertical: 9,
-    shadowColor: '#FF7A1C',
+    shadowColor: colors.black,
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOpacity: 0.16,
+    shadowRadius: 5,
+    elevation: 2,
   },
   pillLightFollowing: {
     backgroundColor: '#F0F0F5',

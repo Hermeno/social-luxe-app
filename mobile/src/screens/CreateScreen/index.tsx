@@ -12,7 +12,13 @@ import { useVideoPlayer, VideoView } from 'expo-video'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs'
 import { useNavigation, useFocusEffect, useIsFocused } from '@react-navigation/native'
-import { fonts } from '../../theme'
+import {
+  colors,
+  fonts,
+  postBackgroundFor,
+  postBackgroundOptions,
+  type PostBackgroundKey,
+} from '../../theme'
 import { createPost, createAlbum } from '../../services/post.service'
 import { createHalf } from '../../services/half.service'
 import TargetPicker from './TargetPicker'
@@ -38,27 +44,6 @@ import {
   DEFAULT_POST_FONT, POST_FONTS, POST_FONT_KEYS, postFontStyle, type PostFontKey,
 } from '../../theme/postFonts'
 import { usePostFontsStore, usePostFontsReady } from '../../store/postFonts.store'
-
-// ── Background palette — cores ricas onde o texto branco lê sempre bem
-// (branco e creme removidos porque tornavam os ícones do feed invisíveis)
-type BgKey =
-  | 'gray' | 'black' | 'red' | 'coral' | 'peach'
-  | 'wine' | 'ocean' | 'forest' | 'violet' | 'ember'
-
-const BG: Record<BgKey, { bg: string; fg: string }> = {
-  gray:   { bg: '#333333', fg: '#FFFFFF' },
-  black:  { bg: '#000000', fg: '#FFFFFF' },
-  red:    { bg: '#FF7A1C', fg: '#FFFFFF' },
-  coral:  { bg: '#FF6766', fg: '#FFFFFF' },
-  peach:  { bg: '#FFB173', fg: '#FFFFFF' },
-  wine:   { bg: '#7A1F3D', fg: '#FFFFFF' },
-  ocean:  { bg: '#1E3A5F', fg: '#FFFFFF' },
-  forest: { bg: '#245C4C', fg: '#FFFFFF' },
-  violet: { bg: '#4C3A82', fg: '#FFFFFF' },
-  ember:  { bg: '#A34210', fg: '#FFFFFF' },
-}
-
-const BG_KEYS: BgKey[] = ['gray', 'black', 'red', 'coral', 'peach', 'wine', 'ocean', 'forest', 'violet', 'ember']
 
 type Media = { uri: string; type: 'image' | 'video' }
 
@@ -86,7 +71,7 @@ export default function CreateScreen() {
   const captionRef     = useRef<TextInput>(null)
 
   const [caption,          setCaption]          = useState('')
-  const [bgKey,            setBgKey]            = useState<BgKey>('gray')
+  const [bgKey,            setBgKey]            = useState<PostBackgroundKey>('graphite')
   const [fontKey,          setFontKey]          = useState<PostFontKey>(DEFAULT_POST_FONT)
   const [media,            setMedia]            = useState<Media | null>(null)
   const [album,            setAlbum]            = useState<string[] | null>(null)
@@ -108,7 +93,7 @@ export default function CreateScreen() {
   const isAdmin    = user?.isAdmin === true
   const canPublish = !!caption.trim() || !!media || !!album
   const hasText    = !!caption.trim()
-  const activeBg   = BG[bgKey]
+  const activeBg   = postBackgroundFor(bgKey)
   // O arranque já as pediu; aqui é a rede de segurança para quem chega ao
   // compositor antes de esse pedido ter terminado.
   const fontsReady = usePostFontsReady()
@@ -392,7 +377,7 @@ export default function CreateScreen() {
     setCaption('')
     setMedia(null)
     setAlbum(null)
-    setBgKey('gray')
+    setBgKey('graphite')
     setFontKey(DEFAULT_POST_FONT)
     setIsAnnouncement(false)
     setIncludePartner(false)
@@ -648,7 +633,7 @@ export default function CreateScreen() {
                 multiline
                 maxLength={280}
                 textAlignVertical="top"
-                selectionColor="#FF7A1C"
+                selectionColor={colors.accent}
                 editable={!loading}
               />
             </View>
@@ -663,19 +648,19 @@ export default function CreateScreen() {
                 keyboardShouldPersistTaps="handled"
                 scrollEnabled={!loading}
               >
-                {BG_KEYS.map((key) => {
-                  const selected = bgKey === key
+                {postBackgroundOptions.map((option) => {
+                  const selected = bgKey === option.key
                   return (
                     <TouchableOpacity
-                      key={key}
+                      key={option.key}
                       style={s.swatchTarget}
-                      onPress={() => setBgKey(key)}
+                      onPress={() => setBgKey(option.key)}
                       disabled={loading}
                       activeOpacity={0.68}
                       accessibilityRole="button"
                       accessibilityState={{ selected, disabled: loading }}
                     >
-                      <View style={[s.swatch, { backgroundColor: BG[key].bg }]} />
+                      <View style={[s.swatch, { backgroundColor: option.bg }]} />
                       <View style={[s.swatchMarker, selected && s.swatchMarkerOn]} />
                     </TouchableOpacity>
                   )
@@ -749,7 +734,7 @@ export default function CreateScreen() {
               <Ionicons
                 name={includePartner ? 'heart' : 'heart-outline'}
                 size={19}
-                color={includePartner ? '#FF7A1C' : '#5C5C63'}
+                color={includePartner ? colors.accent : '#5C5C63'}
               />
               <Text style={s.optionText}>{otherMember!.name}</Text>
               <View style={[s.stateMark, includePartner && s.stateMarkOn]}>
@@ -770,7 +755,7 @@ export default function CreateScreen() {
               <Ionicons
                 name="megaphone-outline"
                 size={19}
-                color={isAnnouncement ? '#FF7A1C' : '#5C5C63'}
+                color={isAnnouncement ? colors.accent : '#5C5C63'}
               />
               <Text style={s.optionText}>{t.create_announce}</Text>
               <View style={[s.stateMark, isAnnouncement && s.stateMarkOn]}>
@@ -876,8 +861,8 @@ const s = StyleSheet.create({
     gap: 5,
   },
   brandSignal: { height: 4, flexDirection: 'row', alignItems: 'center', gap: 3 },
-  brandSignalLine: { width: 18, height: 2, backgroundColor: '#FF7A1C' },
-  brandSignalDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: '#FF7A1C' },
+  brandSignalLine: { width: 18, height: 2, backgroundColor: colors.accent },
+  brandSignalDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: colors.accent },
   headerTitle: {
     color: '#fff',
     fontFamily: fonts.semiBold,
@@ -914,7 +899,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     gap: 7,
   },
-  textCounterLine: { width: 16, height: 2, backgroundColor: '#FF7A1C' },
+  textCounterLine: { width: 16, height: 2, backgroundColor: colors.accent },
   textCounterText: {
     color: 'rgba(255,255,255,0.72)',
     fontFamily: fonts.medium,
@@ -963,7 +948,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  canvasRailSignal: { width: 18, height: 2, backgroundColor: '#FF7A1C' },
+  canvasRailSignal: { width: 18, height: 2, backgroundColor: colors.accent },
   canvasRailText: {
     color: '#fff',
     fontFamily: fonts.medium,
@@ -983,7 +968,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  playSignal: { width: 24, height: 2, marginTop: 10, backgroundColor: '#FF7A1C' },
+  playSignal: { width: 24, height: 2, marginTop: 10, backgroundColor: colors.accent },
 
   panel: {
     maxHeight: '58%',
@@ -1057,7 +1042,7 @@ const s = StyleSheet.create({
     borderColor: 'rgba(0,0,0,0.18)',
   },
   swatchMarker: { width: 16, height: 2, backgroundColor: 'transparent' },
-  swatchMarkerOn: { backgroundColor: '#FF7A1C' },
+  swatchMarkerOn: { backgroundColor: colors.accent },
 
   fontSection: {
     height: 64,
@@ -1115,8 +1100,8 @@ const s = StyleSheet.create({
     justifyContent: 'flex-end',
     gap: 3,
   },
-  optionMicroLine: { width: 14, height: 2, backgroundColor: '#FF7A1C' },
-  optionMicroDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: '#FF7A1C' },
+  optionMicroLine: { width: 14, height: 2, backgroundColor: colors.accent },
+  optionMicroDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: colors.accent },
   stateMark: {
     width: 24,
     height: 12,
@@ -1124,7 +1109,7 @@ const s = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: '#C9C9C6',
   },
-  stateMarkOn: { borderBottomColor: '#FF7A1C' },
+  stateMarkOn: { borderBottomColor: colors.accent },
   stateMarkDot: {
     position: 'absolute',
     left: 0,
@@ -1134,7 +1119,7 @@ const s = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: '#C9C9C6',
   },
-  stateMarkDotOn: { left: 20, backgroundColor: '#FF7A1C' },
+  stateMarkDotOn: { left: 20, backgroundColor: colors.accent },
 
   actionArea: {
     paddingHorizontal: 16,
@@ -1155,7 +1140,7 @@ const s = StyleSheet.create({
     left: 16,
     width: 18,
     height: 2,
-    backgroundColor: '#FF7A1C',
+    backgroundColor: colors.black,
   },
   publishBtnOff: { opacity: 0.3 },
   publishBtnTxt: {

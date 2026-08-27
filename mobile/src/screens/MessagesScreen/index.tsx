@@ -47,7 +47,7 @@ import { useMessageBadgeStore } from '../../store/messageBadge.store'
 import { useFeedStore } from '../../store/feed.store'
 import { useMessagesStore } from '../../store/messages.store'
 import type { AppStackParams } from '../../navigation/AppNavigator'
-import { colors, fonts } from '../../theme'
+import { colors, fonts, normalizePostColor } from '../../theme'
 import { useT } from '../../i18n'
 import AvatarImage from '../../components/AvatarImage'
 import DuoAvatar from '../../components/DuoAvatar'
@@ -404,7 +404,7 @@ const so = StyleSheet.create({
   hole:    { width: 54, height: 54, borderRadius: 27, overflow: 'hidden', borderWidth: 2, borderColor: colors.white },
   onlineDot: {
     position: 'absolute', right: 2, bottom: 2, width: 13, height: 13, borderRadius: 6.5,
-    backgroundColor: '#22C55E', borderWidth: 2, borderColor: colors.white,
+    backgroundColor: colors.success, borderWidth: 2, borderColor: colors.white,
   },
   name:    { fontSize: 11.5, fontFamily: fonts.medium, color: '#6E6E73', maxWidth: 64, textAlign: 'center' },
 })
@@ -1018,7 +1018,7 @@ export default function MessagesScreen() {
                       </View>
                       {postResults.map((p) => {
                         const previewUri = resolveMediaUri(p.thumbnailUrl ?? p.mediaUrl)
-                        const textBackground = p.bgColor?.split('|')[0] ?? '#111114'
+                        const textBackground = normalizePostColor(p.bgColor?.split('|')[0], '#111114')
                         const postSummary = p.caption?.trim() || t.msg_post_no_caption
                         return (
                           <TouchableOpacity
@@ -1429,7 +1429,7 @@ const s = StyleSheet.create({
   // Estado online/offline (chats lidos) — ponto + texto, como no design
   status:      { flexDirection: 'row', alignItems: 'center', gap: 4 },
   statusDot:   { width: 7, height: 7, borderRadius: 3.5 },
-  statusDotOn: { backgroundColor: '#22C55E' },
+  statusDotOn: { backgroundColor: colors.success },
   statusDotOff:{ backgroundColor: '#C9C9CF' },
   statusTxt:   { fontSize: 11, fontFamily: fonts.medium, color: '#ABABAB' },
   rowRight:      { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -1483,7 +1483,7 @@ const s = StyleSheet.create({
   tabBadge:     { backgroundColor: '#1A1A1A', borderRadius: 10, minWidth: 18, height: 18, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
   tabBadgeTxt:  { fontFamily: fonts.bold, fontSize: 11, color: colors.white },
 
-  livePill:    { backgroundColor: '#FF6766', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 },
+  livePill:    { backgroundColor: colors.warning, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 },
   livePillTxt: { fontFamily: fonts.bold, fontSize: 10, color: '#fff', letterSpacing: 0.2 },
 
   /* ── Pending invites section ── */

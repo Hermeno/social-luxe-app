@@ -58,7 +58,7 @@ export function ConfirmHost() {
         <Animated.View style={[s.card, { opacity: op, transform: [{ scale }] }]} onStartShouldSetResponder={() => true}>
           {!!icon && (
             <View style={[s.iconWrap, destructive && s.iconWrapDanger]}>
-              <Ionicons name={icon} size={26} color={destructive ? '#FF3B30' : colors.primary} />
+              <Ionicons name={icon} size={26} color={destructive ? colors.error : colors.primary} />
             </View>
           )}
           <Text style={s.title}>{title}</Text>
@@ -89,9 +89,9 @@ const s = StyleSheet.create({
   iconWrap: {
     width: 56, height: 56, borderRadius: 28, marginBottom: 14,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(202,40,81,0.10)',
+    backgroundColor: colors.gray100,
   },
-  iconWrapDanger: { backgroundColor: 'rgba(255,59,48,0.12)' },
+  iconWrapDanger: { backgroundColor: 'rgba(156,69,238,0.12)' },
   title:   { fontFamily: fonts.bold, fontSize: 18, color: '#1A1A1A', textAlign: 'center', letterSpacing: -0.3 },
   message: { fontFamily: fonts.regular, fontSize: 14, color: '#8E8E93', textAlign: 'center', lineHeight: 20, marginTop: 6 },
   row:     { flexDirection: 'row', gap: 10, marginTop: 22, alignSelf: 'stretch' },
@@ -99,6 +99,6 @@ const s = StyleSheet.create({
   cancelBtn: { backgroundColor: '#F0F0F3' },
   cancelTxt: { fontFamily: fonts.semiBold, fontSize: 15.5, color: '#3A3A3C' },
   confirmBtn: { backgroundColor: colors.primary },
-  dangerBtn:  { backgroundColor: '#FF3B30' },
+  dangerBtn:  { backgroundColor: colors.error },
   confirmTxt: { fontFamily: fonts.bold, fontSize: 15.5, color: '#FFFFFF' },
 })

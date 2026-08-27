@@ -297,7 +297,7 @@ export async function getConnections(req: AuthRequest, res: Response) {
 }
 
 const SUGGESTED_SELECT = {
-  id: true, name: true, username: true, avatar: true, bio: true, interests: true,
+  id: true, name: true, username: true, avatar: true, bio: true, interests: true, isVerified: true,
   _count: { select: { followers: true, posts: true } },
 } as const
 
