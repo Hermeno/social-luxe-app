@@ -3,6 +3,7 @@ import { NavigatorScreenParams } from '@react-navigation/native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack'
 import FeedScreen from '../screens/FeedScreen'
+import HomeScreen from '../screens/HomeScreen'
 import MessagesScreen from '../screens/MessagesScreen'
 import CreateScreen from '../screens/CreateScreen'
 import ProfileScreen from '../screens/ProfileScreen'
@@ -48,6 +49,8 @@ export type AppStackParams = {
   Tabs: NavigatorScreenParams<AppTabParams>
   Profile: { userId?: string }
   /** Sem `userId` mostra a tua própria rede. `mode` escolhe o separador de entrada. */
+  /** Visualização em tela cheia — vídeo/Reel aberto a partir da Home. */
+  Immersive: undefined
   Followers: { userId?: string; name?: string; mode?: 'followers' | 'following' } | undefined
   Chat: { userId: string; userName: string; userAvatar: string | null; partnerHasPosts?: boolean }
   About: undefined
@@ -83,7 +86,10 @@ function Tabs({ defaultTab }: { defaultTab: 'Feed' | 'Messages' }) {
       tabBar={(props) => <TabBar {...props} />}
       screenOptions={{ headerShown: false, tabBarStyle: { position: 'absolute' } }}
     >
-      <Tab.Screen name="Feed"      component={FeedScreen} />
+      {/* A Home é a primeira página: branca, scroll vertical, com a composição
+          circular como assinatura. A Feed imersiva não desapareceu — passou a ser
+          o ecrã de visualização em tela cheia, aberto a partir daqui. */}
+      <Tab.Screen name="Feed"      component={HomeScreen} />
       <Tab.Screen name="Search"    component={SearchScreen} />
       <Tab.Screen name="Messages"  component={MessagesScreen} />
       <Tab.Screen name="Create"    component={CreateScreen} />
@@ -128,6 +134,7 @@ export default function AppNavigator({ defaultTab }: { defaultTab: 'Feed' | 'Mes
       <Stack.Screen name="Chat" component={ChatScreen} />
       <Stack.Screen name="Halves" component={HalvesScreen} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
+      <Stack.Screen name="Immersive" component={FeedScreen} />
       <Stack.Screen name="PostViewer" component={PostViewerScreen} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="StoryViewer" component={StoryViewerScreen} />
