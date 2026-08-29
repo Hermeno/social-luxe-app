@@ -2,7 +2,8 @@ import React, { useState } from 'react'
 import { View, Text, StyleSheet, Pressable, ViewStyle } from 'react-native'
 import { Image } from 'expo-image'
 import { API_BASE } from '../../config'
-import { colors, fonts, leading, typography } from '../../theme'
+import { colors, leading, typography } from '../../theme'
+import { feedType } from './tokens'
 import { useT } from '../../i18n'
 
 const GAP = 3
@@ -122,5 +123,5 @@ const s = StyleSheet.create({
   },
   // `fontWeight` era o único da Feed: a família já traz o peso, e um '700'
   // solto ignora a Jakarta e cai no sistema.
-  moreTxt: { color: colors.white, fontFamily: fonts.medium, fontSize: typography.display, lineHeight: leading.display },
+  moreTxt: { color: colors.white, fontFamily: feedType.title.fontFamily, fontSize: typography.display, lineHeight: leading.display },
 })

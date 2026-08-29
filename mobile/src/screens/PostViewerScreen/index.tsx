@@ -56,10 +56,71 @@ function ProgressBars({ count, current, progress }: {
   )
 }
 
+/**
+ * A apresentação de um Círculo.
+ *
+ * Este ecrã foi, durante algum tempo, o leitor genérico da app: qualquer post
+ * aberto a partir da pesquisa aterrava aqui, numa sequência com barras de
+ * progresso a avançarem sozinhas ao fim de trinta segundos. Para resultados de
+ * pesquisa isso estava errado por construção — cada miniatura é uma escolha, não
+ * um passo de uma história, e quem escolhe não quer ser levado ao seguinte.
+ *
+ * A forma, porém, não estava errada; estava no sítio errado. Um Círculo é
+ * exactamente uma sequência com princípio e fim: várias pessoas, no mesmo
+ * momento, cada uma com as suas fotografias. Aí as barras no topo dizem quantas
+ * faltam e o avanço automático é a própria leitura.
+ *
+ * Por isso o ecrã ficou, e ficou só para isso. A pesquisa, o perfil, as
+ * mensagens e as metades abrem na feed principal (`showPostInFeed`).
+ *
+ * O filtro abaixo é a barreira: o que não for um momento colectivo não entra, e
+ * se não sobrar nada o ecrã fecha-se em vez de mostrar uma sequência de um post
+ * só com uma barra que corre sozinha.
+ */
+function isCircle(post: Post) {
+  return Array.isArray(post.collectiveMoment?.captures)
+    && post.collectiveMoment.captures.length > 0
+}
+
+/**
+ * A barreira, separada da apresentação.
+ *
+ * Filtrar dentro do ecrã deixava `posts[index]` indefinido no frame entre o
+ * filtro e o `goBack` — e a linha seguinte lê `post.collectiveMoment`. Um
+ * invólucro resolve-o sem truques: os quatro ganchos deste componente correm
+ * sempre pela mesma ordem, e a apresentação só é montada quando há mesmo um
+ * círculo para apresentar.
+ */
 export default function PostViewerScreen() {
   const nav   = useNavigation()
   const route = useRoute<Route>()
-  const { posts, startIndex, collectiveCaptureIndex } = route.params
+  const { posts: routePosts, startIndex, collectiveCaptureIndex } = route.params
+
+  const posts = useMemo(() => routePosts.filter(isCircle), [routePosts])
+
+  useEffect(() => {
+    if (posts.length === 0) nav.goBack()
+  }, [nav, posts.length])
+
+  if (posts.length === 0) return null
+
+  return (
+    <CirclePresentation
+      posts={posts}
+      startIndex={Math.max(0, Math.min(startIndex, posts.length - 1))}
+      collectiveCaptureIndex={collectiveCaptureIndex}
+    />
+  )
+}
+
+interface PresentationProps {
+  posts: Post[]
+  startIndex: number
+  collectiveCaptureIndex?: number
+}
+
+function CirclePresentation({ posts, startIndex, collectiveCaptureIndex }: PresentationProps) {
+  const nav = useNavigation()
   const { top } = useSafeAreaInsets()
 
   const [index, setIndex]             = useState(startIndex)
@@ -81,7 +142,7 @@ export default function PostViewerScreen() {
   const progressValueRef = useRef(0)
   const pressStartRef    = useRef(0)
 
-  const post     = posts[index]
+  const post     = posts[Math.max(0, Math.min(index, posts.length - 1))]
   const captures = Array.isArray(post.collectiveMoment?.captures)
     ? post.collectiveMoment.captures
     : []

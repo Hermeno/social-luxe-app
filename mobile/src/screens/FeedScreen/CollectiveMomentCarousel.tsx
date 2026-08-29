@@ -27,8 +27,8 @@ import FeedIcon from '../../components/FeedIcon'
 import { API_BASE } from '../../config'
 import { useT } from '../../i18n'
 import { useAuthStore } from '../../store/auth.store'
-import { colors, fonts, leading, radius, spacing, typography } from '../../theme'
-import { feedInk, feedLine } from './tokens'
+import { colors, radius, spacing } from '../../theme'
+import { feedInk, feedLine, feedType } from './tokens'
 import type {
   CollectiveMomentCapture,
   CollectiveMomentParticipant,
@@ -1093,16 +1093,12 @@ const s = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: feedLine.strong,
     color: feedInk.muted,
-    fontFamily: fonts.medium,
-    fontSize: typography.body,
-    lineHeight: leading.body,
+    ...feedType.primary,
     textAlign: 'center',
   },
   fallbackText: {
+    ...feedType.copy,
     color: feedInk.muted,
-    fontFamily: fonts.medium,
-    fontSize: typography.secondary,
-    lineHeight: leading.secondary,
     textAlign: 'center',
   },
   emoji: {
@@ -1166,7 +1162,7 @@ const s = StyleSheet.create({
   },
   groupMoreText: {
     color: colors.white,
-    fontFamily: fonts.medium,
+    fontFamily: feedType.primary.fontFamily,
   },
   ctaBody: {
     flex: 1,
@@ -1191,17 +1187,13 @@ const s = StyleSheet.create({
     gap: spacing.xs2,
   },
   ctaTitle: {
+    ...feedType.title,
     color: colors.white,
-    fontFamily: fonts.medium,
-    fontSize: typography.section,
-    lineHeight: leading.section,
     textAlign: 'center',
   },
   ctaSub: {
+    ...feedType.copy,
     color: feedInk.muted,
-    fontFamily: fonts.medium,
-    fontSize: typography.secondary,
-    lineHeight: leading.secondary,
     textAlign: 'center',
   },
 })

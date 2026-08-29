@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native'
 import FeedIcon from '../../components/FeedIcon'
-import { colors, fonts, leading, radius, spacing, typography } from '../../theme'
-import { feedIcon, feedInk, feedLine, feedTextShadow } from './tokens'
+import { colors, radius, spacing } from '../../theme'
+import { feedIcon, feedInk, feedLine, feedTextShadow, feedType } from './tokens'
 import { useT } from '../../i18n'
 import type { TasteSignal } from '../../services/post.service'
 
@@ -133,11 +133,8 @@ const s = StyleSheet.create({
   wrap: { marginBottom: spacing.sm2, justifyContent: 'center' },
   question: {
     ...feedTextShadow,
+    ...feedType.meta,
     color: feedInk.muted,
-    fontFamily: fonts.regular,
-    fontSize: typography.meta,
-    lineHeight: leading.meta,
-    letterSpacing: -0.1,
     marginBottom: spacing.sm,
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
@@ -161,22 +158,16 @@ const s = StyleSheet.create({
   pillPressed: { borderColor: colors.white },
   pillTxt: {
     ...feedTextShadow,
+    ...feedType.primary,
     textAlign: 'center',
     color: feedInk.secondary,
-    fontFamily: fonts.regular,
-    fontSize: typography.secondary,
-    lineHeight: leading.secondary,
-    letterSpacing: -0.15,
   },
   thanks: {
     ...feedTextShadow,
+    ...feedType.primary,
     position: 'absolute',
     left: 0,
     right: 0,
     color: feedInk.secondary,
-    fontFamily: fonts.regular,
-    fontSize: typography.secondary,
-    lineHeight: leading.secondary,
-    letterSpacing: -0.15,
   },
 })

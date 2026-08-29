@@ -14,6 +14,7 @@ import AvatarImage from '../../components/AvatarImage'
 import { toast } from '../../utils/toast'
 import { colors, fonts } from '../../theme'
 import { API_BASE } from '../../config'
+import { useFeedStore } from '../../store/feed.store'
 import { useT } from '../../i18n'
 
 function resolveMedia(url: string) {
@@ -82,7 +83,10 @@ export default function HalvesScreen() {
       const post = await completeHalf(half.id, shot.assets[0].uri)
       setIncoming((prev) => prev.filter((h) => h.id !== half.id))
       toast.success(t.hv_whole_title, t.hv_whole_msg.replace('{name}', half.creator.name.split(' ')[0]))
-      nav.navigate('PostViewer', { posts: [post], startIndex: 0 })
+      // A metade completa abre na feed, como qualquer outro post. O `PostViewer`
+      // deixou de ser o leitor genérico da app.
+      useFeedStore.getState().showPostInFeed(post)
+      nav.navigate('Tabs', { screen: 'Feed' })
     } catch (e: unknown) {
       const msg = (e as any)?.response?.data?.message ?? 'Não foi possível completar.'
       toast.error(t.error, msg)

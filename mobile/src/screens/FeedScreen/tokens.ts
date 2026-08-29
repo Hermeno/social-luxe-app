@@ -1,3 +1,30 @@
+import { Platform } from 'react-native'
+import { fonts, typography } from '../../theme'
+
+// Instagram usa a fonte nativa do sistema, não uma display geométrica. No
+// Android isto dá Roboto; no iOS, San Francisco. A marca continua no wordmark e
+// nos ícones — o texto funcional deixa o conteúdo falar.
+const FEED_UI_FONT_MEDIUM = Platform.select({
+  android: 'sans-serif-medium',
+  ios: 'System',
+  default: fonts.medium,
+}) ?? fonts.medium
+
+const FEED_UI_FONT_BOLD = Platform.select({
+  android: 'sans-serif',
+  ios: 'System',
+  default: fonts.bold,
+}) ?? fonts.bold
+
+// O nome é o único texto da publicação que recebe o peso máximo. No Android,
+// `sans-serif-black` aponta para o corte 900 real do Roboto; assim não dependemos
+// de um 700 sintetizado para tentar criar hierarquia.
+const FEED_UI_FONT_BLACK = Platform.select({
+  android: 'sans-serif-black',
+  ios: 'System',
+  default: fonts.extraBold,
+}) ?? fonts.extraBold
+
 /**
  * Ícones da Feed — tamanho e espessura.
  *
@@ -30,13 +57,137 @@ export const feedIcon = {
    * decisões.
    */
   control: 20,
-  /** Coluna de acções do post e navegação. O mesmo valor nos dois, que era a
-   *  intenção original escrita na TabBar e que se tinha perdido (rail a 30). */
-  action: 28,
+  /**
+   * Coluna de acções do post e navegação.
+   *
+   * Esteve em 28 e lia-se pequeno ao lado do que o Instagram pratica na mesma
+   * posição. Subir é seguro: o `FeedIcon` desenha SVG, a espessura de cada
+   * contorno está em unidades do viewBox e o reforço do peso `medium` é uma
+   * fracção do viewBox (1%). Cresce tudo na mesma proporção — não há um pixel
+   * a interpolar em lado nenhum, nem traço a afinar com o tamanho.
+   */
+  action: 32,
   /** Sobreposições no centro da mídia — play de vídeo. */
   overlay: 64,
   /** O coração do duplo toque. Não é um ícone, é um gesto a confirmar-se. */
   burst: 104,
+} as const
+
+/**
+ * Geometria da coluna de acções.
+ *
+ * A coluna precisa de uma cadência, não de alturas escolhidas por componente.
+ * Cada item ocupa 54pt e deixa 6pt até ao seguinte: os centros dos glifos
+ * ficam sempre a 60pt uns dos outros. Dentro do item, 32 + 4 + 16 reserva a
+ * mesma caixa para glifo e métrica, mesmo quando a métrica está vazia. Sobra
+ * 1pt em cima e em baixo e o alvo táctil continua bem acima dos 44pt mínimos.
+ */
+export const feedRail = {
+  width: 64,
+  itemHeight: 54,
+  itemGap: 6,
+  iconStageWidth: 48,
+  iconStageHeight: feedIcon.action,
+  iconToMetricGap: 4,
+  metricSlotHeight: 16,
+} as const
+
+/**
+ * O vazio entre o fundo da caixa do último item da coluna e a tinta do ícone.
+ *
+ * Todos os itens da coluna medem o mesmo: o ícone em cima, uma folga e o espaço
+ * do contador por baixo — reservado mesmo nas acções que não têm número, senão
+ * os ícones deixavam de assentar na mesma grelha. O efeito é que a tinta do
+ * último ícone fica bem acima do fundo da sua caixa.
+ *
+ * À esquerda não há nada disto: a última linha de texto acaba onde a caixa
+ * acaba. Encostar as duas caixas ao mesmo fundo, como se fez antes, punha os
+ * ícones 22pt acima do texto — que é precisamente a distância que este valor
+ * mede, e que agora o bloco do autor usa para subir até à mesma linha.
+ *
+ * Derivado e não escrito à mão: se um dos degraus da coluna mudar, esta conta
+ * muda com ele e o alinhamento não se desfaz em silêncio.
+ */
+export const feedRailTailInset = (
+  (feedRail.itemHeight - (feedRail.iconStageHeight + feedRail.iconToMetricGap + feedRail.metricSlotHeight)) / 2
+  + feedRail.iconToMetricGap
+  + feedRail.metricSlotHeight
+)
+
+/**
+ * Largura máxima da coluna editorial da pausa do Círculo e do CTA que a fecha.
+ * Partilhar a medida mantém as duas margens na mesma régua também em ecrãs
+ * largos; no telemóvel, ambas continuam simplesmente a 16px das bordas.
+ */
+export const FEED_CONTENT_MAX_WIDTH = 390
+
+/**
+ * Tipografia do cromado da Feed.
+ *
+ * Três tamanhos, mais o título curto e o badge técnico. A altura nunca cresce:
+ * todos os papéis abaixo são iguais ou menores que os valores que substituem.
+ * Os tamanhos e as alturas ficam intactos. A publicação ganha dois papéis
+ * explícitos: `author` em 900 e `content` em 700. Os controlos continuam em 700;
+ * contexto e métricas ficam em 500. A hierarquia deixa de depender de diferenças
+ * quase imperceptíveis sem tornar nenhuma linha maior.
+ */
+export const feedType = {
+  title: {
+    fontFamily: FEED_UI_FONT_BOLD,
+    fontWeight: '700',
+    fontSize: typography.section,
+    lineHeight: 21,
+    letterSpacing: 0,
+    includeFontPadding: false,
+  },
+  author: {
+    fontFamily: FEED_UI_FONT_BLACK,
+    fontWeight: '900',
+    fontSize: typography.secondary,
+    lineHeight: 17,
+    letterSpacing: 0,
+    includeFontPadding: false,
+  },
+  primary: {
+    fontFamily: FEED_UI_FONT_BOLD,
+    fontWeight: '700',
+    fontSize: typography.secondary,
+    lineHeight: 17,
+    letterSpacing: 0,
+    includeFontPadding: false,
+  },
+  content: {
+    fontFamily: FEED_UI_FONT_BOLD,
+    fontWeight: '700',
+    fontSize: typography.secondary,
+    lineHeight: 17,
+    letterSpacing: 0,
+    includeFontPadding: false,
+  },
+  copy: {
+    fontFamily: FEED_UI_FONT_MEDIUM,
+    fontWeight: '500',
+    fontSize: typography.secondary,
+    lineHeight: 17,
+    letterSpacing: 0,
+    includeFontPadding: false,
+  },
+  meta: {
+    fontFamily: FEED_UI_FONT_MEDIUM,
+    fontWeight: '500',
+    fontSize: typography.meta,
+    lineHeight: 14,
+    letterSpacing: 0,
+    includeFontPadding: false,
+  },
+  badge: {
+    fontFamily: FEED_UI_FONT_MEDIUM,
+    fontWeight: '500',
+    fontSize: typography.badge,
+    lineHeight: 11,
+    letterSpacing: 0,
+    includeFontPadding: false,
+  },
 } as const
 
 /**
@@ -81,9 +232,8 @@ export const feedInk = {
  * Sombra do texto sobre a mídia.
  *
  * Um véu escuro grande o suficiente para dar contraste lê-se como mancha e suja
- * a fotografia. Esta sombra faz o mesmo trabalho num raio de 3px à volta das
- * letras: o olho não a vê como sombra — vê o texto mais nítido — mas o contraste
- * local sobe o suficiente para branco assentar sobre qualquer foto.
+ * a fotografia. Uma sombra de 1px fica colada ao glifo: preserva contraste sem
+ * engrossar nem desfocar a letra, que era o que o antigo raio de 3px fazia.
  *
  * É a mesma que o FeedHeader já pratica, para o topo e o fundo do ecrã tratarem
  * o texto da mesma maneira.
@@ -93,9 +243,9 @@ export const feedInk = {
  * continua a ser o do véu.
  */
 export const feedTextShadow = {
-  textShadowColor: 'rgba(0,0,0,0.55)',
+  textShadowColor: 'rgba(0,0,0,0.48)',
   textShadowOffset: { width: 0, height: 1 },
-  textShadowRadius: 3,
+  textShadowRadius: 1,
 } as const
 
 /**

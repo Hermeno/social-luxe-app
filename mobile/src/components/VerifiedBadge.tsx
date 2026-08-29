@@ -1,12 +1,14 @@
 import React from 'react'
 import Icon from './Icon'
 import { colors } from '../theme'
-import { feedIcon } from '../screens/FeedScreen/tokens'
+
+/** O selo acompanha texto de 15pt: 14pt preserva a leitura sem dominar o nome. */
+export const VERIFIED_BADGE_SIZE = 14
 
 interface Props {
-  /** Lado do selo. O degrau `inline` é o que acompanha texto numa linha. */
+  /** Lado do selo. */
   size?: number
-  /** Sobrepõe a cor. Só para superfícies onde o azul da marca não assenta. */
+  /** Sobrepõe a tinta para manter contraste com a superfície. */
   color?: string
 }
 
@@ -16,12 +18,12 @@ interface Props {
  * Existe como componente e não como `<Icon name="verified" />` solto em cada
  * ecrã porque é uma marca de identidade: aparece na feed, na pesquisa, no perfil
  * e nos comentários, e nesses quatro sítios tem de ser exactamente o mesmo
- * desenho, do mesmo tamanho, da mesma cor. Espalhado, bastava alguém escrever
- * 14 em vez de 12 num deles para o selo passar a ser quatro selos.
+ * desenho e a mesma medida base. Contextos muito pequenos podem reduzi-lo.
  *
- * Azul da marca: um selo cinzento não se lê como selo, e um selo com a cor de
- * acento competia com o botão de seguir que está na mesma linha.
+ * A tinta acompanha a superfície: escura por defeito nas folhas claras e branca
+ * quando o chamador o coloca sobre a mídia. Assim o selo continua a ser identidade
+ * sem introduzir uma terceira cor na linha do autor.
  */
-export default function VerifiedBadge({ size = feedIcon.inline, color = colors.primary }: Props) {
+export default function VerifiedBadge({ size = VERIFIED_BADGE_SIZE, color = colors.primary }: Props) {
   return <Icon name="verified" size={size} color={color} />
 }

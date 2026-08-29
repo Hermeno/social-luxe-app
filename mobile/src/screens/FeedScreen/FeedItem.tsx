@@ -15,9 +15,8 @@ import { Post, type RepostResult } from '../../types'
 import { colors, fonts, leading, postGradientColors, radius, spacing, typography } from '../../theme'
 import { parsePostFontKey, postFontStyle } from '../../theme/postFonts'
 import Icon from '../../components/Icon'
-import { feedFill, feedIcon, feedInk, feedLine, feedTextShadow, RAIL_CLEARANCE } from './tokens'
+import { feedFill, feedIcon, feedInk, feedLine, feedRailTailInset, feedTextShadow, feedType, RAIL_CLEARANCE } from './tokens'
 import { usePostFontsReady } from '../../store/postFonts.store'
-import { API_BASE } from '../../config'
 import * as postService from '../../services/post.service'
 import type { TasteSignal } from '../../services/post.service'
 import AuthorAvatar from '../../components/AuthorAvatar'
@@ -30,7 +29,6 @@ import {
 } from './tastePolicy'
 import PostAlbumCarousel from './PostAlbumCarousel'
 import CollectiveMomentCarousel from './CollectiveMomentCarousel'
-import CommenterStack from './CommenterStack'
 import FeedIcon from '../../components/FeedIcon'
 import { useAuthStore } from '../../store/auth.store'
 import { useFollowStore } from '../../store/follow.store'
@@ -38,6 +36,7 @@ import { tabBarOccupiedHeight } from '../../components/TabBar/layout'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { useT } from '../../i18n'
 import { displayHandle } from '../../utils/handle'
+import { resolveMediaUrl as resolveUrl } from '../../utils/media'
 
 const { width } = Dimensions.get('window')
 // Uma linha, com reticências e o "ver mais" a abrir o resto.
@@ -45,6 +44,21 @@ const { width } = Dimensions.get('window')
 // Duas linhas mais o "ver mais" davam três linhas de texto no bloco do autor —
 // o mesmo espaço que a fotografia perdia. A legenda serve para decidir se vale
 // a pena abrir, e para isso a primeira linha chega.
+/**
+ * O que o anel do autor rouba à esquerda: `ringWidth` 2 + `gap` 2.
+ *
+ * O `AuthorAvatar` desenha o anel por fora da fotografia, e a caixa reserva esse
+ * espaço mesmo quando o anel está apagado — de propósito, para o avatar não mudar
+ * de tamanho quando ele acende. O efeito colateral era a fotografia começar 4px
+ * mais à direita que a legenda e que os avatares de quem comentou, que não têm
+ * anel nenhum: três coisas na mesma coluna, alinhadas por duas réguas.
+ *
+ * O desconto devolve a fotografia à margem do ecrã. Quando o anel acende, é ele
+ * que passa a sair 4px para fora — que é o que se quer: o anel é um estado
+ * passageiro e não pode ser ele a definir onde começa a coluna.
+ */
+const AUTHOR_RING_INSET = 4
+
 const DESCRIPTION_MAX_LINES = 1
 // Quanto tempo uma célula de vídeo tem de ficar parada no ecrã antes de valer a
 // pena gastar dados com ela. Curto para quem pára não notar, longo para quem
@@ -52,15 +66,18 @@ const DESCRIPTION_MAX_LINES = 1
 const VIDEO_ARM_DELAY = 260
 type Nav = StackNavigationProp<AppStackParams>
 
-function resolveUrl(url: string | null | undefined): string {
-  if (!url) return ''
-  if (url.startsWith('http') || url.startsWith('file://')) return url
-  return `${API_BASE}${url}`
-}
-
 interface Props {
   post: Post
   reduceMotion: boolean
+  /**
+   * Altura que a mídia cede no topo, abaixo da área segura.
+   *
+   * Serve a fila de Círculos activos: quando existe, a fotografia começa por
+   * baixo dela em vez de lhe passar por trás. Não recorta nada — a moldura sai
+   * sempre da proporção da imagem, por isso menos espaço dá a mesma fotografia
+   * mais pequena, com a mesma nitidez. Zero quando não há fila.
+   */
+  topInset?: number
   /** Só a célula visível toca o vídeo e corre a contagem de vida. */
   isActive: boolean
   /** Altura real da lista (medida no FeedScreen) — todas as células iguais. */
@@ -87,7 +104,7 @@ interface Props {
 // A célula é a única dona do seu leitor — a FlatList monta/desmonta, sem player
 // partilhado.
 function FeedItem({
-  post, reduceMotion, isActive, cellHeight, liked, commentCount,
+  post, reduceMotion, isActive, cellHeight, topInset = 0, liked, commentCount,
   onCommentPress, onLikeChange, onRepostChange, onDeleted, onEdited, onProfileBlocked, onAuthorMuted, onExpired, onBlockingChange,
   onTasteSignal, tasteBlocked = false,
 }: Props) {
@@ -139,15 +156,28 @@ function FeedItem({
   const navTop        = tabBarOccupiedHeight(safeBottom)
   const trackBottom   = navTop + GAP                         // traço, acima da navegação
   const videoBottom   = trackBottom + TRACK_H + GAP          // post termina antes do traço
-  const overlayBottom = videoBottom + 14                     // autor/ações dentro do post
-  const videoFrame = { top: safeTop, bottom: videoBottom }
+  // A linha onde as duas colunas de baixo acabam — a tinta, não a caixa.
+  //
+  // A coluna de acções fica ancorada em `videoBottom`, encostada ao palco do post
+  // sem invadir o traço do tempo. Mas o último ícone dela não está no fundo da
+  // sua caixa: como todos os itens da coluna, reserva por baixo o espaço do
+  // contador, e a tinta acaba `feedRailTailInset` acima. À esquerda não há nada
+  // disso — a última linha de texto acaba onde a caixa acaba.
+  //
+  // Por isso é o bloco do autor que sobe até à coluna, e não o contrário: descer
+  // a coluna esses 22pt punha o alvo do último ícone dentro da faixa do scrubber,
+  // que atravessa a largura toda e ficaria a disputar o mesmo toque.
+  const overlayBottom = videoBottom + feedRailTailInset
+  // O topo da mídia: a área segura mais o que a fila de Círculos ocupar.
+  const mediaTop = safeTop + topInset
+  const videoFrame = { top: mediaTop, bottom: videoBottom }
   const trackWidth = width - 28                             // left/right 14
 
   // ── Enquadramento da imagem ────────────────────────────────────────────────
   // A largura é sempre a do ecrã; a altura é que vem da proporção da imagem.
   // Por isso a moldura da foto NÃO é a `videoFrame` (que estica de cima a baixo):
   // é calculada a partir do que a imagem mede, e centrada no espaço disponível.
-  const mediaSpace = Math.max(0, cellHeight - safeTop - videoBottom)
+  const mediaSpace = Math.max(0, cellHeight - mediaTop - videoBottom)
 
   // A altura vem SEMPRE da proporção da imagem. Nunca da altura disponível —
   // encher o ecrã na vertical é o que não se quer, nem sequer como estado
@@ -169,7 +199,7 @@ function FeedItem({
   const aspect = serverAspect ?? loadedAspect
   const photoHeight = aspect ? Math.min(width / aspect, mediaSpace) : mediaSpace
   const photoFrame  = {
-    top: safeTop + (mediaSpace - photoHeight) / 2,
+    top: mediaTop + (mediaSpace - photoHeight) / 2,
     height: photoHeight,
     opacity: aspect ? 1 : 0,
   }
@@ -177,7 +207,6 @@ function FeedItem({
   // Conteúdo do post entra depois do cartão assentar; o avatar mantém um pulso
   // lento enquanto o post for o único ativo.
   const metaEntry = useRef(new Animated.Value(0)).current
-  const ambient   = useRef(new Animated.Value(0)).current
   const [clockNow, setClockNow] = useState(Date.now)
 
   /**
@@ -206,22 +235,6 @@ function FeedItem({
       Animated.timing(metaEntry, { toValue: 1, duration: 240, useNativeDriver: true }),
     ]).start()
   }, [isActive, reduceMotion, metaEntry])
-
-  useEffect(() => {
-    ambient.stopAnimation()
-    if (!isActive || reduceMotion) {
-      ambient.setValue(0)
-      return
-    }
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(ambient, { toValue: 1, duration: 1900, useNativeDriver: true }),
-        Animated.timing(ambient, { toValue: 0, duration: 1900, useNativeDriver: true }),
-      ]),
-    )
-    loop.start()
-    return () => loop.stop()
-  }, [isActive, reduceMotion, ambient])
 
   // Só o momento visível atualiza o relógio. Já não há traço de tempo a mover-se
   // — o que depende disto agora é o anel do autor, que se apaga sozinho quando a
@@ -712,25 +725,22 @@ function FeedItem({
 
         <View style={s.authorRow}>
           <TouchableOpacity
+            style={s.authorAvatarHit}
             onPress={() => nav.navigate('Profile', { userId: post.user.id })}
             activeOpacity={0.82}
             accessibilityRole="button"
             accessibilityLabel={post.user.name}
           >
-            <Animated.View
-              style={{ transform: [{ scale: ambient.interpolate({ inputRange: [0, 1], outputRange: [1, 1.018] }) }] }}
-            >
-              <AuthorAvatar
-                uri={resolveUrl(post.user.avatar)}
-                name={post.user.name}
-                avatarSize={34}
-                ringWidth={1.5}
-                gap={2.5}
-                ringVisible={isFresh}
-                wellColor="rgba(11,20,26,0.84)"
-                elevated
-              />
-            </Animated.View>
+            <AuthorAvatar
+              uri={resolveUrl(post.user.avatar)}
+              name={post.user.name}
+              avatarSize={34}
+              ringWidth={2}
+              gap={2}
+              ringVisible={isFresh}
+              wellColor="rgba(11,20,26,0.84)"
+              elevated
+            />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -744,7 +754,11 @@ function FeedItem({
               <Text style={s.authorName} numberOfLines={1}>
                 {post.user.username ? displayHandle(post.user.username) : post.user.name}
               </Text>
-              {post.user.isVerified && <VerifiedBadge />}
+              {post.user.isVerified && (
+                <View style={s.authorVerified}>
+                  <VerifiedBadge color={feedInk.primary} />
+                </View>
+              )}
             </View>
             {!!authorContext && (
               <Text style={s.authorContext} numberOfLines={1}>{authorContext}</Text>
@@ -762,7 +776,6 @@ function FeedItem({
               accessibilityLabel={`${following ? t.following : t.follow} ${post.user.name}`}
               accessibilityState={{ disabled: !followLoaded, selected: following }}
             >
-              <View style={[s.followNode, following && s.followNodeOn]} />
               <Text style={[s.followTxt, following && s.followingTxt]}>
                 {following ? t.following : t.follow}
               </Text>
@@ -819,13 +832,6 @@ function FeedItem({
 
         {commentCount > 0 && (
           <View style={s.socialRow}>
-            {!!post.recentCommenters?.length && (
-              <CommenterStack
-                commenters={post.recentCommenters}
-                onPress={() => onCommentPress(post)}
-                accessibilityLabel={`${commentCount} ${commentCount === 1 ? t.comment_one : t.comment_many}`}
-              />
-            )}
             <TouchableOpacity
               style={s.commentsLink}
               onPress={() => onCommentPress(post)}
@@ -839,7 +845,6 @@ function FeedItem({
                   ? t.feed_view_comment
                   : `${t.feed_view_comments} ${commentCount} ${t.comment_many}`}
               </Text>
-              <FeedIcon name="chevron-right" size={feedIcon.inline} color={feedInk.muted} />
             </TouchableOpacity>
           </View>
         )}
@@ -858,11 +863,11 @@ function FeedItem({
         onProfileBlocked={onProfileBlocked}
         onAuthorMuted={onAuthorMuted}
         onOptionsBlockingChange={handleMenuBlocking}
-        // A coluna desce até ao limite da mídia, 14pt abaixo da linha do autor.
-        // Mais baixo do que isto entrava na faixa do traço do tempo, que corre
-        // logo a seguir e atravessa a largura toda.
+        // A coluna termina no palco do post e não invade o scrubber. Quem se
+        // alinha por ela é o bloco do autor, via `feedRailTailInset`.
         bottomOffset={videoBottom}
         isActive={isActive}
+        isCircle={isCollective}
         reduceMotion={reduceMotion}
         iconSize={feedIcon.action}
         iconWeight="medium"
@@ -903,7 +908,8 @@ const s = StyleSheet.create({
   },
 
   // Autor + descrição
-  meta:       { position: 'absolute', left: spacing.md, right: RAIL_CLEARANCE, gap: spacing.sm },
+  meta:       { position: 'absolute', left: spacing.md, right: RAIL_CLEARANCE, gap: spacing.xs2 },
+  authorAvatarHit: { marginLeft: -AUTHOR_RING_INSET },
   authorRow:  { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   // `flexShrink` e não `flex: 1`: com `flex: 1` o bloco do nome esticava para
   // toda a largura livre e empurrava o botão de seguir para a borda oposta.
@@ -912,50 +918,53 @@ const s = StyleSheet.create({
   authorText: { flexShrink: 1, minWidth: 0, justifyContent: 'center' },
   // O selo ao lado do nome, não por baixo: `flexShrink` no texto para um nome
   // comprido cortar com reticências em vez de empurrar o selo para fora.
-  authorNameLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  authorNameLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.xxs },
+  authorVerified: {
+    width: 16,
+    height: feedType.author.lineHeight,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   authorName: {
     flexShrink: 1,
     ...feedTextShadow,
-    color: feedInk.primary, fontFamily: fonts.regular, fontSize: typography.body, lineHeight: leading.body, letterSpacing: -0.12
+    ...feedType.author,
+    color: feedInk.primary,
   },
   authorContext: {
     ...feedTextShadow,
-    color: feedInk.muted, fontFamily: fonts.regular, fontSize: typography.meta, lineHeight: leading.meta
+    ...feedType.meta,
+    color: feedInk.muted,
   },
   followBtn: {
     minHeight: 32,
-    minWidth: 86,
+    minWidth: 72,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs2,
-    paddingLeft: spacing.sm2,
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderLeftColor: feedLine.medium
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm2,
+    borderWidth: 1,
+    borderColor: feedLine.bright,
+    borderRadius: radius.md,
   },
-  followNode: { width: 4, height: 4, borderRadius: radius.full, backgroundColor: feedInk.primary },
-  followNodeOn: { backgroundColor: feedLine.strong },
   followTxt: {
     ...feedTextShadow,
+    ...feedType.primary,
     color: feedInk.primary,
-    // Um controlo secundário não pode ser mais pesado que o nome que qualifica.
-    fontFamily: fonts.regular,
-    fontSize: typography.secondary,
-    lineHeight: leading.secondary,
-    letterSpacing: 0.05,
   },
-  followingBtn: { borderLeftColor: feedLine.subtle },
+  followingBtn: { borderColor: feedLine.bright },
   followingTxt: { color: feedInk.primary },
   descriptionWrap: { position: 'relative' },
   description: {
     ...feedTextShadow,
-    color: feedInk.secondary, fontFamily: fonts.regular, fontSize: typography.secondary, lineHeight: leading.secondary
+    ...feedType.content,
+    color: feedInk.secondary,
   },
   descriptionMore: {
     ...feedTextShadow,
+    ...feedType.content,
     color: feedInk.secondary,
-    fontFamily: fonts.regular,
-    fontSize: typography.secondary,
-    lineHeight: leading.secondary,
     marginTop: spacing.xxs,
   },
   descriptionMeasure: {
@@ -964,15 +973,13 @@ const s = StyleSheet.create({
     right: 0,
     opacity: 0
   },
-  socialRow: { minHeight: 22, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  commentsLink: { flex: 1, minHeight: 22, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  socialRow: { minHeight: feedType.copy.lineHeight, flexDirection: 'row', alignItems: 'center' },
+  commentsLink: { flex: 1, minHeight: feedType.copy.lineHeight, justifyContent: 'center' },
   commentsText: {
     ...feedTextShadow,
+    ...feedType.copy,
     flexShrink: 1,
     color: feedInk.muted,
-    fontFamily: fonts.regular,
-    fontSize: typography.meta,
-    lineHeight: leading.meta
   },
 
   // Traço do tempo do vídeo — scrubber (área de toque de 22px, linha ao centro)

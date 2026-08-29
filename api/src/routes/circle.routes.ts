@@ -10,6 +10,7 @@ router.use(authMiddleware)
 // Sessão de foto em grupo, ao vivo com pessoas próximas
 router.post('/open',        circleController.open)
 router.get('/incoming',     circleController.incoming)
+router.get('/active',       circleController.active)
 router.post('/call',        circleController.call)
 router.post('/join',        circleController.join)
 router.post('/leave',       circleController.leave)

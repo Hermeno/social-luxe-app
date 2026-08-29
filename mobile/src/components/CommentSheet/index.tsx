@@ -264,8 +264,8 @@ export default function CommentSheet({ post, onClose, onCommentAdded }: Props) {
               uri={author.avatar}
               name={author.name}
               avatarSize={30}
-              ringWidth={1.5}
-              gap={1.25}
+              ringWidth={1.75}
+              gap={1}
               wellColor={colors.white}
             />
             <View style={s.authorInfo}>

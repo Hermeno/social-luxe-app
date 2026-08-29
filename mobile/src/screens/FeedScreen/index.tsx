@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
+import React, { useState, useMemo, useCallback, useLayoutEffect, useRef, useEffect } from 'react'
 import {
-  View, Text, ActivityIndicator, FlatList, StyleSheet, Dimensions, Keyboard,
+  View, Text, ActivityIndicator, Animated, Easing, FlatList, StyleSheet, Dimensions, Keyboard,
   type LayoutChangeEvent, type ViewToken,
   type NativeSyntheticEvent, type NativeScrollEvent,
 } from 'react-native'
@@ -17,9 +17,15 @@ import * as postService from '../../services/post.service'
 import type { TasteSignal } from '../../services/post.service'
 import { isConnected } from '../../services/netinfo.service'
 import { useT } from '../../i18n'
-import { colors, fonts, spacing, typography } from '../../theme'
+import { resolveMediaUrl } from '../../utils/media'
+import { getActiveCircles, type ActiveCircle } from '../../services/circle.service'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { colors, spacing } from '../../theme'
 import FeedHeader, { FeedUserGroup as UserGroup } from './FeedHeader'
+import FeedCircleBar, { FEED_CIRCLE_BAR_HEIGHT } from './FeedCircleBar'
+import FeedInvite from './FeedInvite'
 import FeedItem from './FeedItem'
+import { feedType } from './tokens'
 import { hydrateTastePolicy, noteTastePostSeen } from './tastePolicy'
 import CommentSheet from '../../components/CommentSheet'
 import useReducedMotionPreference from '../../hooks/useReducedMotionPreference'
@@ -56,6 +62,37 @@ const MAINTAIN_VISIBLE_POSITION = { minIndexForVisible: 0 } as const
 // `React.memo` de todas as células a cada render da feed.
 const NOOP = () => {}
 
+// ─── Linhas do pager ───────────────────────────────────────────────────────
+// A feed deixou de ser só posts: de onze em onze linhas há uma pausa, uma
+// célula que não é de ninguém e convida a publicar (ver `FeedInvite`). Vive
+// aqui dentro da mesma lista porque tem de deslizar com o mesmo snap, a mesma
+// altura e o mesmo `getItemLayout` — uma sobreposição por cima do pager teria
+// de reimplementar tudo isso e nunca ficaria alinhada.
+// ─── Fila de Círculos activos ──────────────────────────────────────────────
+// A fila não entra no fluxo do pager: fica sobreposta, logo abaixo da linha do
+// cabeçalho, e é a mídia de cada célula que desce por baixo dela. Assim a altura
+// da célula, o `snapToInterval` e o `getItemLayout` continuam a ser exactamente
+// os mesmos com fila e sem fila — o pager não sabe que ela existe.
+/** Entre o topo da área segura e a fila; a linha do cabeçalho mede 48. */
+const CIRCLE_BAR_TOP = 56
+/** Respiro entre a fila e o início da fotografia. */
+const CIRCLE_BAR_GAP = 12
+/** O que a mídia cede quando há Círculos a acontecer. */
+const CIRCLE_BAR_INSET = CIRCLE_BAR_TOP + FEED_CIRCLE_BAR_HEIGHT + CIRCLE_BAR_GAP
+
+const INVITE_PREFIX = 'feed-invite:'
+/** Depois de quantos posts entra a primeira pausa. */
+const INVITE_FIRST_AT = 6
+/** E de quantos em quantos posts a partir daí. */
+const INVITE_EVERY = 8
+
+interface InviteRow { id: string; kind: 'invite' }
+type FeedRow = Post | InviteRow
+
+const isInvite = (row: FeedRow): row is InviteRow => (
+  (row as InviteRow).kind === 'invite'
+)
+
 
 // Pager vertical: uma FlatList paginada onde cada célula é um post em ecrã
 // inteiro (FeedItem). A célula é dona do seu vídeo — aqui só se gere o estado
@@ -85,10 +122,13 @@ export default function FeedScreen() {
   const setActiveCommentTarget = useFeedStore((s) => s.setActiveCommentTarget)
   const immersive        = useFeedStore((s) => s.immersive)
   const setImmersive     = useFeedStore((s) => s.setImmersive)
+  const setFeedInviteActive = useFeedStore((s) => s.setFeedInviteActive)
   const requestedCommentPostId = useFeedStore((s) => s.requestedCommentPostId)
   const clearCommentRequest    = useFeedStore((s) => s.clearCommentRequest)
   const circleInvite           = useNotificationStore((s) => s.circleInvite)
 
+  const { top: safeTop } = useSafeAreaInsets()
+  const [activeCircles, setActiveCircles] = useState<ActiveCircle[]>([])
   const [currentPostId, setCurrentPostId] = useState<string | null>(null)
   const [commentPost,   setCommentPost]   = useState<Post | null>(null)
   const [viewedIds,     setViewedIds]     = useState<Set<string>>(new Set())
@@ -100,7 +140,7 @@ export default function FeedScreen() {
   const [mutedAuthorIds, setMutedAuthorIds] = useState<Set<string>>(new Set())
   const moderationRevisionRef = useRef(0)
 
-  const listRef = useRef<FlatList<Post>>(null)
+  const listRef = useRef<FlatList<FeedRow>>(null)
   // Altura real da área da lista (medida). O pager usa-a para a célula, o snap
   // e o layout — assim toda a gente fica alinhada (Dimensions.window no arranque
   // podia não bater certo e desalinhava os posts a partir do 2.º).
@@ -155,27 +195,109 @@ export default function FeedScreen() {
   const flatPostsRef = useRef(flatPosts)
   flatPostsRef.current = flatPosts
 
+  // A pausa entra depois do sexto post e daí em diante de oito em oito. Seis
+  // porque antes disso ninguém deslizou o suficiente para lhe apetecer publicar
+  // — a primeira coisa que a app mostra a quem abre tem de ser a feed. Oito
+  // porque é a distância a que a pausa ainda se lê como pausa: mais perto vira
+  // interrupção, mais longe nunca se vê.
+  //
+  // A chave é o id do post a seguir e não a posição: quando um post entra pelo
+  // socket ou sai por bloqueio, as linhas em volta não mudam de identidade e o
+  // pager fica onde estava.
+  const rows = useMemo<FeedRow[]>(() => {
+    const out: FeedRow[] = []
+    flatPosts.forEach((post, index) => {
+      const offset = index - INVITE_FIRST_AT
+      if (offset >= 0 && offset % INVITE_EVERY === 0) {
+        out.push({ id: `${INVITE_PREFIX}${post.id}`, kind: 'invite' })
+      }
+      out.push(post)
+    })
+    return out
+  }, [flatPosts])
+
+  const rowsRef = useRef(rows)
+  rowsRef.current = rows
+
+  // Na pausa o topo desaparece. A assinatura e o botão Criar são o cromado da
+  // feed — pertencem ao que se está a ver, e ali não se está a ver nada de
+  // ninguém. Deixá-los lá punha dois "Criar" no mesmo ecrã, um em cima do outro,
+  // a competir.
+  const onInvite = !!currentPostId?.startsWith(INVITE_PREFIX) && !searchMode
+  const chrome = useRef(new Animated.Value(1)).current
+
+  // Enquanto esta página ocupa o pager, a saída principal deixa de ser um dos
+  // cinco separadores e passa a ser um CTA único. O estado é limpo também ao
+  // perder foco para nenhuma outra aba herdar o botão por um frame.
+  useEffect(() => {
+    setFeedInviteActive(isFocused && onInvite)
+  }, [isFocused, onInvite, setFeedInviteActive])
+
+  useEffect(() => () => {
+    useFeedStore.getState().setFeedInviteActive(false)
+  }, [])
+
+  useEffect(() => {
+    if (reduceMotion) { chrome.setValue(onInvite ? 0 : 1); return }
+    const animation = Animated.timing(chrome, {
+      toValue: onInvite ? 0 : 1,
+      duration: 200,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    })
+    animation.start()
+    return () => animation.stop()
+  }, [chrome, onInvite, reduceMotion])
+
+  // Um círculo verdadeiro da própria feed, para a pausa mostrar do que fala em
+  // vez de o descrever. Sai do que já está carregado — nenhuma chamada de rede.
+  // Dois registos no mínimo: um "círculo" com uma fotografia só não é exemplo
+  // de nada, e é precisamente a ideia de várias pessoas que se quer mostrar.
+  const exampleCircle = useMemo(() => {
+    for (const post of flatPosts) {
+      const captures = Array.isArray(post.collectiveMoment?.captures)
+        ? post.collectiveMoment.captures
+        : []
+      if (captures.length < 2) continue
+      const urls = captures
+        .slice(0, 4)
+        .map((capture, index) => resolveMediaUrl(
+          post.mediaUrls?.[capture.mediaIndex ?? index] ?? capture.mediaUrl,
+        ))
+        .filter(Boolean)
+      if (urls.length < 2) continue
+      // Gente, não fotografias: no Círculo cada pessoa tira duas, e contar
+      // capturas daria sempre o dobro das pessoas que lá estiveram.
+      const participants = Array.isArray(post.collectiveMoment?.participants)
+        ? post.collectiveMoment.participants
+        : []
+      return { urls, authorName: post.user.name, people: participants.length }
+    }
+    return null
+  }, [flatPosts])
+
   // Repostar deixou de mexer nesta lista (ver `updateRepostState` em useFeed),
   // por isso não há aqui âncoras, reancoragens nem bloqueios de viewability: o
   // pager fica exactamente onde estava porque nada se inseriu por cima dele.
   // A única mudança de índice que sobra é a de desfazer a partir da própria
   // cópia, e essa é resolvida em `handleRepostChange`, no mesmo commit.
 
-  const currentIndex = useMemo(() => {
-    if (!currentPostId) return 0
-    const i = flatPosts.findIndex((p) => p.id === currentPostId)
-    return i >= 0 ? i : 0
-  }, [currentPostId, flatPosts])
-
-  const activePost = flatPosts[currentIndex]
+  // Procura por id em vez de indexar por posição. Numa pausa o `currentPostId`
+  // é o da própria pausa, e a versão anterior caía no índice 0 — marcava o
+  // primeiro post da feed como visto e apontava-lhe o campo de comentário, com
+  // o post nem sequer no ecrã.
+  const activePost = useMemo(
+    () => (currentPostId ? flatPosts.find((post) => post.id === currentPostId) : undefined),
+    [currentPostId, flatPosts],
+  )
 
   // Repõe um post exactamente no início do viewport. O teclado pode conservar
   // um contentOffset em píxeis enquanto a janela muda; sem este snap defensivo,
   // o offset deixa de ser múltiplo da altura da célula e mostra dois posts.
   const alignPagerToPost = useCallback((postId: string | null, height = listHRef.current) => {
-    const source = flatPostsRef.current
+    const source = rowsRef.current
     if (source.length === 0) return
-    const found = postId ? source.findIndex((post) => post.id === postId) : 0
+    const found = postId ? source.findIndex((row) => row.id === postId) : 0
     const index = found >= 0 ? found : 0
     requestAnimationFrame(() => {
       listRef.current?.scrollToOffset({ offset: index * height, animated: false })
@@ -278,15 +400,19 @@ export default function FeedScreen() {
   }, [setImmersiveIfChanged])
 
   const scrollToIndex = useCallback((idx: number) => {
-    const fp = flatPostsRef.current
-    const clamped = Math.max(0, Math.min(idx, fp.length - 1))
-    if (fp[clamped]) listRef.current?.scrollToIndex({ index: clamped, animated: true })
+    // Conta linhas e não posts: com as pausas pelo meio, `flatPosts.length` é
+    // menor que a lista e o clamp cortava os índices do fim.
+    const source = rowsRef.current
+    const clamped = Math.max(0, Math.min(idx, source.length - 1))
+    if (source[clamped]) listRef.current?.scrollToIndex({ index: clamped, animated: true })
   }, [])
 
   // ── Célula visível → post ativo (é o que decide qual vídeo toca) ───────────
   const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
     const first = viewableItems.find((v) => v.isViewable)
-    const id = (first?.item as Post | undefined)?.id
+    // Serve para as duas espécies de linha: numa pausa o `currentPostId` passa a
+    // ser o id da pausa, e é isso que a acende e apaga todos os posts.
+    const id = (first?.item as FeedRow | undefined)?.id
     if (id) setCurrentPostId(id)
   }).current
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 80 }).current
@@ -295,6 +421,30 @@ export default function FeedScreen() {
   // post ativo: assim o reset síncrono da identidade não apaga a primeira vista
   // da sessão enquanto a leitura do SQLite termina em segundo plano.
   useEffect(() => { hydrateTastePolicy(tasteUserId) }, [tasteUserId])
+
+  // Só enquanto a Feed está à frente: uma sessão dura no máximo duas horas e a
+  // lista muda devagar, mas "activo agora" tem de ser verdade, por isso relê de
+  // minuto a minuto. Fora de foco não corre, logo não custa nada.
+  useEffect(() => {
+    if (!isFocused) return
+    let alive = true
+    const load = async () => {
+      if (!isConnected()) return
+      try {
+        const list = await getActiveCircles()
+        if (alive) setActiveCircles(list)
+      } catch {}
+    }
+    load()
+    const timer = setInterval(load, 60_000)
+    return () => { alive = false; clearInterval(timer) }
+  }, [isFocused])
+
+  const circleBarInset = activeCircles.length > 0 ? CIRCLE_BAR_INSET : 0
+
+  const handleCirclePressed = useCallback(() => {
+    nav.navigate('Tabs', { screen: 'Circle' })
+  }, [nav])
 
   // ── Vistas: marca o post ativo como visto ──────────────────────────────────
   useEffect(() => {
@@ -327,18 +477,62 @@ export default function FeedScreen() {
     requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated: false }))
   }, [pendingPost, clearFocusedPost, prependPost, setPendingPost])
 
-  // Um pedido novo leva o pager ao alvo uma única vez. O post continua no topo
-  // depois disso, para que o utilizador possa deslizar normalmente pela feed.
+  // ── Abrir um post na feed (pesquisa, perfil, mensagens, metades) ──────────
+  //
+  // O post pedido entra em `displayedPosts` na primeira posição, o que faz dele
+  // a linha 0 do pager. Aterrar nele parece trivial e não é, por causa de duas
+  // coisas que puxam em sentidos opostos:
+  //
+  // 1. `maintainVisibleContentPosition` existe para o pager não saltar quando
+  //    chega um post pelo socket: ao inserir-se uma linha acima, o nativo soma
+  //    a altura dessa linha ao `contentOffset` para o que estava à vista ficar
+  //    onde estava. Ao abrir um post é exactamente o contrário do que se quer —
+  //    a inserção *é* o destino.
+  // 2. A versão anterior corrigia isso com `scrollToIndex({ animated: true })`
+  //    dentro de um `requestAnimationFrame`. Quem estivesse no décimo post via
+  //    a feed inteira a desfilar para trás até ao topo, depois de um frame já
+  //    pintado na posição errada. Era esse o piscar.
+  //
+  // Agora: salto seco para o offset exacto, dentro de um `useLayoutEffect` —
+  // antes de o frame ser pintado, não um frame depois. O pager arranca opaco e
+  // revela-se em 200ms, por isso mesmo que a compensação nativa chegue atrasada
+  // não há nada visível para ela estragar. E o offset é reafirmado no frame
+  // seguinte, que é quando essa compensação costuma aterrar; reafirmar o mesmo
+  // número duas vezes não se vê.
   const handledFocusedPostRequest = useRef(0)
-  useEffect(() => {
-    if (!focusedPost || flatPosts.length === 0) return
+  const focusFade = useRef(new Animated.Value(1)).current
+
+  useLayoutEffect(() => {
+    if (!focusedPost || rows.length === 0) return
     if (handledFocusedPostRequest.current === focusedPostRequest) return
-    const idx = flatPosts.findIndex((post) => post.id === focusedPost.id)
+    const idx = rows.findIndex((row) => row.id === focusedPost.id)
     if (idx < 0) return
+
     handledFocusedPostRequest.current = focusedPostRequest
+    // A ref também, e não só o estado: ela só acompanharia no render seguinte, e
+    // um `onLayout` que chegue no meio realinha por `currentPostIdRef` — iria
+    // buscar o post anterior e desfazer a aterragem.
+    currentPostIdRef.current = focusedPost.id
     setCurrentPostId(focusedPost.id)
-    requestAnimationFrame(() => scrollToIndex(idx))
-  }, [focusedPost, focusedPostRequest, flatPosts, scrollToIndex])
+
+    const offset = idx * listHRef.current
+    const land = () => listRef.current?.scrollToOffset({ offset, animated: false })
+
+    if (reduceMotion) { land(); return }
+
+    focusFade.setValue(0)
+    land()
+    const frame = requestAnimationFrame(() => {
+      land()
+      Animated.timing(focusFade, {
+        toValue: 1,
+        duration: 200,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start()
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [focusFade, focusedPost, focusedPostRequest, reduceMotion, rows])
 
   // Não há prefetch de vídeo. Descarregar os próximos dois ficheiros inteiros
   // gastava os MB de vídeos que o utilizador só passa à frente — e nem servia
@@ -478,12 +672,6 @@ export default function FeedScreen() {
     alignPagerToPost(searchAnchorPostIdRef.current ?? currentPostIdRef.current)
   }, [alignPagerToPost, setSearchVisible])
   const handleSearchChange = useCallback((q: string) => setSearchQuery(q), [])
-  // As caras do topo levam à lista de onde saíram — seguidores ou seguidos,
-  // conforme o que a legenda por baixo delas está a mostrar.
-  const handleRelationPress = useCallback((mode: 'following' | 'followers') => {
-    nav.navigate('Followers', { mode })
-  }, [nav])
-
   const handleBubblePress  = useCallback((group: UserGroup) => {
     const idx = flatPostsRef.current.findIndex((p) => p.user.id === group.user.id)
     if (idx >= 0) {
@@ -498,7 +686,7 @@ export default function FeedScreen() {
     setSearchVisible(false)
     setSearchQuery('')
   }, [alignPagerToPost, setSearchVisible])
-  // O botão do topo cria; o Círculo tem separador próprio na barra de baixo.
+  // O botão do topo cria; nesta pausa, a barra inferior leva ao Círculo.
   const handleCirclePress  = useCallback(() => nav.navigate('Tabs', { screen: 'Create' }), [nav])
   const handleRestoreNavigation = useCallback(() => {
     setImmersiveIfChanged(false)
@@ -582,12 +770,21 @@ export default function FeedScreen() {
   }, [homeTap, clearFocusedPost])
 
   // ── Render de cada célula ───────────────────────────────────────────────────
-  const renderItem = useCallback(({ item }: { item: Post }) => (
+  const renderItem = useCallback(({ item }: { item: FeedRow }) => (
+    isInvite(item) ? (
+      <FeedInvite
+        cellHeight={listH}
+        isActive={item.id === currentPostId}
+        reduceMotion={reduceMotion}
+        example={exampleCircle}
+      />
+    ) : (
     <FeedItem
       post={item}
       reduceMotion={reduceMotion}
       isActive={item.id === currentPostId}
       cellHeight={listH}
+      topInset={circleBarInset}
       liked={likedPostIds.has(item.id)}
       commentCount={(item._count?.comments ?? 0) + (commentDeltas[item.id] ?? 0)}
       onCommentPress={openComments}
@@ -602,7 +799,8 @@ export default function FeedScreen() {
       onTasteSignal={handleTasteSignal}
       tasteBlocked={searchMode || !!commentPost}
     />
-  ), [currentPostId, listH, likedPostIds, commentDeltas, searchMode, commentPost, openComments, handleLikeChange, handleRepostChange, handlePostDeleted, handlePostExpired, handleProfileBlocked, handleAuthorMuted, handleTasteSignal, updatePost, reduceMotion])
+    )
+  ), [circleBarInset, exampleCircle, currentPostId, listH, likedPostIds, commentDeltas, searchMode, commentPost, openComments, handleLikeChange, handleRepostChange, handlePostDeleted, handlePostExpired, handleProfileBlocked, handleAuthorMuted, handleTasteSignal, updatePost, reduceMotion])
 
   const getItemLayout = useCallback((_: unknown, index: number) => (
     { length: listH, offset: listH * index, index }
@@ -614,11 +812,12 @@ export default function FeedScreen() {
       onLayout={handleFeedLayout}
     >
       {flatPosts.length > 0 ? (
+        <Animated.View style={[s.pagerFade, { opacity: focusFade }]}>
         <FlatList
           ref={listRef}
           style={s.pager}
-          data={flatPosts}
-          keyExtractor={(p) => p.id}
+          data={rows}
+          keyExtractor={(row) => row.id}
           renderItem={renderItem}
           getItemLayout={getItemLayout}
           scrollEnabled={!searchMode}
@@ -651,6 +850,7 @@ export default function FeedScreen() {
             listRef.current?.scrollToOffset({ offset: listH * index, animated: false })
           }}
         />
+        </Animated.View>
       ) : (
         <View style={s.empty}>
           <ActivityIndicator size="large" color={colors.primary} />
@@ -659,6 +859,16 @@ export default function FeedScreen() {
       )}
 
       {/* Um só dono para as duas faces do topo: marca/Círculo e pesquisa. */}
+      <Animated.View
+        style={[s.chrome, { opacity: chrome }]}
+        pointerEvents={onInvite ? 'none' : 'box-none'}
+      >
+      {activeCircles.length > 0 && (
+        <View style={[s.circleBar, { top: safeTop + CIRCLE_BAR_TOP }]} pointerEvents="box-none">
+          <FeedCircleBar circles={activeCircles} onPress={handleCirclePressed} />
+        </View>
+      )}
+
       <FeedHeader
         filteredGroups={filteredGroups}
         activeUserId={activePost?.user.id}
@@ -671,8 +881,8 @@ export default function FeedScreen() {
         onBubblePress={handleBubblePress}
         onCirclePress={handleCirclePress}
         onRestoreNavigation={handleRestoreNavigation}
-        onRelationPress={handleRelationPress}
       />
+      </Animated.View>
 
       {commentPost && (
         <CommentSheet
@@ -686,8 +896,18 @@ export default function FeedScreen() {
 }
 
 const s = StyleSheet.create({
+  // Caixa do cromado do topo. Só serve para o poder apagar de uma vez; o
+  // `FeedHeader` continua a posicionar-se sozinho lá dentro.
+  chrome: { ...StyleSheet.absoluteFillObject },
+  // Sobreposta e não em fluxo: a célula do pager continua a medir o ecrã inteiro.
+  // `zIndex` abaixo do cabeçalho (40) e acima da mídia.
+  circleBar: { position: 'absolute', left: 0, right: 0, zIndex: 30 },
   container: { flex: 1, backgroundColor: colors.feedSurface },
   pager: { flex: 1, backgroundColor: colors.feedSurface },
+  // Envolve o pager só para o poder revelar depois de aterrar no post pedido.
+  // Fundo próprio: durante os 200ms da revelação o que está por baixo é isto,
+  // e tem de ser a cor da feed e não branco.
+  pagerFade: { flex: 1, backgroundColor: colors.feedSurface },
   empty:     { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, backgroundColor: colors.feedSurface },
-  emptyTxt:  { fontFamily: fonts.medium, fontSize: typography.body, color: colors.gray600 }
+  emptyTxt:  { ...feedType.primary, color: colors.gray600 }
 })

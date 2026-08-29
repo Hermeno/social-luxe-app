@@ -4,10 +4,10 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import FeedIcon, { type FeedIconWeight } from '../../components/FeedIcon'
-import { feedIcon, feedInk, feedTextShadow } from './tokens'
+import { feedIcon, feedInk, feedRail, feedTextShadow, feedType } from './tokens'
 
 import { Post, type RepostResult } from '../../types'
-import { colors, fonts, leading, spacing, typography } from '../../theme'
+import { colors } from '../../theme'
 import * as postService from '../../services/post.service'
 import { updateCachedPost, queueLike, enqueueSyncOp } from '../../db/database'
 import { isConnected } from '../../services/netinfo.service'
@@ -34,6 +34,14 @@ interface Props {
   /** Tamanho/peso dos glifos. A feed principal reforça-os sem alterar a rail. */
   iconSize?: number
   iconWeight?: FeedIconWeight
+  /**
+   * Post do Círculo. A coluna encolhe: fica o gosto, o comentário e o menu.
+   *
+   * Vem de fora e não é recalculado aqui de propósito. Quem decide o que é um
+   * momento colectivo é o `FeedItem` — é ele que troca a mídia pelo carrossel — e
+   * duas contas do mesmo em ficheiros diferentes acabam sempre por discordar.
+   */
+  isCircle?: boolean
   /** Distância ao fundo da coluna de ações. Sobrepõe o valor por defeito para
    *  a coluna assentar sobre o vídeo (que não vai até ao fundo do ecrã). */
   bottomOffset?: number
@@ -82,11 +90,13 @@ interface RailActionProps {
   entry: Animated.Value
   order: number
   reduceMotion: boolean
+  /** Desliga o encolher do toque. Só o gosto o usa — ver `burstHearts`. */
+  noPressScale?: boolean
 }
 
 function RailAction({
   label, count, selected, onPress, onLongPress, children,
-  entry, order, reduceMotion
+  entry, order, reduceMotion, noPressScale
 }: RailActionProps) {
   const scale = useRef(new Animated.Value(1)).current
   const metricY = useRef(new Animated.Value(0)).current
@@ -109,7 +119,7 @@ function RailAction({
   // ícone dava-lhe um fundo que ele não tem em repouso: aparecia uma forma nova
   // no ecrã em vez de o ícone reagir. Encolher já diz que foi tocado.
   function pressIn() {
-    if (reduceMotion) return
+    if (reduceMotion || noPressScale) return
     Animated.spring(scale, {
       toValue: 0.88,
       speed: 45,
@@ -119,7 +129,7 @@ function RailAction({
   }
 
   function pressOut() {
-    if (reduceMotion) return
+    if (reduceMotion || noPressScale) return
     Animated.spring(scale, {
       toValue: 1,
       speed: 22,
@@ -176,7 +186,7 @@ export default React.memo(function ActionBar({
   post, onCommentPress, liked: likedProp = false,
   onLikeChange, onRepostChange, commentCount: commentCountProp, bottomOffset,
   onDeleted, onEdited, onProfileBlocked, onAuthorMuted, onOptionsBlockingChange,
-  isActive = true, reduceMotion = false,
+  isActive = true, isCircle = false, reduceMotion = false,
   iconSize = DEFAULT_RAIL_ICON_SIZE, iconWeight = 'regular',
 }: Props) {
   const { bottom: safeBottom } = useSafeAreaInsets()
@@ -194,7 +204,6 @@ export default React.memo(function ActionBar({
   const [hearts,    setHearts]    = useState<HeartP[]>([])
   const heartIdRef = useRef(0)
   const railEntry = useRef(new Animated.Value(isActive ? 1 : 0)).current
-  const likePop = useRef(new Animated.Value(1)).current
   const repostSpin = useRef(new Animated.Value(0)).current
   // O "1" desenhado sobre o glifo é o MEU +1 nesta publicação — segue
   // `userRepostedVia`, não `userReposted`. Numa cópia que eu não tenha tocado o
@@ -235,16 +244,10 @@ export default React.memo(function ActionBar({
     ]).start()
   }, [isActive, railEntry, reduceMotion])
 
-  function animateLikeMagnet() {
-    if (reduceMotion) return
-    likePop.stopAnimation()
-    likePop.setValue(1)
-    Animated.sequence([
-      Animated.timing(likePop, { toValue: 0.84, duration: 70, useNativeDriver: true }),
-      Animated.spring(likePop, { toValue: 1.2, speed: 30, bounciness: 12, useNativeDriver: true }),
-      Animated.spring(likePop, { toValue: 1, speed: 24, bounciness: 4, useNativeDriver: true }),
-    ]).start()
-  }
+  // O coração encolhia para 0.84, saltava para 1.2 e voltava, e só no meio disso
+  // é que trocava de desenho — dava a ler como se o ícone se tivesse assustado
+  // antes de mudar de cor. Quem confirma o gosto é o rebentamento: dez corações
+  // a sair do sítio onde o dedo tocou. O ícone só muda de estado, sem encenar.
 
   function burstHearts() {
     if (reduceMotion) return
@@ -325,7 +328,6 @@ export default React.memo(function ActionBar({
     if (likedProp === liked) return
     setLiked(likedProp)
     if (likedProp) {
-      animateLikeMagnet()
       burstHearts()
     }
   }, [likedProp])
@@ -334,7 +336,6 @@ export default React.memo(function ActionBar({
     const was = liked; const prev = likeCount
     const optimisticCount = was ? prev - 1 : prev + 1
     setLiked(!was); setLikeCount(optimisticCount); onLikeChange?.(!was)
-    animateLikeMagnet()
     if (!was) burstHearts()
     updateCachedPost(post.id, { _count: { ...post._count, likes: optimisticCount } }).catch(() => {})
 
@@ -511,17 +512,16 @@ export default React.memo(function ActionBar({
               entry={railEntry}
               order={0}
               reduceMotion={reduceMotion}
+              noPressScale
             >
               {/* Gostado troca de desenho, não apenas de pintura. O contorno recebe
                   o peso da feed; o coração sólido fica regular para não saltar de tamanho. */}
-              <Animated.View style={{ transform: [{ scale: likePop }] }}>
-                <FeedIcon
-                  name={liked ? 'heart-solid' : 'heart'}
-                  size={iconSize}
-                  color={liked ? colors.heart : feedInk.primary}
-                  weight={liked ? 'regular' : iconWeight}
-                />
-              </Animated.View>
+              <FeedIcon
+                name={liked ? 'heart-solid' : 'heart'}
+                size={iconSize}
+                color={liked ? colors.heart : feedInk.primary}
+                weight={liked ? 'regular' : iconWeight}
+              />
               {hearts.map((h) => (
                 <Animated.View
                   key={h.id}
@@ -547,6 +547,11 @@ export default React.memo(function ActionBar({
               <FeedIcon name="chat-outline" size={iconSize} color={feedInk.primary} weight={iconWeight} />
             </RailAction>
 
+            {/* Repost e partilha não valem num post do Círculo: o que lá está
+                pertence às pessoas que o fizeram juntas, e reencaminhá-lo tira-o
+                do sítio onde essa combinação faz sentido. */}
+            {!isCircle && (
+            <>
             {/* Repost: o glifo completa uma volta; só depois nasce o "1".
                 O número vive fora da camada rodada para permanecer direito. */}
             <RailAction
@@ -597,11 +602,13 @@ export default React.memo(function ActionBar({
             <RailAction label={t.mo_share} count={fmt(shareCount)} onPress={handleShare} onLongPress={handleShareExternal} entry={railEntry} order={3} reduceMotion={reduceMotion}>
               <FeedIcon name="share" size={iconSize} color={feedInk.primary} weight={iconWeight} />
             </RailAction>
+            </>
+            )}
           </>
         )}
 
-        {/* As duas utilidades não têm contador. Vivem juntas numa unidade
-            compacta, em vez de herdarem os 15pt vazios das métricas acima. */}
+        {/* As utilidades não têm contador, mas reservam a mesma caixa vazia.
+            Assim menu, autor e acções mantêm exactamente a mesma cadência. */}
         <Animated.View
           style={[
             s.utilityCluster,
@@ -629,11 +636,14 @@ export default React.memo(function ActionBar({
             onAuthorMuted={onAuthorMuted}
             onBlockingChange={setOptionsBlocking}
             rail
-            compactRail
             triggerSize={iconSize}
             // As barras já trazem a espessura exata da referência raster.
             triggerWeight="regular"
           />
+          {/* Também sai: um momento colectivo não é a obra de um autor, e o
+              atalho para "as publicações desta pessoa" pergunta a coisa errada
+              sobre uma fotografia que várias pessoas tiraram juntas. */}
+          {!isCircle && (
           <TouchableOpacity
             style={s.utilityHit}
             onPress={() => setShowAuthorPosts(true)}
@@ -641,15 +651,19 @@ export default React.memo(function ActionBar({
             accessibilityRole="button"
             accessibilityLabel={t.feed_author_posts.replace('{name}', post.user.name.split(' ')[0])}
           >
-            <View style={s.utilityIconStage}>
-              <FeedIcon
-                name="author-posts"
-                size={iconSize}
-                color={feedInk.primary}
-                weight={iconWeight}
-              />
+            <View style={s.utilityVisual}>
+              <View style={s.utilityIconStage}>
+                <FeedIcon
+                  name="author-posts"
+                  size={iconSize}
+                  color={feedInk.primary}
+                  weight={iconWeight}
+                />
+              </View>
+              <View style={s.metricSlot} pointerEvents="none" />
             </View>
           </TouchableOpacity>
+          )}
         </Animated.View>
       </Animated.View>
 
@@ -675,36 +689,43 @@ export default React.memo(function ActionBar({
 })
 
 const s = StyleSheet.create({
-  // Alinhada com o último botão do topo: centro a 32 px da margem direita.
+  // Alinhada com o último botão do topo: centro a 32pt da margem direita.
+  // A cadência é 60pt: item de 54pt + intervalo de 6pt.
   rail: {
     position: 'absolute',
     right: 0,
-    width: 64,
+    width: feedRail.width,
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: feedRail.itemGap,
     zIndex: 20
   },
   actionHit: {
-    width: 64,
-    height: 53,
+    width: feedRail.width,
+    height: feedRail.itemHeight,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  actionSlot: { width: 64, height: 53 },
+  actionSlot: { width: feedRail.width, height: feedRail.itemHeight },
   utilityCluster: {
-    width: 64,
+    width: feedRail.width,
     alignItems: 'center',
-    gap: 0,
+    gap: feedRail.itemGap,
   },
   utilityHit: {
-    width: 64,
-    height: 44,
+    width: feedRail.width,
+    height: feedRail.itemHeight,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  utilityVisual: {
+    height: feedRail.itemHeight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: feedRail.iconToMetricGap,
+  },
   utilityIconStage: {
-    width: 44,
-    height: 44,
+    width: feedRail.iconStageWidth,
+    height: feedRail.iconStageHeight,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -713,30 +734,28 @@ const s = StyleSheet.create({
     shadowRadius: 1.8,
   },
   actionVisual: {
-    height: 53,
+    height: feedRail.itemHeight,
     alignItems: 'center',
-    gap: spacing.xxs,
+    justifyContent: 'center',
+    gap: feedRail.iconToMetricGap,
   },
   iconStage: {
-    width: 44,
-    height: 36,
+    width: feedRail.iconStageWidth,
+    height: feedRail.iconStageHeight,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'visible',
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.38, shadowRadius: 1.8
   },
   metricSlot: {
-    height: leading.meta,
+    height: feedRail.metricSlotHeight,
     alignItems: 'center',
     justifyContent: 'center',
   },
   railN: {
     ...feedTextShadow,
+    ...feedType.meta,
     color: feedInk.secondary,
-    fontFamily: fonts.regular,
-    fontSize: typography.meta,
-    lineHeight: leading.meta,
-    letterSpacing: 0,
     fontVariant: ['tabular-nums'],
   },
   repostOneWrap: {
@@ -749,11 +768,8 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   repostOne: {
+    ...feedType.badge,
     color: feedInk.primary,
-    // extraBold num contador de 11px era o peso mais alto de toda a feed.
-    fontFamily: fonts.medium,
-    fontSize: typography.badge,
-    lineHeight: leading.badge,
     textAlign: 'center',
     textShadowColor: 'rgba(0,0,0,0.38)',
     textShadowOffset: { width: 0, height: 0.5 },
@@ -764,8 +780,10 @@ const s = StyleSheet.create({
   // Centrado sobre o ícone do like (primeiro da coluna)
   burstHeart: {
     position: 'absolute',
-    top: 11,
-    left: 15,
+    top: '50%',
+    left: '50%',
+    marginTop: -feedIcon.inline / 2,
+    marginLeft: -feedIcon.inline / 2,
     zIndex: 30,
   },
 })

@@ -7,9 +7,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import { Post, Pairing } from '../../types'
-import { brandPalette, colors, fonts, leading, radius, sheet, spacing, typography } from '../../theme'
+import { brandPalette, colors, radius, sheet, spacing } from '../../theme'
 import Icon from '../../components/Icon'
-import { feedIcon, feedInk, feedLine, feedTextShadow, FEED_STROKE, RAIL_CLEARANCE } from './tokens'
+import { feedIcon, feedInk, feedLine, feedTextShadow, feedType, FEED_STROKE, RAIL_CLEARANCE } from './tokens'
 import { useT } from '../../i18n'
 import { useAuthStore } from '../../store/auth.store'
 import { useFollowStore } from '../../store/follow.store'
@@ -231,8 +231,8 @@ export default function PostInfo({
                 uri={post.user.avatar}
                 name={post.user.name}
                 avatarSize={30}
-                ringWidth={1.25}
-                gap={2.75}
+                ringWidth={1.75}
+                gap={2.25}
                 wellColor={light ? sheet.surface : colors.feedSurface}
               />
             </TouchableOpacity>
@@ -248,8 +248,8 @@ export default function PostInfo({
                   uri={post.partnerUser.avatar}
                   name={post.partnerUser.name}
                   avatarSize={24}
-                  ringWidth={1.25}
-                  gap={0.75}
+                  ringWidth={1.5}
+                  gap={0.5}
                   wellColor={light ? sheet.surface : colors.feedSurface}
                 />
               </TouchableOpacity>
@@ -285,7 +285,9 @@ export default function PostInfo({
                     <Text style={[s.username, light && s.usernameLight]} numberOfLines={1}>
                       {post.user.name}{post.partnerUser && post.partnerAccepted ? ` & ${post.partnerUser.name}` : ''}
                     </Text>
-                    {post.user.isVerified && <VerifiedBadge />}
+                    {post.user.isVerified && (
+                      <VerifiedBadge color={light ? colors.primary : feedInk.primary} />
+                    )}
                   </View>
                 </TouchableOpacity>
               )}
@@ -435,22 +437,21 @@ const s = StyleSheet.create({
   // Coluna nome → meta → pareamento, alinhada ao centro óptico do avatar
   nameCol:  { flex: 1, gap: spacing.xxs, paddingTop: spacing.xxs },
   nameLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs2 },
-  // `body`, o mesmo degrau que o nome do autor na Feed. Esteve em `secondary`,
-  // que é o degrau da legenda: nome e legenda ficavam do mesmo tamanho e a
-  // hierarquia entre quem publica e o que publicou passava a ser só o peso.
+  // Nome e legenda mantêm a mesma escala compacta; a hierarquia vem dos cortes
+  // 900 e 700, não de aumentar o nome e levantar a altura do bloco.
   nameWithBadge: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flexShrink: 1 },
   username: {
     ...feedTextShadow,
-    color: feedInk.primary, fontFamily: fonts.medium, fontSize: typography.body,
-    lineHeight: leading.body, letterSpacing: -0.2, flexShrink: 1,
+    ...feedType.author,
+    color: feedInk.primary, flexShrink: 1,
   },
 
   metaLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  metaSep:  { ...feedTextShadow, color: feedInk.muted, fontFamily: fonts.regular, fontSize: typography.meta, lineHeight: leading.meta },
+  metaSep:  { ...feedTextShadow, ...feedType.meta, color: feedInk.muted },
   metaTxt: {
     ...feedTextShadow,
-    color: feedInk.muted, fontFamily: fonts.regular, fontSize: typography.meta,
-    lineHeight: leading.meta, letterSpacing: 0.1, flexShrink: 1,
+    ...feedType.meta,
+    color: feedInk.muted, flexShrink: 1,
   },
 
   announceBadge: {
@@ -459,8 +460,8 @@ const s = StyleSheet.create({
     paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.full,
   },
   announceTxt: {
-    color: feedInk.primary, fontFamily: fonts.medium,
-    fontSize: typography.meta, lineHeight: leading.meta, letterSpacing: 0.2,
+    ...feedType.meta,
+    color: feedInk.primary,
   },
 
   // Seguir + 3 pontinhos, à direita e no topo
@@ -470,7 +471,7 @@ const s = StyleSheet.create({
   segToggle: { flexDirection: 'row', gap: spacing.md },
   segItem: { minHeight: 44, justifyContent: 'center', alignItems: 'center', paddingBottom: spacing.xs2 },
   segRow:  { flexDirection: 'row', alignItems: 'center', gap: spacing.xs2 },
-  segTxt: { fontFamily: fonts.medium, fontSize: typography.secondary, lineHeight: leading.secondary, color: sheet.inkFaint, letterSpacing: -0.08 },
+  segTxt: { ...feedType.primary, color: sheet.inkFaint },
   segTxtActive: { color: sheet.ink },
   segUnderline: { height: 2, alignSelf: 'stretch', borderRadius: radius.full, marginTop: spacing.xs, backgroundColor: 'transparent' },
   segUnderlineOn: { backgroundColor: sheet.ink },
@@ -483,12 +484,12 @@ const s = StyleSheet.create({
   pairingDot: { width: 5, height: 5, borderRadius: radius.full, backgroundColor: feedInk.primary },
   pairingRowTxt: {
     ...feedTextShadow,
-    color: feedInk.muted, fontFamily: fonts.regular, fontSize: typography.meta,
-    lineHeight: leading.meta, letterSpacing: -0.1,
+    ...feedType.meta,
+    color: feedInk.muted,
   },
 
   extBadge:     { backgroundColor: colors.primary, borderRadius: radius.full, paddingHorizontal: spacing.xs2, paddingVertical: 1 },
-  extBadgeText: { color: colors.white, fontFamily: fonts.medium, fontSize: typography.badge, lineHeight: leading.badge, letterSpacing: 0.2 },
+  extBadgeText: { ...feedType.badge, color: colors.white },
 
   statusBadge: {
     borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs,
@@ -496,23 +497,23 @@ const s = StyleSheet.create({
   },
   statusText: {
     ...feedTextShadow,
-    color: feedInk.secondary, fontFamily: fonts.regular, fontSize: typography.meta,
-    lineHeight: leading.meta, letterSpacing: 0.1,
+    ...feedType.meta,
+    color: feedInk.secondary,
   },
 
   // Legenda alinhada ao avatar; expande para baixo sem empurrar o cabeçalho
   captionWrap: { marginLeft: 46, marginRight: spacing.xs2 },
   caption:     {
     ...feedTextShadow,
-    color: feedInk.secondary, fontFamily: fonts.regular,
-    fontSize: typography.secondary, lineHeight: leading.secondary,
+    ...feedType.content,
+    color: feedInk.secondary,
   },
-  seeMore:     { color: feedInk.muted, fontFamily: fonts.regular },
+  seeMore:     { color: feedInk.muted },
 
   timer:      {
     ...feedTextShadow,
-    color: feedInk.muted, fontFamily: fonts.regular,
-    fontSize: typography.meta, lineHeight: leading.meta, letterSpacing: 0.1,
+    ...feedType.meta,
+    color: feedInk.muted,
   },
   timerDying: { color: brandPalette.purple },
 
@@ -548,15 +549,13 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   commenterInitial: {
-    color: feedInk.primary, fontSize: typography.badge, lineHeight: leading.badge, fontFamily: fonts.medium,
+    ...feedType.badge,
+    color: feedInk.primary,
   },
   commentersLabel: {
     ...feedTextShadow,
+    ...feedType.meta,
     color: feedInk.muted,
-    fontFamily: fonts.regular,
-    fontSize: typography.meta,
-    lineHeight: leading.meta,
     marginLeft: spacing.xs2,
-    letterSpacing: -0.1,
   }
 })

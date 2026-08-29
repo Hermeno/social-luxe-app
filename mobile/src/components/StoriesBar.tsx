@@ -8,6 +8,7 @@ import { StoryGroup, getFriendsStories } from '../services/story.service'
 import { AppStackParams } from '../navigation/AppNavigator'
 import { colors, fonts } from '../theme'
 import AvatarImage from './AvatarImage'
+import BrandAvatarRing from './BrandAvatarRing'
 
 type Nav = StackNavigationProp<AppStackParams>
 
@@ -52,7 +53,12 @@ export default function StoriesBar() {
         contentContainerStyle={s.list}
         ListHeaderComponent={
           <TouchableOpacity style={s.item} onPress={handleOwnPress} activeOpacity={0.8}>
-            <View style={[s.ring, myGroup ? s.ringActive : s.ringGray]}>
+            <View style={s.ring}>
+              {myGroup ? (
+                <BrandAvatarRing size={CIRCLE + 6} strokeWidth={2} style={s.ringCanvas} />
+              ) : (
+                <View style={[s.mutedRing, s.ringGray]} />
+              )}
               <View style={s.avatarWrap}>
                 <AvatarImage uri={user?.avatar} size={CIRCLE} />
                 {!myGroup && (
@@ -73,7 +79,12 @@ export default function StoriesBar() {
               onPress={() => handleGroupPress(item)}
               activeOpacity={0.8}
             >
-              <View style={[s.ring, item.hasUnviewed ? s.ringActive : s.ringViewed]}>
+              <View style={s.ring}>
+                {item.hasUnviewed ? (
+                  <BrandAvatarRing size={CIRCLE + 6} strokeWidth={2} style={s.ringCanvas} />
+                ) : (
+                  <View style={[s.mutedRing, s.ringViewed]} />
+                )}
                 <View style={s.avatarWrap}>
                   <AvatarImage uri={item.user.avatar} size={CIRCLE} />
                 </View>
@@ -100,11 +111,15 @@ const s = StyleSheet.create({
     width: CIRCLE + 6,
     height: CIRCLE + 6,
     borderRadius: (CIRCLE + 6) / 2,
-    borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ringActive: { borderColor: colors.ring },
+  ringCanvas: { position: 'absolute', top: 0, left: 0 },
+  mutedRing: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: (CIRCLE + 6) / 2,
+    borderWidth: 2,
+  },
   ringViewed: { borderColor: 'rgba(255,255,255,0.2)' },
   ringGray:   { borderColor: 'rgba(255,255,255,0.15)' },
   avatarWrap: { position: 'relative' },

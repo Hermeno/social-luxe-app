@@ -17,6 +17,7 @@ import Icon from '../../components/Icon'
 import { tabBarOccupiedHeight } from '../../components/TabBar/layout'
 import { FollowDuration } from '../../services/follow.service'
 import { getCache, setCache } from '../../db/database'
+import { useFeedStore } from '../../store/feed.store'
 import { useFollowStore } from '../../store/follow.store'
 import { isConnected } from '../../services/netinfo.service'
 import AvatarImage from '../../components/AvatarImage'
@@ -132,6 +133,7 @@ export default function SearchScreen() {
   const [results,       setResults]       = useState<UserResult[]>([])
   const [loadingSearch, setLoadingSearch] = useState(false)
   const followingIds    = useFollowStore((s) => s.followingIds)
+  const showPostInFeed  = useFeedStore((s) => s.showPostInFeed)
   const [followPending, setFollowPending] = useState<Set<string>>(new Set())
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -218,6 +220,16 @@ export default function SearchScreen() {
       })
     }
   }, [followPending])
+
+  // Tocar numa miniatura abre o post na feed principal, no mesmo caminho que o
+  // perfil, as mensagens e a folha do autor já usavam. Antes ia para o
+  // `PostViewer`, um leitor com barras de progresso que avançavam sozinhas: bom
+  // para uma sequência de um momento, errado para resultados de pesquisa, onde
+  // cada miniatura é uma escolha e não um passo de uma história.
+  const openInFeed = useCallback((post: Post) => {
+    showPostInFeed(post)
+    nav.navigate('Tabs', { screen: 'Feed' })
+  }, [nav, showPostInFeed])
 
   const isSearching = query.trim().length > 0
   // Sem pesquisa é sempre a grelha, seja qual for o âmbito guardado.
@@ -384,11 +396,8 @@ export default function SearchScreen() {
           key="grid"
           numColumns={3}
           keyExtractor={(p) => p.id}
-          renderItem={({ item, index }) => (
-            <PostCell
-              post={item}
-              onPress={() => nav.navigate('PostViewer', { posts: postList, startIndex: index })}
-            />
+          renderItem={({ item }) => (
+            <PostCell post={item} onPress={() => openInFeed(item)} />
           )}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"

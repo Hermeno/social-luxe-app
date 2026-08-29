@@ -1,11 +1,9 @@
 import React from 'react'
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
 
-import { colors, gradients, radius } from '../theme'
+import { colors, radius } from '../theme'
 import AvatarImage from './AvatarImage'
-
-const CLEAR_RING = ['transparent', 'transparent'] as const
+import BrandAvatarRing from './BrandAvatarRing'
 
 interface Props {
   uri: string | null | undefined
@@ -32,7 +30,7 @@ export default function AuthorAvatar({
   uri,
   name,
   avatarSize,
-  ringWidth = 1.5,
+  ringWidth = 2,
   gap = 2,
   ringVisible = true,
   wellColor = colors.feedSurface,
@@ -40,6 +38,7 @@ export default function AuthorAvatar({
   style,
 }: Props) {
   const outerSize = avatarSize + (ringWidth + gap) * 2
+  const wellSize = avatarSize + gap * 2
 
   return (
     <View
@@ -50,30 +49,32 @@ export default function AuthorAvatar({
         style,
       ]}
     >
-      <LinearGradient
-        colors={ringVisible ? gradients.avatarRing : CLEAR_RING}
-        start={{ x: 0.04, y: 0.08 }}
-        end={{ x: 0.96, y: 0.92 }}
-        style={[s.gradient, { padding: ringWidth }]}
+      <BrandAvatarRing
+        size={outerSize}
+        strokeWidth={ringWidth}
+        visible={ringVisible}
+        style={s.ring}
+      />
+
+      <View
+        style={[
+          s.well,
+          {
+            width: wellSize,
+            height: wellSize,
+            padding: gap,
+            backgroundColor: ringVisible ? wellColor : 'transparent',
+          },
+        ]}
       >
-        <View
-          style={[
-            s.well,
-            {
-              padding: gap,
-              backgroundColor: ringVisible ? wellColor : 'transparent',
-            },
-          ]}
-        >
-          <AvatarImage
-            uri={uri}
-            name={name}
-            size={avatarSize}
-            borderWidth={0}
-            borderColor="transparent"
-          />
-        </View>
-      </LinearGradient>
+        <AvatarImage
+          uri={uri}
+          name={name}
+          size={avatarSize}
+          borderWidth={0}
+          borderColor="transparent"
+        />
+      </View>
     </View>
   )
 }
@@ -81,13 +82,11 @@ export default function AuthorAvatar({
 const s = StyleSheet.create({
   outer: {
     borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  gradient: {
-    flex: 1,
-    borderRadius: radius.full,
-  },
+  ring: { position: 'absolute', top: 0, left: 0 },
   well: {
-    flex: 1,
     borderRadius: radius.full,
     overflow: 'hidden',
   },

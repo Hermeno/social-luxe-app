@@ -352,8 +352,8 @@ export default memo(function AuthorPostsModal({ author, onClose }: Props) {
               uri={author.avatar}
               name={author.name}
               avatarSize={46}
-              ringWidth={1.5}
-              gap={1.5}
+              ringWidth={2}
+              gap={1}
               wellColor={sheetInk.surface}
             />
             <View style={s.identityCopy}>
@@ -496,7 +496,7 @@ const s = StyleSheet.create({
   identityCopy: { flex: 1, minWidth: 0 },
   identityName: {
     color: sheetInk.ink,
-    fontFamily: fonts.medium,
+    fontFamily: fonts.regular,
     fontSize: typography.section,
     lineHeight: leading.section,
     letterSpacing: -0.35,
@@ -511,7 +511,7 @@ const s = StyleSheet.create({
   postStat: { minWidth: 66, alignItems: 'center' },
   postStatValue: {
     color: sheetInk.ink,
-    fontFamily: fonts.medium,
+    fontFamily: fonts.regular,
     fontSize: typography.section,
     lineHeight: leading.section,
     fontVariant: ['tabular-nums'],
@@ -564,7 +564,7 @@ const s = StyleSheet.create({
   tileFallback: { alignItems: 'center', justifyContent: 'center' },
   tileText: {
     color: colors.white,
-    fontFamily: fonts.medium,
+    fontFamily: fonts.regular,
     fontSize: typography.meta,
     lineHeight: leading.meta,
     textAlign: 'center',
@@ -639,7 +639,7 @@ const s = StyleSheet.create({
   },
   stateText: {
     color: sheetInk.inkMuted,
-    fontFamily: fonts.medium,
+    fontFamily: fonts.regular,
     fontSize: typography.secondary,
     lineHeight: leading.secondary,
     textAlign: 'center',
@@ -654,7 +654,7 @@ const s = StyleSheet.create({
   },
   retryText: {
     color: colors.white,
-    fontFamily: fonts.medium,
+    fontFamily: fonts.regular,
     fontSize: typography.secondary,
     lineHeight: leading.secondary,
   },

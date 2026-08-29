@@ -1,17 +1,15 @@
-import React, { memo, useEffect, useMemo } from 'react'
+import React, { memo } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity,
-  ScrollView, StyleSheet, useWindowDimensions,
+  ScrollView, StyleSheet,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import Icon from '../../components/Icon'
 import AvatarImage from '../../components/AvatarImage'
 import Wordmark from '../../components/Wordmark'
-import { colors, fonts, leading, radius, sheet, spacing, typography } from '../../theme'
-import { feedIcon, feedInk, feedLine, feedTextShadow, FEED_STROKE } from './tokens'
-import { useAuthStore } from '../../store/auth.store'
-import { type SocialPreviewUser, useSocialPreviewStore } from '../../store/socialPreview.store'
+import { colors, radius, sheet, spacing } from '../../theme'
+import { feedIcon, feedInk, feedLine, feedTextShadow, feedType, FEED_STROKE } from './tokens'
 import { useT } from '../../i18n'
 import { Post } from '../../types'
 
@@ -21,51 +19,6 @@ export interface FeedUserGroup {
 }
 
 const SEARCH_AVATAR_SIZE = 46
-const FRIEND_AVATAR_SIZE = 18
-const FRIEND_OVERLAP = 6
-
-function uniquePeople(...groups: SocialPreviewUser[][]): SocialPreviewUser[] {
-  const seen = new Set<string>()
-  const people: SocialPreviewUser[] = []
-  groups.flat().forEach((person) => {
-    if (!person?.id || seen.has(person.id)) return
-    seen.add(person.id)
-    people.push(person)
-  })
-  return people.slice(0, 3)
-}
-
-function FriendFaces({ people }: { people: SocialPreviewUser[] }) {
-  if (people.length === 0) return null
-
-  return (
-    <View
-      style={s.friendFaces}
-      pointerEvents="none"
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-    >
-      {people.map((person, index) => (
-        <View
-          key={person.id}
-          style={[
-            s.friendFace,
-            index > 0 && { marginLeft: -FRIEND_OVERLAP },
-            { zIndex: people.length - index },
-          ]}
-        >
-          <AvatarImage
-            uri={person.avatar}
-            name={person.name}
-            size={FRIEND_AVATAR_SIZE}
-            borderWidth={0}
-            borderColor="transparent"
-          />
-        </View>
-      ))}
-    </View>
-  )
-}
 
 export interface FeedHeaderProps {
   filteredGroups: FeedUserGroup[]
@@ -79,7 +32,6 @@ export interface FeedHeaderProps {
   onBubblePress: (group: FeedUserGroup) => void
   onCirclePress: () => void
   onRestoreNavigation: () => void
-  onRelationPress: (mode: 'following' | 'followers') => void
 }
 
 export default memo(function FeedHeader({
@@ -94,30 +46,9 @@ export default memo(function FeedHeader({
   onBubblePress,
   onCirclePress,
   onRestoreNavigation,
-  onRelationPress,
 }: FeedHeaderProps) {
   const { top } = useSafeAreaInsets()
-  const { width } = useWindowDimensions()
   const t = useT()
-  const currentUser = useAuthStore((state) => state.user)
-  const followers = useSocialPreviewStore((state) => state.followers)
-  const following = useSocialPreviewStore((state) => state.following)
-  const loadSocialPreview = useSocialPreviewStore((state) => state.load)
-  // As caras eram `uniquePeople(following, followers)` — uma mistura das duas
-  // listas. Enquanto não tinham legenda, misturar não custava nada; a partir do
-  // momento em que uma palavra as descreve, tem de ser verdade. Por isso a fonte
-  // passou a ser uma lista de cada vez: quem segues, se segues alguém; senão,
-  // quem te segue. A palavra por baixo diz sempre qual das duas está ali.
-  const relation: 'following' | 'followers' = following.length > 0 ? 'following' : 'followers'
-  const relationPeople = relation === 'following' ? following : followers
-  const friends = useMemo(() => uniquePeople(relationPeople), [relationPeople])
-  // Em ecrãs compactos, duas caras preservam a história social sem apertar
-  // a assinatura nem truncar o CTA. A partir de 360pt cabem as três.
-  const visibleFriends = width < 360 ? friends.slice(0, 2) : friends
-
-  useEffect(() => {
-    if (currentUser?.id) loadSocialPreview(currentUser.id).catch(() => {})
-  }, [currentUser?.id, loadSocialPreview])
 
   if (searchMode) {
     return (
@@ -214,7 +145,7 @@ export default memo(function FeedHeader({
   return (
     <View style={[s.topRoot, { height: top + 60 }]} pointerEvents="box-none">
       <View style={[s.topRow, { marginTop: top + 4 }]} pointerEvents="box-none">
-        <View style={s.restoreSlot}>
+        <View style={s.brandGroup} pointerEvents="box-none">
           {immersive && (
             <TouchableOpacity
               style={s.restoreButton}
@@ -227,35 +158,13 @@ export default memo(function FeedHeader({
               <Icon name="arrow-left" size={feedIcon.control} color={feedInk.primary} strokeWidth={FEED_STROKE} absoluteStrokeWidth />
             </TouchableOpacity>
           )}
+
+          <View style={s.topInkShadow} pointerEvents="none">
+            <Wordmark height={22} color={feedInk.primary} />
+          </View>
         </View>
 
-        <View style={s.topInkShadow} pointerEvents="none">
-          <Wordmark height={22} color={feedInk.primary} />
-        </View>
-
-        {/* As caras estavam dentro do botão Criar, sem nada que dissesse quem
-            eram: liam-se como decoração do botão e tocar nelas abria a câmara.
-            Agora são um alvo próprio, com a palavra ao lado a dizer o que estás
-            a ver — e levam à lista de onde saíram.
-            A palavra vem primeiro e as caras a seguir: lê-se "Seguindo: estes",
-            que é a ordem em que a frase faz sentido. */}
         <View style={s.topActions} pointerEvents="box-none">
-          {visibleFriends.length > 0 && (
-            <TouchableOpacity
-              style={s.relation}
-              onPress={() => onRelationPress(relation)}
-              activeOpacity={0.72}
-              hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-              accessibilityRole="button"
-              accessibilityLabel={relation === 'following' ? t.following : t.followers}
-            >
-              <Text style={s.relationLabel} numberOfLines={1}>
-                {relation === 'following' ? t.following : t.followers}
-              </Text>
-              <FriendFaces people={visibleFriends} />
-            </TouchableOpacity>
-          )}
-
           <TouchableOpacity
             style={s.circleButton}
             onPress={onCirclePress}
@@ -264,14 +173,7 @@ export default memo(function FeedHeader({
             accessibilityRole="button"
             accessibilityLabel={circleInvite ? `${t.feed_create}, ${t.pending}` : t.feed_create}
           >
-            {/* Um `+` e a palavra, e nada mais. O círculo com o `+` em emblema
-                dizia duas coisas ao mesmo tempo — que era um círculo e que se
-                acrescentava — e o Círculo passou a ter separador próprio na
-                navegação de baixo. Aqui ficou só o que este botão faz: criar. */}
             <View style={s.circlePill}>
-              <View style={s.topInkShadow}>
-                <Icon name="plus" size={14} color={feedInk.primary} strokeWidth={1.5} absoluteStrokeWidth />
-              </View>
               <Text style={s.circleButtonText} numberOfLines={1}>{t.feed_create}</Text>
             </View>
 
@@ -320,31 +222,23 @@ const s = StyleSheet.create({
     paddingHorizontal: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
-    // Centrado como um grupo, mas com três distâncias diferentes — é o que diz
-    // ao olho o que pertence a quê:
+    // Duas âncoras estáveis: voltar/assinatura à esquerda e Criar à direita.
+    // Sem conteúdo variável no meio, nenhuma largura volta a deslocar o logo.
     //
-    //   assinatura  ──24──  [ caras ─12─ Criar ]
-    //                          └ rótulo ─4─ rostos ┘
+    //   [ voltar ─8─ assinatura ]  ── flex ──  [ Criar ]
     //
-    // 24 separa a assinatura das acções: são coisas de natureza diferente e a
-    // distância tem de o dizer. 12 separa as caras do Criar, que também não são
-    // a mesma coisa. 4 cola o rótulo aos rostos, que são.
-    justifyContent: 'center',
-    gap: spacing.lg,
-  },
-  topActions: {
-    flexShrink: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: spacing.sm2,
   },
-  restoreSlot: {
-    position: 'absolute',
-    left: spacing.md,
-    top: 0,
-    bottom: 0,
-    width: 36,
-    justifyContent: 'center',
+  brandGroup: {
+    flexShrink: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  topActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   restoreButton: {
     width: 36,
@@ -362,63 +256,29 @@ const s = StyleSheet.create({
     shadowOpacity: 0.36,
     shadowRadius: 2,
   },
-  // A fila inteira: caras à esquerda, cápsula à direita. Sem fio — o fio é da
-  // cápsula, para as caras ficarem soltas sobre a mídia em vez de emolduradas.
-  relation: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    // Não encolhe: quem cede largura quando o ecrã aperta é o rótulo do Criar,
-    // que já corta com reticências. Uma legenda cortada a meio não diz nada.
-    flexShrink: 0,
-  },
-  relationLabel: {
-    ...feedTextShadow,
-    color: feedInk.muted,
-    fontFamily: fonts.medium,
-    fontSize: typography.meta,
-    lineHeight: leading.meta,
-    letterSpacing: -0.1,
-  },
   circleButton: {
-    flexShrink: 1,
+    // Dois módulos tácteis de 44pt: cresce sem virar o elemento dominante.
+    width: 88,
     height: 36,
-    maxWidth: 168,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs2,
     overflow: 'visible',
   },
   // Só o botão do Círculo leva o contorno.
   circlePill: {
     ...outline,
-    flexShrink: 1,
+    width: '100%',
     // 32 de desenho dentro de uma fila de 36: o `hitSlop` devolve os 44 de área
     // tátil. A cápsula fica menor que a altura da linha e lê-se como botão.
     height: 30,
-    paddingLeft: spacing.xs2,
-    paddingRight: spacing.sm,
-    flexDirection: 'row',
+    paddingHorizontal: spacing.md,
     alignItems: 'center',
-    gap: spacing.xs,
-  },
-  friendFaces: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  friendFace: {
-    width: FRIEND_AVATAR_SIZE,
-    height: FRIEND_AVATAR_SIZE,
-    borderRadius: radius.full,
-    overflow: 'hidden',
+    justifyContent: 'center',
   },
   circleButtonText: {
-    flexShrink: 1,
+    // Sem tipo local: Criar é um controlo primário como Seguir e Get Started.
+    ...feedType.primary,
     color: feedInk.primary,
-    fontFamily: fonts.regular,
-    fontSize: 12,
-    lineHeight: 16,
-    letterSpacing: 0,
     ...feedTextShadow,
   },
   inviteBadge: {
@@ -468,10 +328,8 @@ const s = StyleSheet.create({
     flex: 1,
     height: 48,
     padding: 0,
+    ...feedType.primary,
     color: sheet.ink,
-    fontFamily: fonts.regular,
-    fontSize: typography.body,
-    letterSpacing: -0.25,
   },
   clearSearch: {
     width: 26,
@@ -486,11 +344,8 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   cancelText: {
+    ...feedType.primary,
     color: sheet.ink,
-    fontFamily: fonts.regular,
-    fontSize: typography.secondary,
-    lineHeight: leading.secondary,
-    letterSpacing: -0.15,
   },
   peopleScroll: { flexGrow: 0 },
   peopleContent: {
@@ -514,15 +369,12 @@ const s = StyleSheet.create({
   },
   personName: {
     maxWidth: SEARCH_AVATAR_SIZE + 14,
+    ...feedType.meta,
     color: sheet.inkMuted,
-    fontFamily: fonts.regular,
-    fontSize: typography.meta,
-    lineHeight: leading.meta,
     textAlign: 'center',
   },
   personNameActive: {
     color: sheet.ink,
-    fontFamily: fonts.regular,
   },
   personMarker: {
     width: 12,
@@ -538,9 +390,7 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   emptySearchText: {
+    ...feedType.primary,
     color: sheet.inkMuted,
-    fontFamily: fonts.regular,
-    fontSize: typography.secondary,
-    lineHeight: leading.secondary,
   },
 })

@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import FeedIcon, { type FeedIconWeight } from '../../components/FeedIcon'
 import Icon, { type IconName } from '../../components/Icon'
-import { feedIcon, feedInk, FEED_STROKE } from './tokens'
+import { feedIcon, feedInk, feedRail, FEED_STROKE } from './tokens'
 import { confirm } from '../../components/confirm'
 import { API_BASE } from '../../config'
 import { deleteCachedPostsByUser } from '../../db/database'
@@ -36,7 +36,6 @@ interface Props {
   onAuthorMuted?: (userId: string) => void
   onBlockingChange?: (open: boolean) => void
   rail?: boolean
-  compactRail?: boolean
   triggerSize?: number
   triggerWeight?: FeedIconWeight
 }
@@ -152,7 +151,7 @@ function resolveMedia(url: string): string {
 
 export default function PostOptionsMenu({
   post, onDeleted, onEdited, onProfileBlocked, onAuthorMuted, onBlockingChange,
-  rail = false, compactRail = false, triggerSize = 25, triggerWeight = 'regular',
+  rail = false, triggerSize = 25, triggerWeight = 'regular',
 }: Props) {
   const { bottom: safeBottom } = useSafeAreaInsets()
   const t = useT()
@@ -339,17 +338,18 @@ export default function PostOptionsMenu({
   return (
     <>
       <TouchableOpacity
-        style={[s.trigger, rail && s.triggerRail, compactRail && s.triggerRailCompact]}
+        style={[s.trigger, rail && s.triggerRail]}
         onPress={openOptionsMenu}
         activeOpacity={0.75}
-        hitSlop={{ top: 9, bottom: 9, left: 9, right: 9 }}
+        // Na rail, a caixa já mede 64×54. Aumentá-la mais 9pt invadia os
+        // alvos vizinhos e fazia duas acções disputarem o mesmo toque.
+        hitSlop={rail ? undefined : { top: 9, bottom: 9, left: 9, right: 9 }}
         accessibilityRole="button"
         accessibilityLabel={t.feed_options_title}
       >
         <View style={[
           s.triggerIconStage,
           rail && s.triggerIconStageRail,
-          compactRail && s.triggerIconStageRailCompact,
         ]}>
           <FeedIcon
             name="option"
@@ -358,7 +358,7 @@ export default function PostOptionsMenu({
             weight={triggerWeight}
           />
         </View>
-        {rail && !compactRail && <View style={s.triggerMetricSlot} pointerEvents="none" />}
+        {rail && <View style={s.triggerMetricSlot} pointerEvents="none" />}
       </TouchableOpacity>
 
       <Modal
@@ -581,16 +581,11 @@ const s = StyleSheet.create({
     shadowRadius: 1.8,
   },
   triggerRail: {
-    width: 64,
-    height: 53,
+    width: feedRail.width,
+    height: feedRail.itemHeight,
     borderRadius: 0,
-    justifyContent: 'flex-start',
-    gap: spacing.xxs,
-  },
-  triggerRailCompact: {
-    height: 44,
     justifyContent: 'center',
-    gap: 0,
+    gap: feedRail.iconToMetricGap,
   },
   triggerIconStage: {
     width: 34,
@@ -599,13 +594,10 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
   triggerIconStageRail: {
-    width: 44,
-    height: 36,
+    width: feedRail.iconStageWidth,
+    height: feedRail.iconStageHeight,
   },
-  triggerIconStageRailCompact: {
-    height: 44,
-  },
-  triggerMetricSlot: { height: leading.meta },
+  triggerMetricSlot: { height: feedRail.metricSlotHeight },
   backdrop: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -646,7 +638,7 @@ const s = StyleSheet.create({
   },
   sheetTitle: {
     color: colors.gray800,
-    fontFamily: fonts.medium,
+    fontFamily: fonts.regular,
     fontSize: typography.section,
     lineHeight: leading.section,
     letterSpacing: -0.35,
@@ -700,7 +692,7 @@ const s = StyleSheet.create({
     paddingTop: spacing.sm2,
     paddingBottom: spacing.xs,
     color: colors.gray500,
-    fontFamily: fonts.medium,
+    fontFamily: fonts.regular,
     fontSize: typography.meta,
     lineHeight: leading.meta,
     letterSpacing: 1.1,

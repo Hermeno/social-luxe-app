@@ -40,6 +40,11 @@ interface FeedStore {
   // é dela que saem `videoBottom`, `overlayBottom` e a coluna de acções.
   immersive: boolean
   setImmersive: (value: boolean) => void
+  // A pausa editorial do Círculo troca a navegação inferior por um único CTA.
+  // O pager vive dentro da Feed e a TabBar fora dela, por isso este é o ponto
+  // comum mínimo entre os dois — não guarda conteúdo nem estado de navegação.
+  feedInviteActive: boolean
+  setFeedInviteActive: (value: boolean) => void
   reset: () => void
 }
 
@@ -54,6 +59,7 @@ const initialFeedState = {
   activeCommentTarget: null,
   requestedCommentPostId: null,
   immersive: false,
+  feedInviteActive: false,
 } satisfies Pick<
   FeedStore,
   | 'pendingPost'
@@ -66,6 +72,7 @@ const initialFeedState = {
   | 'activeCommentTarget'
   | 'requestedCommentPostId'
   | 'immersive'
+  | 'feedInviteActive'
 >
 
 export const useFeedStore = create<FeedStore>((set) => ({
@@ -82,6 +89,7 @@ export const useFeedStore = create<FeedStore>((set) => ({
   bumpHomeTap:      ()      => set((s) => ({ homeTap: s.homeTap + 1 })),
   setActiveCommentTarget: (target) => set({ activeCommentTarget: target }),
   setImmersive: (value) => set({ immersive: value }),
+  setFeedInviteActive: (value) => set({ feedInviteActive: value }),
   requestComments: (postId) => set({ requestedCommentPostId: postId }),
   clearCommentRequest: () => set({ requestedCommentPostId: null }),
   reset: () => set(initialFeedState),

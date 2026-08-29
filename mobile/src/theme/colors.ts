@@ -1,16 +1,16 @@
 /**
- * Paleta cromática oficial.
+ * Assinatura cromática oficial da Luxey.
  *
- * Os cinco pontos foram amostrados da imagem de referência adicionada em
- * 27/08/2026. Nada fora desta faixa azul → violeta → magenta deve entrar na
- * interface. Preto, branco e cinzas continuam a formar a base neutra.
+ * Os cinco pontos foram amostrados da referência: azul à esquerda, violeta no
+ * centro e magenta à direita. É uma progressão linear — não um espectro de oito
+ * cores — e fica reservada aos anéis de identidade.
  */
 export const brandPalette = {
   blue:    '#2F49FD',
-  indigo:  '#5948F9',
+  indigo:  '#4F4AFB',
   violet:  '#7A47F5',
-  purple:  '#9C45EE',
-  magenta: '#C246E6',
+  purple:  '#A544ED',
+  magenta: '#C846E2',
   // Sem `as const`: com ele cada valor ganhava o seu próprio tipo literal e um
   // `useState(brandPalette.blue)` passava a só aceitar `'#2F49FD'` — o ecrã de
   // Aparência, que guarda o acento escolhido, deixava de compilar.
@@ -23,7 +23,9 @@ export const colors = {
   primaryMid:   '#1A1A1A',
   primaryLight: '#D1D1D6',
   secondary:    '#555555',
-  accent:       brandPalette.blue,
+  // Violeta é o ponto sólido da assinatura usado por controlos; a progressão
+  // completa pertence aos anéis.
+  accent:       brandPalette.violet,
 
   black:        '#000000',
   white:        '#FFFFFF',
@@ -57,9 +59,9 @@ export const colors = {
   gray800: '#1A1A1A',   // texto principal — preto nítido (era #333, parecia mole)
   dark:    '#000000',
 
-  // Anéis à volta de avatares. Preto suave, nunca carmim: o anel emoldura o
-  // rosto em vez de competir com ele. O carmim fica para acções.
-  ring:         'rgba(0,0,0,0.55)',
+  // Fallback sólido para contextos que não conseguem desenhar o espectro. Os
+  // anéis de avatar reais usam `gradients.avatarRing`.
+  ring:         brandPalette.violet,
   ringMuted:    'rgba(0,0,0,0.12)',   // quem não publicou
 
   overlay:      'rgba(0,0,0,0.4)',
@@ -112,8 +114,17 @@ export const sheet = {
 
 export const gradients = {
   brand:      [brandPalette.blue, brandPalette.indigo, brandPalette.violet, brandPalette.purple, brandPalette.magenta] as const,
-  /** Único gradiente permitido em anéis de autor. */
-  avatarRing: [brandPalette.blue, brandPalette.indigo, brandPalette.violet, brandPalette.purple, brandPalette.magenta] as const,
+  /**
+   * Anel oficial: a ordem acompanha a referência da esquerda para a direita.
+   * `BrandAvatarRing` aplica estes pontos num gradiente linear horizontal.
+   */
+  avatarRing: [
+    brandPalette.blue,
+    brandPalette.indigo,
+    brandPalette.violet,
+    brandPalette.purple,
+    brandPalette.magenta,
+  ] as const,
   feedBottom: ['transparent', 'rgba(0,0,0,0.92)'] as const,
   // O véu da feed (`feedVeil`/`feedVeilStops`) viveu aqui com vinte linhas de
   // raciocínio e zero utilizações: o scrim foi removido por decisão de produto —
