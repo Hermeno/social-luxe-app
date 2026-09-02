@@ -3,6 +3,7 @@ import { Image, StyleSheet } from 'react-native'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { Post } from '../../types'
 import { API_BASE } from '../../config'
+import { configureVideoPlayer, videoSource as buildVideoSource } from '../../utils/video'
 
 
 function resolveMedia(url: string) {
@@ -17,8 +18,12 @@ interface Props {
 export default function PostMedia({ post, isActive }: Props) {
   const uri    = resolveMedia(post.mediaUrl ?? '')
   const player = useVideoPlayer(
-    post.mediaType === 'VIDEO' ? { uri } : null,
-    (p) => { p.loop = true; p.muted = false },
+    post.mediaType === 'VIDEO' && isActive ? buildVideoSource(post.mediaUrl) : null,
+    (p) => {
+      configureVideoPlayer(p)
+      p.loop = true
+      p.muted = false
+    },
   )
 
   useEffect(() => {

@@ -2,15 +2,16 @@ import React, { useRef, useEffect } from 'react'
 import {
   View,
   Text,
-  Image,
   TouchableOpacity,
   StyleSheet,
   Animated,
 } from 'react-native'
+import { Image } from 'expo-image'
 import { Post } from '../types'
 import { colors, fonts, spacing, radius } from '../theme'
 import { useT } from '../i18n'
-import { API_BASE } from '../config'
+import { resolveMediaUrl } from '../utils/media'
+import { videoPosterUrl } from '../utils/video'
 
 interface Props {
   post: Post
@@ -30,9 +31,9 @@ export default function FlashbackCard({ post, onDismiss }: Props) {
     }).start()
   }, [])
 
-  const thumbUri = post.mediaUrl ?? ''.startsWith('http')
-    ? post.mediaUrl ?? ''
-    : `${API_BASE}${post.mediaUrl ?? ''}`
+  const thumbUri = post.mediaType === 'VIDEO'
+    ? videoPosterUrl(post.mediaUrl, post.thumbnailUrl, 320)
+    : resolveMediaUrl(post.thumbnailUrl || post.mediaUrl)
 
   const caption = post.caption ?? ''
   const displayed = caption.length > 60 ? caption.slice(0, 60) + '…' : caption
@@ -45,7 +46,7 @@ export default function FlashbackCard({ post, onDismiss }: Props) {
       </View>
 
       <View style={s.body}>
-        <Image source={{ uri: thumbUri }} style={s.thumb} resizeMode="cover" />
+        <Image source={{ uri: thumbUri }} style={s.thumb} contentFit="cover" cachePolicy="disk" />
         {displayed.length > 0 && (
           <Text style={s.caption} numberOfLines={2}>{displayed}</Text>
         )}

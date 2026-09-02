@@ -1,0 +1,704 @@
+[
+  {
+    "screen": "home",
+    "label": "Procurar",
+    "family": "icons",
+    "name": "search",
+    "size": 24,
+    "viewBox": "0 0 24 24",
+    "nativeViewBox": "0 0 24 24",
+    "ink": {
+      "x": 1.88,
+      "y": 2.38,
+      "w": 20.25,
+      "h": 19.25
+    },
+    "stroke": 1.88,
+    "declared": "1.9 abs",
+    "where": "HomeScreen/HomeHeader.tsx:46"
+  },
+  {
+    "screen": "home",
+    "label": "Criar",
+    "family": "icons",
+    "name": "plus",
+    "size": 20,
+    "viewBox": "0 0 24 24",
+    "nativeViewBox": "0 0 24 24",
+    "ink": {
+      "x": 2.5,
+      "y": 2.5,
+      "w": 15,
+      "h": 15
+    },
+    "stroke": 1.91,
+    "declared": "2 abs",
+    "where": "HomeScreen/HomeHeader.tsx:56"
+  },
+  {
+    "screen": "home",
+    "label": "Gostar · repouso",
+    "family": "feed-icons",
+    "name": "heart",
+    "size": 28,
+    "viewBox": "0.447 0.941 20.028 20.028",
+    "nativeViewBox": "0 0 21 21",
+    "ink": {
+      "x": 3.06,
+      "y": 4,
+      "w": 21.88,
+      "h": 20
+    },
+    "stroke": 1.69,
+    "declared": "pintura de origem",
+    "where": "HomeScreen/HomeFeedItem.tsx:200"
+  },
+  {
+    "screen": "home",
+    "label": "Gostar · gostado",
+    "family": "feed-icons",
+    "name": "heart-solid",
+    "size": 28,
+    "viewBox": "0.447 0.941 20.028 20.028",
+    "nativeViewBox": "0 0 21 21",
+    "ink": {
+      "x": 3.06,
+      "y": 4,
+      "w": 21.88,
+      "h": 20
+    },
+    "stroke": null,
+    "declared": "pintura de origem",
+    "where": "HomeScreen/HomeFeedItem.tsx:200"
+  },
+  {
+    "screen": "home",
+    "label": "Comentar",
+    "family": "feed-icons",
+    "name": "chat-outline",
+    "size": 28,
+    "viewBox": "-2.115 -2.12 19.231 19.231",
+    "nativeViewBox": "0 0 15 15",
+    "ink": {
+      "x": 2.94,
+      "y": 2.94,
+      "w": 22.13,
+      "h": 22.13
+    },
+    "stroke": 1.7,
+    "declared": "boostPx 0.26",
+    "where": "HomeScreen/HomeFeedItem.tsx:238"
+  },
+  {
+    "screen": "home",
+    "label": "Repostar",
+    "family": "feed-icons",
+    "name": "repost",
+    "size": 28,
+    "viewBox": "-0.821 -0.821 25.641 25.641",
+    "nativeViewBox": "0 0 24 24",
+    "ink": {
+      "x": 3,
+      "y": 3.31,
+      "w": 22,
+      "h": 21.38
+    },
+    "stroke": 1.69,
+    "declared": "boostPx 0.08",
+    "where": "HomeScreen/HomeFeedItem.tsx:253"
+  },
+  {
+    "screen": "home",
+    "label": "Partilhar",
+    "family": "feed-icons",
+    "name": "share",
+    "size": 28,
+    "viewBox": "0.462 0.962 23.077 23.077",
+    "nativeViewBox": "0 0 24 24",
+    "ink": {
+      "x": 2.81,
+      "y": 4.63,
+      "w": 22.38,
+      "h": 18.75
+    },
+    "stroke": 1.7,
+    "declared": "boostPx 0.51",
+    "where": "HomeScreen/HomeFeedItem.tsx:272"
+  },
+  {
+    "screen": "home",
+    "label": "Mais",
+    "family": "feed-icons",
+    "name": "option",
+    "size": 28,
+    "viewBox": "-3.551 -3.552 39.103 39.103",
+    "nativeViewBox": "0 0 32 32",
+    "ink": {
+      "x": 3.06,
+      "y": 7.25,
+      "w": 21.88,
+      "h": 13.5
+    },
+    "stroke": 1.7,
+    "declared": "pintura de origem",
+    "where": "FeedScreen/PostOptionsMenu.tsx:356 · triggerSize de HomeFeedItem.tsx:281"
+  },
+  {
+    "screen": "home",
+    "label": "Verificado",
+    "family": "icons",
+    "name": "verified",
+    "size": 14,
+    "viewBox": "0 0 24 24",
+    "nativeViewBox": "0 0 24 24",
+    "ink": {
+      "x": 1.13,
+      "y": 1.13,
+      "w": 11.75,
+      "h": 11.75
+    },
+    "stroke": 3.34,
+    "declared": "1.75 na caixa",
+    "where": "components/VerifiedBadge.tsx:28"
+  },
+  {
+    "screen": "home",
+    "label": "Reproduzir",
+    "family": "icons",
+    "name": "play",
+    "size": 26,
+    "viewBox": "0 0 24 24",
+    "nativeViewBox": "0 0 24 24",
+    "ink": {
+      "x": 9,
+      "y": 5.56,
+      "w": 12.31,
+      "h": 14.88
+    },
+    "stroke": 4.14,
+    "declared": "1.9 abs",
+    "where": "HomeScreen/HomeFeedItem.tsx:355"
+  },
+  {
+    "screen": "home",
+    "label": "Capturado juntos",
+    "family": "icons",
+    "name": "users",
+    "size": 22,
+    "viewBox": "0 0 24 24",
+    "nativeViewBox": "0 0 24 24",
+    "ink": {
+      "x": 1.69,
+      "y": 3.19,
+      "w": 18.63,
+      "h": 16.56
+    },
+    "stroke": 1.63,
+    "declared": "1.7 abs",
+    "where": "HomeScreen/HomeFeedItem.tsx:388"
+  },
+  {
+    "screen": "reels",
+    "label": "Gostar · repouso",
+    "family": "feed-icons",
+    "name": "heart",
+    "size": 32,
+    "viewBox": "0.447 0.941 20.028 20.028",
+    "nativeViewBox": "0 0 21 21",
+    "ink": {
+      "x": 3.5,
+      "y": 4.56,
+      "w": 25,
+      "h": 22.88
+    },
+    "stroke": 1.94,
+    "declared": "pintura de origem",
+    "where": "FeedScreen/ActionBar.tsx:519"
+  },
+  {
+    "screen": "reels",
+    "label": "Gostar · gostado",
+    "family": "feed-icons",
+    "name": "heart-solid",
+    "size": 32,
+    "viewBox": "0.447 0.941 20.028 20.028",
+    "nativeViewBox": "0 0 21 21",
+    "ink": {
+      "x": 3.5,
+      "y": 4.56,
+      "w": 25,
+      "h": 22.88
+    },
+    "stroke": null,
+    "declared": "pintura de origem",
+    "where": "FeedScreen/ActionBar.tsx:519"
+  },
+  {
+    "screen": "reels",
+    "label": "Coração da explosão",
+    "family": "feed-icons",
+    "name": "heart-solid",
+    "size": 12,
+    "viewBox": "0.447 0.941 20.028 20.028",
+    "nativeViewBox": "0 0 21 21",
+    "ink": {
+      "x": 1.31,
+      "y": 1.69,
+      "w": 9.38,
+      "h": 8.63
+    },
+    "stroke": null,
+    "declared": "pintura de origem",
+    "where": "FeedScreen/ActionBar.tsx:531"
+  },
+  {
+    "screen": "reels",
+    "label": "Comentar",
+    "family": "feed-icons",
+    "name": "chat-outline",
+    "size": 32,
+    "viewBox": "-2.115 -2.12 19.231 19.231",
+    "nativeViewBox": "0 0 15 15",
+    "ink": {
+      "x": 3.31,
+      "y": 3.38,
+      "w": 25.38,
+      "h": 25.25
+    },
+    "stroke": 1.94,
+    "declared": "boostPx 0.297",
+    "where": "FeedScreen/ActionBar.tsx:543"
+  },
+  {
+    "screen": "reels",
+    "label": "Repostar",
+    "family": "feed-icons",
+    "name": "repost",
+    "size": 32,
+    "viewBox": "-0.821 -0.821 25.641 25.641",
+    "nativeViewBox": "0 0 24 24",
+    "ink": {
+      "x": 3.44,
+      "y": 3.75,
+      "w": 25.13,
+      "h": 24.5
+    },
+    "stroke": 1.94,
+    "declared": "boostPx 0.091",
+    "where": "FeedScreen/ActionBar.tsx:574"
+  },
+  {
+    "screen": "reels",
+    "label": "Partilhar",
+    "family": "feed-icons",
+    "name": "share",
+    "size": 32,
+    "viewBox": "0.462 0.962 23.077 23.077",
+    "nativeViewBox": "0 0 24 24",
+    "ink": {
+      "x": 3.19,
+      "y": 5.31,
+      "w": 25.63,
+      "h": 21.38
+    },
+    "stroke": 1.94,
+    "declared": "boostPx 0.583",
+    "where": "FeedScreen/ActionBar.tsx:599"
+  },
+  {
+    "screen": "reels",
+    "label": "Publicações do autor",
+    "family": "feed-icons",
+    "name": "author-posts",
+    "size": 32,
+    "viewBox": "-0.611 -0.77 32.823 32.823",
+    "nativeViewBox": "0 0 32 32",
+    "ink": {
+      "x": 3.5,
+      "y": 3.94,
+      "w": 25,
+      "h": 24.13
+    },
+    "stroke": 1.97,
+    "declared": "strokePx 1.943",
+    "where": "FeedScreen/ActionBar.tsx:654"
+  },
+  {
+    "screen": "reels",
+    "label": "Mais",
+    "family": "feed-icons",
+    "name": "option",
+    "size": 32,
+    "viewBox": "-3.551 -3.552 39.103 39.103",
+    "nativeViewBox": "0 0 32 32",
+    "ink": {
+      "x": 3.5,
+      "y": 8.31,
+      "w": 25,
+      "h": 15.38
+    },
+    "stroke": 1.94,
+    "declared": "pintura de origem",
+    "where": "FeedScreen/PostOptionsMenu.tsx:356 · triggerSize de ActionBar.tsx:638"
+  },
+  {
+    "screen": "reels",
+    "label": "Duplo toque",
+    "family": "feed-icons",
+    "name": "heart-solid",
+    "size": 104,
+    "viewBox": "0.447 0.941 20.028 20.028",
+    "nativeViewBox": "0 0 21 21",
+    "ink": {
+      "x": 11.38,
+      "y": 14.85,
+      "w": 81.23,
+      "h": 74.31
+    },
+    "stroke": null,
+    "declared": "pintura de origem",
+    "where": "FeedScreen/FeedItem.tsx:694"
+  },
+  {
+    "screen": "reels",
+    "label": "Reproduzir",
+    "family": "icons",
+    "name": "play",
+    "size": 64,
+    "viewBox": "0 0 24 24",
+    "nativeViewBox": "0 0 24 24",
+    "ink": {
+      "x": 22.25,
+      "y": 13.69,
+      "w": 30.19,
+      "h": 36.63
+    },
+    "stroke": 10.17,
+    "declared": "1.75 na caixa",
+    "where": "FeedScreen/FeedItem.tsx:699"
+  },
+  {
+    "screen": "reels",
+    "label": "Voltar",
+    "family": "icons",
+    "name": "arrow-left",
+    "size": 20,
+    "viewBox": "0 0 24 24",
+    "nativeViewBox": "0 0 24 24",
+    "ink": {
+      "x": 2.19,
+      "y": 3.88,
+      "w": 15.63,
+      "h": 12.25
+    },
+    "stroke": 1.88,
+    "declared": "1.9 abs",
+    "where": "FeedScreen/FeedHeader.tsx:152"
+  },
+  {
+    "screen": "reels",
+    "label": "Procurar",
+    "family": "icons",
+    "name": "search",
+    "size": 20,
+    "viewBox": "0 0 24 24",
+    "nativeViewBox": "0 0 24 24",
+    "ink": {
+      "x": 1.44,
+      "y": 1.81,
+      "w": 17.13,
+      "h": 16.38
+    },
+    "stroke": 1.88,
+    "declared": "1.9 abs",
+    "where": "FeedScreen/FeedHeader.tsx:51"
+  },
+  {
+    "screen": "reels",
+    "label": "Limpar",
+    "family": "icons",
+    "name": "close",
+    "size": 16,
+    "viewBox": "0 0 24 24",
+    "nativeViewBox": "0 0 24 24",
+    "ink": {
+      "x": 2.94,
+      "y": 2.94,
+      "w": 10.13,
+      "h": 10.13
+    },
+    "stroke": 1.82,
+    "declared": "1.9 abs",
+    "where": "FeedScreen/FeedHeader.tsx:73"
+  },
+  {
+    "screen": "reels",
+    "label": "Verificado",
+    "family": "icons",
+    "name": "verified",
+    "size": 14,
+    "viewBox": "0 0 24 24",
+    "nativeViewBox": "0 0 24 24",
+    "ink": {
+      "x": 1.13,
+      "y": 1.13,
+      "w": 11.75,
+      "h": 11.75
+    },
+    "stroke": 3.34,
+    "declared": "1.75 na caixa",
+    "where": "FeedScreen/PostInfo.tsx:289"
+  },
+  {
+    "screen": "reels",
+    "label": "Anúncio",
+    "family": "icons",
+    "name": "megaphone",
+    "size": 12,
+    "viewBox": "0 0 24 24",
+    "nativeViewBox": "0 0 24 24",
+    "ink": {
+      "x": 1.13,
+      "y": 1.06,
+      "w": 8.69,
+      "h": 10.19
+    },
+    "stroke": 2.3,
+    "declared": "1.9 abs",
+    "where": "FeedScreen/PostInfo.tsx:306"
+  },
+  {
+    "screen": "reels",
+    "label": "Dispositivo",
+    "family": "icons",
+    "name": "smartphone",
+    "size": 12,
+    "viewBox": "0 0 24 24",
+    "nativeViewBox": "0 0 24 24",
+    "ink": {
+      "x": 2.25,
+      "y": 0.31,
+      "w": 7.5,
+      "h": 11.38
+    },
+    "stroke": 1.95,
+    "declared": "1.9 abs",
+    "where": "FeedScreen/PostInfo.tsx:318"
+  },
+  {
+    "screen": "reels",
+    "label": "Avançar",
+    "family": "feed-icons",
+    "name": "chevron-right",
+    "size": 12,
+    "viewBox": "3.026 3.026 17.949 17.949",
+    "nativeViewBox": "0 0 24 24",
+    "ink": {
+      "x": 3.31,
+      "y": 1.31,
+      "w": 5.38,
+      "h": 9.38
+    },
+    "stroke": 1.24,
+    "declared": "pintura de origem",
+    "where": "FeedScreen/TasteCard.tsx:120"
+  },
+  {
+    "screen": "reels",
+    "label": "Convite · câmara",
+    "family": "icons",
+    "name": "camera",
+    "size": 20,
+    "viewBox": "0 0 24 24",
+    "nativeViewBox": "0 0 24 24",
+    "ink": {
+      "x": 1.31,
+      "y": 2.13,
+      "w": 17.38,
+      "h": 15.75
+    },
+    "stroke": 1.85,
+    "declared": "1.9 abs",
+    "where": "FeedScreen/FeedInvite.tsx:120"
+  },
+  {
+    "screen": "reels",
+    "label": "Convite · pessoa",
+    "family": "icons",
+    "name": "user",
+    "size": 16,
+    "viewBox": "0 0 24 24",
+    "nativeViewBox": "0 0 24 24",
+    "ink": {
+      "x": 2.13,
+      "y": 0.94,
+      "w": 11.75,
+      "h": 14.13
+    },
+    "stroke": 1.95,
+    "declared": "1.9 abs",
+    "where": "FeedScreen/FeedInvite.tsx:120"
+  },
+  {
+    "screen": "reels",
+    "label": "Convite · juntar",
+    "family": "icons",
+    "name": "plus",
+    "size": 12,
+    "viewBox": "0 0 24 24",
+    "nativeViewBox": "0 0 24 24",
+    "ink": {
+      "x": 1.13,
+      "y": 1.13,
+      "w": 9.75,
+      "h": 9.75
+    },
+    "stroke": 1.87,
+    "declared": "2 abs",
+    "where": "FeedScreen/FeedInvite.tsx:133"
+  },
+  {
+    "screen": "reels",
+    "label": "Momento · juntar",
+    "family": "feed-icons",
+    "name": "baseline-plus",
+    "size": 12.4,
+    "viewBox": "3.026 3.024 17.949 17.949",
+    "nativeViewBox": "0 0 24 24",
+    "ink": {
+      "x": 1.25,
+      "y": 1.31,
+      "w": 9.94,
+      "h": 9.81
+    },
+    "stroke": 1.4,
+    "declared": "weight medium",
+    "where": "FeedScreen/CollectiveMomentCarousel.tsx:492"
+  },
+  {
+    "screen": "nav",
+    "label": "Início",
+    "family": "icons",
+    "name": "home",
+    "size": 26.07,
+    "viewBox": "0 0 24 24",
+    "nativeViewBox": "0 0 24 24",
+    "ink": {
+      "x": 2.56,
+      "y": 2.56,
+      "w": 21,
+      "h": 21
+    },
+    "stroke": 1.9,
+    "declared": "1.9 abs",
+    "where": "components/TabBar/index.tsx:59"
+  },
+  {
+    "screen": "nav",
+    "label": "Procurar",
+    "family": "icons",
+    "name": "search",
+    "size": 25.04,
+    "viewBox": "0 0 24 24",
+    "nativeViewBox": "0 0 24 24",
+    "ink": {
+      "x": 2,
+      "y": 2.56,
+      "w": 21.06,
+      "h": 19.94
+    },
+    "stroke": 1.88,
+    "declared": "1.9 abs",
+    "where": "components/TabBar/index.tsx:60"
+  },
+  {
+    "screen": "nav",
+    "label": "Círculo",
+    "family": "icons",
+    "name": "circle-add",
+    "size": 25.38,
+    "viewBox": "0 0 24 24",
+    "nativeViewBox": "0 0 24 24",
+    "ink": {
+      "x": 2.19,
+      "y": 2.19,
+      "w": 21.06,
+      "h": 21.06
+    },
+    "stroke": 1.88,
+    "declared": "1.9 abs",
+    "where": "components/TabBar/index.tsx:61"
+  },
+  {
+    "screen": "nav",
+    "label": "Mensagens",
+    "family": "feed-icons",
+    "name": "chat-outline",
+    "size": 26.25,
+    "viewBox": "-2.115 -2.12 19.231 19.231",
+    "nativeViewBox": "0 0 15 15",
+    "ink": {
+      "x": 2.63,
+      "y": 2.63,
+      "w": 21,
+      "h": 21
+    },
+    "stroke": 1.85,
+    "declared": "boostPx 0.5",
+    "where": "components/TabBar/index.tsx:70"
+  },
+  {
+    "screen": "nav",
+    "label": "Perfil",
+    "family": "icons",
+    "name": "user",
+    "size": 25.04,
+    "viewBox": "0 0 24 24",
+    "nativeViewBox": "0 0 24 24",
+    "ink": {
+      "x": 3.94,
+      "y": 2,
+      "w": 17.19,
+      "h": 21.06
+    },
+    "stroke": 1.88,
+    "declared": "1.9 abs",
+    "where": "components/TabBar/index.tsx:71"
+  },
+  {
+    "screen": "nav",
+    "label": "Criar",
+    "family": "icons",
+    "name": "plus",
+    "size": 24.86,
+    "viewBox": "0 0 24 24",
+    "nativeViewBox": "0 0 24 24",
+    "ink": {
+      "x": 3.44,
+      "y": 3.44,
+      "w": 18,
+      "h": 18
+    },
+    "stroke": 1.84,
+    "declared": "1.9 abs",
+    "where": "components/TabBar/index.tsx:712"
+  },
+  {
+    "screen": "nav",
+    "label": "Círculo",
+    "family": "icons",
+    "name": "circle-add",
+    "size": 21.39,
+    "viewBox": "0 0 24 24",
+    "nativeViewBox": "0 0 24 24",
+    "ink": {
+      "x": 1.69,
+      "y": 1.69,
+      "w": 18.06,
+      "h": 18.06
+    },
+    "stroke": 1.88,
+    "declared": "1.9 abs",
+    "where": "components/TabBar/index.tsx:741"
+  }
+]

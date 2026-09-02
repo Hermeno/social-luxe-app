@@ -11,8 +11,9 @@ import {
 import { KeyboardAvoidingView, useKeyboardState } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import FeedIcon, { type FeedIconWeight } from '../../components/FeedIcon'
+import FeedIcon from '../../components/FeedIcon'
 import Icon, { type IconName } from '../../components/Icon'
+import PostActionIcon from '../../components/PostActionIcon'
 import { feedIcon, feedInk, feedRail, FEED_STROKE } from './tokens'
 import { confirm } from '../../components/confirm'
 import { API_BASE } from '../../config'
@@ -37,7 +38,8 @@ interface Props {
   onBlockingChange?: (open: boolean) => void
   rail?: boolean
   triggerSize?: number
-  triggerWeight?: FeedIconWeight
+  /** Tinta do gatilho; branca sobre mídia, escura sobre superfícies claras. */
+  triggerColor?: string
 }
 
 interface OptionRowProps {
@@ -151,7 +153,7 @@ function resolveMedia(url: string): string {
 
 export default function PostOptionsMenu({
   post, onDeleted, onEdited, onProfileBlocked, onAuthorMuted, onBlockingChange,
-  rail = false, triggerSize = 25, triggerWeight = 'regular',
+  rail = false, triggerSize = 25, triggerColor = '#fff',
 }: Props) {
   const { bottom: safeBottom } = useSafeAreaInsets()
   const t = useT()
@@ -351,11 +353,10 @@ export default function PostOptionsMenu({
           s.triggerIconStage,
           rail && s.triggerIconStageRail,
         ]}>
-          <FeedIcon
-            name="option"
+          <PostActionIcon
+            name="options"
             size={triggerSize}
-            color="#fff"
-            weight={triggerWeight}
+            color={triggerColor}
           />
         </View>
         {rail && <View style={s.triggerMetricSlot} pointerEvents="none" />}

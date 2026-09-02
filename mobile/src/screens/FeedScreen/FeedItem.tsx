@@ -15,11 +15,12 @@ import { Post, type RepostResult } from '../../types'
 import { colors, fonts, leading, postGradientColors, radius, spacing, typography } from '../../theme'
 import { parsePostFontKey, postFontStyle } from '../../theme/postFonts'
 import Icon from '../../components/Icon'
-import { feedFill, feedIcon, feedInk, feedLine, feedRailTailInset, feedTextShadow, feedType, RAIL_CLEARANCE } from './tokens'
+import { ACTION_INK, RAIL_CLEARANCE, feedFill, feedIcon, feedInk, feedLine, feedRailTailInset, feedTextShadow, feedType } from './tokens'
 import { usePostFontsReady } from '../../store/postFonts.store'
 import * as postService from '../../services/post.service'
 import type { TasteSignal } from '../../services/post.service'
 import AuthorAvatar from '../../components/AuthorAvatar'
+import FeedIcon from '../../components/FeedIcon'
 import VerifiedBadge from '../../components/VerifiedBadge'
 import ActionBar from './ActionBar'
 import TasteCard from './TasteCard'
@@ -29,7 +30,6 @@ import {
 } from './tastePolicy'
 import PostAlbumCarousel from './PostAlbumCarousel'
 import CollectiveMomentCarousel from './CollectiveMomentCarousel'
-import FeedIcon from '../../components/FeedIcon'
 import { useAuthStore } from '../../store/auth.store'
 import { useFollowStore } from '../../store/follow.store'
 import { tabBarOccupiedHeight } from '../../components/TabBar/layout'
@@ -37,6 +37,7 @@ import { AppStackParams } from '../../navigation/AppNavigator'
 import { useT } from '../../i18n'
 import { displayHandle } from '../../utils/handle'
 import { resolveMediaUrl as resolveUrl } from '../../utils/media'
+import { configureVideoPlayer, videoSource as buildVideoSource, videoPosterUrl } from '../../utils/video'
 
 const { width } = Dimensions.get('window')
 // Uma linha, com reticências e o "ver mais" a abrir o resto.
@@ -69,15 +70,6 @@ type Nav = StackNavigationProp<AppStackParams>
 interface Props {
   post: Post
   reduceMotion: boolean
-  /**
-   * Altura que a mídia cede no topo, abaixo da área segura.
-   *
-   * Serve a fila de Círculos activos: quando existe, a fotografia começa por
-   * baixo dela em vez de lhe passar por trás. Não recorta nada — a moldura sai
-   * sempre da proporção da imagem, por isso menos espaço dá a mesma fotografia
-   * mais pequena, com a mesma nitidez. Zero quando não há fila.
-   */
-  topInset?: number
   /** Só a célula visível toca o vídeo e corre a contagem de vida. */
   isActive: boolean
   /** Altura real da lista (medida no FeedScreen) — todas as células iguais. */
@@ -104,7 +96,7 @@ interface Props {
 // A célula é a única dona do seu leitor — a FlatList monta/desmonta, sem player
 // partilhado.
 function FeedItem({
-  post, reduceMotion, isActive, cellHeight, topInset = 0, liked, commentCount,
+  post, reduceMotion, isActive, cellHeight, liked, commentCount,
   onCommentPress, onLikeChange, onRepostChange, onDeleted, onEdited, onProfileBlocked, onAuthorMuted, onExpired, onBlockingChange,
   onTasteSignal, tasteBlocked = false,
 }: Props) {
@@ -168,16 +160,14 @@ function FeedItem({
   // a coluna esses 22pt punha o alvo do último ícone dentro da faixa do scrubber,
   // que atravessa a largura toda e ficaria a disputar o mesmo toque.
   const overlayBottom = videoBottom + feedRailTailInset
-  // O topo da mídia: a área segura mais o que a fila de Círculos ocupar.
-  const mediaTop = safeTop + topInset
-  const videoFrame = { top: mediaTop, bottom: videoBottom }
+  const videoFrame = { top: safeTop, bottom: videoBottom }
   const trackWidth = width - 28                             // left/right 14
 
   // ── Enquadramento da imagem ────────────────────────────────────────────────
   // A largura é sempre a do ecrã; a altura é que vem da proporção da imagem.
   // Por isso a moldura da foto NÃO é a `videoFrame` (que estica de cima a baixo):
   // é calculada a partir do que a imagem mede, e centrada no espaço disponível.
-  const mediaSpace = Math.max(0, cellHeight - mediaTop - videoBottom)
+  const mediaSpace = Math.max(0, cellHeight - safeTop - videoBottom)
 
   // A altura vem SEMPRE da proporção da imagem. Nunca da altura disponível —
   // encher o ecrã na vertical é o que não se quer, nem sequer como estado
@@ -199,7 +189,7 @@ function FeedItem({
   const aspect = serverAspect ?? loadedAspect
   const photoHeight = aspect ? Math.min(width / aspect, mediaSpace) : mediaSpace
   const photoFrame  = {
-    top: mediaTop + (mediaSpace - photoHeight) / 2,
+    top: safeTop + (mediaSpace - photoHeight) / 2,
     height: photoHeight,
     opacity: aspect ? 1 : 0,
   }
@@ -266,8 +256,15 @@ function FeedItem({
 
   // Memoizado: um `{ uri }` inline mudava de referência a cada render e o
   // expo-video criava um player novo que nunca recebia play().
-  const source = useMemo(() => (isVideo && videoArmed ? { uri } : null), [isVideo, videoArmed, uri])
-  const player = useVideoPlayer(source, (p) => { p.loop = true; p.muted = false })
+  const source = useMemo(
+    () => (isVideo && videoArmed ? buildVideoSource(post.mediaUrl) : null),
+    [isVideo, videoArmed, post.mediaUrl],
+  )
+  const player = useVideoPlayer(source, (p) => {
+    configureVideoPlayer(p)
+    p.loop = true
+    p.muted = false
+  })
 
   const [status, setStatus] = useState<VideoPlayerStatus>('idle')
   useEffect(() => {
@@ -276,6 +273,43 @@ function FeedItem({
     return () => sub.remove()
   }, [player, isVideo])
   const buffering = isVideo && isActive && status === 'loading'
+
+  /**
+   * O cartaz do vídeo — o frame zero, servido como JPEG.
+   *
+   * Existe por causa de um ecrã preto com som. A `VideoView` montava sempre,
+   * mesmo antes de o leitor ter fonte: a fonte só é armada depois de a célula
+   * ficar parada, e até lá o que estava no ecrã era a superfície do leitor,
+   * vazia — preta. Quando a fonte chegava, o áudio arrancava de imediato mas a
+   * superfície nem sempre repintava, e ficava som sem imagem.
+   *
+   * Agora o cartaz cobre o leitor até ele ter mesmo frame para dar. Se a
+   * superfície demorar, ou nunca chegar, o que se vê é a fotografia do vídeo —
+   * nunca um rectângulo preto.
+   */
+  const videoPoster = useMemo(
+    () => (isVideo ? videoPosterUrl(post.mediaUrl, post.thumbnailUrl, 1080) : ''),
+    [isVideo, post.mediaUrl, post.thumbnailUrl],
+  )
+  const videoPainted = status === 'readyToPlay'
+
+  /**
+   * Só a célula à vista tem superfície de vídeo. Uma de cada vez, sempre.
+   *
+   * O pager mantém três células vivas, e com uma `VideoView` em cada uma havia
+   * três superfícies empilhadas a mexer ao mesmo tempo. No Android a superfície
+   * por defeito é uma `SurfaceView`, que não é composta com o resto da árvore —
+   * abre um buraco na janela — e a própria documentação do expo-video marca
+   * "overlapping video views" como o caso em que ela parte. Parte assim: o som
+   * continua, a imagem fica preta.
+   *
+   * A Home nunca teve o problema, e é o mesmo componente de vídeo: lá a vista só
+   * existe enquanto a célula está activa. Aqui passa a ser igual.
+   *
+   * O leitor não se desmonta com ela — guarda fonte e posição, por isso voltar
+   * atrás um post não recomeça nada.
+   */
+  const videoSurface = isVideo && videoArmed && isActive
 
   // Toca só a célula ativa e só com o feed em foco. Ao entrar noutra página o
   // feed perde foco e o vídeo pausa; ao voltar, retoma.
@@ -623,7 +657,36 @@ function FeedItem({
           />
         </View>
       ) : isVideo ? (
-        <VideoView player={player} style={[s.media, videoFrame]} contentFit="cover" nativeControls={false} />
+        <View style={[s.media, videoFrame]}>
+          {/* Ver `videoSurface`: a vista só existe com fonte armada e com a
+              célula à vista. Montá-la antes de haver fonte deixava-a presa a
+              pintar preto, e montá-la em três células ao mesmo tempo partia-a. */}
+          {videoSurface && (
+            <VideoView
+              player={player}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              nativeControls={false}
+              // Composta com a árvore como qualquer outra vista. Custa mais
+              // bateria que a `SurfaceView`, mas numa lista que arrasta vídeos
+              // uns por cima dos outros é a única que desenha o que deve.
+              surfaceType="textureView"
+            />
+          )}
+          {/* O cartaz — o frame zero em JPEG — é o que se vê sempre que não há
+              superfície: antes de a fonte armar, fora da célula à vista, e ainda
+              por cima dela até o leitor ter mesmo imagem para dar. */}
+          {(!videoSurface || !videoPainted) && !!videoPoster && (
+            <Image
+              source={{ uri: videoPoster }}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              cachePolicy="disk"
+              recyclingKey={`${post.id}:poster`}
+              pointerEvents="none"
+            />
+          )}
+        </View>
       ) : (
         // `cover` numa moldura que já tem a proporção da imagem não corta nada —
         // a largura é sempre cheia e a altura veio da própria foto. Só recorta
@@ -699,7 +762,7 @@ function FeedItem({
 
       {isVideo && paused && (
         <View style={s.playOverlay} pointerEvents="none">
-          <Icon name="play" size={feedIcon.overlay} color={feedInk.secondary} />
+          <Icon name="play" size={feedIcon.overlay} color={ACTION_INK} />
         </View>
       )}
 
@@ -870,7 +933,6 @@ function FeedItem({
         isCircle={isCollective}
         reduceMotion={reduceMotion}
         iconSize={feedIcon.action}
-        iconWeight="medium"
       />
 
       {/* ── Traço do tempo — scrubber: tocar/arrastar salta no vídeo ── */}

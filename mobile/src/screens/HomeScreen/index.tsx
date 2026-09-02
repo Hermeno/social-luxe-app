@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   FlatList,
@@ -8,27 +8,28 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native'
+import { setStatusBarStyle } from 'expo-status-bar'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useIsFocused, useNavigation } from '@react-navigation/native'
+import { useFocusEffect, useIsFocused, useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 
 import CommentSheet from '../../components/CommentSheet'
 import SharePostSheet from '../../components/SharePostSheet'
 import { useT } from '../../i18n'
 import { useFeed } from '../../hooks/useFeed'
-import { useAuthStore } from '../../store/auth.store'
 import { useFeedStore } from '../../store/feed.store'
 import { AppStackParams } from '../../navigation/AppNavigator'
-import { getActiveCircles, type ActiveCircle } from '../../services/circle.service'
 import * as postService from '../../services/post.service'
 import { isConnected } from '../../services/netinfo.service'
 import { queueLike, updateCachedPost } from '../../db/database'
 import { tabBarOccupiedHeight } from '../../components/TabBar/layout'
 import type { Post } from '../../types'
+import type { ViewToken } from 'react-native'
 import { colors, fonts, spacing, typography } from '../../theme'
-import HomeCirclesRow from './HomeCirclesRow'
 import HomeHeader from './HomeHeader'
 import HomeFeedItem from './HomeFeedItem'
+import HomeMediaRail from './HomeMediaRail'
+import { composeHomeFeed, type HomeBlock } from './feedComposition'
 
 type Nav = StackNavigationProp<AppStackParams>
 
@@ -40,50 +41,68 @@ type Nav = StackNavigationProp<AppStackParams>
  * circular de um Círculo, várias pessoas no mesmo momento, desenhada como uma só
  * figura em vez de uma grelha de fotografias.
  *
- * O cabeçalho fica fixo e a fila de Círculos rola com o conteúdo. É deliberado:
- * a assinatura e as duas acções têm de estar sempre à mão, mas a fila é a
- * primeira coisa da página, não uma barra permanente — mantê-la colada ao topo
- * roubava altura ao conteúdo em todo o scroll para servir uma decisão que se
- * toma no início.
+ * O cabeçalho fica fixo; abaixo dele é só conteúdo.
  *
- * Os dados são os que já existiam: `useFeed` para as publicações, `getActiveCircles`
- * para a fila. Comentários, partilha e opções reutilizam as folhas que a Feed
- * imersiva já usava — nada disto é lógica nova.
+ * Os dados são os que já existiam: `useFeed` para as publicações. Comentários,
+ * partilha e opções reutilizam as folhas que a Feed imersiva já usava — nada
+ * disto é lógica nova.
  */
 export default function HomeScreen() {
   const t = useT()
   const nav = useNavigation<Nav>()
+  // Sair da Home cala o vídeo. Sem isto continuava a tocar por baixo de outro
+  // separador — invisível, a gastar rede e bateria.
   const isFocused = useIsFocused()
   const { width } = useWindowDimensions()
   const { top, bottom } = useSafeAreaInsets()
 
-  const { posts, loading, refresh, loadMore, updatePostCounts, removePost, updatePost } = useFeed()
-  const me = useAuthStore((state) => state.user)
+  const { posts, loading, refresh, loadMore, updatePostCounts, updateRepostState, removePost, updatePost } = useFeed()
   const showPostInFeed = useFeedStore((state) => state.showPostInFeed)
 
-  const [circles, setCircles] = useState<ActiveCircle[]>([])
+  const homeTap = useFeedStore((state) => state.homeTap)
+  const listRef = useRef<FlatList<HomeBlock>>(null)
+
+  const [visibleId, setVisibleId] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
-  const [likedIds, setLikedIds] = useState<Set<string>>(new Set())
+  // Só guarda interações desta sessão. Sem override, a verdade vem do post —
+  // assim um gosto que já veio do servidor não nasce visualmente desligado.
+  const [likeOverrides, setLikeOverrides] = useState<Record<string, boolean>>({})
+  const [repostOverrides, setRepostOverrides] = useState<Record<string, boolean>>({})
   const [commentPost, setCommentPost] = useState<Post | null>(null)
   const [sharePost, setSharePost] = useState<Post | null>(null)
+  const commentPostRef = useRef(commentPost)
+  const sharePostRef = useRef(sharePost)
+  commentPostRef.current = commentPost
+  sharePostRef.current = sharePost
 
-  // ── Fila de Círculos ───────────────────────────────────────────────────────
-  // Só enquanto a Home está à frente. Uma sessão dura no máximo duas horas, mas
-  // "a acontecer agora" tem de ser verdade — daí a releitura de minuto a minuto.
+  // ── Primeiro carregamento ──────────────────────────────────────────────────
+  //
+  // O `useFeed` não carrega ao montar — de propósito, para o mesmo estado servir
+  // vários ecrãs sem cada um disparar a sua busca. Quem pede o primeiro
+  // carregamento é o ecrã, ao ganhar foco, e era exactamente isto que faltava
+  // aqui: a Home montava, ficava com `posts` vazio e desenhava para sempre o
+  // estado de "a preparar".
+  //
+  // A ref evita que trocar a identidade de `refresh` volte a disparar a busca; é
+  // o mesmo padrão que a Feed imersiva já usava.
+  const refreshRef = useRef(refresh)
+  refreshRef.current = refresh
+
+  useFocusEffect(useCallback(() => {
+    // Página branca pede ícones escuros na barra de estado. A Feed imersiva põe
+    // 'light' quando abre e repõe 'dark' ao sair, por isso voltar para aqui tem
+    // de reafirmar — senão fica branco sobre branco.
+    setStatusBarStyle('dark')
+    refreshRef.current().catch(() => {})
+  }, []))
+
+  // Tocar em Home já estando na Home: volta ao topo e relê.
+  const firstHomeTap = useRef(true)
   useEffect(() => {
-    if (!isFocused) return
-    let alive = true
-    const load = async () => {
-      if (!isConnected()) return
-      try {
-        const list = await getActiveCircles()
-        if (alive) setCircles(list)
-      } catch {}
-    }
-    load()
-    const timer = setInterval(load, 60_000)
-    return () => { alive = false; clearInterval(timer) }
-  }, [isFocused])
+    if (firstHomeTap.current) { firstHomeTap.current = false; return }
+    listRef.current?.scrollToOffset({ offset: 0, animated: true })
+    refreshRef.current().catch(() => {})
+  }, [homeTap])
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true)
@@ -101,56 +120,158 @@ export default function HomeScreen() {
    * A publicação entra na Feed imersiva pelo mesmo `showPostInFeed` que o perfil,
    * a pesquisa e as mensagens já usam — é ele que a põe em primeiro e faz o pager
    * aterrar nela sem animação nem salto.
+   *
+   * A imersiva é um separador e não um ecrã empilhado: é a barra do navegador de
+   * separadores que se transforma no campo de comentário, e por cima dela esse
+   * campo não existiria.
    */
   const openMedia = useCallback((post: Post) => {
     showPostInFeed(post)
-    nav.navigate('Immersive')
+    nav.navigate('Tabs', { screen: 'Immersive' })
   }, [nav, showPostInFeed])
 
   const toggleLike = useCallback((post: Post) => {
-    const was = likedIds.has(post.id)
-    setLikedIds((prev) => {
-      const next = new Set(prev)
-      if (was) next.delete(post.id); else next.add(post.id)
-      return next
-    })
-    const likes = (post._count?.likes ?? 0) + (was ? -1 : 1)
+    const was = likeOverrides[post.id] ?? Boolean(post.userLiked)
+    const intended = !was
+    setLikeOverrides((prev) => ({ ...prev, [post.id]: intended }))
+    const likes = Math.max(0, (post._count?.likes ?? 0) + (was ? -1 : 1))
     updatePostCounts?.(post.id, { likes })
-    updateCachedPost(post.id, { _count: { ...post._count, likes } }).catch(() => {})
+    updateCachedPost(post.id, {
+      userLiked: intended,
+      _count: { ...post._count, likes },
+    }).catch(() => {})
 
     // Sem rede o gosto fica na fila e o estado optimista mantém-se — desfazê-lo
     // à frente da pessoa por não haver rede é perder a intenção dela.
-    if (!isConnected()) { queueLike(post.id, !was).catch(() => {}); return }
-    postService.likePost(post.id).catch(() => {})
-  }, [likedIds, updatePostCounts])
+    if (!isConnected()) { queueLike(post.id, intended).catch(() => {}); return }
+    postService.likePost(post.id)
+      .then(({ liked }) => {
+        setLikeOverrides((prev) => ({ ...prev, [post.id]: liked }))
+        if (liked === intended) return
+        const confirmedLikes = Math.max(0, likes + (liked ? 1 : -1))
+        updatePostCounts?.(post.id, { likes: confirmedLikes })
+        updateCachedPost(post.id, {
+          userLiked: liked,
+          _count: { ...post._count, likes: confirmedLikes },
+        }).catch(() => {})
+      })
+      .catch(() => queueLike(post.id, intended).catch(() => {}))
+  }, [likeOverrides, updatePostCounts])
 
-  const renderItem = useCallback(({ item }: { item: Post }) => (
+  const handleCommentAdded = useCallback(() => {
+    const current = commentPostRef.current
+    if (!current) return
+    const comments = (current._count?.comments ?? 0) + 1
+    const next = { ...current, _count: { ...current._count, comments } }
+    commentPostRef.current = next
+    setCommentPost(next)
+    updatePostCounts?.(current.id, { comments })
+    updateCachedPost(current.id, { _count: next._count }).catch(() => {})
+  }, [updatePostCounts])
+
+  const handleShared = useCallback(() => {
+    const current = sharePostRef.current
+    if (!current) return
+    const shares = (current._count?.shares ?? 0) + 1
+    const next = { ...current, _count: { ...current._count, shares } }
+    sharePostRef.current = next
+    setSharePost(next)
+    updatePostCounts?.(current.id, { shares })
+    updateCachedPost(current.id, { _count: next._count }).catch(() => {})
+  }, [updatePostCounts])
+
+  /**
+   * Repostar, com o mesmo desenho optimista do gosto: o ecrã muda primeiro e a
+   * rede confirma depois. A verdade vem de `post.userReposted` — não há aqui um
+   * conjunto local em paralelo, que seria uma segunda fonte a divergir da lista.
+   */
+  const toggleRepost = useCallback((post: Post) => {
+    const was = repostOverrides[post.id] ?? Boolean(post.userReposted)
+    const next = !was
+    const before = post._count?.reposts ?? 0
+    setRepostOverrides((prev) => ({ ...prev, [post.id]: next }))
+
+    // O ecrã muda primeiro; a resposta do servidor corrige-o a seguir. Quem
+    // reconcilia é o `updateRepostState` do `useFeed`, que já sabe propagar o
+    // estado para o original e para todas as cópias — não é trabalho para aqui.
+    updatePostCounts?.(post.id, { reposts: before + (next ? 1 : -1) })
+
+    postService.setRepost(post.id, next)
+      .then((result) => {
+        setRepostOverrides((prev) => ({ ...prev, [post.id]: result.reposted }))
+        updateRepostState?.(result)
+      })
+      .catch(() => {
+        setRepostOverrides((prev) => ({ ...prev, [post.id]: was }))
+        updatePostCounts?.(post.id, { reposts: before })
+      })
+  }, [repostOverrides, updatePostCounts, updateRepostState])
+
+  /**
+   * Que publicação está à vista — é ela que toca.
+   *
+   * A referência é estável (`useRef`) porque a `FlatList` recusa que este par
+   * mude entre renders, e o limiar de 70% evita que duas células se disputem o
+   * lugar durante o deslize: com um valor baixo, duas meias publicações eram
+   * ambas "visíveis" e o vídeo saltava de uma para a outra.
+   */
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    const first = viewableItems.find((entry) => entry.isViewable)
+    setVisibleId((first?.item as HomeBlock | undefined)?.id ?? null)
+  }).current
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 70 }).current
+
+  /**
+   * A lista não é de publicações, é de BLOCOS.
+   *
+   * Quem decide o registo de cada uma — herói de ponta a ponta, cartão numa fila
+   * deitada, ou a composição do Círculo — é o `composeHomeFeed`, a partir da
+   * forma da própria mídia. Aqui só se desenha o que ele agrupou.
+   *
+   * E é daqui que sai o invariante do vídeo: um só bloco é o `visibleId` a cada
+   * momento, e dentro de uma fila só o cartão activo toca. Duas superfícies de
+   * vídeo montadas ao mesmo tempo é o que devolve som sem imagem no Android.
+   */
+  const blocks = useMemo(() => composeHomeFeed(posts), [posts])
+
+  const renderItem = useCallback(({ item: block }: { item: HomeBlock }) => {
+    const blockActive = isFocused && block.id === visibleId
+
+    if (block.kind === 'rail') {
+      return (
+        <HomeMediaRail
+          posts={block.posts}
+          width={width}
+          active={blockActive}
+          onOpenMedia={openMedia}
+          onOpenAuthor={openAuthor}
+        />
+      )
+    }
+
+    const item = block.post
+    return (
     <HomeFeedItem
       post={item}
       width={width}
-      liked={likedIds.has(item.id)}
+      active={blockActive}
+      liked={likeOverrides[item.id] ?? Boolean(item.userLiked)}
+      likeCount={item._count?.likes ?? 0}
+      reposted={repostOverrides[item.id] ?? Boolean(item.userReposted)}
+      repostCount={item._count?.reposts ?? 0}
       commentCount={item._count?.comments ?? 0}
+      shareCount={item._count?.shares ?? 0}
       onOpenAuthor={openAuthor}
       onOpenMedia={openMedia}
       onLike={toggleLike}
+      onRepost={toggleRepost}
       onComment={setCommentPost}
       onShare={setSharePost}
       onDeleted={removePost}
       onEdited={updatePost}
     />
-  ), [likedIds, openAuthor, openMedia, removePost, toggleLike, updatePost, width])
-
-  const listHeader = useMemo(() => (
-    <View style={s.circlesSlot}>
-      <HomeCirclesRow
-        circles={circles}
-        me={me ? { name: me.name, avatar: me.avatar } : null}
-        onCreate={() => nav.navigate('Tabs', { screen: 'Circle' })}
-        onOpen={() => nav.navigate('Tabs', { screen: 'Circle' })}
-        onOpenMine={() => nav.navigate('Tabs', { screen: 'Circle' })}
-      />
-    </View>
-  ), [circles, me, nav])
+    )
+  }, [isFocused, visibleId, likeOverrides, openAuthor, openMedia, removePost, repostOverrides, toggleLike, toggleRepost, updatePost, width])
 
   return (
     <View style={[s.screen, { paddingTop: top }]}>
@@ -169,21 +290,32 @@ export default function HomeScreen() {
         </View>
       ) : (
         <FlatList
-          data={posts}
-          keyExtractor={(post) => post.id}
+          ref={listRef}
+          data={blocks}
+          keyExtractor={(block) => block.id}
           renderItem={renderItem}
-          ListHeaderComponent={listHeader}
           contentContainerStyle={{ paddingBottom: tabBarOccupiedHeight(bottom) + spacing.xl }}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.gray400} />
           }
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={viewabilityConfig}
           onEndReached={loadMore}
           onEndReachedThreshold={0.6}
           // Alturas variáveis (a composição de um Círculo depende de quantos são),
           // por isso não há `getItemLayout`. O que segura a performance é a janela
-          // curta e o recorte do que sai do ecrã.
-          removeClippedSubviews
+          // curta, e só ela.
+          //
+          // Sem `removeClippedSubviews`, e é de propósito. Ele desanexa da árvore
+          // nativa o que sai da janela, e o que sai com ele é a capacidade de
+          // receber toques: uma célula meia dentro do ecrã continuava a ver-se e
+          // deixava de responder. Era isto que fazia tocar numa fotografia não
+          // abrir a imersiva umas vezes sim, outras não — a célula estava lá, o
+          // toque é que não chegava a lado nenhum.
+          //
+          // O que ele poupava, `windowSize` e `maxToRenderPerBatch` já poupam,
+          // e esses não mentem sobre o que está a responder no ecrã.
           initialNumToRender={3}
           maxToRenderPerBatch={3}
           windowSize={5}
@@ -191,10 +323,14 @@ export default function HomeScreen() {
       )}
 
       {commentPost && (
-        <CommentSheet post={commentPost} onClose={() => setCommentPost(null)} />
+        <CommentSheet
+          post={commentPost}
+          onCommentAdded={handleCommentAdded}
+          onClose={() => setCommentPost(null)}
+        />
       )}
       {sharePost && (
-        <SharePostSheet post={sharePost} onClose={() => setSharePost(null)} />
+        <SharePostSheet post={sharePost} onShared={handleShared} onClose={() => setSharePost(null)} />
       )}
     </View>
   )
@@ -202,7 +338,6 @@ export default function HomeScreen() {
 
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.white },
-  circlesSlot: { paddingTop: spacing.xs2, paddingBottom: spacing.lg },
   state: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   stateTitle: {
     color: colors.gray500,

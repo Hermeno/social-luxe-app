@@ -3,8 +3,8 @@ import {
   View, Pressable, StyleSheet, Share, Modal, Animated, Easing, TouchableOpacity
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import FeedIcon, { type FeedIconWeight } from '../../components/FeedIcon'
-import { feedIcon, feedInk, feedRail, feedTextShadow, feedType } from './tokens'
+import PostActionIcon from '../../components/PostActionIcon'
+import { ACTION_INK, feedIcon, feedInk, feedRail, feedTextShadow, feedType } from './tokens'
 
 import { Post, type RepostResult } from '../../types'
 import { colors } from '../../theme'
@@ -31,9 +31,8 @@ interface Props {
   onOptionsBlockingChange?: (open: boolean) => void
   isActive?: boolean
   reduceMotion?: boolean
-  /** Tamanho/peso dos glifos. A feed principal reforça-os sem alterar a rail. */
+  /** Tamanho dos glifos; por defeito é o mesmo usado na Home. */
   iconSize?: number
-  iconWeight?: FeedIconWeight
   /**
    * Post do Círculo. A coluna encolhe: fica o gosto, o comentário e o menu.
    *
@@ -187,7 +186,7 @@ export default React.memo(function ActionBar({
   onLikeChange, onRepostChange, commentCount: commentCountProp, bottomOffset,
   onDeleted, onEdited, onProfileBlocked, onAuthorMuted, onOptionsBlockingChange,
   isActive = true, isCircle = false, reduceMotion = false,
-  iconSize = DEFAULT_RAIL_ICON_SIZE, iconWeight = 'regular',
+  iconSize = DEFAULT_RAIL_ICON_SIZE,
 }: Props) {
   const { bottom: safeBottom } = useSafeAreaInsets()
   const t          = useT()
@@ -516,11 +515,11 @@ export default React.memo(function ActionBar({
             >
               {/* Gostado troca de desenho, não apenas de pintura. O contorno recebe
                   o peso da feed; o coração sólido fica regular para não saltar de tamanho. */}
-              <FeedIcon
-                name={liked ? 'heart-solid' : 'heart'}
+              <PostActionIcon
+                name="like"
                 size={iconSize}
-                color={liked ? colors.heart : feedInk.primary}
-                weight={liked ? 'regular' : iconWeight}
+                color={liked ? colors.heart : ACTION_INK}
+                selected={liked}
               />
               {hearts.map((h) => (
                 <Animated.View
@@ -529,7 +528,7 @@ export default React.memo(function ActionBar({
                   accessible={false}
                   style={[s.burstHeart, { opacity: h.o, transform: [{ translateX: h.tx }, { translateY: h.ty }, { scale: h.s }] }]}
                 >
-                  <FeedIcon name="heart-solid" size={feedIcon.inline} color={colors.heart} />
+                  <PostActionIcon name="like" size={feedIcon.inline} color={colors.heart} selected />
                 </Animated.View>
               ))}
             </RailAction>
@@ -544,7 +543,7 @@ export default React.memo(function ActionBar({
               reduceMotion={reduceMotion}
             >
               {/* Já nasce com a cauda à direita — dispensa o espelho que aqui estava. */}
-              <FeedIcon name="chat-outline" size={iconSize} color={feedInk.primary} weight={iconWeight} />
+              <PostActionIcon name="comment" size={iconSize} color={ACTION_INK} />
             </RailAction>
 
             {/* Repost e partilha não valem num post do Círculo: o que lá está
@@ -574,13 +573,10 @@ export default React.memo(function ActionBar({
                     }],
                   }}
                 >
-                  <FeedIcon
+                  <PostActionIcon
                     name="repost"
                     size={iconSize}
-                    color={feedInk.primary}
-                    // O SVG já tem o peso dentro da geometria preenchida; o
-                    // reforço `medium` deixava-o mais grosso que os vizinhos.
-                    weight="regular"
+                    color={reposted ? colors.accent : ACTION_INK}
                   />
                 </Animated.View>
                 <Animated.View
@@ -600,7 +596,7 @@ export default React.memo(function ActionBar({
 
             {/* Partilhar */}
             <RailAction label={t.mo_share} count={fmt(shareCount)} onPress={handleShare} onLongPress={handleShareExternal} entry={railEntry} order={3} reduceMotion={reduceMotion}>
-              <FeedIcon name="share" size={iconSize} color={feedInk.primary} weight={iconWeight} />
+              <PostActionIcon name="share" size={iconSize} color={ACTION_INK} />
             </RailAction>
             </>
             )}
@@ -637,8 +633,7 @@ export default React.memo(function ActionBar({
             onBlockingChange={setOptionsBlocking}
             rail
             triggerSize={iconSize}
-            // As barras já trazem a espessura exata da referência raster.
-            triggerWeight="regular"
+            triggerColor={ACTION_INK}
           />
           {/* Também sai: um momento colectivo não é a obra de um autor, e o
               atalho para "as publicações desta pessoa" pergunta a coisa errada
@@ -653,11 +648,10 @@ export default React.memo(function ActionBar({
           >
             <View style={s.utilityVisual}>
               <View style={s.utilityIconStage}>
-                <FeedIcon
+                <PostActionIcon
                   name="author-posts"
                   size={iconSize}
-                  color={feedInk.primary}
-                  weight={iconWeight}
+                  color={ACTION_INK}
                 />
               </View>
               <View style={s.metricSlot} pointerEvents="none" />

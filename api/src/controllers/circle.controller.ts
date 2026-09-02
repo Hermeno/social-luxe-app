@@ -31,12 +31,6 @@ export async function incoming(req: AuthRequest, res: Response) {
   } catch (err) { return handleError(res, err, 'circle.incoming') }
 }
 
-export async function active(req: AuthRequest, res: Response) {
-  try {
-    return ok(res, await session.activeCircles(req.user!.userId))
-  } catch (err) { return handleError(res, err, 'circle.active') }
-}
-
 export async function call(req: AuthRequest, res: Response) {
   try {
     const { sessionId, userId } = req.body

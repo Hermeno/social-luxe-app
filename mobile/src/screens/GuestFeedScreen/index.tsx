@@ -16,10 +16,13 @@ import { useT } from '../../i18n'
 import AvatarImage from '../../components/AvatarImage'
 import Wordmark from '../../components/Wordmark'
 import Icon from '../../components/Icon'
+import { ACTION_INK } from '../FeedScreen/tokens'
 import FeedIcon, { type FeedIconName } from '../../components/FeedIcon'
 import { displayHandle } from '../../utils/handle'
+import { configureVideoPlayer, videoPosterUrl, videoSource as buildVideoSource } from '../../utils/video'
 
 const { height: SCREEN_H } = Dimensions.get('window')
+const VIDEO_ARM_DELAY = 300
 
 function resolveMedia(url: string | null | undefined): string {
   if (!url) return ''
@@ -40,7 +43,7 @@ function LockedAction({
       accessibilityRole="button"
       accessibilityLabel={label}
     >
-      <FeedIcon name={name} size={27} color="#fff" />
+      <FeedIcon name={name} size={27} color={ACTION_INK} />
       {value !== undefined && value > 0 && <Text style={s.actionCount}>{value}</Text>}
     </TouchableOpacity>
   )
@@ -62,14 +65,40 @@ function GuestItem({
   const isText  = post.mediaType === 'TEXT'
   const uri     = resolveMedia(post.mediaUrl)
 
-  const source = useMemo(() => (isVideo ? { uri } : null), [isVideo, uri])
-  const player = useVideoPlayer(source, (p) => { p.loop = true; p.muted = false })
+  // A FlatList monta células vizinhas para a rolagem ficar fluida. Sem esta
+  // barreira, cada uma delas começa a encher um buffer antes de ser vista.
+  const [videoArmed, setVideoArmed] = useState(false)
+  useEffect(() => {
+    if (!isVideo || videoArmed || !isActive) return
+    const timer = setTimeout(() => setVideoArmed(true), VIDEO_ARM_DELAY)
+    return () => clearTimeout(timer)
+  }, [isActive, isVideo, videoArmed])
+
+  // A célula inativa perde a source: para a rede imediatamente, enquanto o
+  // cache nativo conserva os bytes já vistos caso a pessoa volte.
+  const source = useMemo(
+    () => (isVideo && isActive && videoArmed ? buildVideoSource(post.mediaUrl) : null),
+    [isActive, isVideo, post.mediaUrl, videoArmed],
+  )
+  const player = useVideoPlayer(source, (p) => {
+    configureVideoPlayer(p)
+    p.loop = true
+    p.muted = false
+  })
 
   useEffect(() => {
     if (!isVideo) return
-    if (isActive) player.play()
-    else player.pause()
-  }, [isActive, player, isVideo])
+    try {
+      if (isActive && videoArmed) player.play()
+      else player.pause()
+    } catch {}
+  }, [isActive, player, isVideo, videoArmed])
+
+  // O cartaz cobre enquanto não há superfície — nunca um rectângulo preto.
+  const poster = useMemo(
+    () => (isVideo ? videoPosterUrl(post.mediaUrl, post.thumbnailUrl, 1080) : ''),
+    [isVideo, post.mediaUrl, post.thumbnailUrl],
+  )
 
   return (
     <View style={[s.cell, { height: cellHeight }]}>
@@ -78,7 +107,29 @@ function GuestItem({
           <Text style={s.textPost}>{post.caption}</Text>
         </View>
       ) : isVideo ? (
-        <VideoView player={player} style={s.media} contentFit="cover" nativeControls={false} />
+        <View style={s.media}>
+          {/* Uma superfície de cada vez, e só com fonte. Montada em todas as
+              células do pager, o Android empilhava `SurfaceView`s que não se
+              compõem com a árvore e devolvia som sem imagem. */}
+          {isActive && videoArmed && (
+            <VideoView
+              player={player}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              nativeControls={false}
+              surfaceType="textureView"
+            />
+          )}
+          {(!isActive || !videoArmed) && !!poster && (
+            <Image
+              source={{ uri: poster }}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              transition={0}
+              pointerEvents="none"
+            />
+          )}
+        </View>
       ) : (
         <Image source={{ uri }} style={s.media} contentFit="cover" transition={160} />
       )}

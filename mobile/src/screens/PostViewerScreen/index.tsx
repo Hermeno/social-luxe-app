@@ -23,6 +23,7 @@ import PostInfo from '../FeedScreen/PostInfo'
 import CommentSheet from '../../components/CommentSheet'
 import AvatarImage from '../../components/AvatarImage'
 import { API_BASE } from '../../config'
+import { configureVideoPlayer, videoSource as buildVideoSource } from '../../utils/video'
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window')
 const IMAGE_DURATION = 30000
@@ -176,7 +177,11 @@ function CirclePresentation({ posts, startIndex, collectiveCaptureIndex }: Prese
   const postRef  = useRef(post)
   postRef.current = post
 
-  const player = useVideoPlayer(null, (p) => { p.loop = true; p.muted = false })
+  const player = useVideoPlayer(null, (p) => {
+    configureVideoPlayer(p)
+    p.loop = true
+    p.muted = false
+  })
 
   const safePlayer = useCallback((fn: () => void) => {
     try { fn() } catch { /* player already released */ }
@@ -241,7 +246,7 @@ function CirclePresentation({ posts, startIndex, collectiveCaptureIndex }: Prese
     if (commentPost || optionsOpen) return
 
     if (post.mediaType === 'VIDEO') {
-      safePlayer(() => player.replace({ uri: resolveMedia(post.mediaUrl ?? '') }))
+      safePlayer(() => player.replace(buildVideoSource(post.mediaUrl)))
       safePlayer(() => player.play())
     }
 

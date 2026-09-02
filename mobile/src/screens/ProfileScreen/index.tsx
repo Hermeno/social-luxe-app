@@ -45,6 +45,7 @@ import type { Union, UnionInvite, Pairing } from '../../types'
 import * as pairingService from '../../services/pairing.service'
 import { useT } from '../../i18n'
 import { displayHandle } from '../../utils/handle'
+import { videoPosterUrl } from '../../utils/video'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type Nav   = StackNavigationProp<AppStackParams>
@@ -115,7 +116,9 @@ function PostThumb({
   post: Post; width: number; height: number; isOwn: boolean; yearLabel: string
   onPress: () => void; onMenu: () => void
 }) {
-  const thumb = resolveUrl(post.thumbnailUrl ?? post.mediaUrl)
+  const thumb = post.mediaType === 'VIDEO'
+    ? videoPosterUrl(post.mediaUrl, post.thumbnailUrl, Math.max(width, height) * 2)
+    : resolveUrl(post.thumbnailUrl ?? post.mediaUrl)
 
   // Vida conquistada — visível para toda a gente. A grelha deixa de ser "o que
   // ele publicou" e passa a ser "o que dele sobreviveu".
@@ -745,7 +748,11 @@ export default function ProfileScreen() {
   const showPostInFeed = useFeedStore((s) => s.showPostInFeed)
   function openPost(post: Post) {
     showPostInFeed(post)
-    nav.navigate('Tabs', { screen: 'Feed' })
+      // `Immersive` e não `Feed`: desde o redesenho da Home, o separador `Feed`
+      // é a Home. Mandar para lá um post que se acabou de pôr em foco pelo
+      // `showPostInFeed` não abria nada — a pessoa aterrava na página onde já
+      // estava e o foco ficava por usar.
+    nav.navigate('Tabs', { screen: 'Immersive' })
   }
 
   async function handleDeletePost(post: Post) {

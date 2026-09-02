@@ -18,11 +18,9 @@ import type { TasteSignal } from '../../services/post.service'
 import { isConnected } from '../../services/netinfo.service'
 import { useT } from '../../i18n'
 import { resolveMediaUrl } from '../../utils/media'
-import { getActiveCircles, type ActiveCircle } from '../../services/circle.service'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors, spacing } from '../../theme'
 import FeedHeader, { FeedUserGroup as UserGroup } from './FeedHeader'
-import FeedCircleBar, { FEED_CIRCLE_BAR_HEIGHT } from './FeedCircleBar'
 import FeedInvite from './FeedInvite'
 import FeedItem from './FeedItem'
 import { feedType } from './tokens'
@@ -68,18 +66,6 @@ const NOOP = () => {}
 // aqui dentro da mesma lista porque tem de deslizar com o mesmo snap, a mesma
 // altura e o mesmo `getItemLayout` — uma sobreposição por cima do pager teria
 // de reimplementar tudo isso e nunca ficaria alinhada.
-// ─── Fila de Círculos activos ──────────────────────────────────────────────
-// A fila não entra no fluxo do pager: fica sobreposta, logo abaixo da linha do
-// cabeçalho, e é a mídia de cada célula que desce por baixo dela. Assim a altura
-// da célula, o `snapToInterval` e o `getItemLayout` continuam a ser exactamente
-// os mesmos com fila e sem fila — o pager não sabe que ela existe.
-/** Entre o topo da área segura e a fila; a linha do cabeçalho mede 48. */
-const CIRCLE_BAR_TOP = 56
-/** Respiro entre a fila e o início da fotografia. */
-const CIRCLE_BAR_GAP = 12
-/** O que a mídia cede quando há Círculos a acontecer. */
-const CIRCLE_BAR_INSET = CIRCLE_BAR_TOP + FEED_CIRCLE_BAR_HEIGHT + CIRCLE_BAR_GAP
-
 const INVITE_PREFIX = 'feed-invite:'
 /** Depois de quantos posts entra a primeira pausa. */
 const INVITE_FIRST_AT = 6
@@ -128,7 +114,6 @@ export default function FeedScreen() {
   const circleInvite           = useNotificationStore((s) => s.circleInvite)
 
   const { top: safeTop } = useSafeAreaInsets()
-  const [activeCircles, setActiveCircles] = useState<ActiveCircle[]>([])
   const [currentPostId, setCurrentPostId] = useState<string | null>(null)
   const [commentPost,   setCommentPost]   = useState<Post | null>(null)
   const [viewedIds,     setViewedIds]     = useState<Set<string>>(new Set())
@@ -394,10 +379,11 @@ export default function FeedScreen() {
     const offset = event.nativeEvent.contentOffset.y
     const delta = offset - lastOffsetRef.current
     lastOffsetRef.current = offset
-    if (offset <= 8) { setImmersiveIfChanged(false); return }
-    if (!draggingRef.current || Math.abs(delta) < 6) return
-    setImmersiveIfChanged(true)
-  }, [setImmersiveIfChanged])
+    // O deslize já não liga nem desliga a imersão: ela vale enquanto este ecrã
+    // estiver à frente. O offset continua a ser seguido porque outras contas o
+    // usam.
+    void delta
+  }, [])
 
   const scrollToIndex = useCallback((idx: number) => {
     // Conta linhas e não posts: com as pausas pelo meio, `flatPosts.length` é
@@ -421,30 +407,6 @@ export default function FeedScreen() {
   // post ativo: assim o reset síncrono da identidade não apaga a primeira vista
   // da sessão enquanto a leitura do SQLite termina em segundo plano.
   useEffect(() => { hydrateTastePolicy(tasteUserId) }, [tasteUserId])
-
-  // Só enquanto a Feed está à frente: uma sessão dura no máximo duas horas e a
-  // lista muda devagar, mas "activo agora" tem de ser verdade, por isso relê de
-  // minuto a minuto. Fora de foco não corre, logo não custa nada.
-  useEffect(() => {
-    if (!isFocused) return
-    let alive = true
-    const load = async () => {
-      if (!isConnected()) return
-      try {
-        const list = await getActiveCircles()
-        if (alive) setActiveCircles(list)
-      } catch {}
-    }
-    load()
-    const timer = setInterval(load, 60_000)
-    return () => { alive = false; clearInterval(timer) }
-  }, [isFocused])
-
-  const circleBarInset = activeCircles.length > 0 ? CIRCLE_BAR_INSET : 0
-
-  const handleCirclePressed = useCallback(() => {
-    nav.navigate('Tabs', { screen: 'Circle' })
-  }, [nav])
 
   // ── Vistas: marca o post ativo como visto ──────────────────────────────────
   useEffect(() => {
@@ -687,10 +649,12 @@ export default function FeedScreen() {
     setSearchQuery('')
   }, [alignPagerToPost, setSearchVisible])
   // O botão do topo cria; nesta pausa, a barra inferior leva ao Círculo.
-  const handleCirclePress  = useCallback(() => nav.navigate('Tabs', { screen: 'Create' }), [nav])
+  // A única saída da imersiva. A barra de baixo é o campo de comentário e não
+  // tem separadores, por isso este botão não repõe navegação nenhuma — devolve a
+  // pessoa à Home.
   const handleRestoreNavigation = useCallback(() => {
-    setImmersiveIfChanged(false)
-  }, [setImmersiveIfChanged])
+    nav.navigate('Tabs', { screen: 'Feed' })
+  }, [nav])
 
   // Também cobre o gesto de esconder o teclado sem carregar em Cancelar. A
   // pesquisa continua aberta, mas a célula volta já ao seu snap exacto.
@@ -744,6 +708,9 @@ export default function FeedScreen() {
 
   useFocusEffect(useCallback(() => {
     setStatusBarStyle('light')
+    // Entrar aqui é entrar em imersão. Antes isto só ligava depois de a pessoa
+    // deslizar, e o primeiro vídeo aberto aparecia com a navegação por baixo.
+    useFeedStore.getState().setImmersive(true)
     refreshRef.current()
     return () => {
       setStatusBarStyle('dark')
@@ -784,7 +751,6 @@ export default function FeedScreen() {
       reduceMotion={reduceMotion}
       isActive={item.id === currentPostId}
       cellHeight={listH}
-      topInset={circleBarInset}
       liked={likedPostIds.has(item.id)}
       commentCount={(item._count?.comments ?? 0) + (commentDeltas[item.id] ?? 0)}
       onCommentPress={openComments}
@@ -800,7 +766,7 @@ export default function FeedScreen() {
       tasteBlocked={searchMode || !!commentPost}
     />
     )
-  ), [circleBarInset, exampleCircle, currentPostId, listH, likedPostIds, commentDeltas, searchMode, commentPost, openComments, handleLikeChange, handleRepostChange, handlePostDeleted, handlePostExpired, handleProfileBlocked, handleAuthorMuted, handleTasteSignal, updatePost, reduceMotion])
+  ), [exampleCircle, currentPostId, listH, likedPostIds, commentDeltas, searchMode, commentPost, openComments, handleLikeChange, handleRepostChange, handlePostDeleted, handlePostExpired, handleProfileBlocked, handleAuthorMuted, handleTasteSignal, updatePost, reduceMotion])
 
   const getItemLayout = useCallback((_: unknown, index: number) => (
     { length: listH, offset: listH * index, index }
@@ -863,23 +829,14 @@ export default function FeedScreen() {
         style={[s.chrome, { opacity: chrome }]}
         pointerEvents={onInvite ? 'none' : 'box-none'}
       >
-      {activeCircles.length > 0 && (
-        <View style={[s.circleBar, { top: safeTop + CIRCLE_BAR_TOP }]} pointerEvents="box-none">
-          <FeedCircleBar circles={activeCircles} onPress={handleCirclePressed} />
-        </View>
-      )}
-
       <FeedHeader
         filteredGroups={filteredGroups}
         activeUserId={activePost?.user.id}
         searchMode={searchMode}
         searchQuery={searchQuery}
-        immersive={immersive}
-        circleInvite={Boolean(circleInvite)}
         onSearchClose={handleSearchClose}
         onSearchChange={handleSearchChange}
         onBubblePress={handleBubblePress}
-        onCirclePress={handleCirclePress}
         onRestoreNavigation={handleRestoreNavigation}
       />
       </Animated.View>
@@ -899,9 +856,6 @@ const s = StyleSheet.create({
   // Caixa do cromado do topo. Só serve para o poder apagar de uma vez; o
   // `FeedHeader` continua a posicionar-se sozinho lá dentro.
   chrome: { ...StyleSheet.absoluteFillObject },
-  // Sobreposta e não em fluxo: a célula do pager continua a medir o ecrã inteiro.
-  // `zIndex` abaixo do cabeçalho (40) e acima da mídia.
-  circleBar: { position: 'absolute', left: 0, right: 0, zIndex: 30 },
   container: { flex: 1, backgroundColor: colors.feedSurface },
   pager: { flex: 1, backgroundColor: colors.feedSurface },
   // Envolve o pager só para o poder revelar depois de aterrar no post pedido.

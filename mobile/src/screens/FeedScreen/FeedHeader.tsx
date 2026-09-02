@@ -7,7 +7,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import Icon from '../../components/Icon'
 import AvatarImage from '../../components/AvatarImage'
-import Wordmark from '../../components/Wordmark'
 import { colors, radius, sheet, spacing } from '../../theme'
 import { feedIcon, feedInk, feedLine, feedTextShadow, feedType, FEED_STROKE } from './tokens'
 import { useT } from '../../i18n'
@@ -25,12 +24,9 @@ export interface FeedHeaderProps {
   activeUserId: string | undefined
   searchMode: boolean
   searchQuery: string
-  immersive: boolean
-  circleInvite: boolean
   onSearchClose: () => void
   onSearchChange: (query: string) => void
   onBubblePress: (group: FeedUserGroup) => void
-  onCirclePress: () => void
   onRestoreNavigation: () => void
 }
 
@@ -39,12 +35,9 @@ export default memo(function FeedHeader({
   activeUserId,
   searchMode,
   searchQuery,
-  immersive,
-  circleInvite,
   onSearchClose,
   onSearchChange,
   onBubblePress,
-  onCirclePress,
   onRestoreNavigation,
 }: FeedHeaderProps) {
   const { top } = useSafeAreaInsets()
@@ -144,46 +137,20 @@ export default memo(function FeedHeader({
 
   return (
     <View style={[s.topRoot, { height: top + 60 }]} pointerEvents="box-none">
+      {/* Só o voltar. A assinatura e o Criar viviam aqui quando esta era a
+          primeira página da app; agora a primeira página é a Home e isto é um
+          ecrã de visualização — o que a pessoa precisa aqui é de sair. */}
       <View style={[s.topRow, { marginTop: top + 4 }]} pointerEvents="box-none">
-        <View style={s.brandGroup} pointerEvents="box-none">
-          {immersive && (
-            <TouchableOpacity
-              style={s.restoreButton}
-              onPress={onRestoreNavigation}
-              activeOpacity={0.68}
-              hitSlop={4}
-              accessibilityRole="button"
-              accessibilityLabel={t.feed_show_navigation}
-            >
-              <Icon name="arrow-left" size={feedIcon.control} color={feedInk.primary} strokeWidth={FEED_STROKE} absoluteStrokeWidth />
-            </TouchableOpacity>
-          )}
-
-          <View style={s.topInkShadow} pointerEvents="none">
-            <Wordmark height={22} color={feedInk.primary} />
-          </View>
-        </View>
-
-        <View style={s.topActions} pointerEvents="box-none">
-          <TouchableOpacity
-            style={s.circleButton}
-            onPress={onCirclePress}
-            activeOpacity={0.72}
-            hitSlop={{ top: 4, bottom: 4, left: 3, right: 3 }}
-            accessibilityRole="button"
-            accessibilityLabel={circleInvite ? `${t.feed_create}, ${t.pending}` : t.feed_create}
-          >
-            <View style={s.circlePill}>
-              <Text style={s.circleButtonText} numberOfLines={1}>{t.feed_create}</Text>
-            </View>
-
-            {circleInvite && (
-              <View style={s.inviteBadge}>
-                <Icon name="camera" size={feedIcon.badge} color={feedInk.primary} strokeWidth={FEED_STROKE} absoluteStrokeWidth />
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={s.restoreButton}
+          onPress={onRestoreNavigation}
+          activeOpacity={0.68}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={t.feed_show_navigation}
+        >
+          <Icon name="arrow-left" size={feedIcon.control} color={feedInk.primary} strokeWidth={FEED_STROKE} absoluteStrokeWidth />
+        </TouchableOpacity>
       </View>
     </View>
   )
@@ -222,23 +189,6 @@ const s = StyleSheet.create({
     paddingHorizontal: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
-    // Duas âncoras estáveis: voltar/assinatura à esquerda e Criar à direita.
-    // Sem conteúdo variável no meio, nenhuma largura volta a deslocar o logo.
-    //
-    //   [ voltar ─8─ assinatura ]  ── flex ──  [ Criar ]
-    //
-    justifyContent: 'space-between',
-    gap: spacing.sm2,
-  },
-  brandGroup: {
-    flexShrink: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  topActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   restoreButton: {
     width: 36,
@@ -250,50 +200,7 @@ const s = StyleSheet.create({
     shadowOpacity: 0.36,
     shadowRadius: 2,
   },
-  topInkShadow: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.36,
-    shadowRadius: 2,
-  },
-  circleButton: {
-    // Dois módulos tácteis de 44pt: cresce sem virar o elemento dominante.
-    width: 88,
-    height: 36,
-    flexDirection: 'row',
-    alignItems: 'center',
-    overflow: 'visible',
-  },
   // Só o botão do Círculo leva o contorno.
-  circlePill: {
-    ...outline,
-    width: '100%',
-    // 32 de desenho dentro de uma fila de 36: o `hitSlop` devolve os 44 de área
-    // tátil. A cápsula fica menor que a altura da linha e lê-se como botão.
-    height: 30,
-    paddingHorizontal: spacing.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  circleButtonText: {
-    // Sem tipo local: Criar é um controlo primário como Seguir e Get Started.
-    ...feedType.primary,
-    color: feedInk.primary,
-    ...feedTextShadow,
-  },
-  inviteBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -3,
-    width: 17,
-    height: 17,
-    borderRadius: radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.accent,
-    borderWidth: 1.5,
-    borderColor: colors.feedSurface,
-  },
 
   searchPanel: {
     position: 'absolute',

@@ -17,6 +17,7 @@ import { useVideoPlayer, VideoView } from 'expo-video'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { StoryGroup, Story, storyUrl, viewStory } from '../../services/story.service'
 import { colors, fonts } from '../../theme'
+import { configureVideoPlayer, videoSource as buildVideoSource } from '../../utils/video'
 
 const { width, height } = Dimensions.get('window')
 const STORY_DURATION = 4000
@@ -79,8 +80,11 @@ export default function StoryViewerScreen() {
   const story: Story | undefined = group?.stories[storyIndex]
 
   const videoPlayer = useVideoPlayer(
-    story?.mediaType === 'VIDEO' && story ? { uri: storyUrl(story) } : null,
-    (p) => { p.loop = false },
+    story?.mediaType === 'VIDEO' && story ? buildVideoSource(storyUrl(story)) : null,
+    (p) => {
+      configureVideoPlayer(p)
+      p.loop = false
+    },
   )
 
   const goNextStory = useCallback(() => {

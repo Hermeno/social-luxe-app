@@ -52,6 +52,7 @@ import { useT } from '../../i18n'
 import AvatarImage from '../../components/AvatarImage'
 import DuoAvatar from '../../components/DuoAvatar'
 import { displayHandle } from '../../utils/handle'
+import { videoPosterUrl } from '../../utils/video'
 
 type Nav = StackNavigationProp<AppStackParams>
 
@@ -1017,7 +1018,9 @@ export default function MessagesScreen() {
                         </View>
                       </View>
                       {postResults.map((p) => {
-                        const previewUri = resolveMediaUri(p.thumbnailUrl ?? p.mediaUrl)
+                        const previewUri = p.mediaType === 'VIDEO'
+                          ? videoPosterUrl(p.mediaUrl, p.thumbnailUrl, 240)
+                          : resolveMediaUri(p.thumbnailUrl ?? p.mediaUrl)
                         const textBackground = normalizePostColor(p.bgColor?.split('|')[0], '#111114')
                         const postSummary = p.caption?.trim() || t.msg_post_no_caption
                         return (
@@ -1030,11 +1033,18 @@ export default function MessagesScreen() {
                             onPress={() => {
                               useFeedStore.getState().showPostInFeed(p)
                               exitSearch()
-                              nav.navigate('Tabs', { screen: 'Feed' })
+                              // `Immersive`: o separador `Feed` é a Home desde o redesenho.
+                              nav.navigate('Tabs', { screen: 'Immersive' })
                             }}
                           >
                             {previewUri ? (
-                              <Image source={{ uri: previewUri }} style={s.postThumb} contentFit="cover" />
+                              <Image
+                                source={{ uri: previewUri }}
+                                style={s.postThumb}
+                                contentFit="cover"
+                                cachePolicy="disk"
+                                recyclingKey={`message-search:${p.id}`}
+                              />
                             ) : (
                               <View style={[s.postThumb, { backgroundColor: textBackground, alignItems: 'center', justifyContent: 'center' }]}>
                                 <Ionicons name="text" size={18} color="#fff" />

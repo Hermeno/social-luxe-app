@@ -1,3 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M12 20.75S3.15 15.7 3.15 9.45c0-2.9 2.15-5.1 5-5.1 1.7 0 3.12.82 3.85 2.18.73-1.36 2.15-2.18 3.85-2.18 2.85 0 5 2.2 5 5.1 0 6.25-8.85 11.3-8.85 11.3Z"/>
+  <!-- O mesmo coração da feed, reescalado da caixa de 21 para a grelha 24 e
+       encostado à área viva 2..22. Escala uniforme: as curvas relativas só
+       multiplicam e no arco só os raios e o ponto final mudam. -->
+  <path d="M12.049 6.40202c0.62821 -3.14105 5.45664 -3.33831 7.53853 -1.25642c2.01404 2.01404 1.88463 5.44533 0 7.53853l-7.53853 7.53853l-7.53853 -7.53853a5.33099 5.33099 0 0 1 0 -7.53853c1.94745 -1.94745 6.91032 -1.88463 7.53853 1.25642"/>
 </svg>

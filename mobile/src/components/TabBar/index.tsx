@@ -3,13 +3,15 @@ import { View, TouchableOpacity, StyleSheet, Text, Animated, Easing } from 'reac
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors, radius, spacing } from '../../theme'
-import { FEED_CONTENT_MAX_WIDTH, feedIcon, feedInk, feedLine, feedType } from '../../screens/FeedScreen/tokens'
+import { FEED_CONTENT_MAX_WIDTH, feedIcon, feedInk, feedType } from '../../screens/FeedScreen/tokens'
 import { useFeedStore } from '../../store/feed.store'
 import { useAuthStore } from '../../store/auth.store'
 import { useMessageBadgeStore } from '../../store/messageBadge.store'
 import { useOverlayStore } from '../../store/overlay.store'
 import { useT } from '../../i18n'
+import FeedIcon, { type FeedIconName } from '../FeedIcon'
 import Icon from '../Icon'
+import type { IconName } from '../Icon/paths'
 import {
   FEED_COMPOSER_HEIGHT,
   TAB_BAR_ICON_LIFT,
@@ -23,22 +25,51 @@ import useNavSkin from './useNavSkin'
 
 // ─── Sistema ótico da navegação ─────────────────────────────────────────────
 //
-// Uma só família, uma só grelha 24×24 e um único traço de 1.9pt. O tamanho da
-// caixa varia apenas para compensar a área viva de cada desenho: o olho vê a
-// tinta, não o viewBox. Todos chegam assim aos mesmos 21pt de massa visual sem
-// esticar paths, misturar preenchidos com contornos ou corrigir cada estado.
+// Um único traço de 1.9pt e a mesma massa de tinta em todos: 21pt no lado maior.
+// A caixa varia porque cada desenho enche a sua de maneira diferente — o olho vê
+// a tinta, não o viewBox.
+//
+// Os tamanhos abaixo são MEDIDOS, não estimados. Antes vinham de uma conta sobre
+// um número escrito à mão por glifo ("a área viva do `search` é 16.75") e bastava
+// esse palpite estar ao lado para o ícone sair maior ou menor que os vizinhos —
+// foi o que aconteceu ao balão das mensagens, que andou a 21 quando precisava de
+// 26.25 e por isso lia 20% mais pequeno que tudo o resto.
+//
+// Quem os produz é `design/feed-icons/nav-ruler.mjs`: renderiza cada glifo com a
+// pintura exacta desta barra, conta os pixels pintados e resolve o tamanho que
+// põe a tinta nos 21. Mexeste num destes desenhos? Corre a régua outra vez e
+// traz os números de lá — não os afines à mão.
 const NAV_INK = 21
 const STROKE = 1.9
-const opticalSize = (geometry: number) =>
-  +(((NAV_INK - STROKE) * 24) / geometry).toFixed(2)
 
-const NAV_GLYPHS = {
-  home:    { icon: 'home',       size: opticalSize(17.5),  nudgeY: 0 },
-  search:  { icon: 'search',     size: opticalSize(16.75), nudgeY: -0.1 },
-  circle:  { icon: 'circle-add', size: opticalSize(18),    nudgeY: 0 },
-  message: { icon: 'message',    size: opticalSize(17.3),  nudgeY: 0 },
-  profile: { icon: 'user',       size: opticalSize(16.75), nudgeY: -0.4 },
-} as const
+/**
+ * Reforço para o glifo preenchido da barra.
+ *
+ * `chat-outline` traz o contorno cozido no preenchimento, por isso `strokeWidth`
+ * não lhe toca — sobe-se com `boostPx`, como na fila de acções da Home. Sem ele
+ * ficava visivelmente mais leve que os quatro vizinhos traçados.
+ */
+const NAV_FILL_BOOST = 0.5
+
+type NavGlyphSpec =
+  | { family: 'ui'; icon: IconName; size: number; nudgeY: number }
+  | { family: 'feed'; icon: FeedIconName; size: number; nudgeY: number }
+
+const NAV_GLYPHS: Record<string, NavGlyphSpec> = {
+  home:    { family: 'ui', icon: 'home',       size: 26.07, nudgeY: 0 },
+  search:  { family: 'ui', icon: 'search',     size: 25.04, nudgeY: 0 },
+  circle:  { family: 'ui', icon: 'circle-add', size: 25.38, nudgeY: 0 },
+  // O balão de comentar, e não o `message` do outro conjunto: é o mesmo desenho
+  // que a acção de comentar na Home usa. Ter dois balões diferentes na mesma app
+  // — um na barra, outro por baixo de cada publicação — era a inconsistência.
+  //
+  // Vem do `FeedIcon`, e é por isso que o número é o mais alto dos cinco. Essa
+  // família reenquadra cada caixa para a tinta ocupar 0.78 do lado, enquanto os
+  // `ui` a esta escala andam nos 0.83: o mesmo alvo de tinta pede-lhe uma caixa
+  // maior. Achar que as duas normalizações se equivaliam foi o que o deixou a 21.
+  message: { family: 'feed', icon: 'chat-outline', size: 26.25, nudgeY: 0 },
+  profile: { family: 'ui', icon: 'user',       size: 25.04, nudgeY: 0 },
+}
 
 type NavGlyph = keyof typeof NAV_GLYPHS
 
@@ -63,13 +94,22 @@ const NavigationGlyph = memo(function NavigationGlyph({
           { transform: [{ translateY: -1 + metric.nudgeY }] },
         ]}
       >
-        <Icon
-          name={metric.icon}
-          size={metric.size}
-          color={selected ? activeColor : inactiveColor}
-          strokeWidth={STROKE}
-          absoluteStrokeWidth
-        />
+        {metric.family === 'feed' ? (
+          <FeedIcon
+            name={metric.icon}
+            size={metric.size}
+            color={selected ? activeColor : inactiveColor}
+            boostPx={NAV_FILL_BOOST}
+          />
+        ) : (
+          <Icon
+            name={metric.icon}
+            size={metric.size}
+            color={selected ? activeColor : inactiveColor}
+            strokeWidth={STROKE}
+            absoluteStrokeWidth
+          />
+        )}
       </View>
       <View
         style={[
@@ -93,9 +133,9 @@ const REVEAL_SLOT = 46
  * A calibração é a mesma: só muda o alvo.
  */
 const REVEAL_INK = 18
-const revealSize = (geometry: number) => +(((REVEAL_INK - STROKE) * 24) / geometry).toFixed(2)
-const SZ_REVEAL_CIRCLE = revealSize(18)    // circle-add ⇒ 18 de lado
-const SZ_REVEAL_PLUS = revealSize(15.5)    // plus ⇒ 15.5 de lado
+// Medidos pela mesma régua, com o alvo em REVEAL_INK.
+const SZ_REVEAL_CIRCLE = 21.39
+const SZ_REVEAL_PLUS = 24.86
 
 function MotionTabButton({
   children, selected, onPress, label, valueText,
@@ -267,7 +307,11 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
 
   const activeRoute = state.routes[state.index]
   const activeTab  = activeRoute.name
-  const onFeed     = activeTab === 'Feed'
+  // A Feed imersiva — mídia a ocupar o ecrã, fundo escuro, campo de comentário
+  // em baixo. Deixou de ser o separador `Feed`, que agora é a Home branca: tudo
+  // o que esta constante governa (barra escura, campo de comentário, CTA da
+  // pausa) pertence à imersiva e ficaria errado sobre uma página branca.
+  const onFeed     = activeTab === 'Immersive'
   const onCircle   = activeTab === 'Circle'
   const onSearch   = activeTab === 'Search'
   const showFeedInviteCta = onFeed && feedInviteActive
@@ -312,7 +356,9 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
     if (!event.defaultPrevented) navigation.navigate(tab)
   }
 
-  const homeActive   = activeTab === 'Feed' && !openSearch && !searchVisible
+  // A imersiva abre-se a partir da Home, por isso o separador continua aceso lá
+  // dentro — senão a barra fica sem nada seleccionado.
+  const homeActive   = (activeTab === 'Feed' || activeTab === 'Immersive') && !openSearch && !searchVisible
   const msgActive    = activeTab === 'Messages'
   const profActive   = activeTab === 'Profile'
   const commentLabel = commentTarget && commentTarget.authorId !== currentUser?.id
@@ -327,9 +373,14 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
 
   // A Feed mantém uma stage de altura fixa: cinco controlos iguais dão lugar ao
   // compositor sem alterar a geometria reservada pela mídia e pelo scrubber.
-  // Sem post por baixo não há nada para comentar. Na pausa do Círculo, o estado
-  // dedicado abaixo substitui toda a navegação por uma só saída inequívoca.
-  const collapsed = onFeed && immersive && !!commentTarget
+  // Na imersiva a barra é sempre o campo — nunca navegação, nem no primeiro vídeo
+  // aberto. Antes dependia de `immersive`, que só ligava depois de a pessoa
+  // deslizar, e por isso o primeiro post abria com os separadores por baixo.
+  // A saída dali é o `←` do cabeçalho, não a barra.
+  //
+  // A pausa do Círculo não passa por aqui: tem a sua própria face
+  // (`showFeedInviteCta`) que substitui a barra inteira.
+  const collapsed = onFeed
   useEffect(() => {
     // Outra aba nunca herda um frame transparente/recolhido da Feed.
     if (!onFeed) {
@@ -821,13 +872,16 @@ const s = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing.md2,
     borderRadius: radius.full,
+    // Sem contorno e sem sombra: o campo é uma forma cheia e nada mais.
+    //
+    // Teve os dois. A sombra saiu primeiro — descolava o campo da barra como um
+    // cartão a flutuar, e o campo de resposta é a última coisa da Feed que deve
+    // chamar atenção. O contorno ficou a segurar sozinho, mas um fio branco a
+    // 18% sobre um preenchimento quase preto não desenha uma borda: desenha uma
+    // sujidade clara à volta dos cantos, que é exactamente o que se via.
+    //
+    // O preenchimento a 96% já se separa do gradiente da barra sem ajuda.
     backgroundColor: colors.commentField,
-    borderWidth: StyleSheet.hairlineWidth,
-    // O contorno chega. A sombra que aqui estava — 8px de raio, 34% de preto,
-    // deslocada 3px — descolava o campo da barra como se fosse um cartão a
-    // flutuar, e o campo de resposta é a última coisa da Feed que deve chamar
-    // atenção. Por baixo dele corre o gradiente da barra, que já o assenta.
-    borderColor: feedLine.subtle,
   },
   commentFieldDisabled: { opacity: 0.54 },
   commentText: {

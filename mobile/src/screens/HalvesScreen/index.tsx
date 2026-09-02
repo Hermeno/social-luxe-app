@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator,
-  RefreshControl, Image, Alert,
+  RefreshControl, Alert,
 } from 'react-native'
+import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useNavigation, useFocusEffect } from '@react-navigation/native'
@@ -16,9 +17,16 @@ import { colors, fonts } from '../../theme'
 import { API_BASE } from '../../config'
 import { useFeedStore } from '../../store/feed.store'
 import { useT } from '../../i18n'
+import { videoPosterUrl } from '../../utils/video'
 
 function resolveMedia(url: string) {
   return url.startsWith('http') ? url : `${API_BASE}${url}`
+}
+
+function halfPreview(item: Half): string {
+  return item.mediaType === 'VIDEO'
+    ? videoPosterUrl(item.mediaUrl, null, 320)
+    : resolveMedia(item.mediaUrl)
 }
 
 const T_C = '#1A1A1A'
@@ -86,7 +94,11 @@ export default function HalvesScreen() {
       // A metade completa abre na feed, como qualquer outro post. O `PostViewer`
       // deixou de ser o leitor genérico da app.
       useFeedStore.getState().showPostInFeed(post)
-      nav.navigate('Tabs', { screen: 'Feed' })
+      // `Immersive` e não `Feed`: desde o redesenho da Home, o separador `Feed`
+      // é a Home. Mandar para lá um post que se acabou de pôr em foco pelo
+      // `showPostInFeed` não abria nada — a pessoa aterrava na página onde já
+      // estava e o foco ficava por usar.
+      nav.navigate('Tabs', { screen: 'Immersive' })
     } catch (e: unknown) {
       const msg = (e as any)?.response?.data?.message ?? 'Não foi possível completar.'
       toast.error(t.error, msg)
@@ -111,7 +123,13 @@ export default function HalvesScreen() {
     const first = item.creator.name.split(' ')[0]
     return (
       <View style={s.card}>
-        <Image source={{ uri: resolveMedia(item.mediaUrl) }} style={s.thumb} />
+        <Image
+          source={{ uri: halfPreview(item) }}
+          style={s.thumb}
+          contentFit="cover"
+          cachePolicy="disk"
+          recyclingKey={`half:${item.id}`}
+        />
         <View style={s.cardBody}>
           <View style={s.who}>
             <AvatarImage uri={item.creator.avatar} size={22} name={item.creator.name} />
@@ -138,7 +156,13 @@ export default function HalvesScreen() {
   function renderMine({ item }: { item: Half }) {
     return (
       <View style={s.card}>
-        <Image source={{ uri: resolveMedia(item.mediaUrl) }} style={s.thumb} />
+        <Image
+          source={{ uri: halfPreview(item) }}
+          style={s.thumb}
+          contentFit="cover"
+          cachePolicy="disk"
+          recyclingKey={`half:${item.id}`}
+        />
         <View style={s.cardBody}>
           <View style={s.who}>
             <Text style={s.whoTxt} numberOfLines={1}>

@@ -22,6 +22,15 @@ export interface UploadResult {
   height: number | null
 }
 
+// Matches mobile/src/utils/video.ts. The original stays available in
+// Cloudinary, while this phone-sized derivative is prepared once at upload so
+// the first viewer does not pay the transcoding delay.
+export const VIDEO_DELIVERY_TRANSFORMATION = [
+  { crop: 'limit', width: 1080 },
+  { quality: 'auto:eco' },
+  { video_codec: 'h264' },
+]
+
 export async function uploadToCloudinary(
   file: UploadedFile,
   folder: string = 'luxe',
@@ -41,9 +50,10 @@ export async function uploadToCloudinaryWithMeta(
     ? {
         folder,
         resource_type: 'video' as const,
-        quality:     'auto:best',
-        video_codec: 'h264',
-        audio_codec: 'aac',
+        // Do not turn the uploaded original into a large `auto:best` delivery.
+        // Prepare the exact lightweight MP4 requested by the mobile player.
+        eager: [{ transformation: VIDEO_DELIVERY_TRANSFORMATION, format: 'mp4' as const }],
+        eager_async: true,
       }
     : isAudio
     ? {
@@ -151,8 +161,8 @@ export function generateThumbnailUrl(mediaUrl: string | null, mediaType: MediaTy
 //
 // Medido numa foto de referência: 1 036 KB → 48 KB, e mais nítida.
 //
-// Vídeo fica de fora de propósito — precisa de streaming adaptativo, que é
-// outra conversa e não se resolve por transformação de URL.
+// Vídeo fica de fora desta função porque tem a sua transformação progressiva
+// própria (`VIDEO_DELIVERY_TRANSFORMATION`), aplicada pelo leitor mobile.
 const DISPLAY_TRANSFORM = 'w_1080,c_limit,q_auto:good,f_auto,e_sharpen:60'
 
 /**

@@ -144,7 +144,6 @@ export default function CommentItem({
           name={comment.likedByMe ? 'heart-solid' : 'heart'}
           size={15}
           color={comment.likedByMe ? colors.heart : 'rgba(0,0,0,0.28)'}
-          weight={comment.likedByMe ? 'regular' : 'medium'}
         />
         {likes > 0 && (
           <Text style={[s.likeCount, comment.likedByMe && s.likeCountOn]}>{likes}</Text>

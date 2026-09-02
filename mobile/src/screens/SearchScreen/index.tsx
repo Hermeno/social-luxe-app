@@ -25,6 +25,7 @@ import VerifiedBadge from '../../components/VerifiedBadge'
 import FollowSplitButton from '../../components/FollowSplitButton'
 import { useT } from '../../i18n'
 import { displayHandle } from '../../utils/handle'
+import { videoPosterUrl } from '../../utils/video'
 
 type Nav = StackNavigationProp<AppStackParams>
 
@@ -49,7 +50,11 @@ const GRID_GAP = 2
 const CELL = (Dimensions.get('window').width - GRID_GAP * 2) / 3
 
 function PostCell({ post, onPress }: { post: Post; onPress: () => void }) {
-  const uri = post.mediaUrls?.[0] ?? post.mediaUrl
+  // Nunca entregar um MP4 a <Image>: além de não ser uma miniatura válida,
+  // cada tile acabava por pedir o ficheiro de vídeo inteiro.
+  const uri = post.mediaType === 'VIDEO'
+    ? videoPosterUrl(post.mediaUrl, post.thumbnailUrl, CELL * 2)
+    : post.mediaUrls?.[0] ?? post.mediaUrl
   return (
     <TouchableOpacity
       style={s.cell}
@@ -59,7 +64,14 @@ function PostCell({ post, onPress }: { post: Post; onPress: () => void }) {
       accessibilityLabel={post.caption?.slice(0, 60) || post.user?.name}
     >
       {uri ? (
-        <Image source={{ uri }} style={s.cellImage} contentFit="cover" transition={140} />
+        <Image
+          source={{ uri }}
+          style={s.cellImage}
+          contentFit="cover"
+          cachePolicy="disk"
+          recyclingKey={`search:${post.id}`}
+          transition={140}
+        />
       ) : (
         // Post só de texto: a legenda é a própria miniatura.
         <View style={s.cellText}>
@@ -228,7 +240,11 @@ export default function SearchScreen() {
   // cada miniatura é uma escolha e não um passo de uma história.
   const openInFeed = useCallback((post: Post) => {
     showPostInFeed(post)
-    nav.navigate('Tabs', { screen: 'Feed' })
+      // `Immersive` e não `Feed`: desde o redesenho da Home, o separador `Feed`
+      // é a Home. Mandar para lá um post que se acabou de pôr em foco pelo
+      // `showPostInFeed` não abria nada — a pessoa aterrava na página onde já
+      // estava e o foco ficava por usar.
+    nav.navigate('Tabs', { screen: 'Immersive' })
   }, [nav, showPostInFeed])
 
   const isSearching = query.trim().length > 0

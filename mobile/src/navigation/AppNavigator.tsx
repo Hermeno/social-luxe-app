@@ -38,6 +38,12 @@ import { StoryGroup } from '../services/story.service'
 
 export type AppTabParams = {
   Feed: undefined
+  /**
+   * A Feed imersiva: mídia em ecrã inteiro, aberta ao tocar num vídeo ou numa
+   * imagem da Home. É um separador sem botão — vive neste navegador porque é a
+   * barra dele que se transforma no campo de comentário em baixo.
+   */
+  Immersive: undefined
   Search: undefined
   Messages: undefined
   Create: undefined          // launched from the feed top actions
@@ -49,8 +55,6 @@ export type AppStackParams = {
   Tabs: NavigatorScreenParams<AppTabParams>
   Profile: { userId?: string }
   /** Sem `userId` mostra a tua própria rede. `mode` escolhe o separador de entrada. */
-  /** Visualização em tela cheia — vídeo/Reel aberto a partir da Home. */
-  Immersive: undefined
   Followers: { userId?: string; name?: string; mode?: 'followers' | 'following' } | undefined
   Chat: { userId: string; userName: string; userAvatar: string | null; partnerHasPosts?: boolean }
   About: undefined
@@ -90,6 +94,11 @@ function Tabs({ defaultTab }: { defaultTab: 'Feed' | 'Messages' }) {
           circular como assinatura. A Feed imersiva não desapareceu — passou a ser
           o ecrã de visualização em tela cheia, aberto a partir daqui. */}
       <Tab.Screen name="Feed"      component={HomeScreen} />
+      {/* Sem botão próprio: a `TabBar` desenha uma lista fixa de separadores e só
+          lê as rotas para saber qual está activa. Vive aqui dentro, e não na
+          stack, porque é a barra deste navegador que traz o campo de comentário
+          em baixo — empilhada por cima, a imersiva ficava sem ele. */}
+      <Tab.Screen name="Immersive" component={FeedScreen} />
       <Tab.Screen name="Search"    component={SearchScreen} />
       <Tab.Screen name="Messages"  component={MessagesScreen} />
       <Tab.Screen name="Create"    component={CreateScreen} />
@@ -134,7 +143,6 @@ export default function AppNavigator({ defaultTab }: { defaultTab: 'Feed' | 'Mes
       <Stack.Screen name="Chat" component={ChatScreen} />
       <Stack.Screen name="Halves" component={HalvesScreen} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} />
-      <Stack.Screen name="Immersive" component={FeedScreen} />
       <Stack.Screen name="PostViewer" component={PostViewerScreen} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
       <Stack.Screen name="StoryViewer" component={StoryViewerScreen} />

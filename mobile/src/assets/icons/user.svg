@@ -1,4 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-  <circle cx="12" cy="8" r="4"/>
-  <path d="M4.1 20.75c0-4.25 3.45-7.15 7.9-7.15s7.9 2.9 7.9 7.15Z"/>
+  <!-- A pessoa da Luxey. Vinha numa caixa de 24 com traço 1.5 e a tinta a
+       transbordar a área viva; aqui está reescalada para caber em 2..22 com o
+       traço da família. As curvas são as do ficheiro, só multiplicadas.
+       O tamanho na barra (25.04) foi medido contra ESTE desenho. -->
+  <circle cx="12.0" cy="6.525" r="3.65"/>
+  <path d="M19.3 17.019C19.3 19.287 19.3 21.125 12.0 21.125C4.7 21.125 4.7 19.287 4.7 17.019C4.7 14.751 7.968 12.912 12.0 12.912C16.032 12.912 19.3 14.751 19.3 17.019Z"/>
 </svg>

@@ -1,5 +1,5 @@
 import { Platform } from 'react-native'
-import { fonts, typography } from '../../theme'
+import { colors, fonts, typography } from '../../theme'
 
 // Instagram usa a fonte nativa do sistema, não uma display geométrica. No
 // Android isto dá Roboto; no iOS, San Francisco. A marca continua no wordmark e
@@ -57,15 +57,7 @@ export const feedIcon = {
    * decisões.
    */
   control: 20,
-  /**
-   * Coluna de acções do post e navegação.
-   *
-   * Esteve em 28 e lia-se pequeno ao lado do que o Instagram pratica na mesma
-   * posição. Subir é seguro: o `FeedIcon` desenha SVG, a espessura de cada
-   * contorno está em unidades do viewBox e o reforço do peso `medium` é uma
-   * fracção do viewBox (1%). Cresce tudo na mesma proporção — não há um pixel
-   * a interpolar em lado nenhum, nem traço a afinar com o tamanho.
-   */
+  /** Ações de publicação, com a mesma caixa na Home e na Feed imersiva. */
   action: 32,
   /** Sobreposições no centro da mídia — play de vídeo. */
   overlay: 64,
@@ -199,6 +191,24 @@ export const feedType = {
  * de cada desenho: é isto que faz famílias diferentes terem a mesma espessura.
  */
 export const FEED_STROKE = 1.9
+
+/**
+ * Tinta dos controlos de uma publicação — gostar, comentar, repostar, partilhar,
+ * o menu e os atalhos que vivem na mesma fila.
+ *
+ * Um só cinzento, e é essa a razão de existir. Já esteve partido em dois — quase
+ * preto sobre o papel da Home, branco sobre a fotografia — e isso é decidir a
+ * tinta pelo fundo em vez de pelo papel do glifo. Um comando não é conteúdo: não
+ * compete com a fotografia nem com o nome de quem publicou, e a partir do momento
+ * em que a tinta é a mesma nos dois sítios deixa de haver uma escolha por ecrã.
+ *
+ * Sobre mídia não precisa de branco para se ler: por baixo da fila corre sempre
+ * um véu, e é ele que segura o contraste.
+ *
+ * Os estados accionados continuam a ter cor própria — o coração gostado, o
+ * repost feito. É o repouso que é neutro.
+ */
+export const ACTION_INK = '#B4B4B4'
 
 /**
  * Tinta do texto sobre a mídia.

@@ -32,6 +32,7 @@ import { useFeedStore } from '../../store/feed.store'
 import { colors, fonts, leading, postGradientColors, radius, sheet as sheetInk, spacing, typography } from '../../theme'
 import type { Post } from '../../types'
 import { displayHandle } from '../../utils/handle'
+import { videoPosterUrl } from '../../utils/video'
 
 /** Fundo de um post de texto sem cor própria — dois pretos, para a grelha
  *  não ficar com uma célula chapada. */
@@ -56,16 +57,6 @@ function resolveMedia(url: string | null | undefined): string | null {
   return `${API_BASE}${url}`
 }
 
-function videoGridFrame(mediaUrl: string | null | undefined, thumbnailUrl: string | null | undefined): string | null {
-  if (mediaUrl?.includes('cloudinary.com') && mediaUrl.includes('/video/upload/')) {
-    return mediaUrl.replace(
-      '/video/upload/',
-      '/video/upload/so_0,w_400,h_400,c_fill,q_auto:good,f_jpg/',
-    )
-  }
-  return thumbnailUrl || null
-}
-
 function stillVisible(posts: Post[]): Post[] {
   const now = Date.now()
   return posts.filter((post) => (
@@ -86,7 +77,7 @@ function PostTile({ post, size, label, likeLabel, commentLabel, onPress }: {
   // A thumbnail do backend é um LQIP fortemente desfocado. Fotografias usam a
   // mídia nítida; vídeos Cloudinary recebem um frame JPEG próprio para a grelha.
   const mediaSource = post.mediaType === 'VIDEO'
-    ? videoGridFrame(post.mediaUrl ?? post.mediaUrls?.[0], post.thumbnailUrl)
+    ? videoPosterUrl(post.mediaUrl ?? post.mediaUrls?.[0], post.thumbnailUrl, size * 2)
     : (post.mediaUrl ?? post.mediaUrls?.[0] ?? post.thumbnailUrl)
   const uri = resolveMedia(mediaSource)
   const gradient = postGradientColors(post.bgColor, TEXT_POST_FALLBACK)
@@ -290,7 +281,8 @@ export default memo(function AuthorPostsModal({ author, onClose }: Props) {
       requestAnimationFrame(() => {
         const ownState = navigation.getState?.()
         const stack = ownState?.type === 'stack' ? navigation : navigation.getParent?.()
-        stack?.navigate?.('Tabs', { screen: 'Feed' })
+        // `Immersive`: o separador `Feed` é a Home desde o redesenho.
+        stack?.navigate?.('Tabs', { screen: 'Immersive' })
       })
     })
   }

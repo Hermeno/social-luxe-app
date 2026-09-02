@@ -29,6 +29,7 @@ import ScheduleMessageModal from './ScheduleMessageModal'
 import * as scheduledSvc from '../../services/scheduledMessages.service'
 import Toast from 'react-native-toast-message'
 import { API_BASE } from '../../config'
+import { videoPosterUrl } from '../../utils/video'
 import {
   getCachedMessages,
   getCachedConnections,
@@ -275,12 +276,7 @@ interface BubbleProps {
 
 // Poster (1ª frame) de um vídeo do Cloudinary, para mostrar na bolha
 function videoPoster(url: string): string {
-  if (url.includes('/video/upload/')) {
-    return url
-      .replace('/video/upload/', '/video/upload/so_0,w_600,h_600,c_fill/')
-      .replace(/\.(mp4|mov|webm|m4v)(\?.*)?$/i, '.jpg')
-  }
-  return url
+  return videoPosterUrl(url, null, 600)
 }
 
 function MessageBubble({ msg, mine, isFirst, isLast, myUserId, partnerAvatar, partnerName, myAvatar, myName, onLongPress, onReply }: BubbleProps) {

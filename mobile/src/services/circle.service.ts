@@ -94,25 +94,6 @@ export async function getIncoming(): Promise<{ call: { sessionId: string; host: 
   return res.data.data ?? { call: null }
 }
 
-export interface ActiveCircle {
-  sessionId: string
-  host: CircleUser & { username?: string | null; isVerified?: boolean }
-  /** Até quatro rostos para a pilha; `memberCount` diz o total. */
-  members: CircleUser[]
-  memberCount: number
-  joined: boolean
-  isHost: boolean
-  /** Sessão aberta agora. As antigas entram só para completar a fila. */
-  live: boolean
-  startedAt: string
-}
-
-// Os Círculos vivos que posso ver agora — alimenta a fila do topo da Feed.
-export async function getActiveCircles(): Promise<ActiveCircle[]> {
-  const res = await api.get('/circle/active')
-  return res.data.data ?? []
-}
-
 // Anfitrião chama um vizinho para o círculo
 export async function callToCircle(sessionId: string, userId: string): Promise<void> {
   await api.post('/circle/call', { sessionId, userId })
