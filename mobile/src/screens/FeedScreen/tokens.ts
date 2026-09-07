@@ -25,17 +25,7 @@ const FEED_UI_FONT_BLACK = Platform.select({
   default: fonts.extraBold,
 }) ?? fonts.extraBold
 
-/**
- * Ícones da Feed — tamanho e espessura.
- *
- * Antes disto a Feed tinha 14 tamanhos de ícone diferentes (9, 10, 12, 13, 14,
- * 17, 19, 20, 21, 28, 30, 34, 46, 62) e três famílias a coexistir no mesmo ecrã:
- * `FeedIcon`, o `Icon` do design system e `Ionicons` do @expo/vector-icons.
- * Três grelhas, três espessuras, três maneiras de desenhar o mesmo contorno.
- *
- * Quatro degraus chegam para toda a Feed. Cada um existe porque tem um papel
- * diferente, não porque alguém precisou de um valor intermédio.
- */
+/** Caixas por papel; todos os SVG usam grelha 24×24 e traço de 1.75. */
 export const feedIcon = {
   /**
    * Dentro de uma forma pequena e fixa — o emblema de câmara sobre o botão de
@@ -182,15 +172,8 @@ export const feedType = {
   },
 } as const
 
-/**
- * Espessura ótica dos contornos, em px do tamanho renderizado.
- *
- * 1.9 px a 28 px de caixa dá a mesma razão que o Instagram pratica (2 px numa
- * grelha de 24) — o traço lê-se limpo sobre fotografia sem engrossar o desenho.
- * Passa-se via `strokePx` do FeedIcon, que converte para as unidades da caixa
- * de cada desenho: é isto que faz famílias diferentes terem a mesma espessura.
- */
-export const FEED_STROKE = 1.9
+/** Traço base em unidades da grelha 24×24; escala junto com o ícone. */
+export const FEED_STROKE = 1.75
 
 /**
  * Tinta dos controlos de uma publicação — gostar, comentar, repostar, partilhar,

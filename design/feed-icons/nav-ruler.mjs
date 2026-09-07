@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// ARQUIVO HISTÓRICO: calibração anterior. A família atual usa geometria autoral 24×24 e caixas de navegação 26px.
 // A régua da barra de navegação.
 //
 // Os cinco separadores vêm de duas famílias que se medem de maneiras diferentes,

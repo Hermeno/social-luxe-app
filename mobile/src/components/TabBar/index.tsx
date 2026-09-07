@@ -23,52 +23,19 @@ import useReducedMotionPreference from '../../hooks/useReducedMotionPreference'
 import useComposerReveal from './useComposerReveal'
 import useNavSkin from './useNavSkin'
 
-// ─── Sistema ótico da navegação ─────────────────────────────────────────────
-//
-// Um único traço de 1.9pt e a mesma massa de tinta em todos: 21pt no lado maior.
-// A caixa varia porque cada desenho enche a sua de maneira diferente — o olho vê
-// a tinta, não o viewBox.
-//
-// Os tamanhos abaixo são MEDIDOS, não estimados. Antes vinham de uma conta sobre
-// um número escrito à mão por glifo ("a área viva do `search` é 16.75") e bastava
-// esse palpite estar ao lado para o ícone sair maior ou menor que os vizinhos —
-// foi o que aconteceu ao balão das mensagens, que andou a 21 quando precisava de
-// 26.25 e por isso lia 20% mais pequeno que tudo o resto.
-//
-// Quem os produz é `design/feed-icons/nav-ruler.mjs`: renderiza cada glifo com a
-// pintura exacta desta barra, conta os pixels pintados e resolve o tamanho que
-// põe a tinta nos 21. Mexeste num destes desenhos? Corre a régua outra vez e
-// traz os números de lá — não os afines à mão.
-const NAV_INK = 21
-const STROKE = 1.9
-
-/**
- * Reforço para o glifo preenchido da barra.
- *
- * `chat-outline` traz o contorno cozido no preenchimento, por isso `strokeWidth`
- * não lhe toca — sobe-se com `boostPx`, como na fila de acções da Home. Sem ele
- * ficava visivelmente mais leve que os quatro vizinhos traçados.
- */
-const NAV_FILL_BOOST = 0.5
-
+// Os separadores partilham a caixa de 26px. O desenho em 24×24 guarda
+// a compensação óptica e o traço de 1.75 escala com a caixa.
 type NavGlyphSpec =
-  | { family: 'ui'; icon: IconName; size: number; nudgeY: number }
-  | { family: 'feed'; icon: FeedIconName; size: number; nudgeY: number }
+  | { family: 'ui'; icon: IconName }
+  | { family: 'feed'; icon: FeedIconName }
 
+const NAV_ICON_SIZE = 26
 const NAV_GLYPHS: Record<string, NavGlyphSpec> = {
-  home:    { family: 'ui', icon: 'home',       size: 26.07, nudgeY: 0 },
-  search:  { family: 'ui', icon: 'search',     size: 25.04, nudgeY: 0 },
-  circle:  { family: 'ui', icon: 'circle-add', size: 25.38, nudgeY: 0 },
-  // O balão de comentar, e não o `message` do outro conjunto: é o mesmo desenho
-  // que a acção de comentar na Home usa. Ter dois balões diferentes na mesma app
-  // — um na barra, outro por baixo de cada publicação — era a inconsistência.
-  //
-  // Vem do `FeedIcon`, e é por isso que o número é o mais alto dos cinco. Essa
-  // família reenquadra cada caixa para a tinta ocupar 0.78 do lado, enquanto os
-  // `ui` a esta escala andam nos 0.83: o mesmo alvo de tinta pede-lhe uma caixa
-  // maior. Achar que as duas normalizações se equivaliam foi o que o deixou a 21.
-  message: { family: 'feed', icon: 'chat-outline', size: 26.25, nudgeY: 0 },
-  profile: { family: 'ui', icon: 'user',       size: 25.04, nudgeY: 0 },
+  home:    { family: 'ui', icon: 'home' },
+  search:  { family: 'ui', icon: 'search' },
+  circle:  { family: 'ui', icon: 'circle-add' },
+  message: { family: 'feed', icon: 'chat-outline' },
+  profile: { family: 'ui', icon: 'user' },
 }
 
 type NavGlyph = keyof typeof NAV_GLYPHS
@@ -91,23 +58,20 @@ const NavigationGlyph = memo(function NavigationGlyph({
       <View
         style={[
           s.navGlyphInk,
-          { transform: [{ translateY: -1 + metric.nudgeY }] },
+          { transform: [{ translateY: -1 }] },
         ]}
       >
         {metric.family === 'feed' ? (
           <FeedIcon
             name={metric.icon}
-            size={metric.size}
+            size={NAV_ICON_SIZE}
             color={selected ? activeColor : inactiveColor}
-            boostPx={NAV_FILL_BOOST}
           />
         ) : (
           <Icon
             name={metric.icon}
-            size={metric.size}
+            size={NAV_ICON_SIZE}
             color={selected ? activeColor : inactiveColor}
-            strokeWidth={STROKE}
-            absoluteStrokeWidth
           />
         )}
       </View>
@@ -127,13 +91,7 @@ const NavigationGlyph = memo(function NavigationGlyph({
 
 /** Largura que o compositor cede por cada atalho revelado. */
 const REVEAL_SLOT = 46
-/**
- * Os atalhos revelados são secundários — vivem ao lado do campo, não na fila
- * dos separadores — por isso levam um degrau de tinta abaixo dos 21 da barra.
- * A calibração é a mesma: só muda o alvo.
- */
-const REVEAL_INK = 18
-// Medidos pela mesma régua, com o alvo em REVEAL_INK.
+// Mantém as caixas existentes dos atalhos do compositor.
 const SZ_REVEAL_CIRCLE = 21.39
 const SZ_REVEAL_PLUS = 24.86
 
@@ -613,8 +571,6 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
                   name="arrow-right"
                   size={feedIcon.control}
                   color={colors.black}
-                  strokeWidth={STROKE}
-                  absoluteStrokeWidth
                 />
               </View>
             </TouchableOpacity>
@@ -709,7 +665,7 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
                           }],
                         }}
                       >
-                        <Icon name="plus" size={SZ_REVEAL_PLUS} color={iconActive} strokeWidth={STROKE} absoluteStrokeWidth />
+                        <Icon name="plus" size={SZ_REVEAL_PLUS} color={iconActive} />
                       </Animated.View>
                     </TouchableOpacity>
 
@@ -738,7 +694,7 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
                           }],
                         }}
                       >
-                        <Icon name="circle-add" size={SZ_REVEAL_CIRCLE} color={iconActive} strokeWidth={STROKE} absoluteStrokeWidth />
+                        <Icon name="circle-add" size={SZ_REVEAL_CIRCLE} color={iconActive} />
                       </Animated.View>
                     </TouchableOpacity>
                   </View>

@@ -489,7 +489,7 @@ const CreateCircleCard = memo(function CreateCircleCard({
                     },
                   ]}
                 >
-                  <FeedIcon name="baseline-plus" size={badgeSize * 0.62} color={colors.white} weight="medium" />
+                  <FeedIcon name="baseline-plus" size={badgeSize * 0.62} color={colors.white} />
                 </View>
               </View>
 

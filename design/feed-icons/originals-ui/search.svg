@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+  <!-- A lupa da Luxey. O ficheiro de origem vinha como contorno preenchido:
+       círculo de raio 384 em (480,480) e pega de (795.9,750.7) a (920.9,875.7),
+       banda de 64, numa caixa de 1024. Aqui é o mesmo desenho como traçado, para
+       a espessura vir do componente — que é como toda a família se mede.
+       O tamanho na barra (25.04) foi medido contra ESTE desenho: trocá-lo sem
+       correr `design/feed-icons/nav-ruler.mjs` desalinha-o dos vizinhos. -->
+  <circle cx="11.371" cy="11.871" r="8.496"/>
+  <path d="M18.36 17.86 21.125 20.625"/>
+</svg>

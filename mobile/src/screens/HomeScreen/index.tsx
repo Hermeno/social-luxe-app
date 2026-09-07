@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   FlatList,
@@ -28,8 +28,6 @@ import type { ViewToken } from 'react-native'
 import { colors, fonts, spacing, typography } from '../../theme'
 import HomeHeader from './HomeHeader'
 import HomeFeedItem from './HomeFeedItem'
-import HomeMediaRail from './HomeMediaRail'
-import { composeHomeFeed, type HomeBlock } from './feedComposition'
 
 type Nav = StackNavigationProp<AppStackParams>
 
@@ -60,7 +58,7 @@ export default function HomeScreen() {
   const showPostInFeed = useFeedStore((state) => state.showPostInFeed)
 
   const homeTap = useFeedStore((state) => state.homeTap)
-  const listRef = useRef<FlatList<HomeBlock>>(null)
+  const listRef = useRef<FlatList<Post>>(null)
 
   const [visibleId, setVisibleId] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
@@ -217,44 +215,15 @@ export default function HomeScreen() {
    */
   const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
     const first = viewableItems.find((entry) => entry.isViewable)
-    setVisibleId((first?.item as HomeBlock | undefined)?.id ?? null)
+    setVisibleId((first?.item as Post | undefined)?.id ?? null)
   }).current
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 70 }).current
 
-  /**
-   * A lista não é de publicações, é de BLOCOS.
-   *
-   * Quem decide o registo de cada uma — herói de ponta a ponta, cartão numa fila
-   * deitada, ou a composição do Círculo — é o `composeHomeFeed`, a partir da
-   * forma da própria mídia. Aqui só se desenha o que ele agrupou.
-   *
-   * E é daqui que sai o invariante do vídeo: um só bloco é o `visibleId` a cada
-   * momento, e dentro de uma fila só o cartão activo toca. Duas superfícies de
-   * vídeo montadas ao mesmo tempo é o que devolve som sem imagem no Android.
-   */
-  const blocks = useMemo(() => composeHomeFeed(posts), [posts])
-
-  const renderItem = useCallback(({ item: block }: { item: HomeBlock }) => {
-    const blockActive = isFocused && block.id === visibleId
-
-    if (block.kind === 'rail') {
-      return (
-        <HomeMediaRail
-          posts={block.posts}
-          width={width}
-          active={blockActive}
-          onOpenMedia={openMedia}
-          onOpenAuthor={openAuthor}
-        />
-      )
-    }
-
-    const item = block.post
-    return (
+  const renderItem = useCallback(({ item }: { item: Post }) => (
     <HomeFeedItem
       post={item}
       width={width}
-      active={blockActive}
+      active={isFocused && item.id === visibleId}
       liked={likeOverrides[item.id] ?? Boolean(item.userLiked)}
       likeCount={item._count?.likes ?? 0}
       reposted={repostOverrides[item.id] ?? Boolean(item.userReposted)}
@@ -270,8 +239,7 @@ export default function HomeScreen() {
       onDeleted={removePost}
       onEdited={updatePost}
     />
-    )
-  }, [isFocused, visibleId, likeOverrides, openAuthor, openMedia, removePost, repostOverrides, toggleLike, toggleRepost, updatePost, width])
+  ), [isFocused, visibleId, likeOverrides, openAuthor, openMedia, removePost, repostOverrides, toggleLike, toggleRepost, updatePost, width])
 
   return (
     <View style={[s.screen, { paddingTop: top }]}>
@@ -291,8 +259,8 @@ export default function HomeScreen() {
       ) : (
         <FlatList
           ref={listRef}
-          data={blocks}
-          keyExtractor={(block) => block.id}
+          data={posts}
+          keyExtractor={(post) => post.id}
           renderItem={renderItem}
           contentContainerStyle={{ paddingBottom: tabBarOccupiedHeight(bottom) + spacing.xl }}
           showsVerticalScrollIndicator={false}

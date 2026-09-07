@@ -6,7 +6,7 @@ import {
 } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Ionicons } from '@expo/vector-icons'
+import Icon from '../Icon'
 import { Post, Comment } from '../../types'
 import { useComments } from '../../hooks/useComments'
 import CommentItem from './CommentItem'
@@ -252,7 +252,7 @@ export default function CommentSheet({ post, onClose, onCommentAdded }: Props) {
         <View style={s.header}>
           <Text style={s.title}>{title}</Text>
           <TouchableOpacity onPress={close} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-            <Ionicons name="close" size={21} color="rgba(0,0,0,0.45)" />
+            <Icon name="close" size={21} color="rgba(0,0,0,0.45)" />
           </TouchableOpacity>
         </View>
 
@@ -293,7 +293,7 @@ export default function CommentSheet({ post, onClose, onCommentAdded }: Props) {
           </View>
         ) : comments.length === 0 ? (
           <View style={s.center}>
-            <Ionicons name="chatbubble-outline" size={26} color="rgba(0,0,0,0.16)" />
+            <Icon name="message" size={26} color="rgba(0,0,0,0.16)" />
             <Text style={s.emptyTitle}>{t.cmt_empty_title}</Text>
             <Text style={s.emptySub}>{t.cmt_empty_sub}</Text>
           </View>

@@ -1,63 +1,47 @@
-# Ícones da feed · folha de medidas
+# Luxee · ícones refinados das duas feeds
 
-`index.html` é a folha para redesenhar os ícones das duas feeds à mão: cada glifo
-ampliado sobre grelha de px reais, a tinta medida marcada por cima, e o mesmo
-desenho ao lado em tamanho 1:1 sobre a superfície onde vive.
+Os 33 SVGs de `mobile/src/assets/feed-icons/` foram refinados mantendo as metáforas e os estados originais. Os contornos antes incorporados em formas preenchidas passaram a traçados editáveis; os estados sólidos continuam sólidos. Os 15 controlos de interface que precisaram de correções também foram ajustados em `mobile/src/assets/icons/`.
+
+## Sistema
+
+- Canvas e `viewBox`: **24×24**.
+- Área viva máxima: **20×20**, com tinta dentro de **2..22**, incluindo metade do traço.
+- Traço principal: **1,75** em unidades do SVG, com `round` nos terminais e junções.
+- Cor: `currentColor`.
+- As compensações de escala e posição vivem na geometria. Formas densas podem ocupar menos área; chevrons e barras mantêm suas proporções.
+- Os pares coração, balão, gota e vídeo compartilham o mesmo contorno externo entre outline e preenchido.
+- Na aplicação: ações **32px** nas duas feeds; navegação **26px**. O traço escala junto com o desenho.
+
+`FeedIcon` apenas renderiza as formas geradas. Não acrescenta contornos a preenchimentos, não muda a espessura por ícone e não reenquadra o `viewBox`. `PostActionIcon` compartilha os mesmos desenhos entre o feed inicial e o feed de vídeos em tela cheia, mantendo a seleção do coração.
+
+## Entrega e comparação
+
+Abra **[index.html](index.html)**. A folha inclui antes/depois, ampliação sobre grelha, amostras a 24/28/32px, fundos claro/escuro e faixas com os tamanhos reais das duas feeds e da navegação. É uma conferência vetorial, não uma captura do aplicativo.
+
+- `originals/`: SVGs de feed anteriores e `runtime.json`, snapshot da geometria antes do refinamento.
+- `originals-ui/`: SVGs de interface anteriores às correções.
+- `../../mobile/src/assets/feed-icons/`: SVGs finais, limpos e editáveis.
+- `../../mobile/src/assets/icons/`: controlos compartilhados da interface.
+
+O comparativo de feed usa o enquadramento anterior do app e as compensações de espessura das ações; as referências originais permanecem disponíveis separadamente. A coluna de interface mostra diretamente o SVG anterior.
+
+## Reconstruir e conferir
 
 ```bash
-node design/feed-icons/build.mjs      # precisa do Chrome instalado
+cd mobile
+npm run icons
+npm run icons:feed
+npm run icons:feed:measure
+cd ..
+node design/feed-icons/build.mjs
 ```
 
-Sai `index.html` e `measurements.json`. Se mexeste num SVG, corre primeiro
-`npm run icons` ou `npm run icons:feed` dentro de `mobile/` — a página lê os
-`paths.ts` gerados, não os SVG.
+A medição precisa de Chrome local (`CHROME_PATH` pode substituir o caminho padrão do macOS). Rasteriza a 16× e verifica:
 
-## O que está lá dentro
+1. tinta dentro da margem de 2 unidades;
+2. paridade pixel a pixel entre o SVG e as formas geradas para `FeedIcon`;
+3. contorno externo estável entre estados outline e preenchido.
 
-| | |
-|---|---|
-| Feed inicial | `HomeScreen` — 11 ícones |
-| Feed imersiva | `FeedScreen` — 21 ícones |
-| Barra de navegação | `TabBar` — 7 ícones, no ecrã nas duas |
+`mobile/src/assets/feed-icons/_bounds.json` guarda medidas de tinta, centro de massa e paridade. Serve apenas para auditoria: **não altera os desenhos na geração**. O build também rejeita viewBoxes, espessuras e terminais incompatíveis, assim como elementos que o renderer nativo não suporta.
 
-Os três botões no topo escondem a grelha, escondem a caixa de tinta e ligam o
-**modo decalque**, que apaga o glifo até 22% para se poder desenhar por cima.
-Em impressão cada ecrã começa numa página nova.
-
-## As medidas
-
-**Tinta** são os pixels realmente pintados, contados num render supersampled do
-Chrome — não a caixa da geometria, que ignora o traço e as bicas dos cantos.
-**Ocupa** é o maior lado da tinta a dividir pela caixa; entre 78% e 80% o conjunto
-lê alinhado.
-
-**Traço** é a espessura que o olho recebe, por `2·área/perímetro`. Existe porque
-o que o ficheiro declara não é comparável entre famílias: num desenho com o
-contorno cozido no preenchimento o ficheiro só declara o reforço (`boostPx 0.5`)
-e num raster não declara nada. A coluna **declara** guarda o valor de origem ao
-lado, para se ver a diferença.
-
-Na fila de acções da Home, a 28 de caixa: comentar 1.94 · gostar 1.74 ·
-partilhar 1.69 · repostar 1.62 · mais 1.59.
-
-## Três origens, não duas
-
-- **`icons`** — o design system. Grelha 24×24, área viva 2..22, traço posto pelo
-  componente.
-- **`feed-icons`** — a feed. Cada desenho traz a caixa da sua origem e o build
-  reenquadra-a para a tinta ocupar 0.78 do lado.
-- **`ficheiro`** — o coração da Luxey (`LikeIcon`). Não é SVG: é o PNG desenhado
-  à mão, escalado. Ocupa 0.72 da caixa, e é só isso que muda entre um sítio e
-  outro.
-
-## Ficheiros
-
-```
-build.mjs           gera a página e o JSON; reimplementa a pintura dos componentes
-specs.mjs           o inventário — cada uso, com os valores já resolvidos
-index.html          a página (gerada)
-measurements.json   as mesmas medidas, para copiar (gerado)
-```
-
-Quando um ícone mudar de tamanho ou de sítio, é o `specs.mjs` que se corrige —
-as linhas `where` apontam para o ficheiro e a linha de onde o número veio.
+`specs.mjs`, `measurements.json` e `nav-ruler.mjs` pertencem à auditoria anterior. Não orientam a família refinada nem são importados pela nova folha; a fonte de verdade agora é o SVG.

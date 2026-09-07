@@ -21,7 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import AuthorAvatar from '../../components/AuthorAvatar'
 import FeedIcon from '../../components/FeedIcon'
 import Icon from '../../components/Icon'
-import { feedIcon, feedInk, FEED_STROKE } from './tokens'
+import { feedIcon, feedInk } from './tokens'
 import { API_BASE } from '../../config'
 import { getCache, setCache } from '../../db/database'
 import useReducedMotionPreference from '../../hooks/useReducedMotionPreference'
@@ -113,7 +113,7 @@ function PostTile({ post, size, label, likeLabel, commentLabel, onPress }: {
         />
       ) : (
         <View style={[s.tileMedia, s.tileFallback]}>
-          <Icon name="image" size={feedIcon.control} color={sheetInk.inkFaint} strokeWidth={FEED_STROKE} absoluteStrokeWidth />
+          <Icon name="image" size={feedIcon.control} color={sheetInk.inkFaint} />
         </View>
       )}
 
@@ -132,13 +132,13 @@ function PostTile({ post, size, label, likeLabel, commentLabel, onPress }: {
         <View style={s.tileStatsRow}>
           {!!compactMetric(likes) && (
             <View style={s.tileMetric}>
-              <FeedIcon name="heart-solid" size={feedIcon.inline} color={feedInk.primary} weight="regular" />
+              <FeedIcon name="heart-solid" size={feedIcon.inline} color={feedInk.primary} />
               <Text style={s.tileMetricText}>{compactMetric(likes)}</Text>
             </View>
           )}
           {!!compactMetric(comments) && (
             <View style={s.tileMetric}>
-              <FeedIcon name="chat-solid" size={feedIcon.inline} color={feedInk.primary} weight="regular" />
+              <FeedIcon name="chat-solid" size={feedIcon.inline} color={feedInk.primary} />
               <Text style={s.tileMetricText}>{compactMetric(comments)}</Text>
             </View>
           )}
@@ -326,7 +326,7 @@ export default memo(function AuthorPostsModal({ author, onClose }: Props) {
               accessibilityRole="button"
               accessibilityLabel={t.circle_close}
             >
-              <Icon name="arrow-left" size={feedIcon.control} color={sheetInk.ink} strokeWidth={FEED_STROKE} absoluteStrokeWidth />
+              <Icon name="arrow-left" size={feedIcon.control} color={sheetInk.ink} />
             </TouchableOpacity>
 
             <View style={s.topCopy}>
@@ -335,7 +335,7 @@ export default memo(function AuthorPostsModal({ author, onClose }: Props) {
             </View>
 
             <View style={s.topAction} pointerEvents="none" importantForAccessibility="no-hide-descendants">
-              <FeedIcon name="author-posts" size={feedIcon.control} color={sheetInk.ink} weight="medium" />
+              <FeedIcon name="author-posts" size={feedIcon.control} color={sheetInk.ink} />
             </View>
           </View>
 
@@ -361,7 +361,7 @@ export default memo(function AuthorPostsModal({ author, onClose }: Props) {
           </View>
 
           <View style={s.gridTab}>
-            <FeedIcon name="author-posts" size={feedIcon.control} color={sheetInk.ink} weight="medium" />
+            <FeedIcon name="author-posts" size={feedIcon.control} color={sheetInk.ink} />
             <Text style={s.gridTabText}>{subtitle}</Text>
             <View style={s.gridTabAccent} />
           </View>
@@ -373,7 +373,7 @@ export default memo(function AuthorPostsModal({ author, onClose }: Props) {
               </View>
             ) : failed && posts.length === 0 ? (
               <View style={s.state}>
-                <Icon name="image" size={feedIcon.action} color={sheetInk.inkFaint} strokeWidth={FEED_STROKE} absoluteStrokeWidth />
+                <Icon name="image" size={feedIcon.action} color={sheetInk.inkFaint} />
                 <Text style={s.stateText}>{t.feed_author_posts_load_fail}</Text>
                 <TouchableOpacity
                   style={s.retryButton}
@@ -404,7 +404,7 @@ export default memo(function AuthorPostsModal({ author, onClose }: Props) {
                 contentContainerStyle={posts.length === 0 ? s.emptyContent : s.gridContent}
                 ListEmptyComponent={(
                   <View style={s.state}>
-                    <Icon name="image" size={feedIcon.action} color={sheetInk.inkFaint} strokeWidth={FEED_STROKE} absoluteStrokeWidth />
+                    <Icon name="image" size={feedIcon.action} color={sheetInk.inkFaint} />
                     <Text style={s.stateText}>{t.profile_no_posts}</Text>
                   </View>
                 )}

@@ -1,82 +1,85 @@
 #!/usr/bin/env node
-// Mede a tinta real de cada ícone em src/assets/feed-icons e escreve _bounds.json.
-//
-// Porque é preciso: estes ícones vêm de famílias diferentes e cada uma deixa uma
-// margem diferente dentro da sua caixa. Sem isto, `size={24}` dá tamanhos aparentes
-// diferentes — um balão que enche a caixa fica maior que um coração que não enche.
-// O build usa estas medidas para reenquadrar cada desenho, de modo a que a tinta
-// ocupe sempre a mesma fração da caixa.
-//
-// Corre com: npm run icons:feed:measure   (precisa do Chrome instalado)
-import { execFileSync } from 'node:child_process'
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
+// Confere margens e paridade SVG → formas nativas; as medidas nunca reenquadram o desenho.
+import { spawn } from 'node:child_process'
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { tmpdir } from 'node:os'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const SRC = join(ROOT, 'src/assets/feed-icons')
-const OUT = join(SRC, '_bounds.json')
-
-const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
-
-const files = readdirSync(SRC).filter((f) => f.endsWith('.svg')).sort()
-
-// O browser resolve herança de <g>, unidades e stroke-width por nós — por isso
-// medimos com SVG real em vez de reimplementar o modelo de pintura.
-const page = `<body style="margin:0">
-${files
-  .map((f) => {
-    const name = f.replace(/\.svg$/, '')
-    const svg = readFileSync(join(SRC, f), 'utf8')
-      .replace(/<title[\s\S]*?<\/title>/g, '')
-      .replace(/width="[^"]*"/, 'width="240"')
-      .replace(/height="[^"]*"/, 'height="240"')
-    return `<div data-icon="${name}">${svg}</div>`
-  })
-  .join('\n')}
-<pre id="out"></pre>
-<script>
-const SHAPES = 'path,circle,rect,line,polyline,polygon';
-const res = {};
-for (const host of document.querySelectorAll('[data-icon]')) {
-  const svg = host.querySelector('svg');
-  const vb = svg.getAttribute('viewBox').split(/[ ,]+/).map(Number);
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const el of svg.querySelectorAll(SHAPES)) {
-    const b = el.getBBox();
-    const cs = getComputedStyle(el);
-    // O traço pinta metade para fora da geometria — conta para o tamanho aparente.
-    const pad = (cs.stroke && cs.stroke !== 'none') ? parseFloat(cs.strokeWidth || 0) / 2 : 0;
-    x0 = Math.min(x0, b.x - pad); y0 = Math.min(y0, b.y - pad);
-    x1 = Math.max(x1, b.x + b.width + pad); y1 = Math.max(y1, b.y + b.height + pad);
+const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+const source = readFileSync(join(ROOT, 'src/components/FeedIcon/paths.ts'), 'utf8')
+const start = source.indexOf('export const feedIcons = ') + 'export const feedIcons = '.length
+const end = source.indexOf('\n} satisfies', start)
+const icons = new Function(`return ${source.slice(start, end + 2)}`)()
+const kebab = (s) => s.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase())
+const jobs = readdirSync(SRC).filter((f) => f.endsWith('.svg')).sort().map((file) => {
+  const name = file.slice(0, -4)
+  const def = icons[name]
+  const shapes = def.shapes.map(([tag, attrs]) => `<${tag} ${Object.entries(attrs).map(([k, v]) => `${kebab(k)}="${v}"`).join(' ')}/>`).join('')
+  return { name, svg: readFileSync(join(SRC, file), 'utf8'), runtime: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="${def.viewBox}" fill="none">${shapes}</svg>` }
+})
+const page = `<!doctype html><html><body><script>
+const jobs = ${JSON.stringify(jobs)};
+const scale = 16, size = 24 * scale;
+async function raster(svg) {
+  const image = new Image();
+  await new Promise((ok, fail) => {
+    image.onload = ok; image.onerror = fail;
+    image.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg.replace(/width="24"/, 'width="384"').replace(/height="24"/, 'height="384"').replace(/currentColor/g, '#000000'));
+  });
+  const canvas = document.createElement('canvas'); canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d'); ctx.drawImage(image, 0, 0, size, size);
+  return ctx.getImageData(0, 0, size, size).data;
+}
+(async () => {
+  const result = {}, failures = [];
+  for (const job of jobs) {
+    const pixels = await raster(job.svg), runtime = await raster(job.runtime);
+    let x0 = size, y0 = size, x1 = -1, y1 = -1, area = 0, sumX = 0, sumY = 0, mismatch = 0;
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const i = (y * size + x) * 4 + 3, alpha = pixels[i] / 255;
+      if (pixels[i] !== runtime[i]) mismatch++;
+      area += alpha; sumX += (x + .5) * alpha; sumY += (y + .5) * alpha;
+      if (pixels[i] > 8) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+    }
+    const round = (v) => +v.toFixed(4);
+    result[job.name] = { viewBox: [0, 0, 24, 24], ink: [x0 / scale, y0 / scale, (x1 - x0 + 1) / scale, (y1 - y0 + 1) / scale], centroid: [round(sumX / area / scale), round(sumY / area / scale)], area: round(area / scale / scale), runtimePixelDifferences: mismatch };
+    if (mismatch) failures.push(job.name + ': SVG e runtime divergem em ' + mismatch + ' pixels');
+    if (x0 < 32 || y0 < 32 || x1 >= 352 || y1 >= 352) failures.push(job.name + ': tinta fora da margem de 2 unidades');
   }
-  res[host.dataset.icon] = {
-    viewBox: vb,
-    ink: [ +x0.toFixed(3), +y0.toFixed(3), +(x1 - x0).toFixed(3), +(y1 - y0).toFixed(3) ],
-  };
-}
-document.getElementById('out').textContent = 'JSON_START' + JSON.stringify(res) + 'JSON_END';
-</script></body>`
-
-const tmp = join(tmpdir(), 'luxee-measure-feed-icons.html')
-writeFileSync(tmp, page)
-
-const dom = execFileSync(
-  CHROME,
-  ['--headless', '--disable-gpu', '--virtual-time-budget=4000', '--dump-dom', `file://${tmp}`],
-  { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] },
-)
-
-const m = dom.match(/JSON_START([\s\S]*?)JSON_END/)
-if (!m) throw new Error('não consegui ler as medidas do Chrome')
-
-const bounds = JSON.parse(m[1].replace(/&quot;/g, '"'))
-writeFileSync(OUT, JSON.stringify(bounds, null, 2) + '\n')
-
-console.log(`_bounds.json: ${Object.keys(bounds).length} ícones medidos`)
-for (const [n, b] of Object.entries(bounds)) {
-  const S = b.viewBox[2]
-  const occ = ((Math.max(b.ink[2], b.ink[3]) / S) * 100).toFixed(0)
-  console.log(`  ${n.padEnd(22)} caixa ${String(S).padEnd(4)} tinta ${b.ink[2].toFixed(1)}×${b.ink[3].toFixed(1)}  ocupa ${occ}%`)
-}
+  for (const [outline, solid] of [['heart','heart-solid'],['chat-outline','chat-solid'],['chat-teardrop-light','chat-teardrop-fill'],['play-list-4','play-list-4-solid']]) {
+    if (JSON.stringify(result[outline].ink) !== JSON.stringify(result[solid].ink)) failures.push(outline + ': silhueta externa muda no estado preenchido');
+  }
+  document.body.innerHTML = '<pre id="result"></pre>';
+  document.querySelector('pre').textContent = 'JSON_START' + JSON.stringify({ result, failures }) + 'JSON_END';
+})().catch((error) => { document.body.innerHTML = '<pre id="result">JSON_START' + JSON.stringify({ failures: [String(error)] }) + 'JSON_END</pre>'; });
+</script></body></html>`
+const temp = mkdtempSync(join(tmpdir(), 'luxee-svg-check-'))
+writeFileSync(join(temp, 'measure.html'), page)
+const measured = await new Promise((resolve, reject) => {
+  const browser = spawn(CHROME, ['--headless', '--disable-gpu', '--no-first-run', `--user-data-dir=${join(temp, 'profile')}`, '--virtual-time-budget=10000', '--dump-dom', `file://${join(temp, 'measure.html')}`], { stdio: ['ignore', 'pipe', 'pipe'], detached: true })
+  let stdout = '', stderr = '', settled = false
+  const timer = setTimeout(() => finish(new Error(`Chrome não devolveu as medidas: ${stderr.slice(-500)}`)), 45000)
+  function finish(error, value) {
+    if (settled) return
+    settled = true; clearTimeout(timer)
+    try { process.kill(-browser.pid, 'SIGKILL') } catch { browser.kill('SIGKILL') }
+    browser.stdout.destroy(); browser.stderr.destroy(); browser.unref()
+    if (error) reject(error); else resolve(value)
+  }
+  browser.stdout.on('data', (chunk) => {
+    stdout += chunk
+    const match = stdout.match(/<pre id="result">JSON_START([\s\S]*?)JSON_END<\/pre>/)
+    if (match) {
+      try { finish(null, JSON.parse(match[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&'))) } catch (error) { finish(error) }
+    }
+  })
+  browser.stderr.on('data', (chunk) => { stderr += chunk })
+  browser.on('error', (error) => finish(error))
+  browser.on('close', (code) => { if (!settled) finish(new Error(`Chrome terminou (${code}): ${stderr.slice(-500)}`)) })
+})
+if (measured.failures.length) throw new Error(measured.failures.join('\n'))
+writeFileSync(join(SRC, '_bounds.json'), JSON.stringify(measured.result, null, 2) + '\n')
+console.log(`${jobs.length} SVGs: margem 2px, estados alinhados e paridade de pixels com runtime confirmados.`)

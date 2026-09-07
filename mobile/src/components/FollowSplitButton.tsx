@@ -1,6 +1,6 @@
 import React from 'react'
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
+import Icon from './Icon'
 import { colors, fonts } from '../theme'
 import { FollowDuration } from '../services/follow.service'
 import { useT } from '../i18n'
@@ -45,7 +45,7 @@ export default function FollowSplitButton({
           ? <ActivityIndicator size="small" color={isDark ? 'rgba(255,255,255,0.7)' : colors.gray500} />
           : (
             <View style={s.followingRow}>
-              <Ionicons name="checkmark" size={13} color={isDark ? '#fff' : colors.gray800} />
+              <Icon name="check" size={13} color={isDark ? '#fff' : colors.gray800} />
               <Text style={[s.label, isDark ? s.labelDarkFollowing : s.labelLightFollowing]}>{t.following}</Text>
             </View>
           )

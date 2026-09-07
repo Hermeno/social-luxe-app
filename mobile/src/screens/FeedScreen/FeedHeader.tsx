@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Icon from '../../components/Icon'
 import AvatarImage from '../../components/AvatarImage'
 import { colors, radius, sheet, spacing } from '../../theme'
-import { feedIcon, feedInk, feedLine, feedTextShadow, feedType, FEED_STROKE } from './tokens'
+import { feedIcon, feedInk, feedLine, feedTextShadow, feedType } from './tokens'
 import { useT } from '../../i18n'
 import { Post } from '../../types'
 
@@ -48,7 +48,7 @@ export default memo(function FeedHeader({
       <View style={[s.searchPanel, { paddingTop: top }]}>
         <View style={s.searchRow}>
           <View style={s.searchField}>
-            <Icon name="search" size={feedIcon.control} color={sheet.inkMuted} strokeWidth={FEED_STROKE} absoluteStrokeWidth />
+            <Icon name="search" size={feedIcon.control} color={sheet.inkMuted} />
             <TextInput
               autoFocus
               placeholder={t.feed_search_ph}
@@ -70,7 +70,7 @@ export default memo(function FeedHeader({
                 accessibilityRole="button"
                 accessibilityLabel={t.cancel}
               >
-                <Icon name="close" size={feedIcon.small} color={sheet.inkMuted} strokeWidth={FEED_STROKE} absoluteStrokeWidth />
+                <Icon name="close" size={feedIcon.small} color={sheet.inkMuted} />
               </TouchableOpacity>
             )}
           </View>
@@ -149,7 +149,7 @@ export default memo(function FeedHeader({
           accessibilityRole="button"
           accessibilityLabel={t.feed_show_navigation}
         >
-          <Icon name="arrow-left" size={feedIcon.control} color={feedInk.primary} strokeWidth={FEED_STROKE} absoluteStrokeWidth />
+          <Icon name="arrow-left" size={feedIcon.control} color={feedInk.primary} />
         </TouchableOpacity>
       </View>
     </View>

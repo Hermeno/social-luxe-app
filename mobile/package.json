@@ -9,7 +9,7 @@
     "web": "expo start --web",
     "icons": "node scripts/build-icons.mjs",
     "icons:feed": "node scripts/build-feed-icons.mjs",
-    "icons:feed:measure": "node scripts/measure-feed-icons.mjs && node scripts/build-feed-icons.mjs"
+    "icons:feed:measure": "node scripts/build-feed-icons.mjs && node scripts/measure-feed-icons.mjs"
   },
   "dependencies": {
     "@expo-google-fonts/caveat": "^0.4.2",

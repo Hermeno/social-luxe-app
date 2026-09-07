@@ -1,6 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <title>author-posts</title>
-  <path d="M10.5 9L11.04 6.86Q11.5 3.9 14.47 4.34L25.03 5.91Q28 6.35 27.54 9.31L25.56 22.19Q25.1 25.15 22.13 24.71L22 24.69" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  <rect x="4" y="9" width="18" height="18" rx="4.25" ry="4.25" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+  <path d="m7.875 7.4 .405-1.605Q8.625 3.575 10.853 3.905l7.92 1.178Q21 5.413 20.655 7.633L19.17 17.293q-.345 2.22-2.573 1.89l-.098-.015"/>
+  <rect x="3" y="7.4" width="13.5" height="13.5" rx="3.188"/>
 </svg>

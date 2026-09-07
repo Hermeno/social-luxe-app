@@ -111,9 +111,29 @@ function HomeFeedItem({
     : null
   const measuredAspect = loadedMedia?.postId === post.id ? loadedMedia.aspect : null
   const fallbackAspect = shape.kind === 'video' ? 16 / 9 : 4 / 5
-  const mediaAspect = serverAspect && Number.isFinite(serverAspect) && serverAspect > 0
-    ? serverAspect
-    : measuredAspect ?? fallbackAspect
+
+  /**
+   * Cada publicação tem a altura que a sua mídia pedir. A ordem por onde se
+   * chega à proporção é que importa, e estava ao contrário.
+   *
+   * O que o servidor guarda são as dimensões que o Cloudinary devolveu no
+   * upload — as do ficheiro CODIFICADO. Num vídeo de telemóvel isso é quase
+   * sempre 1920×1080 com uma marca de rotação à parte: o ficheiro é deitado, a
+   * imagem que se vê é ao alto. Quem confia nesse número desenha todos os vídeos
+   * na mesma moldura de 16:9, que é exactamente o que estava a acontecer.
+   *
+   * O cartaz não mente. É um JPEG derivado pelo Cloudinary com `c_limit`, que
+   * preserva a proporção e aplica a rotação — o que ele mede é o que vai ser
+   * pintado. Por isso os pixels ganham às medidas.
+   *
+   * O servidor continua a servir para alguma coisa, e para a coisa certa: dá a
+   * altura do PRIMEIRO desenho, antes de a mídia chegar, para a lista não saltar.
+   * Quando os pixels chegam, corrigem-no — e se os dois concordarem, como
+   * acontece na maioria das fotografias, o número não muda e não há salto nenhum.
+   */
+  const mediaAspect = measuredAspect
+    ?? (serverAspect && Number.isFinite(serverAspect) && serverAspect > 0 ? serverAspect : null)
+    ?? fallbackAspect
   const frameHeight = Math.round(contentWidth / mediaAspect)
 
   const peopleLabel = shape.people === 1
@@ -175,8 +195,6 @@ function HomeFeedItem({
           accessibilityLabel={t.feed_repost}
           accessibilityState={{ selected: reposted }}
         >
-          {/* Sem `strokePx`: o desenho do repost traz o peso dentro da geometria
-              preenchida, e forçar-lhe um traço engrossava-o acima dos vizinhos. */}
           <PostActionIcon
             name="repost"
             size={ACTION_ICON}
@@ -262,13 +280,20 @@ function HomeFeedItem({
                   recyclingKey={`${post.id}:home-media`}
                   transition={100}
                   onLoad={(event) => {
-                    if (serverAspect) return
+                    // Mede sempre, mesmo com dimensões do servidor: são elas que
+                    // podem estar erradas, e o que aqui carregou é o que se vê.
                     const { width: sourceWidth, height: sourceHeight } = event.source ?? {}
                     if (!sourceWidth || !sourceHeight) return
                     const aspect = sourceWidth / sourceHeight
-                    if (Number.isFinite(aspect) && aspect > 0) {
-                      setLoadedMedia({ postId: post.id, aspect })
-                    }
+                    if (!Number.isFinite(aspect) || aspect <= 0) return
+                    // Só escreve se mudar mesmo: a altura da moldura muda com
+                    // isto, e reescrever o mesmo número volta a desenhar a
+                    // célula sem nada para mostrar de novo.
+                    setLoadedMedia((prev) => (
+                      prev?.postId === post.id && Math.abs(prev.aspect - aspect) < 0.001
+                        ? prev
+                        : { postId: post.id, aspect }
+                    ))
                   }}
                 />
               )}
@@ -280,7 +305,7 @@ function HomeFeedItem({
               )}
               {shape.kind === 'video' && !active && (
                 <View style={s.playMark} pointerEvents="none">
-                  <Icon name="play" size={26} color={ACTION_INK} strokeWidth={1.9} absoluteStrokeWidth />
+                  <Icon name="play" size={26} color={ACTION_INK} />
                 </View>
               )}
             </View>
@@ -331,7 +356,7 @@ function HomeFeedItem({
 
       {shape.kind === 'circle' && (
         <View style={s.together}>
-          <Icon name="users" size={22} color={colors.gray800} strokeWidth={1.7} absoluteStrokeWidth />
+          <Icon name="users" size={22} color={colors.gray800} />
           <View>
             <Text style={s.togetherTitle}>{t.home_captured_together}</Text>
             <Text style={s.togetherSub}>{peopleLabel}</Text>

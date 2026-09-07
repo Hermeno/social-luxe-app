@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>option</title>
+  <!-- 2.7 e não os 2.5 de origem nem os 3.4 que estiveram aqui.
+       Três traços soltos não têm contorno a fechá-los e a 2.5 o menu era o
+       glifo mais apagado da fila; a 3.4 passou a ser o mais pesado. 2.7 põe-no
+       nos mesmos 1.70px que os vizinhos, medido por 2·área/perímetro. -->
+  <rect x="0.75" y="6.649" width="30.5" height="2.7" fill="currentColor"/>
+  <rect x="0.75" y="14.65" width="18.5" height="2.7" fill="currentColor"/>
+  <rect x="0.75" y="22.65" width="8.553" height="2.7" fill="currentColor"/>
+</svg>

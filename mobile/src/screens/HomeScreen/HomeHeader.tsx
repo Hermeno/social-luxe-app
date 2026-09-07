@@ -43,7 +43,7 @@ export default function HomeHeader({ onSearch, onCreate }: Props) {
           accessibilityRole="button"
           accessibilityLabel={t.feed_top_search}
         >
-          <Icon name="search" size={24} color={colors.gray800} strokeWidth={1.9} absoluteStrokeWidth />
+          <Icon name="search" size={24} color={colors.gray800} />
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -53,7 +53,7 @@ export default function HomeHeader({ onSearch, onCreate }: Props) {
           accessibilityRole="button"
           accessibilityLabel={t.feed_create}
         >
-          <Icon name="plus" size={20} color={colors.white} strokeWidth={2} absoluteStrokeWidth />
+          <Icon name="plus" size={20} color={colors.white} />
         </TouchableOpacity>
       </View>
     </View>

@@ -1,3 +1,4 @@
+// ARQUIVO HISTÓRICO: inventário anterior ao refinamento. Não é usado pela folha atual.
 // Inventário dos ícones que aparecem nas duas feeds.
 //
 // Cada linha é uma ocorrência real no código, com os valores já resolvidos:

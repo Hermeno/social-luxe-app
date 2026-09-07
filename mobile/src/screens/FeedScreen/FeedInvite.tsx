@@ -6,7 +6,7 @@ import Icon from '../../components/Icon'
 import { useT } from '../../i18n'
 import { useSocialPreviewStore } from '../../store/socialPreview.store'
 import { colors, radius, spacing } from '../../theme'
-import { FEED_CONTENT_MAX_WIDTH, feedIcon, feedInk, feedType, FEED_STROKE } from './tokens'
+import { FEED_CONTENT_MAX_WIDTH, feedIcon, feedInk, feedType } from './tokens'
 
 const GALLERY_SIZES = [42, 52, 64, 52, 42] as const
 const GALLERY_LAYERS = [1, 3, 5, 4, 2] as const
@@ -121,8 +121,6 @@ export default function FeedInvite({
                         name={center ? 'camera' : 'user'}
                         size={center ? feedIcon.control : feedIcon.small}
                         color={feedInk.muted}
-                        strokeWidth={FEED_STROKE}
-                        absoluteStrokeWidth
                       />
                     </View>
                   )}
@@ -134,8 +132,6 @@ export default function FeedInvite({
                       name="plus"
                       size={feedIcon.inline}
                       color={colors.feedSurface}
-                      strokeWidth={2}
-                      absoluteStrokeWidth
                     />
                   </View>
                 )}

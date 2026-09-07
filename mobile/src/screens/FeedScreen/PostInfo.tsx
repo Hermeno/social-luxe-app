@@ -9,7 +9,7 @@ import { StackNavigationProp } from '@react-navigation/stack'
 import { Post, Pairing } from '../../types'
 import { brandPalette, colors, radius, sheet, spacing } from '../../theme'
 import Icon from '../../components/Icon'
-import { feedIcon, feedInk, feedLine, feedTextShadow, feedType, FEED_STROKE, RAIL_CLEARANCE } from './tokens'
+import { feedIcon, feedInk, feedLine, feedTextShadow, feedType, RAIL_CLEARANCE } from './tokens'
 import { useT } from '../../i18n'
 import { useAuthStore } from '../../store/auth.store'
 import { useFollowStore } from '../../store/follow.store'
@@ -303,7 +303,7 @@ export default function PostInfo({
             <View style={s.metaLine}>
               {post.isAnnouncement ? (
                 <View style={s.announceBadge}>
-                  <Icon name="megaphone" size={feedIcon.inline} color={feedInk.primary} strokeWidth={FEED_STROKE} absoluteStrokeWidth />
+                  <Icon name="megaphone" size={feedIcon.inline} color={feedInk.primary} />
                   <Text style={s.announceTxt}>{t.feed_announcement}</Text>
                 </View>
               ) : (
@@ -315,7 +315,7 @@ export default function PostInfo({
               {post.user.showDevice && !post.isAnnouncement && (
                 <>
                   <Text style={[s.metaSep, light && s.metaLightTxt]}>·</Text>
-                  <Icon name="smartphone" size={feedIcon.inline} color={feedInk.muted} strokeWidth={FEED_STROKE} absoluteStrokeWidth />
+                  <Icon name="smartphone" size={feedIcon.inline} color={feedInk.muted} />
                   <Text style={[s.metaTxt, light && s.metaLightTxt]} numberOfLines={1}>
                     {t.feed_posted_by} {post.deviceModel ?? 'Mobile'}
                   </Text>

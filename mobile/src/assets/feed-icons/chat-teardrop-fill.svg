@@ -1,1 +1,3 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 256 256"><title xmlns="">chat-teardrop-fill</title><path fill="currentColor" d="M232 124a100.11 100.11 0 0 1-100 100H48a16 16 0 0 1-16-16v-84a100 100 0 0 1 200 0"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M12 3a9 9 0 0 1 0 18H4.1A1.1 1.1 0 0 1 3 19.9V12a9 9 0 0 1 9-9Z" fill="currentColor"/>
+</svg>

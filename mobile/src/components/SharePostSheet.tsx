@@ -105,7 +105,7 @@ function PersonCell({
               { opacity: check, transform: [{ scale: check }] },
             ]}
           >
-            <Icon name="check" size={14} color={colors.white} strokeWidth={2.4} absoluteStrokeWidth />
+            <Icon name="check" size={14} color={colors.white} />
           </Animated.View>
         )}
       </Animated.View>

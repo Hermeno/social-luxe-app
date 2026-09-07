@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Animated,
 } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
+import Icon from '../Icon'
 import { Comment } from '../../types'
 import { colors, fonts } from '../../theme'
 import { useT } from '../../i18n'
@@ -67,7 +67,7 @@ export default function CommentInputArea({
             {t.comment_reply_to} <Text style={s.replyName}>{replyTo.user.name}</Text>
           </Text>
           <TouchableOpacity onPress={onCancelReply} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Ionicons name="close" size={15} color="rgba(0,0,0,0.35)" />
+            <Icon name="close" size={15} color="rgba(0,0,0,0.35)" />
           </TouchableOpacity>
         </View>
       )}
@@ -106,8 +106,8 @@ export default function CommentInputArea({
             {sending
               ? <ActivityIndicator size="small" color="#fff" />
               : showSent
-                ? <Ionicons name="checkmark" size={19} color="#fff" />
-                : <Ionicons name="arrow-up" size={18} color={canSend ? '#fff' : 'rgba(0,0,0,0.3)'} />}
+                ? <Icon name="check" size={19} color="#fff" />
+                : <Icon name="arrow-up" size={18} color={canSend ? '#fff' : 'rgba(0,0,0,0.3)'} />}
           </Animated.View>
         </TouchableOpacity>
       </View>

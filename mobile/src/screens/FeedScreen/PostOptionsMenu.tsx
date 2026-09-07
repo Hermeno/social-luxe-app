@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import FeedIcon from '../../components/FeedIcon'
 import Icon, { type IconName } from '../../components/Icon'
 import PostActionIcon from '../../components/PostActionIcon'
-import { feedIcon, feedInk, feedRail, FEED_STROKE } from './tokens'
+import { feedIcon, feedInk, feedRail } from './tokens'
 import { confirm } from '../../components/confirm'
 import { API_BASE } from '../../config'
 import { deleteCachedPostsByUser } from '../../db/database'
@@ -130,7 +130,7 @@ function OptionRow({ icon, label, onPress, selected, danger, disabled, loading }
           // Único destes que veio no pacote de SVG do Herminio.
           <FeedIcon name="bookmark" size={feedIcon.control} color={color} />
         ) : (
-          <Icon name={icon} size={feedIcon.control} strokeWidth={FEED_STROKE} absoluteStrokeWidth color={color} fill="none" />
+          <Icon name={icon} size={feedIcon.control} color={color} fill="none" />
         )}
       </View>
       <Text style={[s.optionLabel, danger && s.optionLabelDanger]} numberOfLines={1}>{label}</Text>
@@ -559,7 +559,7 @@ export default function PostOptionsMenu({
                 accessibilityRole="button"
                 accessibilityLabel={t.save}
               >
-                <Icon name="send" size={feedIcon.control} strokeWidth={FEED_STROKE} absoluteStrokeWidth color={feedInk.primary} />
+                <Icon name="send" size={feedIcon.control} color={feedInk.primary} />
               </TouchableOpacity>
             </View>
           </Animated.View>
