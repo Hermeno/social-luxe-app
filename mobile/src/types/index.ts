@@ -44,12 +44,14 @@ export interface CollectiveMomentParticipant {
 export interface CollectiveMomentCapture {
   id: string
   userId: string
-  /** Posição da fotografia deste participante na ronda (1 ou 2). */
+  /** A ordem da fotografia entre as deste participante na ronda — 1, 2, 3… */
   slot?: number
   mediaIndex: number
   mediaUrl: string
   overlays: Array<{ emoji: string; x: number; y: number }>
   createdAt: string
+  /** Fotografia de quem não esteve no disparo — entrou depois, aceite pelo anfitrião. */
+  late?: boolean
 }
 
 /** Snapshot do Círculo no instante em que virou um Post. Participantes sem
@@ -63,6 +65,8 @@ export interface CollectiveMoment {
   creatorId: string
   createdAt: string
   participants: CollectiveMomentParticipant[]
+  /** Quem entrou depois. À parte de `participants`, que diz quem esteve lá. */
+  latecomers?: CollectiveMomentParticipant[]
   captures: CollectiveMomentCapture[]
 }
 

@@ -1,14 +1,18 @@
 import React, { memo, useRef, useEffect, useLayoutEffect, useState } from 'react'
 import { View, TouchableOpacity, StyleSheet, Text, Animated, Easing } from 'react-native'
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
+import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { colors, radius, spacing } from '../../theme'
-import { FEED_CONTENT_MAX_WIDTH, feedIcon, feedInk, feedType } from '../../screens/FeedScreen/tokens'
+import { brandPalette, colors, gradients, radius, spacing } from '../../theme'
+import {
+  actionInkRest, FEED_CONTENT_MAX_WIDTH, feedIcon, feedInk, feedType, pageInk,
+} from '../../screens/FeedScreen/tokens'
 import { useFeedStore } from '../../store/feed.store'
 import { useAuthStore } from '../../store/auth.store'
 import { useMessageBadgeStore } from '../../store/messageBadge.store'
 import { useOverlayStore } from '../../store/overlay.store'
 import { useT } from '../../i18n'
+import AvatarImage from '../AvatarImage'
 import FeedIcon, { type FeedIconName } from '../FeedIcon'
 import Icon from '../Icon'
 import type { IconName } from '../Icon/paths'
@@ -30,6 +34,33 @@ type NavGlyphSpec =
   | { family: 'feed'; icon: FeedIconName }
 
 const NAV_ICON_SIZE = 26
+
+/**
+ * As três formas que uma célula da barra pode tomar.
+ *
+ * Uma barra de navegação bem desenhada não é cinco cópias do mesmo botão. São
+ * três papéis diferentes, e cada um diz "estás aqui" da maneira que a sua forma
+ * permite — é isso que a separa de um modelo comprado feito:
+ *
+ *   glifo     um desenho de traço. Muda de tinta e acende um ponto por baixo.
+ *   disco     o Círculo, ao meio. É a única cor da barra e não precisa de mais
+ *             nada: nada mais no ecrã é colorido, por isso já se vê sempre.
+ *   retrato   a fotografia de quem está a usar a app. Acende um anel à volta —
+ *             um ponto por baixo de um anel diria a mesma coisa duas vezes.
+ *
+ * As três medidas abaixo são o que mantém os três papéis à mesma escala óptica:
+ * um traço de 26 tem cerca de 19 de tinta, e um disco cheio pesa muito mais por
+ * ponto do que um contorno. Por isso o retrato é menor que o glifo, e o disco,
+ * que é o único que se quer que salte, é maior que ambos.
+ */
+const NAV_DISC = 42
+const NAV_DISC_GLYPH = 22
+const NAV_AVATAR = 24
+const NAV_AVATAR_RING = 1.5
+const NAV_AVATAR_GAP = 2
+/** A caixa da célula do meio; as outras ficam na de 38. */
+const NAV_DISC_BOX = 44
+
 const NAV_GLYPHS: Record<string, NavGlyphSpec> = {
   home:    { family: 'ui', icon: 'home' },
   search:  { family: 'ui', icon: 'search' },
@@ -40,18 +71,41 @@ const NAV_GLYPHS: Record<string, NavGlyphSpec> = {
 
 type NavGlyph = keyof typeof NAV_GLYPHS
 
+function NavIconArt({ glyph, size, color }: { glyph: NavGlyph; size: number; color: string }) {
+  const metric = NAV_GLYPHS[glyph]
+  return metric.family === 'feed'
+    ? <FeedIcon name={metric.icon} size={size} color={color} />
+    : <Icon name={metric.icon} size={size} color={color} />
+}
+
 const NavigationGlyph = memo(function NavigationGlyph({
   glyph,
   selected,
   activeColor,
   inactiveColor,
+  reduceMotion,
 }: {
   glyph: NavGlyph
   selected: boolean
   activeColor: string
   inactiveColor: string
+  reduceMotion: boolean
 }) {
-  const metric = NAV_GLYPHS[glyph]
+  // O ponto nascia e morria entre dois frames — aparecia como um erro de
+  // desenho em vez de uma resposta ao toque. Agora acompanha o dedo: sobe com a
+  // mesma mola que o resto da barra usa, e some-se depressa quando o separador
+  // deixa de ser o activo.
+  const mark = useRef(new Animated.Value(selected ? 1 : 0)).current
+
+  useEffect(() => {
+    mark.stopAnimation()
+    if (reduceMotion) { mark.setValue(selected ? 1 : 0); return }
+    if (!selected) {
+      Animated.timing(mark, { toValue: 0, duration: 120, useNativeDriver: true }).start()
+      return
+    }
+    Animated.spring(mark, { toValue: 1, speed: 20, bounciness: 12, useNativeDriver: true }).start()
+  }, [mark, reduceMotion, selected])
 
   return (
     <View style={s.navGlyph} pointerEvents="none">
@@ -61,33 +115,116 @@ const NavigationGlyph = memo(function NavigationGlyph({
           { transform: [{ translateY: -1 }] },
         ]}
       >
-        {metric.family === 'feed' ? (
-          <FeedIcon
-            name={metric.icon}
-            size={NAV_ICON_SIZE}
-            color={selected ? activeColor : inactiveColor}
-          />
-        ) : (
-          <Icon
-            name={metric.icon}
-            size={NAV_ICON_SIZE}
-            color={selected ? activeColor : inactiveColor}
-          />
-        )}
+        <NavIconArt glyph={glyph} size={NAV_ICON_SIZE} color={selected ? activeColor : inactiveColor} />
       </View>
-      <View
+      <Animated.View
         style={[
           s.navSelectionMark,
           {
             backgroundColor: activeColor,
-            opacity: selected ? 1 : 0,
-            transform: [{ scale: selected ? 1 : 0.6 }],
+            opacity: mark,
+            transform: [{ scale: mark.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }) }],
           },
         ]}
       />
     </View>
   )
 })
+
+/**
+ * O Círculo, ao meio, dentro do disco da marca.
+ *
+ * É o único sítio da app onde a assinatura cromática aparece cheia, e é
+ * deliberado: a barra inteira é preta, branca e cinzenta, por isso um só objecto
+ * colorido não compete com nada — puxa o olho para a única coisa da Luxey que
+ * não existe em mais lado nenhum, e que precisa de outra pessoa para acontecer.
+ *
+ * Não leva marca de selecção. Já é o objecto mais visível da fila em qualquer
+ * estado, e acrescentar-lhe um ponto seria dizer duas vezes o que a cor diz.
+ * Para quem lê o ecrã com o leitor de voz nada se perde: o estado continua a ser
+ * anunciado pelo botão que o embrulha.
+ */
+const NavigationDisc = memo(function NavigationDisc({ glyph }: { glyph: NavGlyph }) {
+  return (
+    // Duas caixas e não uma: no iOS um `overflow: hidden` recorta também a
+    // sombra, e o disco perdia o halo. De fora fica quem a projecta, de dentro
+    // quem recorta o gradiente.
+    <View style={s.navDiscWell} pointerEvents="none">
+      <View style={s.navDisc}>
+        <LinearGradient
+          colors={gradients.brand}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <NavIconArt glyph={glyph} size={NAV_DISC_GLYPH} color={colors.white} />
+      </View>
+    </View>
+  )
+})
+
+/**
+ * A última célula: quem está a usar a app.
+ *
+ * Com fotografia, é a fotografia — a barra deixa de ter um boneco genérico onde
+ * devia estar uma pessoa, e o separador do perfil passa a ser reconhecido pelo
+ * rosto e não pelo rótulo. Sem fotografia, volta o glifo: uma inicial dentro de
+ * um disco cinzento ao lado de quatro desenhos de traço lia-se como um erro de
+ * carregamento.
+ *
+ * O anel reserva sempre o seu lugar — desenha-se transparente quando o separador
+ * não está activo — para o retrato não mudar de tamanho ao acender.
+ *
+ * Uma fotografia que não carrega conta como fotografia nenhuma. Um URL partido
+ * (um upload que o servidor já não tem) deixava um anel vazio na barra; agora
+ * volta o glifo. A falha fica presa ao URL que falhou, por isso uma foto nova
+ * tenta outra vez.
+ */
+const NavigationPortrait = memo(function NavigationPortrait({
+  uri,
+  name,
+  selected,
+  activeColor,
+  inactiveColor,
+  reduceMotion,
+}: {
+  uri: string | null | undefined
+  name: string | null | undefined
+  selected: boolean
+  activeColor: string
+  inactiveColor: string
+  reduceMotion: boolean
+}) {
+  const [failedUri, setFailedUri] = useState<string | null>(null)
+
+  if (!uri || failedUri === uri) {
+    return (
+      <NavigationGlyph
+        glyph="profile"
+        selected={selected}
+        activeColor={activeColor}
+        inactiveColor={inactiveColor}
+        reduceMotion={reduceMotion}
+      />
+    )
+  }
+
+  return (
+    <View style={s.navGlyph} pointerEvents="none">
+      <View style={[s.navPortrait, { borderColor: selected ? activeColor : colors.transparent }]}>
+        <AvatarImage uri={uri} name={name} size={NAV_AVATAR} onError={() => setFailedUri(uri)} />
+      </View>
+    </View>
+  )
+})
+
+/**
+ * O fio entre a barra de papel e o que passa por baixo dela.
+ *
+ * Preto a 7%, e não um cinzento sólido: sobre branco lê-se como sombra de uma
+ * borda, e não como linha desenhada.
+ */
+const NAV_EDGE = 'rgba(17,17,17,0.07)'
 
 /** Largura que o compositor cede por cada atalho revelado. */
 const REVEAL_SLOT = 46
@@ -97,7 +234,7 @@ const SZ_REVEAL_PLUS = 24.86
 
 function MotionTabButton({
   children, selected, onPress, label, valueText,
-  pulseSignal = 0, reduceMotion, role = 'tab',
+  pulseSignal = 0, reduceMotion, role = 'tab', box = 38,
 }: {
   children: React.ReactNode
   selected: boolean
@@ -107,6 +244,8 @@ function MotionTabButton({
   pulseSignal?: number
   reduceMotion: boolean
   role?: 'tab' | 'button'
+  /** Lado da caixa que se move ao toque. Só o disco do meio pede mais que 38. */
+  box?: number
 }) {
   const scale = useRef(new Animated.Value(1)).current
   const pulse = useRef(new Animated.Value(0)).current
@@ -164,6 +303,9 @@ function MotionTabButton({
         style={[
           s.navIconMotion,
           {
+            width: box,
+            height: box,
+            borderRadius: box / 2,
             opacity: pulse.interpolate({ inputRange: [0, 0.42, 1], outputRange: [1, 0.78, 1] }),
             transform: [
               { scale },
@@ -283,10 +425,17 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
   const darkCanvas = onFeed || onCircle
   const clear = skin === 'clear' && darkCanvas
 
-  // A forma nunca muda de família. Selecção = contraste + marca mínima; na pele
-  // de papel entra o violeta oficial, sobre mídia prevalece o branco legível.
-  const iconActive = clear ? '#FFFFFF' : colors.accent
-  const iconInactv = clear ? 'rgba(255,255,255,0.68)' : 'rgba(18,18,20,0.56)'
+  // A forma nunca muda de família. Selecção = contraste + marca mínima.
+  //
+  // O separador aceso esteve em violeta. Com o disco do Círculo a trazer a
+  // assinatura cromática para o meio da fila, dois violetas na mesma barra
+  // disputavam o olho e nenhum ganhava. O aceso passa a ser tinta — preta sobre
+  // papel, branca sobre mídia — e a única cor da navegação é a do disco.
+  //
+  // O apagado é o mesmo cinzento dos comandos das duas feeds. Um só cinzento em
+  // toda a app para tudo o que está lá sem pedir nada.
+  const iconActive = clear ? feedInk.primary : pageInk.primary
+  const iconInactv = clear ? 'rgba(255,255,255,0.68)' : actionInkRest.page
 
   useLayoutEffect(() => {
     barVisibility.stopAnimation()
@@ -443,6 +592,7 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
         selected={homeActive}
         activeColor={iconActive}
         inactiveColor={iconInactv}
+        reduceMotion={reduceMotion}
       />
     </MotionTabButton>
   )
@@ -463,6 +613,7 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
         selected={msgActive}
         activeColor={iconActive}
         inactiveColor={iconInactv}
+        reduceMotion={reduceMotion}
       />
     </MotionTabButton>
   )
@@ -475,11 +626,13 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
       selected={profActive}
       reduceMotion={reduceMotion}
     >
-      <NavigationGlyph
-        glyph="profile"
+      <NavigationPortrait
+        uri={currentUser?.avatar}
+        name={currentUser?.name}
         selected={profActive}
         activeColor={iconActive}
         inactiveColor={iconInactv}
+        reduceMotion={reduceMotion}
       />
     </MotionTabButton>
   )
@@ -497,6 +650,7 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
         selected={onSearch}
         activeColor={iconActive}
         inactiveColor={iconInactv}
+        reduceMotion={reduceMotion}
       />
     </MotionTabButton>
   )
@@ -508,13 +662,9 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
       label={t.feed_top_circle}
       selected={onCircle}
       reduceMotion={reduceMotion}
+      box={NAV_DISC_BOX}
     >
-      <NavigationGlyph
-        glyph="circle"
-        selected={onCircle}
-        activeColor={iconActive}
-        inactiveColor={iconInactv}
-      />
+      <NavigationDisc glyph="circle" />
     </MotionTabButton>
   )
 
@@ -530,6 +680,11 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
       {profileTab}
     </>
   )
+
+  // O Círculo é a câmara, e a câmara ocupa o ecrã inteiro. A barra por cima
+  // dela punha cinco destinos a disputar o momento com a fotografia; a saída
+  // passa a ser o fechar no topo do próprio ecrã.
+  if (onCircle) return null
 
   return (
     <Animated.View
@@ -553,6 +708,16 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
             // dentro dela, por isso a altura toda — do topo da linha até ao
             // fundo do ecrã — toma a cor da pele.
             backgroundColor: showFeedInviteCta || clear ? 'transparent' : '#FFFFFF',
+            // O fio que separa a barra do conteúdo.
+            //
+            // Uma faixa branca sobre uma página branca não tem contorno nenhum:
+            // a fotografia que acaba junto ao fundo do ecrã encostava à fila de
+            // ícones sem nada entre as duas, e a barra deixava de se ler como um
+            // objecto pousado por cima. Uma linha de meio pixel a 7% chega — mais
+            // do que isso vira régua, e a régua é que faz uma app parecer um
+            // modelo. Sobre fundo escuro não existe: lá o contraste já separa.
+            borderTopWidth: showFeedInviteCta || clear ? 0 : StyleSheet.hairlineWidth,
+            borderTopColor: NAV_EDGE,
           },
         ]}
       >
@@ -859,9 +1024,6 @@ const s = StyleSheet.create({
   },
   navIconMotion: {
     position: 'relative',
-    width: 38,
-    height: 38,
-    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -883,6 +1045,50 @@ const s = StyleSheet.create({
     width: 3,
     height: 3,
     borderRadius: radius.full,
+  },
+  /**
+   * O halo por baixo do disco.
+   *
+   * Não é uma sombra de cartão — é a cor do próprio objecto a espalhar-se um
+   * pouco por baixo dele, com o desfoque largo e a opacidade baixa. Sobre papel
+   * branco é o que impede o disco de parecer um autocolante colado à faixa; a
+   * cor sólida por trás existe para o Android ter o que elevar, e nunca chega a
+   * ver-se porque o gradiente cobre-a por inteiro.
+   */
+  navDiscWell: {
+    // O mesmo ponto acima do centro geométrico onde a tinta dos glifos assenta:
+    // os cinco centros ficam numa linha só, e não quatro numa e um noutra.
+    transform: [{ translateY: -1 }],
+    width: NAV_DISC,
+    height: NAV_DISC,
+    borderRadius: NAV_DISC / 2,
+    backgroundColor: brandPalette.violet,
+    shadowColor: brandPalette.violet,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.26,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  // O disco recorta o gradiente; sem `overflow` ele pintava o quadrado inteiro
+  // por baixo do raio, e o que se via era um quadrado colorido de cantos moles.
+  navDisc: {
+    width: NAV_DISC,
+    height: NAV_DISC,
+    borderRadius: NAV_DISC / 2,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Caixa de borda: o anel come para dentro, por isso o vão entre ele e a
+  // fotografia é exactamente `NAV_AVATAR_GAP` e não muda com o estado.
+  navPortrait: {
+    transform: [{ translateY: -1 }],
+    width: NAV_AVATAR + (NAV_AVATAR_RING + NAV_AVATAR_GAP) * 2,
+    height: NAV_AVATAR + (NAV_AVATAR_RING + NAV_AVATAR_GAP) * 2,
+    borderRadius: radius.full,
+    borderWidth: NAV_AVATAR_RING,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   badgeAnchor: {

@@ -28,6 +28,15 @@ export function useFeed() {
   const [loading, setLoading] = useState(false)
   const [page, setPage]       = useState(1)
   const [hasMore, setHasMore] = useState(true)
+  // Paginação, em separado de `loading`.
+  //
+  // Os dois estados eram um só, e por isso a lista não conseguia distinguir "a
+  // abrir pela primeira vez" de "a buscar a página seguinte" — que pedem coisas
+  // opostas: um esqueleto de página inteira contra um carregador de 44 no fim.
+  // `pageFailed` guarda a falha da última página; a lista mantém-se e oferece
+  // repetir ali mesmo, em vez de a publicação seguinte desaparecer sem aviso.
+  const [paginating, setPaginating] = useState(false)
+  const [pageFailed, setPageFailed] = useState(false)
   const postsRef = useRef<Post[]>([])
   postsRef.current = posts
 
@@ -86,7 +95,8 @@ export function useFeed() {
   const loadMore = useCallback(async () => {
     if (!hasMore || loadingRef.current || !isConnected()) return
     loadingRef.current = true
-    setLoading(true)
+    setPaginating(true)
+    setPageFailed(false)
     const nextPage = page + 1
     try {
       const data = await postService.getFeed(nextPage)
@@ -98,10 +108,12 @@ export function useFeed() {
       })
       setPage(nextPage)
     } catch {
-      Toast.show({ type: 'error', text1: 'Sem ligação', text2: 'Não foi possível carregar mais posts.', visibilityTime: 2000 })
+      // Sem toast: a falha pertence ao fim da lista, onde a pessoa está a olhar,
+      // e não a uma faixa que passa por cima do conteúdo e desaparece sozinha.
+      setPageFailed(true)
     } finally {
       loadingRef.current = false
-      setLoading(false)
+      setPaginating(false)
     }
   }, [hasMore, page])
 
@@ -299,12 +311,52 @@ export function useFeed() {
     const socket = getSocket()
     if (!socket) return
     function onNewPost(post: Post) { prependPost(post) }
+
+    // Um post mudou depois de publicado — um Círculo onde alguém entrou ou de
+    // onde alguém tirou a fotografia. Só o conteúdo muda: o que o servidor manda
+    // não traz o estado de quem está a ver (gostei, repostei, contagens que já
+    // subiram aqui), por isso esse fica como estava.
+    function onUpdatedPost(post: Post) {
+      if (!post?.id) return
+      const content: Partial<Post> = {
+        mediaUrl: post.mediaUrl,
+        mediaUrls: post.mediaUrls,
+        mediaSizes: post.mediaSizes,
+        mediaWidth: post.mediaWidth,
+        mediaHeight: post.mediaHeight,
+        albumOverlays: post.albumOverlays,
+        collectiveMoment: post.collectiveMoment,
+        caption: post.caption,
+        ...(post.thumbnailUrl ? { thumbnailUrl: post.thumbnailUrl } : {}),
+      }
+      setPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, ...content } : p)))
+      // A cache a partir do que está no ecrã agora: o updater do setState pode
+      // correr só no próximo render, tarde demais para ser ele a dizer o quê.
+      const current = postsRef.current.find((p) => p.id === post.id)
+      if (current) cachePosts([{ ...current, ...content }], 'synced').catch(() => {})
+    }
+
+    // Um post deixou de existir sem o apagarmos daqui — o Círculo ficou sem
+    // fotografias. Sai da lista e da cache; não há nada para pedir ao servidor.
+    function onRemovedPost({ postId }: { postId: string }) {
+      if (!postId) return
+      setPosts((prev) => prev.filter((p) => p.id !== postId))
+      deleteCachedPost(postId).catch(() => {})
+    }
+
     socket.on('post:new', onNewPost)
-    return () => { socket.off('post:new', onNewPost) }
+    socket.on('post:updated', onUpdatedPost)
+    socket.on('post:removed', onRemovedPost)
+    return () => {
+      socket.off('post:new', onNewPost)
+      socket.off('post:updated', onUpdatedPost)
+      socket.off('post:removed', onRemovedPost)
+    }
   }, [prependPost])
 
   return {
-    posts, loading, loadMore, refresh, prependPost, removePost, updatePost,
+    posts, loading, hasMore, paginating, pageFailed,
+    loadMore, refresh, prependPost, removePost, updatePost,
     incrementView, updatePostCounts, updateRepostState,
   }
 }

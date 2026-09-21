@@ -3,20 +3,41 @@
  *
  * É a assinatura visual da Luxey: as fotografias de quem esteve junto não são
  * uma grelha nem um carrossel — são discos que se tocam e formam uma só figura.
- * Por isso a disposição não pode ser aleatória (mudava a cada render e a mesma
- * publicação nunca seria a mesma) nem rígida (com passo perfeito lê-se como um
- * diagrama, não como um momento).
  *
- * O compromisso é este: a estrutura é determinística — anel, ângulo e raio saem
- * de contas fechadas — e só o tamanho de cada disco varia, dentro de ±7%, a
- * partir de uma semente tirada do id da publicação. A mesma publicação desenha-se
- * sempre igual, em qualquer telefone e a qualquer momento; publicações diferentes
- * não se parecem umas com as outras.
+ * A versão anterior desenhava um anel calculado por trigonometria, com o
+ * tamanho de cada disco a variar ±7% a partir de uma semente tirada do id. Era
+ * determinística, mas de uma maneira que não se podia verificar: para saber
+ * onde ficava o terceiro disco de um Círculo de cinco era preciso correr a
+ * função. E o anel puro não tinha centro — cinco pessoas liam-se como um donut,
+ * sem ninguém em primeiro plano.
  *
- * Suporta de 2 a ~20 participantes sem nunca sair da largura disponível: quando
- * o anel calculado transborda, tudo encolhe pelo mesmo factor em vez de recortar
- * ou empilhar.
+ * O Feed System v1.0 fixa as composições uma a uma, em unidades de um palco de
+ * **390×316**, e é isso que está aqui. A tabela é a especificação: cada número
+ * abaixo pode ser lido contra o documento sem executar nada. Fora da base 390 a
+ * figura inteira escala pelo mesmo factor — nunca se reorganiza, nunca recorta.
+ *
+ *   2 pessoas   dois discos de 196, lado a lado, sobreposição parcial
+ *   3 pessoas   três de 156 em triângulo
+ *   4 pessoas   quatro de 138 numa grelha 2×2 sobreposta
+ *   5 pessoas   um centro de 156 e quatro satélites de 112
+ *   6+          um centro de 148 e cinco satélites de 104
+ *
+ * A partir de seis participantes a figura deixa de crescer: seis fotografias
+ * simultâneas é o limite em que um rosto ainda se reconhece. O sexto slot
+ * continua a ser **uma fotografia real** — nunca um ponto abstracto — e recebe
+ * por cima a contagem de quem não coube.
+ *
+ * Não há aleatoriedade nenhuma, nem sequer semeada: a mesma publicação desenha
+ * a mesma figura em qualquer telefone, na Home e ao voltar da imersiva.
  */
+
+/** Largura do palco de referência. Todas as medidas abaixo vivem nesta base. */
+export const CIRCLE_STAGE_WIDTH = 390
+/** Altura do palco de referência. */
+export const CIRCLE_STAGE_HEIGHT = 316
+
+/** Quantas fotografias a figura mostra ao mesmo tempo, no máximo. */
+export const CIRCLE_MAX_SLOTS = 6
 
 export interface ClusterDisc {
   /** Canto superior esquerdo, em pontos, relativo à caixa da composição. */
@@ -24,7 +45,7 @@ export interface ClusterDisc {
   y: number
   /** Diâmetro. */
   d: number
-  /** Ordem de pintura: os discos maiores ficam por baixo. */
+  /** Ordem de pintura. O disco central fica sempre por cima. */
   z: number
 }
 
@@ -34,121 +55,105 @@ export interface ClusterLayout {
   discs: ClusterDisc[]
 }
 
-/**
- * Semente estável a partir do id — o mesmo texto dá sempre o mesmo número.
- * (djb2: barato, boa dispersão para o pouco que aqui se pede.)
- */
-function seedOf(key: string): number {
-  let hash = 5381
-  for (let i = 0; i < key.length; i++) hash = ((hash << 5) + hash + key.charCodeAt(i)) >>> 0
-  return hash
-}
+/** Um disco na base 390×316: centro e diâmetro, que é como a spec o escreve. */
+type Spot = readonly [cx: number, cy: number, d: number]
 
-/** Ruído determinístico em [0,1) para o índice `i` desta semente. */
-function noise(seed: number, i: number): number {
-  const x = Math.sin(seed * 0.0001 + i * 12.9898) * 43758.5453
-  return x - Math.floor(x)
-}
+const CENTRE_X = CIRCLE_STAGE_WIDTH / 2   // 195
+const CENTRE_Y = CIRCLE_STAGE_HEIGHT / 2  // 158
 
 /**
- * Fracção da largura que cada disco ocupa, por número de discos no anel.
+ * Um só participante — o disco é a publicação.
  *
- * Desce à medida que o anel enche: com muitos discos do mesmo tamanho a figura
- * fecha-se num donut e o vazio do meio passa a ser a forma dominante. Os valores
- * saem da referência (cinco discos ≈ 42% da largura) e do que continua legível
- * em baixo — abaixo de 26% um rosto deixa de se reconhecer.
+ * A spec não cobre este caso (um Círculo pede duas pessoas), mas os dados
+ * cobrem-no: uma ronda pode acabar com uma única captura. Fica centrado e no
+ * tamanho que a altura do palco permite.
  */
-function discFraction(ringCount: number): number {
-  if (ringCount <= 3) return 0.50
-  if (ringCount === 4) return 0.46
-  if (ringCount === 5) return 0.42
-  if (ringCount === 6) return 0.38
-  if (ringCount <= 8) return 0.33
-  return 0.28
+const ONE: Spot[] = [[CENTRE_X, CENTRE_Y, 220]]
+
+const TWO: Spot[] = [
+  [135, CENTRE_Y, 196],
+  [255, CENTRE_Y, 196],
+]
+
+const THREE: Spot[] = [
+  [125, 112, 156],
+  [265, 112, 156],
+  [195, 226, 156],
+]
+
+const FOUR: Spot[] = [
+  [126, 108, 138],
+  [264, 108, 138],
+  [126, 226, 138],
+  [264, 226, 138],
+]
+
+/** Centro primeiro; os satélites seguem no sentido da leitura. */
+const FIVE: Spot[] = [
+  [CENTRE_X, CENTRE_Y, 156],
+  [ 80,  90, 112],
+  [310,  94, 112],
+  [102, 236, 112],
+  [290, 236, 112],
+]
+
+/**
+ * Seis slots: um centro de 148 e cinco satélites de 104 numa elipse.
+ *
+ * Os satélites saem de `rx: 132`, `ry: 100` a partir de -90° — a elipse mais
+ * larga que mantém os cinco dentro do palco com o raio de 52 de cada um. Os
+ * valores estão escritos e não calculados, pela mesma razão que os restantes:
+ * uma tabela lê-se contra a especificação, uma fórmula não.
+ */
+const SIX: Spot[] = [
+  [CENTRE_X, CENTRE_Y, 148],
+  [195,  58, 104],
+  [320, 127, 104],
+  [273, 239, 104],
+  [117, 239, 104],
+  [ 69, 127, 104],
+]
+
+const TABLE: Record<number, Spot[]> = { 1: ONE, 2: TWO, 3: THREE, 4: FOUR, 5: FIVE }
+
+/** As composições com centro têm o primeiro slot no meio; as outras não. */
+export function circleHasCentre(count: number): boolean {
+  return count >= 5
 }
 
-/** Como os discos se repartem entre o anel de fora e o de dentro. */
-function split(count: number): { outer: number; inner: number } {
-  if (count <= 6) return { outer: count, inner: 0 }
-  if (count <= 9) return { outer: 6, inner: count - 6 }
-  if (count <= 14) return { outer: 8, inner: count - 8 }
-  return { outer: 9, inner: count - 9 }
+/**
+ * Quantas fotografias esta figura desenha, e quantas pessoas ficam de fora.
+ *
+ * `extra` é o `+N` que o último slot recebe por cima — e só existe acima de
+ * seis participantes, porque até lá cabem todos.
+ */
+export function circleSlotCount(people: number): { slots: number; extra: number } {
+  const n = Math.max(1, people)
+  if (n <= CIRCLE_MAX_SLOTS) return { slots: n, extra: 0 }
+  return { slots: CIRCLE_MAX_SLOTS, extra: n - CIRCLE_MAX_SLOTS }
 }
 
-/** Sobreposição entre vizinhos do mesmo anel: 22% do diâmetro. */
-const NEIGHBOUR_OVERLAP = 0.78
-/** Variação de tamanho disco a disco. */
-const SIZE_JITTER = 0.07
+/**
+ * A figura, em pontos, para a largura disponível.
+ *
+ * `width` é a largura real da coluna; tudo escala a partir de 390. A altura sai
+ * da composição — a caixa é aparada à tinta, para o palco não reservar ar que
+ * nenhum disco ocupa.
+ */
+export function circleClusterLayout(count: number, width: number): ClusterLayout {
+  const { slots } = circleSlotCount(count)
+  const spots = TABLE[slots] ?? SIX
+  const scale = width / CIRCLE_STAGE_WIDTH
+  const centred = circleHasCentre(slots)
 
-export function circleClusterLayout(count: number, width: number, key: string): ClusterLayout {
-  const n = Math.max(1, Math.min(count, 20))
-  const seed = seedOf(key)
-
-  // ── Um só: o disco é a publicação ────────────────────────────────────────
-  if (n === 1) {
-    const d = width * 0.70
-    return { width, height: d, discs: [{ x: (width - d) / 2, y: 0, d, z: 0 }] }
-  }
-
-  // ── Dois: lado a lado, com um desnível mínimo para não parecerem um símbolo
-  //    de infinito. É o caso mais comum de um Círculo e o que mais se nota. ──
-  if (n === 2) {
-    const d = width * 0.54
-    const gap = d * NEIGHBOUR_OVERLAP
-    const drop = d * 0.07
-    const left = (width - (d + gap)) / 2
-    return {
-      width,
-      height: d + drop,
-      discs: [
-        { x: left, y: 0, d, z: 0 },
-        { x: left + gap, y: drop, d, z: 1 },
-      ],
-    }
-  }
-
-  const { outer, inner } = split(n)
-  const base = width * discFraction(outer)
-
-  // Raio que põe os vizinhos do anel a sobreporem-se exactamente
-  // `NEIGHBOUR_OVERLAP`: a corda entre dois centros vale 2·R·sen(π/k).
-  const ringRadius = (base * NEIGHBOUR_OVERLAP) / (2 * Math.sin(Math.PI / outer))
-
-  // Se o anel transbordar a largura, encolhe tudo pelo mesmo factor — a figura
-  // mantém-se, só fica menor. Nunca recorta e nunca reorganiza.
-  //
-  // A conta usa o disco no seu tamanho MÁXIMO, não no base: a variação de ±7%
-  // aplica-se depois desta linha, e medir pelo base deixava o maior disco sair
-  // 2 a 4pt pela margem em alguns números de participantes.
-  const span = 2 * ringRadius + base * (1 + SIZE_JITTER)
-  const scale = span > width ? width / span : 1
-  const d0 = base * scale
-  const R = ringRadius * scale
-
-  const cx = width / 2
-  const cy = R + d0 / 2
-  const discs: ClusterDisc[] = []
-
-  const place = (index: number, total: number, radius: number, sizeFactor: number, angleOffset: number) => {
-    const angle = -Math.PI / 2 + angleOffset + (index / total) * Math.PI * 2
-    const d = d0 * sizeFactor * (1 + (noise(seed, discs.length) - 0.5) * 2 * SIZE_JITTER)
-    discs.push({
-      x: cx + Math.cos(angle) * radius - d / 2,
-      y: cy + Math.sin(angle) * radius - d / 2,
-      d,
-      z: 0,
-    })
-  }
-
-  for (let i = 0; i < outer; i++) place(i, outer, R, 1, 0)
-  // O anel de dentro roda meio passo para os discos caírem nos intervalos do de
-  // fora em vez de atrás deles.
-  for (let i = 0; i < inner; i++) place(i, inner, R * 0.42, 0.82, Math.PI / Math.max(inner, 1))
-
-  // Os maiores por baixo: um disco pequeno tapado por um grande desaparece, ao
-  // contrário do inverso. É o que dá profundidade à figura sem sombra nenhuma.
-  const order = [...discs].sort((a, b) => b.d - a.d)
-  order.forEach((disc, index) => { disc.z = index })
+  const discs: ClusterDisc[] = spots.map(([cx, cy, d], index) => ({
+    x: (cx - d / 2) * scale,
+    y: (cy - d / 2) * scale,
+    d: d * scale,
+    // O centro em cima de tudo; os satélites por ordem de participante, para
+    // que dois vizinhos se sobreponham sempre no mesmo sentido.
+    z: centred && index === 0 ? spots.length : index,
+  }))
 
   const top = Math.min(...discs.map((disc) => disc.y))
   const bottom = Math.max(...discs.map((disc) => disc.y + disc.d))

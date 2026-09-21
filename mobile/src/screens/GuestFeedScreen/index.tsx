@@ -16,7 +16,7 @@ import { useT } from '../../i18n'
 import AvatarImage from '../../components/AvatarImage'
 import Wordmark from '../../components/Wordmark'
 import Icon from '../../components/Icon'
-import { ACTION_INK } from '../FeedScreen/tokens'
+import { actionInkRest } from '../FeedScreen/tokens'
 import FeedIcon, { type FeedIconName } from '../../components/FeedIcon'
 import { displayHandle } from '../../utils/handle'
 import { configureVideoPlayer, videoPosterUrl, videoSource as buildVideoSource } from '../../utils/video'
@@ -43,7 +43,7 @@ function LockedAction({
       accessibilityRole="button"
       accessibilityLabel={label}
     >
-      <FeedIcon name={name} size={27} color={ACTION_INK} />
+      <FeedIcon name={name} size={27} color={actionInkRest.media} />
       {value !== undefined && value > 0 && <Text style={s.actionCount}>{value}</Text>}
     </TouchableOpacity>
   )

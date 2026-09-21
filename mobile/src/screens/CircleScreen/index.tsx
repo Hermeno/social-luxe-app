@@ -1,10 +1,10 @@
-import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { useIsFocused } from '@react-navigation/native'
 import SuggestionsSheet from '../../components/SuggestionsSheet'
 import { useMessagesStore } from '../../store/messages.store'
 import {
   View, Text, StyleSheet, Pressable, ScrollView,
-  ActivityIndicator, Alert, Animated, PanResponder, Modal, Easing, Vibration,
+  ActivityIndicator, Alert, Animated, Modal, Easing, Vibration,
   type StyleProp, type ViewStyle,
 } from 'react-native'
 import { Image } from 'expo-image'
@@ -18,12 +18,13 @@ import { colors, fonts, radius, spacing } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
 import * as circle from '../../services/circle.service'
 import { setCircleScreenActive } from './presence'
+import useShotQueue, { type LocalShot, type ShotUploadResult } from './useShotQueue'
 import {
+  CircleCapture,
   CircleMember,
   CircleRound,
   CircleSession,
   CircleUser,
-  EmojiOverlay,
 } from '../../services/circle.service'
 import { getMyFollowing, getMyFollowers } from '../../services/follow.service'
 import { useFollowStore } from '../../store/follow.store'
@@ -32,8 +33,8 @@ import { useFeedStore } from '../../store/feed.store'
 import { useNotificationStore } from '../../store/notification.store'
 import { getSocket } from '../../socket'
 import { useT } from '../../i18n'
-import { toast } from '../../utils/toast'
 import { API_BASE } from '../../config'
+import useReducedMotionPreference from '../../hooks/useReducedMotionPreference'
 
 const SHUTTER_OUTER = 78
 // Recurso para o primeiro render, antes de o servidor responder. Quem manda na
@@ -41,7 +42,18 @@ const SHUTTER_OUTER = 78
 const PUBLISH_WINDOW_FALLBACK_MS = 60 * 1000
 const SHUTTER_INNER = 62
 const INVITE_TTL_MS = 2 * 60 * 1000   // convite expira em 2 min (igual ao backend)
-const MAX_CAPTURES_PER_ROUND = 2
+// Recurso para o primeiro render; o número que vale vem do servidor com a sessão.
+const MAX_CAPTURES_FALLBACK = 10
+/**
+ * Compressão do JPEG ao disparar. Menos bytes é menos tempo a escrever o
+ * ficheiro e a subi-lo; a 0.7 a diferença não se vê num ecrã de telemóvel.
+ */
+const CAPTURE_QUALITY = 0.7
+/** A miniatura na fita das minhas fotografias. */
+const THUMB_W = 46
+/** A folga do cartão de baixo em relação às bordas do ecrã. */
+const DOCK_SIDE_MARGIN = 12
+const THUMB_H = 58
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name']
 type ButtonTone = 'primary' | 'glass' | 'soft' | 'danger'
@@ -168,81 +180,17 @@ function SearchingDots({ color = '#fff' }: { color?: string }) {
   )
 }
 
-const EMOJI_SET  = ['❤️', '🔥', '😂', '😍', '⭐️', '💯', '🙌', '👀', '✨', '😎', '🎯', '🌸', '👑', '🕶️']
-const EMOJI_FRAC = 0.14
-const MAX_EMOJI_OVERLAYS = 16
-const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
-
-type Placed = { id: string; emoji: string; x: number; y: number }
-type ImageRect = { left: number; top: number; width: number; height: number }
-type PendingCapture = {
+/**
+ * Uma fotografia minha na fita da ronda. Pode ser só local (acabada de tirar,
+ * ainda por subir) ou já estar no servidor — o ecrã desenha as duas da mesma
+ * maneira, porque para quem a tirou ela já está guardada.
+ */
+type MyShot = {
+  key: string
+  slot: number
   uri: string
-  size: { w: number; h: number } | null
-  roundId: string | null
-  slot: 1 | 2
-}
-
-// As primeiras posições ficam perto do centro, mas não exactamente umas sobre
-// as outras. Antes, cada toque colocava o novo emoji no mesmo ponto e parecia
-// que o segundo/terceiro toque não tinha feito nada.
-const EMOJI_START_OFFSETS = [
-  { x: 0, y: 0 },
-  { x: 0.10, y: 0.08 },
-  { x: -0.10, y: 0.08 },
-  { x: 0.10, y: -0.08 },
-  { x: -0.10, y: -0.08 },
-] as const
-
-// Emoji arrastável sobre a pré-visualização
-function PlacedEmoji({
-  item, imageRect, onCommit, onRemove, removeLabel,
-}: {
-  item: Placed
-  imageRect: ImageRect
-  onCommit: (id: string, x: number, y: number) => void
-  onRemove: (id: string) => void
-  removeLabel: string
-}) {
-  // x/y são fracções da FOTO original. A preview usa `cover`, por isso a foto
-  // pode ser maior do que o ecrã e ficar cortada nas bordas. Converter através
-  // de imageRect mantém a posição escolhida quando o post chega à feed.
-  const size      = imageRect.width * EMOJI_FRAC
-  const startLeft = imageRect.left + item.x * imageRect.width - size / 2
-  const startTop  = imageRect.top + item.y * imageRect.height - size / 2
-  const pan       = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current
-
-  const resetPan = () => pan.setValue({ x: 0, y: 0 })
-
-  const responder = useMemo(() => PanResponder.create({
-    onStartShouldSetPanResponder: () => false,
-    onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 3 || Math.abs(g.dy) > 3,
-    onPanResponderMove: (_, g) => pan.setValue({ x: g.dx, y: g.dy }),
-    onPanResponderRelease: (_, g) => {
-      const cx = clamp((startLeft + g.dx + size / 2 - imageRect.left) / imageRect.width, 0.06, 0.94)
-      const cy = clamp((startTop + g.dy + size / 2 - imageRect.top) / imageRect.height, 0.06, 0.94)
-      resetPan()
-      onCommit(item.id, cx, cy)
-    },
-    onPanResponderTerminate: resetPan,
-  }), [startLeft, startTop, size, imageRect.left, imageRect.top, imageRect.width, imageRect.height])
-
-  return (
-    <Animated.View
-      style={[em.placed, { left: startLeft, top: startTop, transform: pan.getTranslateTransform() }]}
-      {...responder.panHandlers}
-    >
-      <Text style={{ fontSize: size }}>{item.emoji}</Text>
-      <Pressable
-        style={({ pressed }) => [em.del, pressed && s.controlButtonPressed]}
-        onPress={() => onRemove(item.id)}
-        hitSlop={8}
-        accessibilityRole="button"
-        accessibilityLabel={`${removeLabel} ${item.emoji}`}
-      >
-        <Ionicons name="close" size={11} color="#fff" />
-      </Pressable>
-    </Animated.View>
-  )
+  local: LocalShot | null
+  capture: CircleCapture | null
 }
 
 export default function CircleScreen() {
@@ -260,6 +208,10 @@ export default function CircleScreen() {
   }, [isFocused, suggestionsRequested])
 
   const { top, bottom } = useSafeAreaInsets()
+  // O painel de baixo flutua: não encosta ao fundo do ecrã. Onde há indicador
+  // de gestos, a safe area já é a margem certa; sem ela, fica a mesma folga que
+  // o cartão tem dos lados.
+  const dockBottom = Math.max(bottom, DOCK_SIDE_MARGIN)
   const nav  = useNavigation<any>()
   const user = useAuthStore((s) => s.user)
   const t    = useT()
@@ -282,9 +234,6 @@ export default function CircleScreen() {
   const [focused,    setFocused]    = useState(false)
   const [facing,     setFacing]     = useState<'back' | 'front'>('back')
   const [cameraReady, setCameraReady] = useState(false)
-  const [preview, setPreview] = useState<PendingCapture | null>(null)
-  const [placed,     setPlaced]     = useState<Placed[]>([])
-  const [previewBox, setPreviewBox] = useState({ w: 0, h: 0 })
   const [initDone,   setInitDone]   = useState(false)
   const [initError,  setInitError]  = useState(false)
   const [shooting,   setShooting]   = useState(false)
@@ -295,10 +244,6 @@ export default function CircleScreen() {
   const [bottomBarH, setBottomBarH] = useState(0)
   const countdownTimer = useRef<ReturnType<typeof setInterval> | null>(null)
   const lastCountdownRoundRef = useRef<string | null>(null)
-  // Quantos envios estão em fundo. Já não bloqueia nada — serve para o dock
-  // poder dizer que a fotografia ainda está a caminho do servidor.
-  const [saving, setSaving] = useState(0)
-  const uploadChainRef = useRef<Promise<unknown>>(Promise.resolve())
   const [publishing, setPublishing] = useState(false)
   const [published,  setPublished]  = useState(false)
   const [joining, setJoining] = useState(false)
@@ -307,14 +252,14 @@ export default function CircleScreen() {
   const [friends,       setFriends]       = useState<CircleUser[]>([])
   const [loadingFriends, setLoadingFriends] = useState(false)
   const [publishWindowMs, setPublishWindowMs] = useState(PUBLISH_WINDOW_FALLBACK_MS)
+  const [maxCaptures, setMaxCaptures] = useState(MAX_CAPTURES_FALLBACK)
   const [withdrawingCaptureId, setWithdrawingCaptureId] = useState<string | null>(null)
+  const reduceMotion = useReducedMotionPreference()
 
   const sessionRef = useRef<CircleSession | null>(null)
   sessionRef.current = session
   const currentRoundRef = useRef<CircleRound | null>(null)
   currentRoundRef.current = currentRound
-  const previewRef = useRef<PendingCapture | null>(null)
-  previewRef.current = preview
   const shootingRef = useRef(false)
   shootingRef.current = shooting
   const startingCountdownRef = useRef(false)
@@ -322,6 +267,10 @@ export default function CircleScreen() {
   const callTimers = useRef<ReturnType<typeof setTimeout>[]>([])
 
   const shutterPress = useRef(new Animated.Value(1)).current
+  // Sem prévia, o clarão é o que diz "tirada": o ecrã pisca como uma câmara e a
+  // fotografia aparece na fita.
+  const shutterFlash = useRef(new Animated.Value(0)).current
+  const filmstripRef = useRef<ScrollView>(null)
 
   const myId       = user?.id
   const isHost     = !!session && session.hostId === myId
@@ -336,42 +285,16 @@ export default function CircleScreen() {
   const joinedMembers = members.filter((m) => m.status === 'JOINED')
   const joinedCount = joinedMembers.length
   const activeRoundId = currentRound?.id ?? null
-  const roundCaptures = activeRoundId
+  const membersRef = useRef(members)
+  membersRef.current = members
+  // As capturas desta ronda que já estão no servidor — as de toda a gente.
+  const serverRoundCaptures: CircleCapture[] = activeRoundId
     ? joinedMembers.flatMap((member) => (
         Array.isArray(member.captures)
           ? member.captures.filter((capture) => capture.roundId === activeRoundId)
           : []
       ))
     : []
-  const myMember = joinedMembers.find((member) => member.user.id === myId)
-  const myRoundCaptures = activeRoundId
-    ? (myMember?.captures ?? [])
-        .filter((capture) => capture.roundId === activeRoundId)
-        .sort((a, b) => a.slot - b.slot)
-    : []
-  const contributorsInRound = new Set(roundCaptures.map((capture) => capture.userId)).size
-
-
-  // Caixa real ocupada pela foto em `contentFit="cover"`. Pode ultrapassar o
-  // ecrã nos lados ou em cima/baixo; os emojis usam esta geometria para guardar
-  // coordenadas relativas ao ficheiro, não relativas ao recorte da preview.
-  const previewImageRect = useMemo<ImageRect>(() => {
-    if (previewBox.w <= 0 || previewBox.h <= 0) {
-      return { left: 0, top: 0, width: 0, height: 0 }
-    }
-    if (!preview?.size?.w || !preview.size.h) {
-      return { left: 0, top: 0, width: previewBox.w, height: previewBox.h }
-    }
-    const scale = Math.max(previewBox.w / preview.size.w, previewBox.h / preview.size.h)
-    const renderedW = preview.size.w * scale
-    const renderedH = preview.size.h * scale
-    return {
-      left: (previewBox.w - renderedW) / 2,
-      top: (previewBox.h - renderedH) / 2,
-      width: renderedW,
-      height: renderedH,
-    }
-  }, [preview?.size?.h, preview?.size?.w, previewBox.h, previewBox.w])
 
   // ── Janela para publicar ────────────────────────────────────────────────────
   // A janela pertence à ronda, não à última fotografia de uma pessoa. Assim os
@@ -402,20 +325,65 @@ export default function CircleScreen() {
   const roundAcceptsMyCapture = roundIsActive
     && (!currentRound?.isSolo || currentRound.ownerUserId === myId)
 
+  // ── As minhas fotografias deste momento ─────────────────────────────────────
+  // Guardadas no telemóvel ao disparar; o servidor recebe-as pela fila.
+  const queue = useShotQueue({ upload: uploadShot, withdraw: withdrawShot })
+  const sessionId = session?.id ?? null
+  // Uma fotografia local é deste momento se espera pela ronda que o primeiro
+  // envio vai criar, ou se é da ronda aberta. As retiradas contam aqui — é o
+  // que esconde também a cópia delas que ainda possa vir do servidor.
+  const momentShots = queue.shots.filter((shot) => (
+    shot.sessionId === sessionId
+    && (shot.roundId === null || (roundIsActive && shot.roundId === activeRoundId))
+  ))
+  const hasPendingSolo = momentShots.some((shot) => shot.roundId === null && !shot.removed)
+  // A mesma fotografia pode chegar pelo socket antes da resposta do envio. O
+  // slot, numerado aqui, é o que a reconhece enquanto ainda não tem id.
+  const isLocalCopy = (capture: CircleCapture) => momentShots.some((shot) => (
+    shot.captureId === capture.id
+    || (shot.slot === capture.slot && (shot.roundId === capture.roundId || shot.roundId === null))
+  ))
+  const myShots: MyShot[] = [
+    ...momentShots
+      .filter((shot) => !shot.removed)
+      .map((shot) => ({ key: shot.key, slot: shot.slot, uri: shot.uri ?? '', local: shot, capture: null })),
+    ...(roundIsActive ? serverRoundCaptures : [])
+      .filter((capture) => capture.userId === myId && !isLocalCopy(capture))
+      .map((capture) => ({
+        key: capture.id,
+        slot: capture.slot,
+        uri: resolveMediaUrl(capture.mediaUrl),
+        local: null,
+        capture,
+      })),
+  ].sort((a, b) => a.slot - b.slot)
+  const othersInRound = roundIsActive
+    ? serverRoundCaptures.filter((capture) => capture.userId !== myId)
+    : []
+  const myCount = myShots.length
+  const momentTotal = othersInRound.length + myCount
+  const contributorsInRound = new Set(othersInRound.map((capture) => capture.userId)).size + (myCount > 0 ? 1 : 0)
+  const captureLimitReached = myCount >= maxCaptures
+  const shutterBlocked = shooting || startingCountdown || countdown !== null || !cameraReady
+    || captureLimitReached || initError || !session || !initDone
+  const shutterHint = captureLimitReached
+    ? t.circle_limitReached.replace('{max}', String(maxCaptures))
+    : myCount > 0
+      ? t.circle_takeAnother
+      : t.circle_takePhoto
+
   // ── Alguém já disparou e eu ainda não ──────────────────────────────────────
   // A ronda dura um minuto. Quem está a enquadrar não repara num número pequeno
   // a aparecer num avatar de 34pt, por isso o aviso é uma faixa com o relógio a
   // esvaziar. Sai sozinha assim que eu capturo ou a ronda fecha.
-  const firstOtherCapture = roundCaptures
-    .filter((capture) => capture.userId !== myId)
+  const firstOtherCapture = [...othersInRound]
     .sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''))[0]
   const firstShooter = firstOtherCapture
     ? joinedMembers.find((member) => member.user.id === firstOtherCapture.userId)?.user
     : undefined
   const waitingOnMe = roundIsActive
     && !!firstShooter
-    && myRoundCaptures.length === 0
-    && !preview
+    && myCount === 0
     && countdown === null
   // Fracção que falta da janela da ronda, para a barra esvaziar com o tempo.
   const roundLeftFraction = (() => {
@@ -433,19 +401,42 @@ export default function CircleScreen() {
     buzzedRoundRef.current = activeRoundId
     Vibration.vibrate(40)
   }, [waitingOnMe, activeRoundId])
-  const visibleMyRoundCaptures = roundIsActive ? myRoundCaptures : []
-  const nextCaptureSlot: 1 | 2 = roundAcceptsMyCapture && visibleMyRoundCaptures.some((capture) => capture.slot === 1) ? 2 : 1
-  const captureLimitReached = roundAcceptsMyCapture && visibleMyRoundCaptures.length >= MAX_CAPTURES_PER_ROUND
-  const canPublish = roundIsActive && roundCaptures.length >= 1 && !published
+  // Publicar também serve um momento que ainda só existe no telemóvel: é o
+  // publicar que o faz subir.
+  const canPublish = !published && ((roundIsActive && momentTotal >= 1) || hasPendingSolo)
 
   // Uma nova ronda, uma captura adicionada ou uma remoção tornam o snapshot
   // anterior obsoleto e reabrem a ação de publicar.
-  const captureSignature = `${activeRoundId ?? ''}:${roundCaptures.map((capture) => capture.id).sort().join('|')}`
+  const captureSignature = `${activeRoundId ?? ''}:${[
+    ...othersInRound.map((capture) => capture.id),
+    ...myShots.map((shot) => shot.key),
+  ].sort().join('|')}`
   const previousCaptureSignatureRef = useRef(captureSignature)
   useEffect(() => {
     if (previousCaptureSignatureRef.current !== captureSignature) setPublished(false)
     previousCaptureSignatureRef.current = captureSignature
   }, [captureSignature])
+
+  // Fotografias de outra sessão, ou de uma ronda que já fechou, saem da fila.
+  // As que ainda esperam para subir ficam: a ronda fechada dá-lhes uma folga, e
+  // é o efeito seguinte que as manda já.
+  const { prune, flush, peek } = queue
+  useEffect(() => {
+    prune((shot) => shot.sessionId !== sessionId || (
+      shot.roundId !== null
+      && !(roundIsActive && shot.roundId === activeRoundId)
+      && (shot.state === 'saved' || shot.state === 'failed')
+    ))
+  }, [activeRoundId, prune, roundIsActive, sessionId])
+
+  // A ronda fechou com fotografias ainda no telemóvel: sobem já, sem esperar
+  // que a pessoa pare, dentro da folga que o servidor dá depois do fim.
+  useEffect(() => {
+    if (roundIsActive || !activeRoundId) return
+    if (peek().some((shot) => shot.roundId === activeRoundId && shot.state === 'waiting')) {
+      void flush()
+    }
+  }, [activeRoundId, flush, peek, roundIsActive])
 
   async function handleWithdraw(captureId: string) {
     const sid = sessionRef.current?.id
@@ -462,6 +453,20 @@ export default function CircleScreen() {
     } finally {
       setWithdrawingCaptureId(null)
     }
+  }
+
+  // Retirar uma fotografia da fita. As que o telemóvel conhece passam pela
+  // fila, que sabe se ela já subiu; as que só o servidor tem saem por lá.
+  async function removeShot(item: MyShot) {
+    if (item.local) {
+      try {
+        await queue.remove(item.local.key)
+      } catch (err: any) {
+        Alert.alert(t.circle_errTitle, err?.response?.data?.message || t.circle_photoFail)
+      }
+      return
+    }
+    if (item.capture) await handleWithdraw(item.capture.id)
   }
 
   // ── Localização ─────────────────────────────────────────────────────────────
@@ -489,6 +494,7 @@ export default function CircleScreen() {
     currentRound: CircleRound | null
     nearby?: CircleUser[]
     publishWindowMs?: number
+    maxCapturesPerRound?: number
   }) => {
     sessionRef.current = state.session
     currentRoundRef.current = state.currentRound
@@ -497,6 +503,7 @@ export default function CircleScreen() {
     setCurrentRound(state.currentRound)
     if (state.nearby) setNearby(state.nearby)
     if (state.publishWindowMs) setPublishWindowMs(state.publishWindowMs)
+    if (state.maxCapturesPerRound) setMaxCaptures(state.maxCapturesPerRound)
   }, [])
 
   // ── Garante uma sessão: junta-se a chamada pendente OU abre a minha ──────────
@@ -626,9 +633,8 @@ export default function CircleScreen() {
       }
       currentRoundRef.current = round
       setCurrentRound(round)
-      // A ronda nova não pode mudar a identidade de uma foto que já está a ser
-      // revista/enviada, nem iniciar uma segunda captura concorrente.
-      if (previewRef.current || shootingRef.current) return
+      // Uma fotografia a meio de ser tirada não pode ganhar uma concorrente.
+      if (shootingRef.current) return
       beginCountdown(inMs, roundId)
     }
 
@@ -643,7 +649,6 @@ export default function CircleScreen() {
       setCircleScreenActive(false)
       setCameraReady(false)
       setStatusBarStyle('dark')
-      setPreview(null)
       lastCountdownRoundRef.current = null
       callTimers.current.forEach(clearTimeout)
       callTimers.current = []
@@ -658,6 +663,13 @@ export default function CircleScreen() {
       shootingRef.current = false
     }
   }, [ensureSession]))
+
+  // Sair da câmara. Os separadores não guardam histórico, por isso "voltar"
+  // leva à Home — que é também de onde se chega aqui.
+  function closeCircle() {
+    if (nav.canGoBack()) nav.goBack()
+    else nav.navigate('Feed')
+  }
 
   // ── Chamar alguém (vizinho ou amigo) ────────────────────────────────────────
   async function handleCall(u: CircleUser) {
@@ -785,26 +797,66 @@ export default function CircleScreen() {
   }
 
   // ── Disparo ─────────────────────────────────────────────────────────────────
-  // roundId e slot entram no mesmo objeto que a URI. Mesmo que outra contagem
-  // chegue durante a edição, a prévia nunca muda de ronda por acidente.
-  async function capture(roundId: string | null, slot: 1 | 2) {
-    if (!camRef.current || shootingRef.current || previewRef.current) return
+  // A posição de uma fotografia entre as minhas do mesmo momento. É numerada
+  // aqui e nunca reutilizada, e é ela que torna um reenvio idempotente: se a
+  // resposta se perder e a fila tentar outra vez, o servidor substitui a mesma
+  // fotografia em vez de criar uma segunda. Lê dos refs porque pode ser chamada
+  // pelo intervalo da contagem, fechado sobre um render antigo.
+  function nextSlot(forSession: string, roundId: string | null) {
+    let last = 0
+    for (const shot of queue.peek()) {
+      if (shot.sessionId !== forSession) continue
+      // As que esperam pela ronda solo vão acabar nesta; contá-las só pode
+      // afastar o número, nunca fazê-lo colidir.
+      if (shot.roundId === null || shot.roundId === roundId) last = Math.max(last, shot.slot)
+    }
+    if (roundId) {
+      for (const member of membersRef.current) {
+        if (member.user.id !== myId) continue
+        for (const capture of member.captures ?? []) {
+          if (capture.roundId === roundId) last = Math.max(last, capture.slot)
+        }
+      }
+    }
+    return last + 1
+  }
+
+  function flashShutter() {
+    if (reduceMotion) return
+    shutterFlash.stopAnimation()
+    shutterFlash.setValue(0.5)
+    Animated.timing(shutterFlash, {
+      toValue: 0,
+      duration: 260,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start()
+  }
+
+  // Disparar é guardar. Não há prévia nem confirmação: a fotografia entra na
+  // fita assim que o ficheiro existe e a câmara fica logo pronta para a
+  // seguinte. `onPictureSaved` faz a promessa resolver mal o sensor captou (no
+  // Android, antes de o ficheiro estar escrito), e o ficheiro chega depois por
+  // esse callback.
+  async function shoot(roundId: string | null) {
+    const sess = sessionRef.current
+    if (!camRef.current || !sess || shootingRef.current) return
     shootingRef.current = true
     setShooting(true)
+    const key = queue.add(sess.id, roundId, nextSlot(sess.id, roundId))
+    flashShutter()
     try {
-      const pic = await camRef.current.takePictureAsync({ quality: 0.8 })
-      if (pic?.uri) {
-        const nextPreview: PendingCapture = {
-          uri: pic.uri,
-          size: pic.width && pic.height ? { w: pic.width, h: pic.height } : null,
-          roundId,
-          slot,
-        }
-        previewRef.current = nextPreview
-        setPreview(nextPreview)
-        setPlaced([])
-      }
+      const pic = await camRef.current.takePictureAsync({
+        quality: CAPTURE_QUALITY,
+        onPictureSaved: (saved) => {
+          if (saved?.uri) queue.fill(key, saved.uri)
+          else queue.drop(key)
+        },
+      })
+      // Uma versão da câmara que ainda devolva a fotografia pela promessa.
+      if (pic?.uri) queue.fill(key, pic.uri)
     } catch {
+      queue.drop(key)
       Alert.alert(t.circle_errTitle, t.circle_captureFail)
     } finally {
       shootingRef.current = false
@@ -816,7 +868,7 @@ export default function CircleScreen() {
   // absoluto: os relógios dos telemóveis não estão sincronizados entre si.
   function beginCountdown(inMs: number, roundId: string) {
     if (!roundId || !Number.isFinite(inMs)) return
-    if (previewRef.current || shootingRef.current) return
+    if (shootingRef.current) return
     // O pedido HTTP e o socket podem entregar a mesma ronda quase juntos.
     // Identidade do servidor evita reiniciar a animação ou disparar duas vezes.
     if (lastCountdownRoundRef.current === roundId) return
@@ -828,7 +880,7 @@ export default function CircleScreen() {
 
     if (safeInMs === 0) {
       setCountdown(null)
-      capture(roundId, 1)
+      shoot(roundId)
       return
     }
 
@@ -838,7 +890,7 @@ export default function CircleScreen() {
         if (countdownTimer.current) clearInterval(countdownTimer.current)
         countdownTimer.current = null
         setCountdown(null)
-        capture(roundId, 1)
+        shoot(roundId)
       } else {
         setCountdown(Math.ceil(left / 1000))
       }
@@ -850,7 +902,6 @@ export default function CircleScreen() {
       shootingRef.current
       || startingCountdownRef.current
       || countdown !== null
-      || previewRef.current
       || !camRef.current
       || !cameraReady
       || captureLimitReached
@@ -864,17 +915,18 @@ export default function CircleScreen() {
     const sess = sessionRef.current
     const otherCount = members.filter((m) => m.status === 'JOINED' && m.user.id !== user?.id).length
 
-    // A ronda continua aberta depois do disparo sincronizado: é aqui que entra
-    // a segunda perspetiva, sem obrigar todo o círculo a contar novamente.
+    // A ronda continua aberta depois do disparo sincronizado: é aqui que entram
+    // as outras perspetivas, sem obrigar todo o círculo a contar novamente.
     if (roundAcceptsMyCapture && activeRoundId) {
-      capture(activeRoundId, nextCaptureSlot)
+      shoot(activeRoundId)
       return
     }
 
-    // Sozinho no círculo não faz sentido contar — dispara já
+    // Sozinho no círculo não faz sentido contar — dispara já. Um momento solo
+    // que ainda só está no telemóvel também continua: é o mesmo momento.
     if (!sess) return
-    if (otherCount === 0) {
-      capture(null, 1)
+    if (otherCount === 0 || hasPendingSolo) {
+      shoot(null)
       return
     }
 
@@ -907,113 +959,83 @@ export default function CircleScreen() {
     }
   }
 
-  function addEmoji(emoji: string) {
-    setPlaced((current) => {
-      if (current.length >= MAX_EMOJI_OVERLAYS) return current
-      const offset = EMOJI_START_OFFSETS[current.length % EMOJI_START_OFFSETS.length]
-      const ring = Math.floor(current.length / EMOJI_START_OFFSETS.length)
-      return [...current, {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        emoji,
-        x: clamp(0.5 + offset.x + ring * 0.025, 0.08, 0.92),
-        y: clamp(0.4 + offset.y + ring * 0.025, 0.08, 0.92),
-      }]
-    })
-  }
-  function commitEmoji(id: string, x: number, y: number) {
-    setPlaced((p) => p.map((it) => (it.id === id ? { ...it, x, y } : it)))
-  }
-  function removeEmoji(id: string) {
-    setPlaced((p) => p.filter((it) => it.id !== id))
+  // ── Da fila para o servidor ─────────────────────────────────────────────────
+  // Chamada pela fila, uma fotografia de cada vez. A sessão e a ronda são as do
+  // momento em que foi tirada, não as de agora: sair e voltar a entrar não pode
+  // mandar uma fotografia para outro sítio.
+  async function uploadShot(shot: LocalShot & { uri: string }): Promise<ShotUploadResult> {
+    const result = await circle.addCirclePhoto(shot.sessionId, shot.uri, shot.roundId, shot.slot)
+    if (!result?.capture?.id || !result.roundId) throw new Error(t.circle_photoFail)
+    adoptCapture(shot, result)
+    return { roundId: result.roundId, captureId: result.capture.id }
   }
 
-  // Confirmar já não é esperar. A prévia fecha na hora e o envio segue em
-  // segundo plano — a câmara volta pronta para a segunda fotografia. Antes
-  // esperava-se pelo servidor com o ecrã bloqueado e, no fim, a câmara ainda
-  // tinha de arrancar de novo: era esse somatório que fazia o ciclo parecer
-  // eterno.
-  //
-  // Os envios vão em cadeia, nunca em paralelo: é a primeira fotografia que
-  // cria a ronda, e a segunda tem de sair com o id dela. A par, abriam-se duas
-  // rondas solo para o mesmo momento.
-  async function sendCapture(pending: PendingCapture, overlays: EmojiOverlay[], retry = true): Promise<void> {
-    const sess = sessionRef.current ?? await ensureSession()
-    if (!sess) { Alert.alert(t.circle_errTitle, t.circle_photoFail); return }
-    // Resolvido no envio, não no disparo: se a fotografia anterior criou a
-    // ronda entretanto, esta entra nessa em vez de abrir outra.
-    const roundId = pending.roundId ?? currentRoundRef.current?.id ?? null
-    try {
-      const result = await circle.addCirclePhoto(sess.id, pending.uri, overlays, roundId, pending.slot)
-      if (!result?.capture?.id || !result.roundId) throw new Error(t.circle_photoFail)
+  // Se uma nova contagem chegou enquanto esta fotografia esperava, o envio
+  // continua válido mas não volta a UI para trás. Só uma ronda solo recém-
+  // criada, ou a ronda que ainda está ativa, assume o dock.
+  function adoptCapture(
+    shot: LocalShot,
+    result: { roundId: string; round?: CircleRound; capture: CircleCapture },
+  ) {
+    if (sessionRef.current?.id !== shot.sessionId) return
+    const shouldAdoptRound = shot.roundId === null
+      || !currentRoundRef.current
+      || currentRoundRef.current.id === result.roundId
+    if (!shouldAdoptRound) return
 
-      // Se uma nova contagem chegou enquanto esta prévia estava aberta, o upload
-      // antigo continua válido, mas não volta a UI para trás. Só uma ronda solo
-      // recém-criada, ou a ronda que ainda está ativa, assume o dock.
-      const shouldAdoptRound = roundId === null
-        || !currentRoundRef.current
-        || currentRoundRef.current.id === result.roundId
-      if (shouldAdoptRound) {
-        const capturedRoundChanged = currentRoundRef.current?.id !== result.roundId
-        const nextRound: CircleRound = capturedRoundChanged
-          ? {
-              id: result.roundId,
-              sessionId: sess.id,
-              shotAt: result.capture.createdAt,
-              expiresAt: new Date(new Date(result.capture.createdAt).getTime() + publishWindowMs).toISOString(),
-              isSolo: roundId === null,
-              ownerUserId: roundId === null ? myId ?? null : null,
-            }
-          : currentRoundRef.current!
-        currentRoundRef.current = nextRound
-        setCurrentRound(nextRound)
-        setMembers((previous) => previous.map((member) => {
-          const baseCaptures = capturedRoundChanged
-            ? []
-            : (Array.isArray(member.captures) ? member.captures : [])
-          if (member.user.id !== myId) return { ...member, captures: baseCaptures }
-          return {
-            ...member,
-            captures: [
-              ...baseCaptures.filter((capture) => capture.id !== result.capture.id && capture.slot !== result.capture.slot),
-              result.capture,
-            ].sort((a, b) => a.slot - b.slot),
-          }
-        }))
-        setPublished(false)
+    const capturedRoundChanged = currentRoundRef.current?.id !== result.roundId
+    const nextRound: CircleRound = capturedRoundChanged
+      ? result.round ?? {
+          id: result.roundId,
+          sessionId: shot.sessionId,
+          shotAt: result.capture.createdAt,
+          expiresAt: new Date(new Date(result.capture.createdAt).getTime() + publishWindowMs).toISOString(),
+          isSolo: shot.roundId === null,
+          ownerUserId: shot.roundId === null ? myId ?? null : null,
+        }
+      : currentRoundRef.current!
+    currentRoundRef.current = nextRound
+    setCurrentRound(nextRound)
+    setMembers((previous) => previous.map((member) => {
+      const baseCaptures = capturedRoundChanged
+        ? []
+        : (Array.isArray(member.captures) ? member.captures : [])
+      if (member.user.id !== myId) return { ...member, captures: baseCaptures }
+      return {
+        ...member,
+        captures: [
+          ...baseCaptures.filter((capture) => (
+            capture.id !== result.capture.id
+            && !(capture.roundId === result.capture.roundId && capture.slot === result.capture.slot)
+          )),
+          result.capture,
+        ].sort((a, b) => a.slot - b.slot),
       }
-      // É aqui que a foto fica guardada no círculo. Sem este aviso a
-      // pré-visualização desaparecia e nada dizia que tinha acontecido.
-      toast.success(t.circle_savedTitle, t.circle_savedSub)
-    } catch (err: any) {
-      // A prévia já fechou, portanto uma falha de rede perdia a fotografia.
-      // Uma segunda tentativa cobre a falha passageira; só depois é que se
-      // avisa, e aí a fotografia perdeu-se mesmo.
-      if (retry) return sendCapture(pending, overlays, false)
-      Alert.alert(t.circle_errTitle, err?.response?.data?.message || err?.message || t.circle_photoFail)
-    }
+    }))
   }
 
-  function confirmPhoto() {
-    const pending = previewRef.current
-    if (!pending) return
-    const overlays: EmojiOverlay[] = placed.map(({ emoji, x, y }) => ({ emoji, x, y }))
-
-    previewRef.current = null
-    setPreview(null)
-    setPlaced([])
-    setSaving((count) => count + 1)
-
-    uploadChainRef.current = uploadChainRef.current
-      .catch(() => {})
-      .then(() => sendCapture(pending, overlays))
-      .then(() => setSaving((count) => Math.max(0, count - 1)))
+  async function withdrawShot(shot: LocalShot & { captureId: string }) {
+    await circle.withdrawMyPhoto(shot.sessionId, shot.captureId)
+    setMembers((prev) => prev.map((member) => member.user.id === myId
+      ? { ...member, captures: member.captures.filter((capture) => capture.id !== shot.captureId) }
+      : member))
+    setPublished(false)
   }
 
   async function handlePublish() {
-    if (!session || !activeRoundId || publishing || published) return
+    const sess = sessionRef.current
+    if (!sess || publishing || published) return
     setPublishing(true)
     try {
-      const post = await circle.publishCircle(session.id, activeRoundId)
+      // O que ainda está só no telemóvel sobe agora — o post tem de o levar.
+      const unsaved = await queue.flush()
+      if (unsaved > 0) {
+        Alert.alert(t.circle_errTitle, t.circle_syncFailed)
+        return
+      }
+      const roundId = currentRoundRef.current?.id
+      if (!roundId) throw new Error(t.circle_publishFail)
+      const post = await circle.publishCircle(sess.id, roundId)
       setPublished(true)
       setPendingPost(post)
       nav.navigate('Feed')
@@ -1072,7 +1094,7 @@ export default function CircleScreen() {
       )}
 
       {/* Contagem sincronizada — todos veem o mesmo número ao mesmo tempo */}
-      {countdown !== null && !preview && (
+      {countdown !== null && (
         <View style={s.countdownWrap} pointerEvents="none">
           <View style={s.countdownRing}>
             <Text style={s.countdownNum}>{countdown}</Text>
@@ -1080,33 +1102,28 @@ export default function CircleScreen() {
           <Text style={s.countdownHint}>{t.circle_countdown_hint}</Text>
         </View>
       )}
-      {preview && (
-        <View
-          style={StyleSheet.absoluteFill}
-          onLayout={(ev) => setPreviewBox({ w: ev.nativeEvent.layout.width, h: ev.nativeEvent.layout.height })}
-        >
-          <Image source={{ uri: preview.uri }} style={StyleSheet.absoluteFill} contentFit="cover" pointerEvents="none" />
-          {previewImageRect.width > 0 && placed.map((it) => (
-            <PlacedEmoji
-              key={it.id}
-              item={it}
-              imageRect={previewImageRect}
-              onCommit={commitEmoji}
-              onRemove={removeEmoji}
-              removeLabel={t.circle_removeEmoji}
-            />
-          ))}
-        </View>
-      )}
 
-      {/* ── Topo: quem está no círculo (chips) + virar câmara ── */}
+      {/* Clarão do obturador — a confirmação de que a fotografia foi tirada */}
+      <Animated.View
+        style={[StyleSheet.absoluteFill, s.shutterFlash, { opacity: shutterFlash }]}
+        pointerEvents="none"
+      />
+
+      {/* ── Topo: fechar, quem está no círculo (chips) + virar câmara ── */}
       <View style={[s.top, { paddingTop: top + 10 }]} pointerEvents="box-none">
+        {/* Sem a barra de navegação, é por aqui que se sai da câmara. */}
+        <CircleIconButton
+          icon="close"
+          label={t.circle_close}
+          onPress={closeCircle}
+          style={s.closeButton}
+        />
         <View style={s.memberRow}>
           {joinedMembers.map((m) => {
             const canRemove = isHost && m.user.id !== myId
-            const memberCaptureCount = activeRoundId
-              ? (m.captures ?? []).filter((capture) => capture.roundId === activeRoundId).length
-              : 0
+            const memberCaptureCount = m.user.id === myId
+              ? myCount
+              : othersInRound.filter((capture) => capture.userId === m.user.id).length
             return (
               <Pressable
                 key={m.user.id}
@@ -1116,7 +1133,7 @@ export default function CircleScreen() {
                 accessibilityRole={canRemove ? 'button' : 'image'}
                 accessibilityLabel={canRemove
                   ? `${t.circle_remove} ${m.user.name}`
-                  : `${m.user.name}, ${memberCaptureCount} de ${MAX_CAPTURES_PER_ROUND}`}
+                  : `${m.user.name}, ${memberCaptureCount} de ${maxCaptures}`}
               >
                 <AvatarImage uri={m.user.avatar} name={m.user.name} size={34} borderWidth={0} borderColor="transparent" />
                 {memberCaptureCount > 0 && (
@@ -1137,30 +1154,28 @@ export default function CircleScreen() {
           )}
         </View>
 
-        {!preview && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            {/* Sair — desfazer o aceitar (só quando estou no círculo de outra pessoa) */}
-            {session && !isHost && (
-              <CircleButton
-                label={t.circle_leave}
-                icon="exit-outline"
-                tone="glass"
-                compact
-                loading={leaving}
-                onPress={handleLeave}
-              />
-            )}
-            <CircleIconButton
-              icon="camera-reverse-outline"
-              label={t.circle_flipCamera}
-              onPress={() => {
-                setCameraReady(false)
-                setFacing((value) => (value === 'back' ? 'front' : 'back'))
-              }}
-              disabled={shooting || countdown !== null}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {/* Sair — desfazer o aceitar (só quando estou no círculo de outra pessoa) */}
+          {session && !isHost && (
+            <CircleButton
+              label={t.circle_leave}
+              icon="exit-outline"
+              tone="glass"
+              compact
+              loading={leaving}
+              onPress={handleLeave}
             />
-          </View>
-        )}
+          )}
+          <CircleIconButton
+            icon="camera-reverse-outline"
+            label={t.circle_flipCamera}
+            onPress={() => {
+              setCameraReady(false)
+              setFacing((value) => (value === 'back' ? 'front' : 'back'))
+            }}
+            disabled={shooting || countdown !== null}
+          />
+        </View>
       </View>
 
       {/* ── Alguém do círculo já disparou e eu ainda não ── */}
@@ -1223,8 +1238,8 @@ export default function CircleScreen() {
       )}
 
       {/* ── Painel flutuante: quem chamar (cards) — só o anfitrião, sobre a câmara ── */}
-      {!preview && isHost && showable.length > 0 && !initError && (
-        <View style={[s.nearbyPanel, { bottom: (bottomBarH || 200) + 14 }]} pointerEvents="box-none">
+      {isHost && showable.length > 0 && !initError && (
+        <View style={[s.nearbyPanel, { bottom: dockBottom + (bottomBarH || 200) + 10 }]} pointerEvents="box-none">
           <Text style={s.nearbyHeading}>{t.circle_callMore}</Text>
           {others.length === 0 && (
             <Text style={s.nearbySub}>{t.circle_nobodySub}</Text>
@@ -1269,7 +1284,7 @@ export default function CircleScreen() {
       )}
 
       {/* ── À procura de pessoas / ninguém por perto — sempre visível quando sozinho ── */}
-      {!preview && others.length === 0 && !incoming && showable.length === 0 && !initError && (
+      {others.length === 0 && !incoming && showable.length === 0 && !initError && (
         <View style={s.searching} pointerEvents="box-none">
           <View style={s.searchingCard}>
             <View style={s.searchingRow}>
@@ -1289,15 +1304,7 @@ export default function CircleScreen() {
         </View>
       )}
 
-      {/* chip compacto durante a pré-visualização — continua a procurar */}
-      {preview && others.length === 0 && (
-        <View style={[s.searchChip, { top: top + 54 }]} pointerEvents="none">
-          <Text style={s.searchChipTxt}>{initDone ? t.circle_nobody : t.circle_searching}</Text>
-          {!initDone && <SearchingDots />}
-        </View>
-      )}
-
-      {!preview && initError && (
+      {initError && (
         <View style={s.retryCard} accessibilityRole="alert">
           <View style={s.retryIcon}>
             <Ionicons name="cloud-offline-outline" size={24} color="#fff" />
@@ -1318,209 +1325,156 @@ export default function CircleScreen() {
         </View>
       )}
 
-      {/* ── Dock da ronda: duas capturas, obturador e publicação ── */}
-      {!preview ? (
-        <View
-          style={[s.bottomDock, { paddingBottom: bottom + 74 }]}
-          onLayout={(e) => setBottomBarH(e.nativeEvent.layout.height)}
-        >
-          <View style={s.dockHeader}>
-            <View>
-              <Text style={s.dockEyebrow}>{t.circle_yourCaptures}</Text>
-              <Text style={s.dockStatus}>
-                {saving > 0
-                  ? t.circle_saving
-                  : roundIsActive
-                  ? `${roundCaptures.length} ${roundCaptures.length === 1 ? t.circle_perspective : t.circle_perspectives} · ${contributorsInRound}/${joinedCount}`
-                  : t.circle_newMoment}
-              </Text>
+      {/* ── Dock da ronda: a fita das minhas fotografias, obturador e publicação ── */}
+      <View
+        style={[s.bottomDock, { bottom: dockBottom }]}
+        onLayout={(e) => setBottomBarH(e.nativeEvent.layout.height)}
+      >
+        <View style={s.dockHeader}>
+          <View>
+            <Text style={s.dockEyebrow}>{t.circle_yourCaptures}</Text>
+            <Text style={s.dockStatus}>
+              {roundIsActive || myCount > 0
+                ? `${momentTotal} ${momentTotal === 1 ? t.circle_perspective : t.circle_perspectives} · ${contributorsInRound}/${joinedCount}`
+                : t.circle_newMoment}
+            </Text>
+          </View>
+          {roundIsActive && (
+            <View
+              style={s.roundTimer}
+              accessible
+              accessibilityLabel={`${Math.ceil(publishLeftMs / 1000)} ${t.circle_secondsLeft}`}
+            >
+              <Ionicons name="time-outline" size={14} color="#fff" />
+              <Text style={s.roundTimerText}>{Math.ceil(publishLeftMs / 1000)}s</Text>
             </View>
-            {roundIsActive && (
-              <View
-                style={s.roundTimer}
-                accessible
-                accessibilityLabel={`${Math.ceil(publishLeftMs / 1000)} ${t.circle_secondsLeft}`}
+          )}
+        </View>
+
+        {/* A fita — cada fotografia aparece aqui no instante em que é tirada,
+            a partir do ficheiro no telemóvel. Subir para o servidor é com a
+            fila; só uma que falhou o diz, e aí um toque tenta de novo. */}
+        {myShots.length > 0 && (
+          <ScrollView
+            ref={filmstripRef}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={s.filmstrip}
+            contentContainerStyle={s.filmstripContent}
+            onContentSizeChange={() => filmstripRef.current?.scrollToEnd({ animated: !reduceMotion })}
+          >
+            {myShots.map((item, index) => {
+              const failed = item.local?.state === 'failed'
+              const removing = !!item.capture && item.capture.id === withdrawingCaptureId
+              const position = `${t.circle_captureSlot} ${index + 1}`
+              return (
+                // A miniatura não é um elemento acessível por si: um contentor
+                // acessível esconde, no iOS, os botões que tem dentro. Quem lê o
+                // ecrã ouve a posição nos próprios botões.
+                <View key={item.key} style={[s.thumb, failed && s.thumbFailed]}>
+                  {item.uri ? (
+                    <Image
+                      source={{ uri: item.uri }}
+                      style={StyleSheet.absoluteFill}
+                      contentFit="cover"
+                      recyclingKey={item.key}
+                      transition={reduceMotion ? 0 : 120}
+                    />
+                  ) : (
+                    <ActivityIndicator size="small" color="rgba(255,255,255,0.72)" />
+                  )}
+                  {failed && item.local && (
+                    <Pressable
+                      style={({ pressed }) => [s.thumbRetry, pressed && s.controlButtonPressed]}
+                      onPress={() => queue.retry(item.local!.key)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${t.circle_retryCapture}, ${position}`}
+                    >
+                      <Ionicons name="refresh" size={17} color="#fff" />
+                    </Pressable>
+                  )}
+                  <Pressable
+                    onPress={() => removeShot(item)}
+                    disabled={removing}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${t.circle_removeCapture}, ${position}`}
+                    accessibilityState={{ disabled: removing, busy: removing }}
+                    hitSlop={8}
+                    style={({ pressed }) => [s.thumbRemove, pressed && s.controlButtonPressed]}
+                  >
+                    {removing
+                      ? <ActivityIndicator size="small" color="#fff" style={s.thumbRemoveBusy} />
+                      : <Ionicons name="close" size={11} color="#fff" />}
+                  </Pressable>
+                </View>
+              )
+            })}
+          </ScrollView>
+        )}
+
+        <View style={s.dockMainRow}>
+          <View style={s.mineSummary}>
+            <Text style={s.roundSummaryValue}>{myCount}/{maxCaptures}</Text>
+            <Text style={s.roundSummaryLabel}>{t.circle_yours}</Text>
+          </View>
+
+          <View style={s.shutterColumn}>
+            <Pressable
+              onPress={handleShutter}
+              disabled={shutterBlocked}
+              accessibilityRole="button"
+              accessibilityLabel={shutterHint}
+              accessibilityState={{ disabled: shutterBlocked, busy: startingCountdown }}
+            >
+              <Animated.View
+                style={[
+                  s.shutterOuter,
+                  (captureLimitReached || initError) && s.shutterOuterDisabled,
+                  { transform: [{ scale: shutterPress }] },
+                ]}
               >
-                <Ionicons name="time-outline" size={14} color="#fff" />
-                <Text style={s.roundTimerText}>{Math.ceil(publishLeftMs / 1000)}s</Text>
+                <View style={[s.shutterInner, myCount > 0 && !captureLimitReached && s.shutterInnerActive]}>
+                  {/* Sem roda durante o disparo: numa rajada ela piscava a cada
+                      fotografia e fazia parecer que se estava à espera. */}
+                  {startingCountdown
+                    ? <ActivityIndicator color="#fff" />
+                    : <Ionicons
+                        name={captureLimitReached ? 'checkmark' : myCount > 0 ? 'add' : 'camera'}
+                        size={captureLimitReached ? 27 : 23}
+                        color="#fff"
+                      />}
+                </View>
+              </Animated.View>
+            </Pressable>
+            <Text style={s.shutterHint} numberOfLines={2}>{shutterHint}</Text>
+          </View>
+
+          <View style={s.roundSummary}>
+            {joinedCount > 1 && (
+              <View style={s.peopleSummary}>
+                <Ionicons name="people" size={13} color="rgba(255,255,255,0.76)" />
+                <Text style={s.peopleSummaryText}>{contributorsInRound}/{joinedCount}</Text>
               </View>
             )}
           </View>
-
-          <View style={s.dockMainRow}>
-            <View style={s.captureSlots}>
-              {([1, 2] as const).map((slot) => {
-                const capture = visibleMyRoundCaptures.find((item) => item.slot === slot)
-                const removing = capture?.id === withdrawingCaptureId
-                return (
-                  <View
-                    key={slot}
-                    style={[s.captureSlot, capture && s.captureSlotFilled]}
-                    accessible={!capture}
-                    accessibilityLabel={capture
-                      ? `${t.circle_captureSlot} ${slot}, ${t.circle_filled}`
-                      : `${t.circle_captureSlot} ${slot}, ${t.circle_empty}`}
-                  >
-                    {capture ? (
-                      <>
-                        <Image
-                          source={{ uri: resolveMediaUrl(capture.mediaUrl) }}
-                          style={StyleSheet.absoluteFill}
-                          contentFit="cover"
-                          cachePolicy="disk"
-                          recyclingKey={`circle-slot-${capture.id}`}
-                        />
-                        <View style={s.slotNumber}><Text style={s.slotNumberText}>{slot}</Text></View>
-                        <Pressable
-                          onPress={() => handleWithdraw(capture.id)}
-                          disabled={!!withdrawingCaptureId}
-                          accessibilityRole="button"
-                          accessibilityLabel={`${t.circle_removeCapture} ${slot}`}
-                          accessibilityState={{ disabled: !!withdrawingCaptureId, busy: removing }}
-                          hitSlop={7}
-                          style={({ pressed }) => [s.slotRemove, pressed && s.controlButtonPressed]}
-                        >
-                          {removing
-                            ? <ActivityIndicator size="small" color="#fff" />
-                            : <Ionicons name="close" size={13} color="#fff" />}
-                        </Pressable>
-                      </>
-                    ) : (
-                      <>
-                        <Ionicons name="image-outline" size={18} color="rgba(255,255,255,0.62)" />
-                        <Text style={s.emptySlotText}>{slot}</Text>
-                      </>
-                    )}
-                  </View>
-                )
-              })}
-            </View>
-
-            <View style={s.shutterColumn}>
-              <Pressable
-                onPress={handleShutter}
-                disabled={shooting || startingCountdown || countdown !== null || !cameraReady || captureLimitReached || initError || !session || !initDone}
-                accessibilityRole="button"
-                accessibilityLabel={captureLimitReached
-                  ? t.circle_limitReached
-                  : visibleMyRoundCaptures.length === 1 && roundAcceptsMyCapture
-                    ? t.circle_takeSecond
-                    : t.circle_takePhoto}
-                accessibilityState={{
-                  disabled: shooting || startingCountdown || countdown !== null || !cameraReady || captureLimitReached || initError || !session || !initDone,
-                  busy: shooting || startingCountdown,
-                }}
-              >
-                <Animated.View
-                  style={[
-                    s.shutterOuter,
-                    (captureLimitReached || initError) && s.shutterOuterDisabled,
-                    { transform: [{ scale: shutterPress }] },
-                  ]}
-                >
-                  <View style={[s.shutterInner, visibleMyRoundCaptures.length > 0 && roundAcceptsMyCapture && s.shutterInnerActive]}>
-                    {shooting || startingCountdown
-                      ? <ActivityIndicator color="#fff" />
-                      : <Ionicons
-                          name={captureLimitReached ? 'checkmark' : visibleMyRoundCaptures.length === 1 && roundAcceptsMyCapture ? 'add' : 'camera'}
-                          size={captureLimitReached ? 27 : 23}
-                          color="#fff"
-                        />}
-                  </View>
-                </Animated.View>
-              </Pressable>
-              <Text style={s.shutterHint} numberOfLines={2}>
-                {captureLimitReached
-                  ? t.circle_limitReached
-                  : visibleMyRoundCaptures.length === 1 && roundAcceptsMyCapture
-                    ? t.circle_takeSecond
-                    : t.circle_takePhoto}
-              </Text>
-            </View>
-
-            <View style={s.roundSummary}>
-              <Text style={s.roundSummaryValue}>{visibleMyRoundCaptures.length}/2</Text>
-              <Text style={s.roundSummaryLabel}>{t.circle_yours}</Text>
-              {joinedCount > 1 && (
-                <View style={s.peopleSummary}>
-                  <Ionicons name="people" size={13} color="rgba(255,255,255,0.76)" />
-                  <Text style={s.peopleSummaryText}>{contributorsInRound}/{joinedCount}</Text>
-                </View>
-              )}
-            </View>
-          </View>
-
-          {canPublish ? (
-            <CircleButton
-              label={`${t.circle_publishMy} · ${roundCaptures.length}`}
-              icon="arrow-up-circle-outline"
-              tone="primary"
-              loading={publishing}
-              onPress={handlePublish}
-              style={s.publishAction}
-            />
-          ) : published && roundIsActive ? (
-            <View style={s.publishedPill} accessibilityRole="text">
-              <Ionicons name="checkmark-circle" size={17} color="#fff" />
-              <Text style={s.publishedPillText}>{t.circle_published}</Text>
-            </View>
-          ) : null}
         </View>
-      ) : (
-        <View style={[s.previewBottom, { paddingBottom: bottom + 62 }]}> 
-          <View style={s.previewBadge}>
-            <Ionicons name="camera" size={14} color="#fff" />
-            <Text style={s.previewBadgeText}>{t.circle_captureSlot} {preview.slot}/2</Text>
-          </View>
-          {/* Barra de emojis — toca para adicionar, arrasta na foto para posicionar */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={s.emojiBar}
-            contentContainerStyle={s.emojiBarContent}
-            keyboardShouldPersistTaps="handled"
-          >
-            {EMOJI_SET.map((emo) => (
-              <Pressable
-                key={emo}
-                onPress={() => addEmoji(emo)}
-                disabled={placed.length >= MAX_EMOJI_OVERLAYS}
-                accessibilityRole="button"
-                accessibilityLabel={emo}
-                accessibilityState={{ disabled: placed.length >= MAX_EMOJI_OVERLAYS }}
-                style={({ pressed }) => [
-                  s.emojiChip,
-                  placed.length >= MAX_EMOJI_OVERLAYS && s.emojiChipDisabled,
-                  pressed && s.controlButtonPressed,
-                ]}
-              >
-                <Text style={s.emojiChipTxt}>{emo}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
 
-          <View style={s.previewActions}>
-            <CircleButton
-              label={t.circle_retake}
-              icon="refresh"
-              tone="glass"
-              onPress={() => {
-                previewRef.current = null
-                setPreview(null)
-                setPlaced([])
-              }}
-              style={s.previewAction}
-            />
-            <CircleButton
-              label={t.circle_addToCircle}
-              icon="checkmark"
-              tone="primary"
-              onPress={confirmPhoto}
-              style={s.previewAction}
-            />
+        {canPublish ? (
+          <CircleButton
+            label={`${t.circle_publishMy} · ${momentTotal}`}
+            icon="arrow-up-circle-outline"
+            tone="primary"
+            loading={publishing}
+            onPress={handlePublish}
+            style={s.publishAction}
+          />
+        ) : published && roundIsActive ? (
+          <View style={s.publishedPill} accessibilityRole="text">
+            <Ionicons name="checkmark-circle" size={17} color="#fff" />
+            <Text style={s.publishedPillText}>{t.circle_published}</Text>
           </View>
-        </View>
-      )}
+        ) : null}
+      </View>
 
       {/* ── Sheet: convidar amigos para o círculo ── */}
       <Modal visible={friendsSheet} transparent animationType="slide" onRequestClose={() => setFriendsSheet(false)}>
@@ -1584,16 +1538,6 @@ export default function CircleScreen() {
   )
 }
 
-const em = StyleSheet.create({
-  placed: { position: 'absolute', zIndex: 2, elevation: 2 },
-  del: {
-    position: 'absolute', top: -8, right: -8,
-    width: 24, height: 24, borderRadius: radius.full,
-    backgroundColor: 'rgba(11,20,26,0.9)', alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.42)',
-  },
-})
-
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.black },
 
@@ -1639,6 +1583,9 @@ const s = StyleSheet.create({
   iconButtonSoft: { backgroundColor: 'rgba(255,255,255,0.14)' },
   iconButtonDanger: { backgroundColor: 'rgba(156,69,238,0.24)', borderColor: 'rgba(156,69,238,0.58)' },
 
+  // O clarão do obturador: branco por cima da câmara, abaixo de todo o resto.
+  shutterFlash: { backgroundColor: colors.white, zIndex: 6 },
+
   // ── Contagem decrescente ──
   countdownWrap: {
     ...StyleSheet.absoluteFillObject,
@@ -1668,7 +1615,13 @@ const s = StyleSheet.create({
     flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
     paddingHorizontal: 14, zIndex: 18,
   },
-  memberRow: { flex: 1, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
+  closeButton: { marginRight: 10 },
+  // A mesma altura dos botões redondos dos lados: numa só linha, os rostos
+  // ficam ao centro deles em vez de encostados ao topo.
+  memberRow: {
+    flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center',
+    alignContent: 'center', flexWrap: 'wrap', gap: 6,
+  },
   memberChip: {
     width: 38, height: 38, borderRadius: radius.full,
     padding: 2,
@@ -1780,14 +1733,6 @@ const s = StyleSheet.create({
   },
   searchInviteAction: { marginTop: 6 },
 
-  searchChip: {
-    position: 'absolute', alignSelf: 'center', zIndex: 15,
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: 'rgba(11,20,26,0.78)', borderRadius: radius.full, paddingHorizontal: 14, paddingVertical: 8,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
-  },
-  searchChipTxt: { color: '#fff', fontSize: 12.5, fontFamily: fonts.semiBold },
-
   panelInvite: {
     alignSelf: 'center', marginTop: 10,
   },
@@ -1833,13 +1778,16 @@ const s = StyleSheet.create({
   sheetCallAction: { minWidth: 92 },
 
   /* ── Dock da ronda ── */
+  // Cartão pousado sobre a câmara, com os quatro cantos redondos e folga das
+  // bordas — já não é uma gaveta presa ao fundo à espera de uma navegação.
   bottomDock: {
-    position: 'absolute', left: 8, right: 8, bottom: 0, zIndex: 18,
-    paddingTop: 12, paddingHorizontal: 14, gap: 10,
-    borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    position: 'absolute', left: DOCK_SIDE_MARGIN, right: DOCK_SIDE_MARGIN, zIndex: 18,
+    paddingTop: 12, paddingBottom: 14, paddingHorizontal: 14, gap: 10,
+    borderRadius: 28, borderCurve: 'continuous',
     backgroundColor: 'rgba(11,20,26,0.9)',
-    borderWidth: 1, borderBottomWidth: 0, borderColor: 'rgba(255,255,255,0.16)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)',
     shadowColor: colors.black, shadowOpacity: 0.38, shadowRadius: 22,
+    shadowOffset: { width: 0, height: 8 }, elevation: 12,
   },
   dockHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   dockEyebrow: { color: 'rgba(255,255,255,0.58)', fontFamily: fonts.semiBold, fontSize: 10.5, textTransform: 'uppercase', letterSpacing: 0.8 },
@@ -1852,26 +1800,29 @@ const s = StyleSheet.create({
   },
   roundTimerText: { color: '#fff', fontFamily: fonts.bold, fontSize: 12 },
   dockMainRow: { flexDirection: 'row', alignItems: 'center', minHeight: 92 },
-  captureSlots: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7 },
-  captureSlot: {
-    width: 50, height: 64, borderRadius: radius.md,
-    alignItems: 'center', justifyContent: 'center', gap: 3,
-    borderWidth: 1.2, borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.28)',
-    backgroundColor: 'rgba(255,255,255,0.07)', overflow: 'visible',
+  filmstrip: { flexGrow: 0, marginHorizontal: -14 },
+  filmstripContent: { paddingHorizontal: 14, gap: 6, alignItems: 'center' },
+  thumb: {
+    width: THUMB_W, height: THUMB_H, borderRadius: radius.sm,
+    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.32)',
   },
-  captureSlotFilled: { borderStyle: 'solid', borderColor: 'rgba(255,255,255,0.62)', overflow: 'hidden' },
-  emptySlotText: { color: 'rgba(255,255,255,0.58)', fontFamily: fonts.bold, fontSize: 10 },
-  slotNumber: {
-    position: 'absolute', left: 4, bottom: 4, width: 17, height: 17,
-    borderRadius: radius.full, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(11,20,26,0.82)',
+  // Uma que não chegou ao servidor: o traço passa à tinta de erro e o toque
+  // no meio tenta outra vez.
+  thumbFailed: { borderColor: colors.error, borderWidth: 1.5 },
+  thumbRetry: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(11,20,26,0.56)',
   },
-  slotNumberText: { color: '#fff', fontFamily: fonts.bold, fontSize: 9 },
-  slotRemove: {
-    position: 'absolute', top: 3, right: 3, width: 25, height: 25,
+  thumbRemove: {
+    position: 'absolute', top: 3, right: 3, width: 18, height: 18,
     borderRadius: radius.full, alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'rgba(11,20,26,0.84)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.34)',
   },
+  thumbRemoveBusy: { transform: [{ scale: 0.6 }] },
+  mineSummary: { flex: 1, alignItems: 'flex-start', justifyContent: 'center', paddingLeft: 3 },
   shutterColumn: { width: 104, alignItems: 'center', justifyContent: 'center' },
   shutterOuter: {
     width: SHUTTER_OUTER, height: SHUTTER_OUTER, borderRadius: SHUTTER_OUTER / 2,
@@ -1889,7 +1840,7 @@ const s = StyleSheet.create({
   roundSummaryValue: { color: '#fff', fontFamily: fonts.extraBold, fontSize: 20, letterSpacing: -0.6 },
   roundSummaryLabel: { color: 'rgba(255,255,255,0.58)', fontFamily: fonts.medium, fontSize: 10.5 },
   peopleSummary: {
-    marginTop: 7, height: 25, paddingHorizontal: 8, borderRadius: radius.full,
+    height: 25, paddingHorizontal: 8, borderRadius: radius.full,
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: 'rgba(255,255,255,0.09)',
   },
@@ -1904,33 +1855,6 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(47,73,253,0.4)',
   },
   publishedPillText: { color: '#fff', fontFamily: fonts.bold, fontSize: 13 },
-
-  /* ── Pré-visualização ── */
-  previewBottom: {
-    position: 'absolute', bottom: 0, left: 8, right: 8, gap: 12, zIndex: 18,
-    paddingTop: 12, borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    backgroundColor: 'rgba(11,20,26,0.88)',
-    borderWidth: 1, borderBottomWidth: 0, borderColor: 'rgba(255,255,255,0.15)',
-  },
-  previewBadge: {
-    alignSelf: 'center', height: 30, paddingHorizontal: 12, borderRadius: radius.full,
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: 'rgba(47,73,253,0.22)', borderWidth: 1, borderColor: 'rgba(194,70,230,0.42)',
-  },
-  previewBadgeText: { color: '#fff', fontFamily: fonts.bold, fontSize: 11.5 },
-  emojiBar: { maxHeight: 52 },
-  emojiBarContent: { paddingHorizontal: 14, gap: 8, alignItems: 'center' },
-  emojiChip: {
-    width: 42, height: 42, borderRadius: 21,
-    backgroundColor: 'rgba(255,255,255,0.11)', alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.13)',
-  },
-  emojiChipDisabled: { opacity: 0.38 },
-  emojiChipTxt: { fontSize: 22 },
-  previewActions: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 14,
-  },
-  previewAction: { flex: 1 },
 
   /* ── Permissão ── */
   permScreen: { flex: 1, backgroundColor: colors.black, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 10 },

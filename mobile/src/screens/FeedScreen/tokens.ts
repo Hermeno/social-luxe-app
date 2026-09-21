@@ -47,13 +47,38 @@ export const feedIcon = {
    * decisões.
    */
   control: 20,
-  /** Ações de publicação, com a mesma caixa na Home e na Feed imersiva. */
+  /** Caixa das ações nas duas feeds; PostActionIcon centra nela o desenho de 28px. */
   action: 32,
   /** Sobreposições no centro da mídia — play de vídeo. */
   overlay: 64,
   /** O coração do duplo toque. Não é um ícone, é um gesto a confirmar-se. */
   burst: 104,
 } as const
+
+/**
+ * O desenho de um ícone de acção dentro da sua caixa.
+ *
+ * `feedIcon.action` (32) é a caixa que fixa os centros e a cadência das duas
+ * feeds; o desenho fica em 28 para o comando não competir com o conteúdo.
+ * `PostActionIcon` centra um no outro — e o número vive aqui, e não numa
+ * constante privada do componente, porque as duas feeds precisam dele para
+ * alinhar margens (ver `FEED_GLYPH_INK_INSET`).
+ */
+export const FEED_GLYPH = 28
+
+/**
+ * O vazio entre a borda da caixa da acção e a tinta do glifo.
+ *
+ * Os SVG vivem numa grelha 24×24 com margem 3 de cada lado: a tinta ocupa
+ * 18/24 — 75% do desenho. A 28px são 21 de tinta, mais os 2 que a caixa de 32
+ * deixa à volta: 5,5 de vazio em cada lado.
+ *
+ * Sem este número, encostar um ícone à mesma régua do texto é adivinhar — era o
+ * que a Home fazia com `SIDE - 4` na fila de acções e `-6` no menu, dois
+ * palpites diferentes para a mesma pergunta. Com ele, quem quer a tinta na
+ * margem escreve `SIDE - FEED_GLYPH_INK_INSET` e acerta.
+ */
+export const FEED_GLYPH_INK_INSET = (feedIcon.action - FEED_GLYPH * 0.75) / 2
 
 /**
  * Geometria da coluna de acções.
@@ -95,6 +120,17 @@ export const feedRailTailInset = (
   + feedRail.iconToMetricGap
   + feedRail.metricSlotHeight
 )
+
+/**
+ * A altura da coluna com `items` acções, do fundo da caixa do último ao topo
+ * do primeiro.
+ *
+ * Para quem desenha por baixo da coluna e precisa de saber até onde ela sobe
+ * sem a medir: a cadência é fixa, por isso a conta é exacta.
+ */
+export function feedRailHeight(items: number): number {
+  return items * feedRail.itemHeight + Math.max(0, items - 1) * feedRail.itemGap
+}
 
 /**
  * Largura máxima da coluna editorial da pausa do Círculo e do CTA que a fecha.
@@ -172,26 +208,64 @@ export const feedType = {
   },
 } as const
 
+/**
+ * Tipografia da Home.
+ *
+ * A escada global (`typography`/`leading`) tem cinco degraus e uma razão para
+ * os ter: uma régua de 1 em 1 não é escada nenhuma. Mas o Feed System fixa a
+ * hierarquia da página numa cadência mais apertada — 13, 12, 11, 10 — e ela
+ * fecha em si mesma: o nome pesa acima da legenda por 1pt e por 300 de peso, o
+ * contexto e o contador ficam abaixo de ambos.
+ *
+ * Fica aqui, ao lado do `feedType` que já faz o mesmo pela imersiva, e não
+ * espalhado por `HomeFeedItem`: são os papéis de uma superfície, medidos uma vez.
+ * Quem quiser um tamanho fora desta tabela na Home está a inventar um papel que
+ * a página não tem.
+ */
+export const homeType = {
+  /** Nome de quem publicou. Uma linha, sempre. */
+  username:      { fontFamily: fonts.bold,     fontSize: 13, lineHeight: 18 },
+  /** Tipo da publicação, local e tempo. */
+  context:       { fontFamily: fonts.medium,   fontSize: 11, lineHeight: 15 },
+  /** Legenda e o texto de ligação aos comentários. */
+  caption:       { fontFamily: fonts.regular,  fontSize: 12, lineHeight: 17 },
+  /** O nome do autor dentro da própria legenda. */
+  captionAuthor: { fontFamily: fonts.bold,     fontSize: 12, lineHeight: 17 },
+  /** Contador ao lado de uma acção. */
+  metric:        { fontFamily: fonts.semiBold, fontSize: 10, lineHeight: 14 },
+  /** `Criar`, no cabeçalho. */
+  control:       { fontFamily: fonts.bold,     fontSize: 13, lineHeight: 18 },
+  /**
+   * Publicação de texto. O peso não está aqui de propósito: quem o escolhe é a
+   * fonte do autor (`postFontStyle`), e o conteúdo manda sobre o cromado.
+   */
+  textPost:      { fontSize: 22, lineHeight: 29 },
+} as const
+
 /** Traço base em unidades da grelha 24×24; escala junto com o ícone. */
 export const FEED_STROKE = 1.75
 
 /**
- * Tinta dos controlos de uma publicação — gostar, comentar, repostar, partilhar,
- * o menu e os atalhos que vivem na mesma fila.
+ * Tinta de um controlo em repouso — gostar, comentar, repostar, partilhar, o
+ * menu e os atalhos que vivem na mesma fila.
  *
- * Um só cinzento, e é essa a razão de existir. Já esteve partido em dois — quase
- * preto sobre o papel da Home, branco sobre a fotografia — e isso é decidir a
- * tinta pelo fundo em vez de pelo papel do glifo. Um comando não é conteúdo: não
- * compete com a fotografia nem com o nome de quem publicou, e a partir do momento
- * em que a tinta é a mesma nos dois sítios deixa de haver uma escolha por ecrã.
+ * Um comando não é conteúdo: não compete com a fotografia nem com o nome de
+ * quem publicou. Mas "não competir" não é o mesmo que "não se ler", e era aí
+ * que o valor único de `#B4B4B4` falhava: sobre a página branca dá 2,3:1 contra
+ * o fundo, e um traço de 1,75 a esse contraste desaparece à luz do dia. Sobre a
+ * mídia escura o mesmo cinzento tinha o problema simétrico.
  *
- * Sobre mídia não precisa de branco para se ler: por baixo da fila corre sempre
- * um véu, e é ele que segura o contraste.
- *
- * Os estados accionados continuam a ter cor própria — o coração gostado, o
- * repost feito. É o repouso que é neutro.
+ * Passa a haver um valor por superfície, como já acontecia com o estado
+ * accionado (`actionInkActive`). São os dois valores que o papel pede, não dois
+ * gostos: `#4D545C` dá 7,4:1 sobre branco e continua claramente abaixo do preto
+ * do nome; `#F7F8F9` é a mesma tinta que o texto imersivo usa.
  */
-export const ACTION_INK = '#B4B4B4'
+export const actionInkRest = {
+  /** Sobre a página branca da Home. */
+  page: '#4D545C',
+  /** Sobre mídia — a coluna da imersiva, a fila sobre um vídeo da Home. */
+  media: '#F7F8F9',
+} as const
 
 /**
  * Tinta do texto sobre a mídia.
@@ -222,6 +296,69 @@ export const feedInk = {
 } as const
 
 /**
+ * A mesma escada de três degraus, do lado da página branca.
+ *
+ * A Home é a outra metade das duas feeds e escrevia a tinta à mão em cada linha
+ * — `gray800` no nome, `gray600` no rótulo, `gray500` no tempo, e depois
+ * `gray600` outra vez num ícone que não é texto nenhum. São os mesmos três
+ * papéis que o `feedInk` já nomeia sobre a mídia: identidade, leitura, contexto.
+ *
+ * Ficam lado a lado de propósito. Quando um papel muda, muda nos dois sítios ao
+ * mesmo tempo, e uma publicação continua a ler-se igual quer esteja sobre papel
+ * branco ou sobre vídeo.
+ */
+export const pageInk = {
+  /** Nome, legenda — o que identifica e o que se lê. */
+  primary: '#0F1115',
+  /** Contadores e rótulos que acompanham uma acção. */
+  secondary: '#555C65',
+  /** Tempo, @handle, contexto — o que se lê depois do resto. */
+  muted: '#737B85',
+} as const
+
+/**
+ * O desenho da página branca que não é texto.
+ *
+ * Três valores, cada um com um papel que o `pageInk` não cobre: a linha que
+ * separa duas publicações, o cinzento de um espaço à espera de conteúdo, e a
+ * cor de uma falha. Antes vinham de `colors.gray200`/`gray100` — degraus de uma
+ * escada neutra genérica, com a mesma coisa a valer para uma borda de campo de
+ * texto e para o divisor da feed.
+ */
+export const pageLine = '#E7E9EC'
+/** Fundo de um lugar reservado: esqueleto, mídia por carregar, disco vazio. */
+export const pageSkeleton = '#EEF0F2'
+/**
+ * O mesmo lugar reservado, sobre o fundo da imersiva.
+ *
+ * O `pageSkeleton` num fundo `#0B141A` era um disco quase branco a piscar antes
+ * de cada fotografia chegar. Este é a superfície secundária da imersiva do Feed
+ * System: um degrau acima do fundo — vê-se a forma sem se ver uma mancha.
+ */
+export const feedSkeleton = '#101B21'
+/** Falha de carregamento, retry, erro de envio — só dentro da feed. */
+export const pageDanger = '#B42318'
+
+
+
+/**
+ * A tinta de um controlo já accionado — o gosto dado, o repost feito.
+ *
+ * Esteve em magenta e violeta, um por acção. Duas cores de marca dentro de uma
+ * fila de comandos cinzentos fazem o estado gritar mais alto que a fotografia
+ * que ele comenta, e obrigavam cada ecrã a escolher qual delas usar.
+ *
+ * O estado passa a dizer-se com a tinta do conteúdo da superfície: preto sobre
+ * a página, branco sobre a mídia. O que confirma a acção é o desenho — o
+ * coração enche-se, o repost ganha o "1" — e a tinta só o sublinha, sem trazer
+ * uma terceira cor para dentro da publicação.
+ */
+export const actionInkActive = {
+  page: colors.black,
+  media: feedInk.primary,
+} as const
+
+/**
  * Sombra do texto sobre a mídia.
  *
  * Um véu escuro grande o suficiente para dar contraste lê-se como mancha e suja
@@ -239,6 +376,25 @@ export const feedTextShadow = {
   textShadowColor: 'rgba(0,0,0,0.48)',
   textShadowOffset: { width: 0, height: 1 },
   textShadowRadius: 1,
+} as const
+
+/**
+ * A separação de um glifo pousado sobre a mídia.
+ *
+ * O que o `feedTextShadow` faz pelas letras, isto faz pelo desenho: uma sombra
+ * de 1px colada ao traço, para um comando a #B4B4B4 continuar a ler-se sobre uma
+ * fotografia clara sem precisar de disco, de véu ou de branco.
+ *
+ * Estava escrita quatro vezes — duas na coluna de acções, uma no gatilho do menu
+ * e outra no botão de voltar — com dois pares de valores diferentes a tentar o
+ * mesmo efeito. Sobre papel branco não se usa: aí uma sombra não separa nada,
+ * só suja o glifo.
+ */
+export const feedGlyphShadow = {
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 1 },
+  shadowOpacity: 0.38,
+  shadowRadius: 1.8,
 } as const
 
 /**

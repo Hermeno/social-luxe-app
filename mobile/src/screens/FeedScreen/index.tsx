@@ -251,8 +251,8 @@ export default function FeedScreen() {
         ))
         .filter(Boolean)
       if (urls.length < 2) continue
-      // Gente, não fotografias: no Círculo cada pessoa tira duas, e contar
-      // capturas daria sempre o dobro das pessoas que lá estiveram.
+      // Gente, não fotografias: no Círculo cada pessoa tira várias, e contar
+      // capturas daria sempre mais gente do que a que lá esteve.
       const participants = Array.isArray(post.collectiveMoment?.participants)
         ? post.collectiveMoment.participants
         : []
@@ -439,62 +439,21 @@ export default function FeedScreen() {
     requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated: false }))
   }, [pendingPost, clearFocusedPost, prependPost, setPendingPost])
 
-  // ── Abrir um post na feed (pesquisa, perfil, mensagens, metades) ──────────
-  //
-  // O post pedido entra em `displayedPosts` na primeira posição, o que faz dele
-  // a linha 0 do pager. Aterrar nele parece trivial e não é, por causa de duas
-  // coisas que puxam em sentidos opostos:
-  //
-  // 1. `maintainVisibleContentPosition` existe para o pager não saltar quando
-  //    chega um post pelo socket: ao inserir-se uma linha acima, o nativo soma
-  //    a altura dessa linha ao `contentOffset` para o que estava à vista ficar
-  //    onde estava. Ao abrir um post é exactamente o contrário do que se quer —
-  //    a inserção *é* o destino.
-  // 2. A versão anterior corrigia isso com `scrollToIndex({ animated: true })`
-  //    dentro de um `requestAnimationFrame`. Quem estivesse no décimo post via
-  //    a feed inteira a desfilar para trás até ao topo, depois de um frame já
-  //    pintado na posição errada. Era esse o piscar.
-  //
-  // Agora: salto seco para o offset exacto, dentro de um `useLayoutEffect` —
-  // antes de o frame ser pintado, não um frame depois. O pager arranca opaco e
-  // revela-se em 200ms, por isso mesmo que a compensação nativa chegue atrasada
-  // não há nada visível para ela estragar. E o offset é reafirmado no frame
-  // seguinte, que é quando essa compensação costuma aterrar; reafirmar o mesmo
-  // número duas vezes não se vê.
+  // Cada pedido explícito abre um pager novo no topo. A lista continua visível
+  // durante o refresh; atualizações de rows nunca podem cancelar a sua revelação.
   const handledFocusedPostRequest = useRef(0)
-  const focusFade = useRef(new Animated.Value(1)).current
-
   useLayoutEffect(() => {
-    if (!focusedPost || rows.length === 0) return
+    if (!isFocused || !focusedPost || rows.length === 0) return
     if (handledFocusedPostRequest.current === focusedPostRequest) return
-    const idx = rows.findIndex((row) => row.id === focusedPost.id)
-    if (idx < 0) return
+    const index = rows.findIndex((row) => row.id === focusedPost.id)
+    if (index < 0) return
 
     handledFocusedPostRequest.current = focusedPostRequest
-    // A ref também, e não só o estado: ela só acompanharia no render seguinte, e
-    // um `onLayout` que chegue no meio realinha por `currentPostIdRef` — iria
-    // buscar o post anterior e desfazer a aterragem.
+    initedRef.current = true
     currentPostIdRef.current = focusedPost.id
     setCurrentPostId(focusedPost.id)
-
-    const offset = idx * listHRef.current
-    const land = () => listRef.current?.scrollToOffset({ offset, animated: false })
-
-    if (reduceMotion) { land(); return }
-
-    focusFade.setValue(0)
-    land()
-    const frame = requestAnimationFrame(() => {
-      land()
-      Animated.timing(focusFade, {
-        toValue: 1,
-        duration: 200,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start()
-    })
-    return () => cancelAnimationFrame(frame)
-  }, [focusFade, focusedPost, focusedPostRequest, reduceMotion, rows])
+    listRef.current?.scrollToOffset({ offset: index * listHRef.current, animated: false })
+  }, [focusedPost, focusedPostRequest, isFocused, rows])
 
   // Não há prefetch de vídeo. Descarregar os próximos dois ficheiros inteiros
   // gastava os MB de vídeos que o utilizador só passa à frente — e nem servia
@@ -778,8 +737,9 @@ export default function FeedScreen() {
       onLayout={handleFeedLayout}
     >
       {flatPosts.length > 0 ? (
-        <Animated.View style={[s.pagerFade, { opacity: focusFade }]}>
+        <View style={s.pagerFrame}>
         <FlatList
+          key={`feed:${focusedPostRequest}`}
           ref={listRef}
           style={s.pager}
           data={rows}
@@ -809,6 +769,7 @@ export default function FeedScreen() {
           viewabilityConfig={viewabilityConfig}
           onEndReached={loadMore}
           onEndReachedThreshold={0.6}
+          removeClippedSubviews={false}
           windowSize={3}
           maxToRenderPerBatch={2}
           initialNumToRender={2}
@@ -816,7 +777,7 @@ export default function FeedScreen() {
             listRef.current?.scrollToOffset({ offset: listH * index, animated: false })
           }}
         />
-        </Animated.View>
+        </View>
       ) : (
         <View style={s.empty}>
           <ActivityIndicator size="large" color={colors.primary} />
@@ -861,7 +822,7 @@ const s = StyleSheet.create({
   // Envolve o pager só para o poder revelar depois de aterrar no post pedido.
   // Fundo próprio: durante os 200ms da revelação o que está por baixo é isto,
   // e tem de ser a cor da feed e não branco.
-  pagerFade: { flex: 1, backgroundColor: colors.feedSurface },
+  pagerFrame: { flex: 1, backgroundColor: colors.feedSurface },
   empty:     { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, backgroundColor: colors.feedSurface },
   emptyTxt:  { ...feedType.primary, color: colors.gray600 }
 })

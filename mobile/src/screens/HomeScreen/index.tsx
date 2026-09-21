@@ -1,10 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  ActivityIndicator,
   FlatList,
   RefreshControl,
   StyleSheet,
-  Text,
   View,
   useWindowDimensions,
 } from 'react-native'
@@ -15,19 +13,24 @@ import { StackNavigationProp } from '@react-navigation/stack'
 
 import CommentSheet from '../../components/CommentSheet'
 import SharePostSheet from '../../components/SharePostSheet'
-import { useT } from '../../i18n'
 import { useFeed } from '../../hooks/useFeed'
 import { useFeedStore } from '../../store/feed.store'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import * as postService from '../../services/post.service'
-import { isConnected } from '../../services/netinfo.service'
+import { isConnected, onConnectivityChange } from '../../services/netinfo.service'
 import { queueLike, updateCachedPost } from '../../db/database'
 import { tabBarOccupiedHeight } from '../../components/TabBar/layout'
 import type { Post } from '../../types'
 import type { ViewToken } from 'react-native'
-import { colors, fonts, spacing, typography } from '../../theme'
+import useReducedMotionPreference from '../../hooks/useReducedMotionPreference'
+import { colors, spacing } from '../../theme'
+import { actionInkRest } from '../FeedScreen/tokens'
 import HomeHeader from './HomeHeader'
 import HomeFeedItem from './HomeFeedItem'
+import { HomeEmpty, HomeFooter, HomeOffline, HomeSkeleton } from './HomeStates'
+
+/** Quantas publicações fingidas a página desenha enquanto a primeira não chega. */
+const SKELETONS = 3
 
 type Nav = StackNavigationProp<AppStackParams>
 
@@ -46,7 +49,6 @@ type Nav = StackNavigationProp<AppStackParams>
  * disto é lógica nova.
  */
 export default function HomeScreen() {
-  const t = useT()
   const nav = useNavigation<Nav>()
   // Sair da Home cala o vídeo. Sem isto continuava a tocar por baixo de outro
   // separador — invisível, a gastar rede e bateria.
@@ -54,7 +56,11 @@ export default function HomeScreen() {
   const { width } = useWindowDimensions()
   const { top, bottom } = useSafeAreaInsets()
 
-  const { posts, loading, refresh, loadMore, updatePostCounts, updateRepostState, removePost, updatePost } = useFeed()
+  const reduceMotion = useReducedMotionPreference()
+  const {
+    posts, loading, paginating, pageFailed,
+    refresh, loadMore, updatePostCounts, updateRepostState, removePost, updatePost,
+  } = useFeed()
   const showPostInFeed = useFeedStore((state) => state.showPostInFeed)
 
   const homeTap = useFeedStore((state) => state.homeTap)
@@ -62,6 +68,9 @@ export default function HomeScreen() {
 
   const [visibleId, setVisibleId] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  // A faixa de "sem ligação" acompanha a rede em tempo real; `isConnected()` é
+  // uma leitura, não um estado, e sozinha nunca voltaria a desenhar a página.
+  const [offline, setOffline] = useState(!isConnected())
   // Só guarda interações desta sessão. Sem override, a verdade vem do post —
   // assim um gosto que já veio do servidor não nasce visualmente desligado.
   const [likeOverrides, setLikeOverrides] = useState<Record<string, boolean>>({})
@@ -101,6 +110,8 @@ export default function HomeScreen() {
     listRef.current?.scrollToOffset({ offset: 0, animated: true })
     refreshRef.current().catch(() => {})
   }, [homeTap])
+
+  useEffect(() => onConnectivityChange((connected) => setOffline(!connected)), [])
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true)
@@ -205,19 +216,13 @@ export default function HomeScreen() {
       })
   }, [repostOverrides, updatePostCounts, updateRepostState])
 
-  /**
-   * Que publicação está à vista — é ela que toca.
-   *
-   * A referência é estável (`useRef`) porque a `FlatList` recusa que este par
-   * mude entre renders, e o limiar de 70% evita que duas células se disputem o
-   * lugar durante o deslize: com um valor baixo, duas meias publicações eram
-   * ambas "visíveis" e o vídeo saltava de uma para a outra.
-   */
+  // Medimos cobertura do viewport: uma mídia alta pode nunca mostrar 70% da
+  // própria célula. Mais de metade do ecrã escolhe um único vídeo para tocar.
   const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
     const first = viewableItems.find((entry) => entry.isViewable)
     setVisibleId((first?.item as Post | undefined)?.id ?? null)
   }).current
-  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 70 }).current
+  const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 55 }).current
 
   const renderItem = useCallback(({ item }: { item: Post }) => (
     <HomeFeedItem
@@ -230,6 +235,7 @@ export default function HomeScreen() {
       repostCount={item._count?.reposts ?? 0}
       commentCount={item._count?.comments ?? 0}
       shareCount={item._count?.shares ?? 0}
+      reduceMotion={reduceMotion}
       onOpenAuthor={openAuthor}
       onOpenMedia={openMedia}
       onLike={toggleLike}
@@ -239,7 +245,7 @@ export default function HomeScreen() {
       onDeleted={removePost}
       onEdited={updatePost}
     />
-  ), [isFocused, visibleId, likeOverrides, openAuthor, openMedia, removePost, repostOverrides, toggleLike, toggleRepost, updatePost, width])
+  ), [isFocused, visibleId, likeOverrides, openAuthor, openMedia, reduceMotion, removePost, repostOverrides, toggleLike, toggleRepost, updatePost, width])
 
   return (
     <View style={[s.screen, { paddingTop: top }]}>
@@ -248,14 +254,19 @@ export default function HomeScreen() {
         onCreate={() => nav.navigate('Tabs', { screen: 'Create' })}
       />
 
+      {offline && <HomeOffline />}
+
       {posts.length === 0 && loading ? (
-        <View style={s.state}>
-          <ActivityIndicator color={colors.gray400} />
+        <View>
+          {Array.from({ length: SKELETONS }, (_, index) => (
+            <HomeSkeleton key={index} width={width} reduceMotion={reduceMotion} />
+          ))}
         </View>
       ) : posts.length === 0 ? (
-        <View style={s.state}>
-          <Text style={s.stateTitle}>{t.feed_empty_title}</Text>
-        </View>
+        <HomeEmpty
+          onCreate={() => nav.navigate('Tabs', { screen: 'Create' })}
+          onSearch={() => nav.navigate('Tabs', { screen: 'Search' })}
+        />
       ) : (
         <FlatList
           ref={listRef}
@@ -265,7 +276,13 @@ export default function HomeScreen() {
           contentContainerStyle={{ paddingBottom: tabBarOccupiedHeight(bottom) + spacing.xl }}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.gray400} />
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={actionInkRest.page} />
+          }
+          // O refresh nunca esvazia a lista: `useFeed` troca o conteúdo por um
+          // conjunto novo, e o `maintainVisibleContentPosition` do pager não se
+          // aplica aqui porque a Home volta ao topo por decisão de produto.
+          ListFooterComponent={
+            <HomeFooter loading={paginating} failed={pageFailed} onRetry={loadMore} />
           }
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
@@ -275,15 +292,9 @@ export default function HomeScreen() {
           // por isso não há `getItemLayout`. O que segura a performance é a janela
           // curta, e só ela.
           //
-          // Sem `removeClippedSubviews`, e é de propósito. Ele desanexa da árvore
-          // nativa o que sai da janela, e o que sai com ele é a capacidade de
-          // receber toques: uma célula meia dentro do ecrã continuava a ver-se e
-          // deixava de responder. Era isto que fazia tocar numa fotografia não
-          // abrir a imersiva umas vezes sim, outras não — a célula estava lá, o
-          // toque é que não chegava a lado nenhum.
-          //
-          // O que ele poupava, `windowSize` e `maxToRenderPerBatch` já poupam,
-          // e esses não mentem sobre o que está a responder no ecrã.
+          // No Android a omissão ativa o recorte nativo. Mantemos as células
+          // montadas na janela para preservar superfícies de vídeo e toques.
+          removeClippedSubviews={false}
           initialNumToRender={3}
           maxToRenderPerBatch={3}
           windowSize={5}
@@ -306,11 +317,4 @@ export default function HomeScreen() {
 
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.white },
-  state: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
-  stateTitle: {
-    color: colors.gray500,
-    fontFamily: fonts.medium,
-    fontSize: typography.body,
-    textAlign: 'center',
-  },
 })

@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "luxey auth-next",
+    "slug": "luxey-auth-next",
+    "scheme": "luxeyauthnext",
+    "version": "1.0.0",
+    "sdkVersion": "54.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.luxee.app.authnext",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Permite escolher a fotografia de perfil com a câmara.",
+        "NSPhotoLibraryUsageDescription": "Permite escolher a fotografia de perfil da galeria."
+      }
+    },
+    "android": {
+      "package": "com.luxee.app.authnext",
+      "softwareKeyboardLayoutMode": "pan"
+    }
+  }
+}

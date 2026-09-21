@@ -41,7 +41,20 @@ const SAFE_MESSAGES = new Set([
   'A janela para publicar esta foto já passou',
   'Ainda não há fotos para publicar',
   'Ronda de captura inválida',
-  'Cada participante pode adicionar no máximo 2 fotos por ronda',
+  'Já chegaste ao limite de fotos desta ronda',
+  'Posição de captura inválida',
+  'Este círculo já não aceita pedidos',
+  'Já fazes parte deste círculo',
+  'Só quem segue alguém deste círculo pode pedir para entrar',
+  'Não podes pedir para entrar neste círculo',
+  'Já tens um pedido à espera neste círculo',
+  'Já tens fotos suficientes neste círculo',
+  'Fizeste muitos pedidos. Espera um pouco.',
+  'Pedido não encontrado',
+  'Este pedido já foi decidido',
+  'Círculo não encontrado',
+  'Não tens fotografias neste círculo',
+  'Não podes retirar esta fotografia',
 ])
 
 function isSafeMessage(msg: string): boolean {

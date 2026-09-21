@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Icon from '../../components/Icon'
 import AvatarImage from '../../components/AvatarImage'
 import { colors, radius, sheet, spacing } from '../../theme'
-import { feedIcon, feedInk, feedLine, feedTextShadow, feedType } from './tokens'
+import { feedGlyphShadow, feedIcon, feedInk, feedType } from './tokens'
 import { useT } from '../../i18n'
 import { Post } from '../../types'
 
@@ -18,6 +18,26 @@ export interface FeedUserGroup {
 }
 
 const SEARCH_AVATAR_SIZE = 46
+
+/**
+ * O alvo de sair da imersiva.
+ *
+ * 48 — o mínimo do Android e a medida que o Feed System fixa para o cromado de
+ * topo, a mesma do menu e da pesquisa na Home. Sair de um ecrã é o comando que
+ * menos pode falhar ao primeiro toque.
+ */
+const BACK_TARGET = 48
+
+/**
+ * A fila do voltar, medida a partir do fim da safe area.
+ *
+ * Exportada porque o cromado flutua por cima da mídia sem lhe roubar altura:
+ * quem desenha na mídia e não quer ficar por baixo do voltar — ou quer assentar
+ * na mesma linha que ele — lê daqui em vez de repetir os números.
+ */
+export const FEED_CHROME_ROW = { top: 4, height: BACK_TARGET } as const
+/** Tudo o que o cromado ocupa abaixo da safe area, incluindo o ar por baixo da fila. */
+export const FEED_CHROME_HEIGHT = BACK_TARGET + spacing.sm2
 
 export interface FeedHeaderProps {
   filteredGroups: FeedUserGroup[]
@@ -136,16 +156,15 @@ export default memo(function FeedHeader({
   }
 
   return (
-    <View style={[s.topRoot, { height: top + 60 }]} pointerEvents="box-none">
+    <View style={[s.topRoot, { height: top + FEED_CHROME_HEIGHT }]} pointerEvents="box-none">
       {/* Só o voltar. A assinatura e o Criar viviam aqui quando esta era a
           primeira página da app; agora a primeira página é a Home e isto é um
           ecrã de visualização — o que a pessoa precisa aqui é de sair. */}
-      <View style={[s.topRow, { marginTop: top + 4 }]} pointerEvents="box-none">
+      <View style={[s.topRow, { marginTop: top + FEED_CHROME_ROW.top }]} pointerEvents="box-none">
         <TouchableOpacity
           style={s.restoreButton}
           onPress={onRestoreNavigation}
           activeOpacity={0.68}
-          hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel={t.feed_show_navigation}
         >
@@ -156,23 +175,10 @@ export default memo(function FeedHeader({
   )
 })
 
-/**
- * Contorno do botão do Círculo.
- *
- * Esteve em `hairlineWidth` (0.33px num @3x) e desaparecia sobre a mídia: fino
- * de mais não é elegante, é invisível. 1px é o mínimo que se lê como contorno
- * desenhado em qualquer fundo, e a 46% de branco firma-se sobre foto escura sem
- * virar linha dura sobre foto clara.
- *
- * O raio é `radius.md` e não `full`: uma cápsula de meia-altura lê-se como
- * etiqueta, e este é um botão. 12 sobre 32 de altura curva o canto o suficiente
- * para não ser um rectângulo, e pouco o bastante para continuar a ser botão.
- */
-const outline = {
-  borderWidth: 1,
-  borderColor: feedLine.strong,
-  borderRadius: radius.md,
-} as const
+// O contorno do botão do Círculo vivia aqui, com doze linhas de raciocínio e
+// zero utilizações desde que o botão saiu do topo. A regra que ele guardava —
+// 1px a 46% de branco, `radius.md` — está em `feedLine.strong` e no botão de
+// seguir, que é quem a pratica agora.
 
 const s = StyleSheet.create({
   topRoot: {
@@ -183,7 +189,7 @@ const s = StyleSheet.create({
     zIndex: 40,
   },
   topRow: {
-    height: 44,
+    height: BACK_TARGET,
     // A mesma régua do bloco do autor e do traço do tempo. Esteve em 12 e o
     // logo não alinhava com o nome que aparece por baixo dele.
     paddingHorizontal: spacing.md,
@@ -191,17 +197,16 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   restoreButton: {
-    width: 36,
-    height: 36,
+    width: BACK_TARGET,
+    height: BACK_TARGET,
+    // O alvo é a caixa, não um `hitSlop` por cima de um botão de 36: com slop,
+    // o que a pessoa vê e o que responde ao dedo são dois rectângulos
+    // diferentes, e só um deles está alinhado com a régua da página.
+    marginLeft: -(BACK_TARGET - feedIcon.control) / 2,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.36,
-    shadowRadius: 2,
+    ...feedGlyphShadow,
   },
-  // Só o botão do Círculo leva o contorno.
-
   searchPanel: {
     position: 'absolute',
     top: 0,

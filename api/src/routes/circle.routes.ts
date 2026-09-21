@@ -20,4 +20,13 @@ router.post('/countdown',   circleController.countdown)
 router.post('/publish',     circleController.publish)
 router.get('/session/:id',  circleController.state)
 
+// Círculo publicado: quem não esteve lá pede para entrar, o anfitrião decide, e
+// qualquer pessoa retira as próprias fotografias.
+router.post('/moments/:momentId/join',          upload.single('media'), circleController.requestJoin)
+router.post('/moments/:momentId/remove-photos', circleController.removeMomentPhotos)
+router.get('/join-requests/incoming',           circleController.incomingJoins)
+router.get('/join-requests/mine',               circleController.myJoins)
+router.post('/join-requests/:requestId/decision', circleController.decideJoin)
+router.delete('/join-requests/:requestId',      circleController.cancelJoin)
+
 export default router

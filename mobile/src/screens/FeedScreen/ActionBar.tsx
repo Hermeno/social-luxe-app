@@ -4,13 +4,15 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import PostActionIcon from '../../components/PostActionIcon'
-import { ACTION_INK, feedIcon, feedInk, feedRail, feedTextShadow, feedType } from './tokens'
+import {
+  actionInkActive, actionInkRest, feedGlyphShadow, feedIcon, feedInk, feedRail, feedTextShadow, feedType,
+} from './tokens'
 
 import { Post, type RepostResult } from '../../types'
-import { colors } from '../../theme'
 import * as postService from '../../services/post.service'
 import { updateCachedPost, queueLike, enqueueSyncOp } from '../../db/database'
 import { isConnected } from '../../services/netinfo.service'
+import { formatCountOrNone } from '../../utils/count'
 import ReactionPicker from '../../components/ReactionPicker'
 import SharePostSheet from '../../components/SharePostSheet'
 import { useT } from '../../i18n'
@@ -31,14 +33,15 @@ interface Props {
   onOptionsBlockingChange?: (open: boolean) => void
   isActive?: boolean
   reduceMotion?: boolean
-  /** Tamanho dos glifos; por defeito é o mesmo usado na Home. */
+  /** Caixa dos ícones; o desenho é limitado a 28px, como na Home. */
   iconSize?: number
   /**
    * Post do Círculo. A coluna encolhe: fica o gosto, o comentário e o menu.
    *
    * Vem de fora e não é recalculado aqui de propósito. Quem decide o que é um
-   * momento colectivo é o `FeedItem` — é ele que troca a mídia pelo carrossel — e
-   * duas contas do mesmo em ficheiros diferentes acabam sempre por discordar.
+   * momento colectivo é o `FeedItem` — é ele que troca a mídia pela figura do
+   * Círculo — e duas contas do mesmo em ficheiros diferentes acabam sempre por
+   * discordar.
    */
   isCircle?: boolean
   /** Distância ao fundo da coluna de ações. Sobrepõe o valor por defeito para
@@ -47,13 +50,18 @@ interface Props {
 }
 
 /**
- * Um só tamanho para a rail toda.
- *
- * Os desenhos vêm de famílias diferentes, mas o build já reenquadra cada caixa para
- * a tinta ocupar a mesma fração (ver scripts/build-feed-icons.mjs). Por isso o mesmo
- * número dá o mesmo tamanho aparente — não voltar a compensar ícone a ícone.
+ * A caixa de 32px mantém os centros e contadores na mesma grelha da Home.
+ * PostActionIcon centra o desenho de 28px; os SVGs definem as proporções entre ícones.
  */
 const DEFAULT_RAIL_ICON_SIZE = feedIcon.action
+
+/**
+ * Quantas acções a coluna tem num Círculo: gostar, comentar e o menu.
+ *
+ * Exportado para a figura do Círculo saber até onde a coluna sobe. Se uma
+ * acção voltar a entrar ou sair do ramo `isCircle` abaixo, é aqui que muda.
+ */
+export const CIRCLE_RAIL_ITEMS = 3
 
 type HeartP = {
   id:  number
@@ -72,13 +80,6 @@ type HeartP = {
  * `undefined`, a `RailAction` não desenha texto nenhum — e o `metricSlot`
  * mantém a altura, para os ícones não saltarem quando o primeiro número chega.
  */
-function fmt(n: number): string | undefined {
-  if (n <= 0)         return undefined
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000)     return `${(n / 1_000).toFixed(1)}K`
-  return String(n)
-}
-
 interface RailActionProps {
   label: string
   count?: string
@@ -504,7 +505,7 @@ export default React.memo(function ActionBar({
             {/* Like */}
             <RailAction
               label={t.nf_likes}
-              count={fmt(likeCount)}
+              count={formatCountOrNone(likeCount)}
               selected={liked}
               onPress={handleLike}
               onLongPress={() => setShowReactions(true)}
@@ -513,12 +514,13 @@ export default React.memo(function ActionBar({
               reduceMotion={reduceMotion}
               noPressScale
             >
-              {/* Gostado troca de desenho, não apenas de pintura. O contorno recebe
-                  o peso da feed; o coração sólido fica regular para não saltar de tamanho. */}
+              {/* Gostado troca de desenho, não apenas de pintura: o contorno enche-se.
+                  A tinta sobe do cinzento dos comandos para o branco do conteúdo — a
+                  confirmação está na forma, e a cor só a sublinha. */}
               <PostActionIcon
                 name="like"
                 size={iconSize}
-                color={liked ? colors.heart : ACTION_INK}
+                color={liked ? actionInkActive.media : actionInkRest.media}
                 selected={liked}
               />
               {hearts.map((h) => (
@@ -528,7 +530,7 @@ export default React.memo(function ActionBar({
                   accessible={false}
                   style={[s.burstHeart, { opacity: h.o, transform: [{ translateX: h.tx }, { translateY: h.ty }, { scale: h.s }] }]}
                 >
-                  <PostActionIcon name="like" size={feedIcon.inline} color={colors.heart} selected />
+                  <PostActionIcon name="like" size={feedIcon.inline} color={actionInkActive.media} selected />
                 </Animated.View>
               ))}
             </RailAction>
@@ -536,14 +538,14 @@ export default React.memo(function ActionBar({
             {/* Comentar */}
             <RailAction
               label={t.nf_comments}
-              count={fmt(commentCountProp ?? post._count?.comments ?? 0)}
+              count={formatCountOrNone(commentCountProp ?? post._count?.comments ?? 0)}
               onPress={onCommentPress}
               entry={railEntry}
               order={1}
               reduceMotion={reduceMotion}
             >
               {/* Já nasce com a cauda à direita — dispensa o espelho que aqui estava. */}
-              <PostActionIcon name="comment" size={iconSize} color={ACTION_INK} />
+              <PostActionIcon name="comment" size={iconSize} color={actionInkRest.media} />
             </RailAction>
 
             {/* Repost e partilha não valem num post do Círculo: o que lá está
@@ -555,7 +557,7 @@ export default React.memo(function ActionBar({
                 O número vive fora da camada rodada para permanecer direito. */}
             <RailAction
               label={t.feed_repost}
-              count={fmt(repostCount)}
+              count={formatCountOrNone(repostCount)}
               selected={reposted}
               onPress={handleRepost}
               entry={railEntry}
@@ -576,7 +578,7 @@ export default React.memo(function ActionBar({
                   <PostActionIcon
                     name="repost"
                     size={iconSize}
-                    color={reposted ? colors.accent : ACTION_INK}
+                    color={reposted ? actionInkActive.media : actionInkRest.media}
                   />
                 </Animated.View>
                 <Animated.View
@@ -595,8 +597,8 @@ export default React.memo(function ActionBar({
             </RailAction>
 
             {/* Partilhar */}
-            <RailAction label={t.mo_share} count={fmt(shareCount)} onPress={handleShare} onLongPress={handleShareExternal} entry={railEntry} order={3} reduceMotion={reduceMotion}>
-              <PostActionIcon name="share" size={iconSize} color={ACTION_INK} />
+            <RailAction label={t.mo_share} count={formatCountOrNone(shareCount)} onPress={handleShare} onLongPress={handleShareExternal} entry={railEntry} order={3} reduceMotion={reduceMotion}>
+              <PostActionIcon name="share" size={iconSize} color={actionInkRest.media} />
             </RailAction>
             </>
             )}
@@ -633,7 +635,7 @@ export default React.memo(function ActionBar({
             onBlockingChange={setOptionsBlocking}
             rail
             triggerSize={iconSize}
-            triggerColor={ACTION_INK}
+            triggerColor={actionInkRest.media}
           />
           {/* Também sai: um momento colectivo não é a obra de um autor, e o
               atalho para "as publicações desta pessoa" pergunta a coisa errada
@@ -651,7 +653,7 @@ export default React.memo(function ActionBar({
                 <PostActionIcon
                   name="author-posts"
                   size={iconSize}
-                  color={ACTION_INK}
+                  color={actionInkRest.media}
                 />
               </View>
               <View style={s.metricSlot} pointerEvents="none" />
@@ -722,10 +724,7 @@ const s = StyleSheet.create({
     height: feedRail.iconStageHeight,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.38,
-    shadowRadius: 1.8,
+    ...feedGlyphShadow,
   },
   actionVisual: {
     height: feedRail.itemHeight,
@@ -739,7 +738,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'visible',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.38, shadowRadius: 1.8
+    ...feedGlyphShadow,
   },
   metricSlot: {
     height: feedRail.metricSlotHeight,

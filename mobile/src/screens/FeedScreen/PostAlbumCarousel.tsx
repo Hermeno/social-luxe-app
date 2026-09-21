@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import {
   View, Text, StyleSheet, Pressable, FlatList,
   NativeSyntheticEvent, NativeScrollEvent,
 } from 'react-native'
 import { Image } from 'expo-image'
-import { API_BASE } from '../../config'
+import { resolveMediaUrl } from '../../utils/media'
 import { colors, radius, spacing } from '../../theme'
 import { useT } from '../../i18n'
 import { feedFill, feedLine } from './tokens'
@@ -12,10 +12,6 @@ import { feedFill, feedLine } from './tokens'
 const EMOJI_FRAC = 0.14
 
 type Overlay = { emoji: string; x: number; y: number }
-
-function resolve(url: string) {
-  return url.startsWith('http') || url.startsWith('file') ? url : `${API_BASE}${url}`
-}
 
 // Uma foto do carrossel — full-bleed, com os emojis fixados por cima.
 function Slide({
@@ -31,21 +27,16 @@ function Slide({
   /** O que o leitor de ecrã anuncia — "foto 2 de 5". */
   label?: string
 }) {
-  // A altura vem sempre da proporção da foto, nunca da altura do slide. Quando
-  // o servidor a manda (`size`), acerta logo no primeiro desenho. Quando não —
-  // álbuns anteriores à migração — a foto carrega INVISÍVEL e só se revela já
-  // no tamanho certo, para nunca se ver o tamanho errado a encolher.
   const serverAspect = size?.w && size?.h ? size.w / size.h : null
-  const [loadedAspect, setLoadedAspect] = useState<number | null>(null)
-
-  // A FlatList reaproveita este slide para outra foto — sem isto ficava com a
-  // proporção da anterior.
-  useEffect(() => { setLoadedAspect(null) }, [url])
-
-  const aspect    = serverAspect ?? loadedAspect
+  const [loadedMedia, setLoadedMedia] = useState<{ url: string; aspect: number } | null>(null)
+  const measuredAspect = loadedMedia?.url === url ? loadedMedia.aspect : null
+  const aspect = measuredAspect
+    ?? (serverAspect && Number.isFinite(serverAspect) && serverAspect > 0 ? serverAspect : null)
   const imgHeight = aspect ? Math.min(width / aspect, height) : height
-  const imgTop    = aspect ? (height - imgHeight) / 2 : 0
-  const es = width * EMOJI_FRAC
+  const imgWidth = aspect ? Math.min(width, height * aspect) : width
+  const imgTop = (height - imgHeight) / 2
+  const imgLeft = (width - imgWidth) / 2
+  const es = imgWidth * EMOJI_FRAC
 
   return (
     <Pressable
@@ -55,26 +46,26 @@ function Slide({
       accessibilityLabel={label}
     >
       <Image
-        source={{ uri: resolve(url) }}
+        source={{ uri: resolveMediaUrl(url) }}
         style={{
-          position: 'absolute', left: 0, right: 0,
+          position: 'absolute', left: imgLeft, width: imgWidth,
           top: imgTop, height: imgHeight,
-          opacity: aspect ? 1 : 0,
         }}
-        contentFit="cover"
+        contentFit="contain"
         cachePolicy="disk"
         recyclingKey={url}
-        transition={140}
+        transition={0}
         onLoad={(e) => {
-          if (serverAspect) return
           const { width: w, height: h } = e.source ?? {}
-          if (w && h) setLoadedAspect(w / h)
+          if (w && h && Number.isFinite(w / h) && w / h > 0) {
+            setLoadedMedia({ url, aspect: w / h })
+          }
         }}
       />
       {/* Os emojis seguem a caixa da IMAGEM, não a do slide. Antes seguiam o
           slide inteiro e saíam do sítio sempre que havia faixas. */}
       {imgHeight > 0 && (overlays ?? []).map((o, k) => (
-        <Text key={k} style={{ position: 'absolute', left: o.x * width - es / 2, top: imgTop + o.y * imgHeight - es / 2, fontSize: es }}>
+        <Text key={k} style={{ position: 'absolute', left: imgLeft + o.x * imgWidth - es / 2, top: imgTop + o.y * imgHeight - es / 2, fontSize: es }}>
           {o.emoji}
         </Text>
       ))}
@@ -113,6 +104,7 @@ export default function PostAlbumCarousel({ urls, sizes, overlays, onOpen, dotsB
         <FlatList
           data={urls}
           horizontal
+          removeClippedSubviews={false}
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           keyExtractor={(u, i) => `${i}_${u}`}

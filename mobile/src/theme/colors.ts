@@ -31,8 +31,13 @@ export const colors = {
   white:        '#FFFFFF',
   offWhite:     '#FAF8F6',
 
-  // Campo de comentário embutido na navigation
-  commentField: 'rgba(24,32,39,0.96)',
+  // Campo de comentário embutido na navigation.
+  //
+  // É a segunda superfície da imersiva: um degrau acima de `feedSurface`, para
+  // o campo se ler como objecto pousado sobre o fundo em vez de um buraco nele.
+  // O tom é o do Feed System (#101B21); a transparência de 4% fica porque a
+  // barra atravessa mídia e um sólido cortava a fotografia a direito.
+  commentField: 'rgba(16,27,33,0.96)',
 
   // Fundo da feed principal — e SÓ da feed. É o que se vê por trás dos posts,
   // nas faixas acima e abaixo de imagens que não enchem a altura, e na tab bar
@@ -45,10 +50,6 @@ export const colors = {
   // outras cores na plataforma.
   feedSurfaceSlate:    '#0B141A',
   feedSurfaceGraphite: '#0B141A',
-
-  // Cartão de convite ao Círculo, dentro do carrossel do momento colectivo.
-  // Um degrau acima do fundo da feed: lê-se como cartão sem virar mancha clara.
-  circleInvite: '#0B141A',
 
   gray100: '#F7F7F7',
   gray200: '#EAEAEA',

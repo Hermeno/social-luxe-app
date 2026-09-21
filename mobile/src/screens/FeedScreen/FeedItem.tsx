@@ -15,21 +15,22 @@ import { Post, type RepostResult } from '../../types'
 import { colors, fonts, leading, postGradientColors, radius, spacing, typography } from '../../theme'
 import { parsePostFontKey, postFontStyle } from '../../theme/postFonts'
 import Icon from '../../components/Icon'
-import { ACTION_INK, RAIL_CLEARANCE, feedFill, feedIcon, feedInk, feedLine, feedRailTailInset, feedTextShadow, feedType } from './tokens'
+import { actionInkRest, RAIL_CLEARANCE, feedFill, feedIcon, feedInk, feedLine, feedRailHeight, feedRailTailInset, feedTextShadow, feedType } from './tokens'
 import { usePostFontsReady } from '../../store/postFonts.store'
 import * as postService from '../../services/post.service'
 import type { TasteSignal } from '../../services/post.service'
 import AuthorAvatar from '../../components/AuthorAvatar'
 import FeedIcon from '../../components/FeedIcon'
 import VerifiedBadge from '../../components/VerifiedBadge'
-import ActionBar from './ActionBar'
+import ActionBar, { CIRCLE_RAIL_ITEMS } from './ActionBar'
+import { FEED_CHROME_HEIGHT, FEED_CHROME_ROW } from './FeedHeader'
 import TasteCard from './TasteCard'
 import {
   shouldAskTaste, tasteDwellMs, noteTasteShown, noteTasteAnswered, noteTasteIgnored,
   type TasteKind,
 } from './tastePolicy'
 import PostAlbumCarousel from './PostAlbumCarousel'
-import CollectiveMomentCarousel from './CollectiveMomentCarousel'
+import CircleMomentStage from './CircleMomentStage'
 import { useAuthStore } from '../../store/auth.store'
 import { useFollowStore } from '../../store/follow.store'
 import { tabBarOccupiedHeight } from '../../components/TabBar/layout'
@@ -65,6 +66,12 @@ const DESCRIPTION_MAX_LINES = 1
 // pena gastar dados com ela. Curto para quem pára não notar, longo para quem
 // está a rolar não pagar nada.
 const VIDEO_ARM_DELAY = 260
+/**
+ * O que a figura do Círculo deixa livre em baixo: a coluna de acções inteira e
+ * um degrau de ar. Num Círculo é a coluna que sobe mais alto — três acções
+ * chegam aos 174, enquanto o autor e a legenda ficam pelos 110.
+ */
+const CIRCLE_BOTTOM_CLEARANCE = feedRailHeight(CIRCLE_RAIL_ITEMS) + spacing.lg
 type Nav = StackNavigationProp<AppStackParams>
 
 interface Props {
@@ -115,24 +122,14 @@ function FeedItem({
   const collectiveCaptures = Array.isArray(post.collectiveMoment?.captures)
     ? post.collectiveMoment.captures
     : []
-  const collectiveParticipants = Array.isArray(post.collectiveMoment?.participants)
-    ? post.collectiveMoment.participants
-    : []
   const isCollective = !isVideo && !isText && collectiveCaptures.length > 0
   // `mediaUrls` também identifica álbuns normais. O discriminador coletivo é
   // explícito para não mudar o desenho desses posts antigos.
   const isAlbum = !isVideo && !isText && !!post.mediaUrls && post.mediaUrls.length > 0
   const uri     = resolveUrl(post.mediaUrl)
 
-  const collectiveUrls = useMemo(() => collectiveCaptures.map((capture, index) => (
-    resolveUrl(post.mediaUrls?.[capture.mediaIndex ?? index] ?? capture.mediaUrl)
-  )), [collectiveCaptures, post.mediaUrls])
-  const collectiveSizes = useMemo(() => collectiveCaptures.map((capture, index) => (
-    post.mediaSizes?.[capture.mediaIndex ?? index] ?? { w: null, h: null }
-  )), [collectiveCaptures, post.mediaSizes])
-
-  // O cartão de convite do carrossel abre o separador Círculo, o mesmo destino
-  // do ícone no topo da feed.
+  // O convite por baixo da figura do Círculo abre o separador Círculo, o mesmo
+  // destino do ícone no topo da feed.
   const openCircle = useCallback(() => {
     nav.navigate('Tabs', { screen: 'Circle' })
   }, [nav])
@@ -141,6 +138,10 @@ function FeedItem({
   // A mídia respeita a status bar. Em baixo, o scrubber tem uma faixa própria
   // entre o fim do post e o início da navegação.
   const TRACK_H    = 3
+  // A faixa que apanha o toque do scrubber. O traço fica centrado nela, e é por
+  // isso que a caixa desce metade da diferença: sem a conta, a linha assentava
+  // 2pt acima do sítio onde a pilha a manda estar.
+  const SCRUB_HIT  = 22
   // O traço do tempo precisa de respirar, não de uma faixa: com 8 de cada lado
   // sobravam 19pt de vazio entre o fim do vídeo e o topo da navegação, e era
   // essa faixa — não a altura da barra — que afastava um do outro.
@@ -161,7 +162,11 @@ function FeedItem({
   // que atravessa a largura toda e ficaria a disputar o mesmo toque.
   const overlayBottom = videoBottom + feedRailTailInset
   const videoFrame = { top: safeTop, bottom: videoBottom }
-  const trackWidth = width - 28                             // left/right 14
+  // A largura útil do traço — a mesma margem que o resto da coluna esquerda usa.
+  // Esteve escrita à mão como `width - 28` enquanto o estilo abria 16 de cada
+  // lado: o dedo aterrava 4pt à frente do sítio onde a imagem saltava, e o erro
+  // crescia até ao fim do vídeo. Agora sai da margem, e não de um número solto.
+  const trackWidth = width - spacing.md * 2
 
   // ── Enquadramento da imagem ────────────────────────────────────────────────
   // A largura é sempre a do ecrã; a altura é que vem da proporção da imagem.
@@ -169,29 +174,19 @@ function FeedItem({
   // é calculada a partir do que a imagem mede, e centrada no espaço disponível.
   const mediaSpace = Math.max(0, cellHeight - safeTop - videoBottom)
 
-  // A altura vem SEMPRE da proporção da imagem. Nunca da altura disponível —
-  // encher o ecrã na vertical é o que não se quer, nem sequer como estado
-  // temporário enquanto a foto carrega.
-  //
-  // Duas fontes para a proporção, por esta ordem:
-  //   1. o servidor, que a guarda no upload → certo já no primeiro desenho
-  //   2. o `onLoad`, para posts anteriores à migração
-  //
-  // No caso 2 a foto carrega INVISÍVEL e só se revela quando a proporção chega.
-  // Assim nunca se vê o tamanho errado — vê-se o fundo e depois a foto certa,
-  // em vez de uma foto esticada que encolhe.
+  // A imagem deve continuar visível enquanto as dimensões chegam. Medidas
+  // carregadas pertencem ao URI; callbacks do cache não disputam um reset em efeito.
   const serverAspect = post.mediaWidth && post.mediaHeight
     ? post.mediaWidth / post.mediaHeight
     : null
-  const [loadedAspect, setLoadedAspect] = useState<number | null>(null)
-  useEffect(() => { setLoadedAspect(null) }, [post.id])
-
-  const aspect = serverAspect ?? loadedAspect
+  const [loadedMedia, setLoadedMedia] = useState<{ uri: string; aspect: number } | null>(null)
+  const measuredAspect = loadedMedia?.uri === uri ? loadedMedia.aspect : null
+  const aspect = measuredAspect
+    ?? (serverAspect && Number.isFinite(serverAspect) && serverAspect > 0 ? serverAspect : null)
   const photoHeight = aspect ? Math.min(width / aspect, mediaSpace) : mediaSpace
-  const photoFrame  = {
+  const photoFrame = {
     top: safeTop + (mediaSpace - photoHeight) / 2,
     height: photoHeight,
-    opacity: aspect ? 1 : 0,
   }
 
   // Conteúdo do post entra depois do cartão assentar; o avatar mantém um pulso
@@ -266,50 +261,25 @@ function FeedItem({
     p.muted = false
   })
 
-  const [status, setStatus] = useState<VideoPlayerStatus>('idle')
+  const [status, setStatus] = useState<VideoPlayerStatus>(player.status)
   useEffect(() => {
     if (!isVideo) return
-    const sub = player.addListener('statusChange', ({ status: s }) => setStatus(s))
+    const sub = player.addListener('statusChange', ({ status: next }) => setStatus(next))
+    // Fontes em cache podem estar prontas antes de o listener ser instalado.
+    setStatus(player.status)
     return () => sub.remove()
   }, [player, isVideo])
-  const buffering = isVideo && isActive && status === 'loading'
 
-  /**
-   * O cartaz do vídeo — o frame zero, servido como JPEG.
-   *
-   * Existe por causa de um ecrã preto com som. A `VideoView` montava sempre,
-   * mesmo antes de o leitor ter fonte: a fonte só é armada depois de a célula
-   * ficar parada, e até lá o que estava no ecrã era a superfície do leitor,
-   * vazia — preta. Quando a fonte chegava, o áudio arrancava de imediato mas a
-   * superfície nem sempre repintava, e ficava som sem imagem.
-   *
-   * Agora o cartaz cobre o leitor até ele ter mesmo frame para dar. Se a
-   * superfície demorar, ou nunca chegar, o que se vê é a fotografia do vídeo —
-   * nunca um rectângulo preto.
-   */
   const videoPoster = useMemo(
     () => (isVideo ? videoPosterUrl(post.mediaUrl, post.thumbnailUrl, 1080) : ''),
     [isVideo, post.mediaUrl, post.thumbnailUrl],
   )
-  const videoPainted = status === 'readyToPlay'
-
-  /**
-   * Só a célula à vista tem superfície de vídeo. Uma de cada vez, sempre.
-   *
-   * O pager mantém três células vivas, e com uma `VideoView` em cada uma havia
-   * três superfícies empilhadas a mexer ao mesmo tempo. No Android a superfície
-   * por defeito é uma `SurfaceView`, que não é composta com o resto da árvore —
-   * abre um buraco na janela — e a própria documentação do expo-video marca
-   * "overlapping video views" como o caso em que ela parte. Parte assim: o som
-   * continua, a imagem fica preta.
-   *
-   * A Home nunca teve o problema, e é o mesmo componente de vídeo: lá a vista só
-   * existe enquanto a célula está activa. Aqui passa a ser igual.
-   *
-   * O leitor não se desmonta com ela — guarda fonte e posição, por isso voltar
-   * atrás um post não recomeça nada.
-   */
-  const videoSurface = isVideo && videoArmed && isActive
+  // readyToPlay indica buffer, não pixels. No Android o evento de primeiro
+  // frame é emitido uma vez por item; conservar a confirmação ao voltar à célula.
+  const [paintedPlayer, setPaintedPlayer] = useState<typeof player | null>(null)
+  const videoPainted = paintedPlayer === player
+  const videoSurface = isVideo && videoArmed && isActive && isFocused
+  const buffering = videoSurface && (status === 'loading' || (!videoPainted && status !== 'error'))
 
   // Toca só a célula ativa e só com o feed em foco. Ao entrar noutra página o
   // feed perde foco e o vídeo pausa; ao voltar, retoma.
@@ -636,15 +606,16 @@ function FeedItem({
         </LinearGradient>
       ) : isCollective ? (
         <View style={[s.media, videoFrame]}>
-          <CollectiveMomentCarousel
-            captures={collectiveCaptures}
-            participants={collectiveParticipants}
-            urls={collectiveUrls}
-            sizes={collectiveSizes}
+          {/* O cromado e a coluna flutuam por cima da mídia sem lhe roubar
+              altura; a figura desconta-os para não ficar por baixo de nenhum. */}
+          <CircleMomentStage
+            post={post}
             reduceMotion={reduceMotion}
             isActive={isActive}
+            topInset={FEED_CHROME_HEIGHT}
+            bottomInset={CIRCLE_BOTTOM_CLEARANCE}
+            chromeRow={FEED_CHROME_ROW}
             onCreateCircle={openCircle}
-            contentBottom={(overlayBottom - videoBottom) + 46 + (post.caption ? 38 : 0)}
           />
         </View>
       ) : isAlbum ? (
@@ -671,6 +642,7 @@ function FeedItem({
               // bateria que a `SurfaceView`, mas numa lista que arrasta vídeos
               // uns por cima dos outros é a única que desenha o que deve.
               surfaceType="textureView"
+              onFirstFrameRender={() => setPaintedPlayer(player)}
             />
           )}
           {/* O cartaz — o frame zero em JPEG — é o que se vê sempre que não há
@@ -688,44 +660,26 @@ function FeedItem({
           )}
         </View>
       ) : (
-        // `cover` numa moldura que já tem a proporção da imagem não corta nada —
-        // a largura é sempre cheia e a altura veio da própria foto. Só recorta
-        // no caso extremo de uma imagem tão alta que não caberia no ecrã.
+        // Contain mantém a foto inteira mesmo antes de conhecermos a proporção.
         <Image
           source={{ uri }}
           style={[s.media, photoFrame]}
-          contentFit="cover"
+          contentFit="contain"
           cachePolicy="disk"
-          recyclingKey={post.id}
-          transition={150}
+          recyclingKey={`${post.id}:${uri}`}
+          transition={0}
           onLoad={(e) => {
-            // Só serve os posts sem dimensões no servidor. Nos outros já se
-            // sabia a proporção antes de a foto sequer começar a descarregar.
-            if (serverAspect) return
             const { width: w, height: h } = e.source ?? {}
-            if (w && h) setLoadedAspect(w / h)
+            if (w && h && Number.isFinite(w / h) && w / h > 0) {
+              setLoadedMedia({ uri, aspect: w / h })
+            }
           }}
         />
       )}
 
-      {/* Enquanto o vídeo não está pronto mostra-se a miniatura desfocada que o
-             servidor já gera (1–3 KB). Antes ficava um rectângulo preto — e era
-             o vídeo inteiro a encher o buffer que o tirava de lá. */}
-      {isVideo && status !== 'readyToPlay' && !!post.thumbnailUrl && (
-        <Image
-          source={{ uri: resolveUrl(post.thumbnailUrl) }}
-          style={[s.media, videoFrame]}
-          contentFit="cover"
-          cachePolicy="disk"
-          recyclingKey={`${post.id}:thumb`}
-          transition={0}
-          pointerEvents="none"
-          accessibilityIgnoresInvertColors
-        />
-      )}
-
       {/* Camada de toque — duplo toque para gostar.
-             Nos carrosséis não a pomos: bloquearia o gesto horizontal. */}
+             Não a pomos no álbum, que bloquearia o gesto horizontal, nem no
+             Círculo, onde cada disco é um toque próprio. */}
       {!isAlbum && !isCollective && (
         <Pressable style={[s.tapLayer, videoFrame]} onPress={handleTapMedia} accessible={false} />
       )}
@@ -762,7 +716,7 @@ function FeedItem({
 
       {isVideo && paused && (
         <View style={s.playOverlay} pointerEvents="none">
-          <Icon name="play" size={feedIcon.overlay} color={ACTION_INK} />
+          <Icon name="play" size={feedIcon.overlay} color={actionInkRest.media} />
         </View>
       )}
 
@@ -937,7 +891,10 @@ function FeedItem({
 
       {/* ── Traço do tempo — scrubber: tocar/arrastar salta no vídeo ── */}
       {isVideo && (
-        <View style={[s.trackRow, { bottom: trackBottom - 9 }]} {...scrub.panHandlers}>
+        <View
+          style={[s.trackRow, { height: SCRUB_HIT, bottom: trackBottom - (SCRUB_HIT - TRACK_H) / 2 }]}
+          {...scrub.panHandlers}
+        >
           <View style={[s.track, { height: TRACK_H }]}>
             <Animated.View style={[s.trackFill, { transform: [{ scaleX: videoProgress }] }]} />
           </View>
@@ -1007,7 +964,10 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.sm2,
     borderWidth: 1,
-    borderColor: feedLine.bright,
+    // O contorno de um botão sobre a mídia — o mesmo 46% que o cromado do topo
+    // pratica. Estava em `bright`, que é a tinta de um anel de identidade: um
+    // convite a seguir não pede o traço mais forte do ecrã.
+    borderColor: feedLine.strong,
     borderRadius: radius.md,
   },
   followTxt: {
@@ -1015,18 +975,25 @@ const s = StyleSheet.create({
     ...feedType.primary,
     color: feedInk.primary,
   },
-  followingBtn: { borderColor: feedLine.bright },
-  followingTxt: { color: feedInk.primary },
+  // Já sigo: os dois estados eram desenhados exactamente iguais — mesmo traço,
+  // mesma tinta — e só o rótulo mudava, o que obriga a ler o texto para saber em
+  // que estado se está. O que já está feito recolhe um degrau: traço mais fraco
+  // e texto no nível do contexto. Continua a poder desfazer-se — e continua a
+  // ver-se sobre uma fotografia clara, que é onde um traço a 18% desaparecia.
+  followingBtn: { borderColor: feedLine.medium },
+  followingTxt: { color: feedInk.muted },
   descriptionWrap: { position: 'relative' },
   description: {
     ...feedTextShadow,
     ...feedType.content,
     color: feedInk.secondary,
   },
+  // Pista, não texto: fica no degrau do contexto para a legenda continuar a ser
+  // a única coisa que se lê a cheio naquele bloco.
   descriptionMore: {
     ...feedTextShadow,
     ...feedType.content,
-    color: feedInk.secondary,
+    color: feedInk.muted,
     marginTop: spacing.xxs,
   },
   descriptionMeasure: {
@@ -1044,8 +1011,9 @@ const s = StyleSheet.create({
     color: feedInk.muted,
   },
 
-  // Traço do tempo do vídeo — scrubber (área de toque de 22px, linha ao centro)
-  trackRow:  { position: 'absolute', left: spacing.md, right: spacing.md, height: 22, justifyContent: 'center' },
+  // Traço do tempo do vídeo — scrubber. A altura da área de toque vem da célula
+  // (`SCRUB_HIT`), que é também quem posiciona a caixa: um número, um sítio.
+  trackRow:  { position: 'absolute', left: spacing.md, right: spacing.md, justifyContent: 'center' },
   // Branco porque assenta sobre a feed escura. O sulco fica a 22% para se ler
   // como calha sem competir com o preenchimento.
   track:     { borderRadius: radius.full, overflow: 'hidden', backgroundColor: feedFill.track },

@@ -8,6 +8,12 @@ interface Props {
   size: number
   strokeWidth?: number
   visible?: boolean
+  /**
+   * Traço interrompido em vez de contínuo. É o selo de quem entrou num Círculo
+   * depois do disparo: está no mesmo anel, com as mesmas cores, mas vê-se que
+   * não fechou o círculo no momento.
+   */
+  dashed?: boolean
   style?: StyleProp<ViewStyle>
 }
 
@@ -28,6 +34,7 @@ function BrandAvatarRing({
   size,
   strokeWidth = 2,
   visible = true,
+  dashed = false,
   style,
 }: Props) {
   const reactId = useId()
@@ -36,6 +43,13 @@ function BrandAvatarRing({
   const center = size / 2
   const radius = Math.max(0, (size - strokeWidth) / 2)
   const gradientId = `luxee-avatar-ring-${reactId.replace(/:/g, '')}`
+  // Um número inteiro de traços, para o anel fechar sem um traço partido no
+  // encontro. A contagem sai do perímetro e da espessura: discos grandes e
+  // pequenos ficam com a mesma cadência à vista.
+  const circumference = 2 * Math.PI * radius
+  const dashCount = Math.max(12, Math.min(48, Math.round(circumference / (strokeWidth * 5))))
+  const dashStep = circumference / dashCount
+  const dashArray = dashed ? `${dashStep * 0.5} ${dashStep * 0.5}` : undefined
 
   return (
     <Svg
@@ -70,6 +84,8 @@ function BrandAvatarRing({
         fill="none"
         stroke={`url(#${gradientId})`}
         strokeWidth={strokeWidth}
+        strokeDasharray={dashArray}
+        strokeLinecap={dashed ? 'round' : undefined}
       />
     </Svg>
   )

@@ -16,6 +16,8 @@ import { getPendingInvites, respondToInvite } from '../../services/union.service
 import { UNION_ENABLED } from '../../config/features'
 import { Post, UnionInvite } from '../../types'
 import AvatarImage from '../../components/AvatarImage'
+import BrandAvatarRing from '../../components/BrandAvatarRing'
+import { useCircleJoinStore } from '../../store/circleJoin.store'
 import FollowSplitButton from '../../components/FollowSplitButton'
 import { useFollowStore } from '../../store/follow.store'
 import { api } from '../../services/api'
@@ -152,9 +154,14 @@ export default function NotificationsScreen() {
   const [loadingPartner,   setLoadingPartner]   = useState(true)
   const [respondingId,     setRespondingId]      = useState<string | null>(null)
   const [suggested,        setSuggested]         = useState<SuggestUser[]>([])
+  // Pedidos para entrar nos meus Círculos. Vivem no servidor, não nas
+  // notificações em memória: um pedido de ontem continua aqui hoje.
+  const circleRequests = useCircleJoinStore((state) => state.incoming)
+  const openCircleReview = useCircleJoinStore((state) => state.openReview)
 
   useFocusEffect(useCallback(() => {
     let active = true
+    useCircleJoinStore.getState().loadIncoming().catch(() => {})
     async function load() {
       // Contas sugeridas — para a secção no fim (Seguir laranja)
       api.get('/users/suggested')
@@ -238,6 +245,40 @@ export default function NotificationsScreen() {
         contentContainerStyle={s.list}
         ListHeaderComponent={
           <>
+            {/* Pedidos para entrar nos meus Círculos — abre a folha de decisão */}
+            {circleRequests.length > 0 && (
+              <TouchableOpacity
+                style={s.partnerSection}
+                onPress={() => openCircleReview()}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={t.circleJoin_notifsRow.replace('{count}', String(circleRequests.length))}
+              >
+                <View style={s.sectionTitleRow}>
+                  <BrandAvatarRing size={14} strokeWidth={1.5} dashed />
+                  <Text style={[s.sectionTitle, { color: colors.gray800 }]}>{t.circleJoin_notifsSection}</Text>
+                </View>
+                <View style={s.partnerCard}>
+                  <AvatarImage
+                    uri={circleRequests[0].requester.avatar}
+                    name={circleRequests[0].requester.name}
+                    size={44}
+                  />
+                  <View style={s.partnerInfo}>
+                    <Text style={s.partnerName} numberOfLines={1}>
+                      {circleRequests.length > 1
+                        ? `${circleRequests[0].requester.name} +${circleRequests.length - 1}`
+                        : circleRequests[0].requester.name}
+                    </Text>
+                    <Text style={s.partnerSub}>
+                      {t.circleJoin_notifsRow.replace('{count}', String(circleRequests.length))}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={colors.gray400} />
+                </View>
+              </TouchableOpacity>
+            )}
+
             {/* Union invites section */}
             {(loadingPartner || unionInvites.length > 0) && (
               <View style={s.partnerSection}>

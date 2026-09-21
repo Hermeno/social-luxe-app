@@ -8,11 +8,25 @@ import { createHash } from 'crypto'
 const RADIUS_KM = 3
 const INVITE_TTL_MS = 2 * 60 * 1000   // convite expira em 2 minutos
 const COUNTDOWN_MS = 3 * 1000
-// A ronda continua identificável enquanto os dois uploads chegam. Durante esta
-// janela outro toque em countdown devolve a mesma ronda em vez de a substituir.
+// A ronda continua identificável enquanto as fotografias de cada um chegam.
+// Durante esta janela outro toque em countdown devolve a mesma ronda em vez de
+// a substituir.
 const ROUND_ACTIVE_MS = 60 * 1000
 // Janela de publicação contada da captura do próprio publicador.
 const PUBLISH_WINDOW_MS = 60 * 1000
+// As fotografias ficam primeiro no telemóvel e sobem depois, em fila. Uma
+// tirada no último segundo da ronda chega ao servidor já com ela fechada; esta
+// folga é o que a impede de se perder pelo caminho. Não abre a ronda a novas
+// capturas — quem decide quando se pode disparar é o `expiresAt`.
+const UPLOAD_GRACE_MS = 30 * 1000
+
+// Quantas fotografias cada pessoa pode pôr numa ronda.
+export const MAX_CAPTURES_PER_ROUND = 10
+// O `slot` é a ordem das fotografias de uma pessoa, numerada pelo telemóvel e
+// nunca reutilizada — retirar a terceira não faz a seguinte ocupar o lugar
+// dela. Por isso pode passar do limite de capturas; este tecto só impede que um
+// cliente estragado escreva números absurdos.
+export const MAX_CAPTURE_SLOT = 100
 
 // Uma sessão é um momento, não uma sala permanente. Passado isto o anfitrião
 // abre uma nova em vez de reutilizar a antiga — senão membros e fotos de há
@@ -35,7 +49,7 @@ async function lockSession(tx: Prisma.TransactionClient, sessionId: string) {
 // Retakes e desistências só podem remover assets quando nenhum Post, captura
 // normalizada ou campo legado ainda os preserva. Falhar esta verificação é
 // conservador: mantém o ficheiro em vez de arriscar quebrar um momento.
-async function unreferencedCirclePhotos(urls: Array<string | null>): Promise<string[]> {
+export async function unreferencedCirclePhotos(urls: Array<string | null>): Promise<string[]> {
   const candidates = [...new Set(urls.filter((url): url is string => !!url))]
   if (candidates.length === 0) return []
   try {
@@ -311,6 +325,7 @@ export async function openSession(userId: string, lat?: number, lng?: number) {
     ...state,
     nearby: nearby.filter((u) => !memberIds.has(u.id)),
     publishWindowMs: PUBLISH_WINDOW_MS,
+    maxCapturesPerRound: MAX_CAPTURES_PER_ROUND,
   }
 }
 
@@ -344,7 +359,12 @@ export async function getSessionState(sessionId: string, requesterId: string) {
   if (!me || me.status !== 'JOINED') throw new Error('Não estás nesta sessão')
 
   await expireInvites({ sessionId })
-  return { session, ...(await liveState(sessionId, requesterId)), publishWindowMs: PUBLISH_WINDOW_MS }
+  return {
+    session,
+    ...(await liveState(sessionId, requesterId)),
+    publishWindowMs: PUBLISH_WINDOW_MS,
+    maxCapturesPerRound: MAX_CAPTURES_PER_ROUND,
+  }
 }
 
 // Anfitrião chama alguém próximo → convite (push + socket ao vivo)
@@ -492,7 +512,7 @@ export async function addPhoto(
   photoWidth?: number | null,
   photoHeight?: number | null,
   requestedRoundId?: string | 'solo',
-  requestedSlot?: 1 | 2,
+  requestedSlot?: number,
   requestedRoundAt?: Date | null,
 ) {
   const written = await prisma.$transaction(async (tx) => {
@@ -571,7 +591,7 @@ export async function addPhoto(
       }
     }
 
-    if (!round || round.expiresAt <= now || round.shotAt > now) {
+    if (!round || round.expiresAt.getTime() + UPLOAD_GRACE_MS <= now.getTime() || round.shotAt > now) {
       throw new Error('Ronda de captura inválida')
     }
 
@@ -579,11 +599,19 @@ export async function addPhoto(
       where: { roundId: round.id, userId },
       orderBy: { slot: 'asc' },
     })
-    const occupied = new Set(existing.map((capture) => capture.slot))
-    const slot = requestedSlot ?? ([1, 2].find((candidate) => !occupied.has(candidate)) as 1 | 2 | undefined)
-    if (!slot) throw new Error('Cada participante pode adicionar no máximo 2 fotos por ronda')
-
+    // Sem slot, a fotografia vai para o fim da fila da pessoa. Com slot, um
+    // slot já ocupado é o mesmo envio a repetir-se (a resposta perdeu-se na
+    // rede e o telemóvel tentou outra vez): substitui-se a si mesmo em vez de
+    // criar uma cópia. Só um slot novo conta para o limite.
+    const slot = requestedSlot ?? existing.reduce((last, capture) => Math.max(last, capture.slot), 0) + 1
     const previousInSlot = existing.find((capture) => capture.slot === slot)
+    // Texto fixo, sem o número: é a mensagem exacta que `SAFE_MESSAGES` deixa
+    // chegar ao cliente como 400. O limite em si o cliente já o recebe na sessão.
+    if (!previousInSlot && existing.length >= MAX_CAPTURES_PER_ROUND) {
+      throw new Error('Já chegaste ao limite de fotos desta ronda')
+    }
+    if (slot > MAX_CAPTURE_SLOT) throw new Error('Posição de captura inválida')
+
     const capture = previousInSlot
       ? await tx.circleSessionCapture.update({
           where: { roundId_userId_slot: { roundId: round.id, userId, slot } },
@@ -633,6 +661,9 @@ export async function addPhoto(
   return {
     ok: true,
     roundId: written.round.id,
+    // A ronda inteira, e não só o id: quando este envio a criou, o telemóvel
+    // passa a conhecer a janela verdadeira em vez de a adivinhar.
+    round: roundState(written.round),
     capture: captureState(written.capture),
     discardedPhotoUrls: await unreferencedCirclePhotos(written.previousUrls),
   }
@@ -811,9 +842,26 @@ export async function startCountdown(userId: string, sessionId: string) {
   }
 }
 
+/**
+ * A impressão digital de um Círculo: muda sempre que alguém entra, sai, ou uma
+ * fotografia muda. É o que diz a um republicar se o post está desatualizado.
+ * Sem latecomers o texto é o mesmo de antes, para os posts antigos não
+ * parecerem todos alterados.
+ */
+export function momentRevision(
+  participants: unknown[],
+  latecomers: unknown[],
+  captures: unknown[],
+): string {
+  const body = latecomers.length > 0
+    ? { participants, latecomers, captures }
+    : { participants, captures }
+  return createHash('sha256').update(JSON.stringify(body)).digest('hex').slice(0, 24)
+}
+
 // Qualquer membro publica no seu feed o snapshot imutável de uma ronda. Uma
-// pessoa pode aparecer zero vezes, uma ou duas vezes em captures; participants
-// continua a representar presença, não quantidade de fotos.
+// pessoa pode aparecer zero vezes ou várias (até MAX_CAPTURES_PER_ROUND) em
+// captures; participants continua a representar presença, não quantidade.
 export async function publishSession(
   userId: string,
   sessionId: string,
@@ -889,8 +937,10 @@ export async function publishSession(
       }
     }
 
+    // As de quem esteve no disparo, e as de quem entrou depois com a aceitação
+    // do anfitrião — essas não são de membros JOINED, mas pertencem ao Círculo.
     const captures = await tx.circleSessionCapture.findMany({
-      where: { roundId: round.id, userId: { in: joinedIds } },
+      where: { roundId: round.id, OR: [{ userId: { in: joinedIds } }, { late: true }] },
     })
     const myCaptures = captures.filter((capture) => capture.userId === userId)
     const latestMine = myCaptures.reduce<Date | null>(
@@ -919,6 +969,15 @@ export async function publishSession(
     }))
 
     const snapshotParticipants = joined.map((member) => member.user)
+    const lateUserIds = [...new Set(
+      captures.filter((capture) => capture.late).map((capture) => capture.userId),
+    )]
+    const snapshotLatecomers = lateUserIds.length > 0
+      ? await tx.user.findMany({
+          where: { id: { in: lateUserIds } },
+          select: { id: true, name: true, username: true, avatar: true },
+        })
+      : []
     const snapshotCaptures = captures.map((capture, index) => ({
       id: capture.id,
       userId: capture.userId,
@@ -927,11 +986,9 @@ export async function publishSession(
       mediaUrl: capture.mediaUrl,
       overlays: overlays[index],
       createdAt: capture.createdAt.toISOString(),
+      ...(capture.late ? { late: true } : {}),
     }))
-    const revision = createHash('sha256')
-      .update(JSON.stringify({ participants: snapshotParticipants, captures: snapshotCaptures }))
-      .digest('hex')
-      .slice(0, 24)
+    const revision = momentRevision(snapshotParticipants, snapshotLatecomers, snapshotCaptures)
     const collectiveMoment = {
       version: 1 as const,
       id: round.id,
@@ -941,6 +998,7 @@ export async function publishSession(
       creatorId: me.session.hostId,
       createdAt: round.shotAt.toISOString(),
       participants: snapshotParticipants,
+      ...(snapshotLatecomers.length > 0 ? { latecomers: snapshotLatecomers } : {}),
       captures: snapshotCaptures,
     }
 

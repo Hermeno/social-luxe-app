@@ -14,13 +14,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import FeedIcon from '../../components/FeedIcon'
 import Icon, { type IconName } from '../../components/Icon'
 import PostActionIcon from '../../components/PostActionIcon'
-import { feedIcon, feedInk, feedRail } from './tokens'
+import { feedGlyphShadow, feedIcon, feedInk, feedRail } from './tokens'
 import { confirm } from '../../components/confirm'
 import { API_BASE } from '../../config'
 import { deleteCachedPostsByUser } from '../../db/database'
 import useReducedMotionPreference from '../../hooks/useReducedMotionPreference'
 import { useT } from '../../i18n'
 import { blockUser } from '../../services/block.service'
+import { removeMomentPhotos } from '../../services/circle.service'
 import { muteUser, type MuteDuration } from '../../services/mute.service'
 import { isPostSaved, toggleSavedPost } from '../../services/savedPost.service'
 import { useAuthStore } from '../../store/auth.store'
@@ -28,6 +29,7 @@ import { colors, fonts, leading, radius, sheet, spacing, typography } from '../.
 import { Post } from '../../types'
 import { saveMediaListToGallery } from '../../utils/download'
 import { toast } from '../../utils/toast'
+import { circleRelation } from '../HomeScreen/homePostShape'
 
 interface Props {
   post: Post
@@ -40,6 +42,15 @@ interface Props {
   triggerSize?: number
   /** Tinta do gatilho; branca sobre mídia, escura sobre superfícies claras. */
   triggerColor?: string
+  /**
+   * O gatilho assenta sobre mídia.
+   *
+   * Só nesse caso o glifo leva a sombra que o separa da fotografia. Sobre a
+   * página branca da Home ela não separa nada — escurece o cinzento do comando
+   * e lê-se como borrão. A coluna da feed imersiva (`rail`) está sempre sobre
+   * mídia e não precisa de o dizer.
+   */
+  onMedia?: boolean
 }
 
 interface OptionRowProps {
@@ -153,7 +164,7 @@ function resolveMedia(url: string): string {
 
 export default function PostOptionsMenu({
   post, onDeleted, onEdited, onProfileBlocked, onAuthorMuted, onBlockingChange,
-  rail = false, triggerSize = 25, triggerColor = '#fff',
+  rail = false, onMedia = false, triggerSize = 25, triggerColor = '#fff',
 }: Props) {
   const { bottom: safeBottom } = useSafeAreaInsets()
   const t = useT()
@@ -172,6 +183,11 @@ export default function PostOptionsMenu({
   const [blocking, setBlocking] = useState(false)
   const [showMuteChoices, setShowMuteChoices] = useState(false)
   const [muting, setMuting] = useState<MuteDuration | null>(null)
+  const [leavingCircle, setLeavingCircle] = useState(false)
+  // Num Círculo, quem lá tem fotografias pode tirá-las — seja o post seu ou de
+  // outro participante: a fotografia é de quem a tirou, não de quem publicou.
+  const circle = useMemo(() => circleRelation(post, currentUserId), [currentUserId, post])
+  const hasMyCirclePhotos = !!circle && circle.myCaptureIds.length > 0
 
   // O campo já não precisa da área segura do fundo quando o teclado a cobre.
   const keyboardOpen = useKeyboardState().isVisible
@@ -302,6 +318,33 @@ export default function PostOptionsMenu({
     }
   }
 
+  async function handleRemoveMyCirclePhotos() {
+    if (!circle || leavingCircle) return
+    setConfirming(true)
+    setShowMenu(false)
+    const ok = await confirm({
+      title: t.circleJoin_removeTitle,
+      message: t.circleJoin_removeMsg,
+      confirmText: t.circleJoin_removeConfirm,
+      cancelText: t.cancel,
+      destructive: true,
+      icon: 'trash-outline',
+    })
+    setConfirming(false)
+    if (!ok) return
+    setLeavingCircle(true)
+    try {
+      // O servidor tira-as de todas as cópias do Círculo; a feed recebe cada
+      // post já sem elas pelo socket.
+      await removeMomentPhotos(circle.momentId)
+      toast.success(t.circleJoin_removed)
+    } catch (err: any) {
+      toast.error(t.circle_errTitle, err?.response?.data?.message || t.circleJoin_removeFailed)
+    } finally {
+      setLeavingCircle(false)
+    }
+  }
+
   async function handleDelete() {
     if (!onDeleted) return
     setConfirming(true)
@@ -340,7 +383,7 @@ export default function PostOptionsMenu({
   return (
     <>
       <TouchableOpacity
-        style={[s.trigger, rail && s.triggerRail]}
+        style={[s.trigger, (rail || onMedia) && s.triggerOnMedia, rail && s.triggerRail]}
         onPress={openOptionsMenu}
         activeOpacity={0.75}
         // Na rail, a caixa já mede 64×54. Aumentá-la mais 9pt invadia os
@@ -406,6 +449,18 @@ export default function PostOptionsMenu({
                 disabled={!mediaUrls.length}
                 onPress={handleDownload}
               />
+              {hasMyCirclePhotos && (
+                <>
+                  <View style={s.divider} />
+                  <OptionRow
+                    icon="trash"
+                    label={t.circleJoin_removeMine}
+                    danger
+                    loading={leavingCircle}
+                    onPress={handleRemoveMyCirclePhotos}
+                  />
+                </>
+              )}
 
               {!!currentUserId && !isOwnPost && !post.isAnnouncement && (
                 <>
@@ -570,17 +625,17 @@ export default function PostOptionsMenu({
 }
 
 const s = StyleSheet.create({
+  // Fora da rail, o gatilho vive numa caixa igual à de qualquer outra acção da
+  // publicação. Estava em 34 — 2pt maiores que as vizinhas — e essa diferença
+  // deslocava a tinta do glifo da régua da página por onde as outras assentam.
   trigger: {
-    width: 34,
-    height: 34,
+    width: feedIcon.action,
+    height: feedIcon.action,
     borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.38,
-    shadowRadius: 1.8,
   },
+  triggerOnMedia: feedGlyphShadow,
   triggerRail: {
     width: feedRail.width,
     height: feedRail.itemHeight,
@@ -589,8 +644,8 @@ const s = StyleSheet.create({
     gap: feedRail.iconToMetricGap,
   },
   triggerIconStage: {
-    width: 34,
-    height: 34,
+    width: feedIcon.action,
+    height: feedIcon.action,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -52,12 +52,11 @@ export interface CollectiveMomentSnapshot {
   revision?: string
   creatorId: string
   createdAt: string
-  participants: Array<{
-    id: string
-    name: string
-    username: string | null
-    avatar: string | null
-  }>
+  // Quem esteve no disparo. Presença, não quantidade de fotografias.
+  participants: CollectiveMomentPerson[]
+  // Quem entrou depois, por pedido aceite pelo anfitrião. Fica à parte de
+  // `participants` para a contagem de "quem esteve lá" continuar verdadeira.
+  latecomers?: CollectiveMomentPerson[]
   captures: Array<{
     id: string
     userId: string
@@ -66,10 +65,27 @@ export interface CollectiveMomentSnapshot {
     mediaUrl: string
     overlays: Overlay[]
     createdAt: string
+    // Fotografia de quem não esteve no disparo.
+    late?: boolean
   }>
 }
 
+export interface CollectiveMomentPerson {
+  id: string
+  name: string
+  username: string | null
+  avatar: string | null
+}
+
 type PostWriteClient = Pick<Prisma.TransactionClient, 'post'>
+
+// O que um post de álbum leva ao sair do servidor — o mesmo ao criar, ao
+// republicar e quando um Círculo muda depois de publicado.
+export const ALBUM_POST_INCLUDE = {
+  user:        { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true, showDevice: true, statusLabel: true } },
+  partnerUser: { select: { id: true, name: true, username: true, avatar: true, isVerified: true } },
+  _count:      { select: { likes: true, comments: true, shares: true, reposts: true, views: true } },
+} as const
 
 export async function createAlbumPost(
   userId: string,
@@ -96,17 +112,14 @@ export async function createAlbumPost(
       ? collectiveMoment as unknown as Prisma.InputJsonValue
       : undefined,
     circlePublicationKey,
+    circleMomentId: collectiveMoment?.id ?? null,
     mediaType: MediaType.IMAGE,
     caption: caption ?? null,
     bgColor: null,
     expiresAt,
     deviceModel: deviceModel ?? null,
   }
-  const include = {
-    user:        { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true, showDevice: true, statusLabel: true } },
-    partnerUser: { select: { id: true, name: true, username: true, avatar: true, isVerified: true } },
-    _count:      { select: { likes: true, comments: true, shares: true, reposts: true, views: true } },
-  } as const
+  const include = ALBUM_POST_INCLUDE
 
   // Retries de rede/toques duplos devolvem o mesmo Post da mesma pessoa e
   // ronda. Álbuns comuns continuam a seguir o caminho de criação normal.
@@ -128,6 +141,7 @@ export async function createAlbumPost(
             ? albumOverlays as unknown as Prisma.InputJsonValue
             : Prisma.DbNull,
           collectiveMoment: collectiveMoment as unknown as Prisma.InputJsonValue,
+          circleMomentId: collectiveMoment?.id ?? null,
           caption: caption ?? null,
           deviceModel: deviceModel ?? null,
         },
@@ -198,6 +212,17 @@ export async function emitPostToVisibleFollowers(
   for (const followerId of followerIds) {
     if (!hiddenRecipients.has(followerId)) emitToUser(followerId, event, post)
   }
+}
+
+// Um post que deixou de existir sem o autor o apagar — um Círculo que ficou
+// sem fotografias porque todos retiraram as suas. Quem o tem na feed tira-o.
+export async function emitPostRemoved(authorId: string, postId: string) {
+  const followers = await prisma.follow.findMany({
+    where: { followingId: authorId },
+    select: { followerId: true },
+  })
+  for (const { followerId } of followers) emitToUser(followerId, 'post:removed', { postId })
+  emitToUser(authorId, 'post:removed', { postId })
 }
 
 // Haversine distance in km between two lat/lng points
@@ -1113,6 +1138,8 @@ export async function repostPost(userId: string, postId: string) {
           mediaHeight:   original.mediaHeight,
           mediaSizes:    (original.mediaSizes ?? undefined) as any,
           collectiveMoment: (original.collectiveMoment ?? undefined) as any,
+          // A cópia acompanha o Círculo: quem entrar depois ou sair aparece nela também.
+          circleMomentId: original.circleMomentId,
           mediaType:     original.mediaType,
           caption:       original.caption,
           bgColor:       original.bgColor,

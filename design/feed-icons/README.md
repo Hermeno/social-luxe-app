@@ -10,13 +10,13 @@ Os 33 SVGs de `mobile/src/assets/feed-icons/` foram refinados mantendo as metáf
 - Cor: `currentColor`.
 - As compensações de escala e posição vivem na geometria. Formas densas podem ocupar menos área; chevrons e barras mantêm suas proporções.
 - Os pares coração, balão, gota e vídeo compartilham o mesmo contorno externo entre outline e preenchido.
-- Na aplicação: ações **32px** nas duas feeds; navegação **26px**. O traço escala junto com o desenho.
+- Na aplicação: desenho das ações limitado a **28px**, centralizado no espaço de **32px** nas duas feeds; navegação **26px**. O traço escala junto com o desenho.
 
-`FeedIcon` apenas renderiza as formas geradas. Não acrescenta contornos a preenchimentos, não muda a espessura por ícone e não reenquadra o `viewBox`. `PostActionIcon` compartilha os mesmos desenhos entre o feed inicial e o feed de vídeos em tela cheia, mantendo a seleção do coração.
+`FeedIcon` apenas renderiza as formas geradas. Não acrescenta contornos a preenchimentos, não muda a espessura por ícone e não reenquadra o `viewBox`. `PostActionIcon` compartilha os mesmos desenhos entre o feed inicial e o feed de vídeos em tela cheia, mantendo a seleção do coração. A caixa externa conserva o `size` solicitado; o desenho recebe `Math.min(size, 28)` e fica centralizado. Assim, as ações ficam visualmente menores sem alterar o espaçamento ou a área de toque dos botões.
 
 ## Entrega e comparação
 
-Abra **[index.html](index.html)**. A folha inclui antes/depois, ampliação sobre grelha, amostras a 24/28/32px, fundos claro/escuro e faixas com os tamanhos reais das duas feeds e da navegação. É uma conferência vetorial, não uma captura do aplicativo.
+Abra **[index.html](index.html)**. A folha inclui antes/depois, ampliação sobre grelha, amostras a 24/28/32px, fundos claro/escuro e faixas com os tamanhos reais das duas feeds e da navegação. Nas faixas das feeds, cada desenho de 28px fica centralizado num espaço de 32px; a navegação permanece a 26px. É uma conferência vetorial, não uma captura do aplicativo.
 
 - `originals/`: SVGs de feed anteriores e `runtime.json`, snapshot da geometria antes do refinamento.
 - `originals-ui/`: SVGs de interface anteriores às correções.

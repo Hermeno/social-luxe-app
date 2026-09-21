@@ -17,7 +17,8 @@ export interface CircleCapture {
   id: string
   roundId: string
   userId: string
-  slot: 1 | 2
+  /** A ordem da fotografia entre as da mesma pessoa — 1, 2, 3… sem reutilizar. */
+  slot: number
   mediaUrl: string
   createdAt: string
   overlays?: EmojiOverlay[]
@@ -57,6 +58,8 @@ export interface CircleOpenState {
   /** Janela para publicar depois do disparo. Vem do servidor — é ele que a
    *  aplica, e antes o cliente tinha a sua própria cópia do número. */
   publishWindowMs?: number
+  /** Quantas fotografias cada pessoa pode pôr numa ronda. Também do servidor. */
+  maxCapturesPerRound?: number
 }
 
 export interface CircleState {
@@ -64,6 +67,7 @@ export interface CircleState {
   members: CircleMember[]
   currentRound: CircleRound | null
   publishWindowMs?: number
+  maxCapturesPerRound?: number
 }
 
 function normalizeMembers(value: unknown): CircleMember[] {
@@ -127,25 +131,32 @@ export async function startCountdown(sessionId: string): Promise<{
   return res.data.data ?? res.data
 }
 
-// Guardar a minha foto (com emojis) na sessão
+/**
+ * Uma fotografia do Círculo tem uns 2 MB; os 3 minutos do `uploadApi` são para
+ * vídeo. Um envio preso ali segurava a fila inteira — e o publicar, que espera
+ * por ela. Assim falha a tempo de a fila tentar outra vez.
+ */
+const CIRCLE_PHOTO_TIMEOUT_MS = 45_000
+
+// Enviar uma fotografia já tirada. `roundId` null pede ao servidor uma ronda
+// individual; um id liga a fotografia à ronda em que foi tirada, sem inferência
+// temporal. O `slot` é numerado pelo telemóvel: repetir o mesmo envio (a
+// resposta perdeu-se) substitui a fotografia em vez de a duplicar.
 export async function addCirclePhoto(
   sessionId: string,
   uri: string,
-  overlays: EmojiOverlay[] = [],
   roundId: string | null,
-  slot: 1 | 2,
-): Promise<{ capture: CircleCapture; roundId: string }> {
+  slot: number,
+): Promise<{ capture: CircleCapture; roundId: string; round?: CircleRound }> {
   const form = new FormData()
   form.append('sessionId', sessionId)
   form.append('media', { uri, name: 'circle.jpg', type: 'image/jpeg' } as unknown as Blob)
-  // Enviar também [] torna explícito que uma nova foto sem emojis deve limpar
-  // os da foto anterior, em vez de deixar o campo ausente.
-  form.append('overlays', JSON.stringify(overlays))
-  // `solo` pede ao servidor uma ronda individual; uma string liga a fotografia,
-  // sem inferência temporal, à ronda sincronizada que originou a prévia.
   form.append('roundId', roundId ?? 'solo')
   form.append('slot', String(slot))
-  const res = await uploadApi.post('/circle/photo', form, { headers: { 'Content-Type': 'multipart/form-data' } })
+  const res = await uploadApi.post('/circle/photo', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: CIRCLE_PHOTO_TIMEOUT_MS,
+  })
   return res.data.data ?? res.data
 }
 
@@ -163,4 +174,66 @@ export async function withdrawMyPhoto(sessionId: string, captureId?: string): Pr
 export async function getCircleSession(sessionId: string): Promise<CircleState> {
   const res = await api.get(`/circle/session/${sessionId}`)
   return normalizeState(res.data.data as CircleState)
+}
+
+// ─── Círculo publicado: entrar depois e retirar fotografias ──────────────────
+
+export interface CircleJoinRequest {
+  id: string
+  momentId: string
+  mediaUrl: string
+  photoWidth: number | null
+  photoHeight: number | null
+  createdAt: string
+  requester: { id: string; name: string; username: string | null; avatar: string | null }
+}
+
+export interface MyCircleJoinRequest {
+  id: string
+  momentId: string
+  createdAt: string
+}
+
+// Pedir para entrar num Círculo já publicado, com uma fotografia tirada agora.
+export async function requestToJoinCircle(momentId: string, uri: string): Promise<MyCircleJoinRequest> {
+  const form = new FormData()
+  form.append('media', { uri, name: 'circle-join.jpg', type: 'image/jpeg' } as unknown as Blob)
+  const res = await uploadApi.post(`/circle/moments/${encodeURIComponent(momentId)}/join`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: CIRCLE_PHOTO_TIMEOUT_MS,
+  })
+  return res.data.data ?? res.data
+}
+
+export async function cancelJoinRequest(requestId: string): Promise<void> {
+  await api.delete(`/circle/join-requests/${encodeURIComponent(requestId)}`)
+}
+
+// Os pedidos à espera da minha decisão, como anfitrião.
+export async function getIncomingJoinRequests(): Promise<CircleJoinRequest[]> {
+  const res = await api.get('/circle/join-requests/incoming')
+  return Array.isArray(res.data?.data) ? res.data.data : []
+}
+
+// Os meus pedidos ainda por decidir.
+export async function getMyJoinRequests(): Promise<MyCircleJoinRequest[]> {
+  const res = await api.get('/circle/join-requests/mine')
+  return Array.isArray(res.data?.data) ? res.data.data : []
+}
+
+export async function decideJoinRequest(requestId: string, accept: boolean): Promise<void> {
+  await api.post(`/circle/join-requests/${encodeURIComponent(requestId)}/decision`, { accept })
+}
+
+// Retirar as minhas fotografias de um Círculo publicado (ou uma só, pelo id).
+// O anfitrião pode retirar também a de quem entrou depois.
+export async function removeMomentPhotos(momentId: string, captureId?: string): Promise<{
+  removedCaptureIds: string[]
+  removedPostIds: string[]
+}> {
+  const res = await api.post(
+    `/circle/moments/${encodeURIComponent(momentId)}/remove-photos`,
+    captureId ? { captureId } : {},
+  )
+  return res.data.data ?? { removedCaptureIds: [], removedPostIds: [] }
 }

@@ -1,5 +1,6 @@
 import { Response } from 'express'
 import * as session from '../services/circleSession.service'
+import * as moment from '../services/circleMoment.service'
 import { ok, created, badRequest } from '../utils/response'
 import { handleError } from '../utils/errors'
 import { AuthRequest } from '../types'
@@ -102,12 +103,12 @@ export async function photo(req: AuthRequest, res: Response) {
     const requestedRoundId = typeof req.body.roundId === 'string' && req.body.roundId
       ? req.body.roundId
       : undefined
-    let requestedSlot: 1 | 2 | undefined
+    let requestedSlot: number | undefined
     if (req.body.slot != null && req.body.slot !== '') {
       const parsedSlot = Number(req.body.slot)
-      if (parsedSlot !== 1 && parsedSlot !== 2) {
+      if (!Number.isInteger(parsedSlot) || parsedSlot < 1 || parsedSlot > session.MAX_CAPTURE_SLOT) {
         fs.unlink(req.file.path, () => {})
-        return badRequest(res, 'slot must be 1 or 2')
+        return badRequest(res, `slot must be an integer from 1 to ${session.MAX_CAPTURE_SLOT}`)
       }
       requestedSlot = parsedSlot
     }
@@ -138,7 +139,7 @@ export async function photo(req: AuthRequest, res: Response) {
     // não lhe pode dar o tratamento de upload órfão.
     uploadedUrl = null
     cleanupCircleUrls(result.discardedPhotoUrls)
-    return ok(res, { ok: true, roundId: result.roundId, capture: result.capture })
+    return ok(res, { ok: true, roundId: result.roundId, round: result.round, capture: result.capture })
   } catch (err) {
     if (!uploadedUrl && req.file) fs.unlink(req.file.path, () => {})
     // Se a sessão fechou ou a escrita falhou depois do upload, esta URL nunca
@@ -181,4 +182,75 @@ export async function publish(req: AuthRequest, res: Response) {
     )
     return created(res, post)
   } catch (err) { return handleError(res, err, 'circle.publish') }
+}
+
+// ─── Círculo publicado: entrar depois e retirar fotografias ───────────────────
+
+export async function requestJoin(req: AuthRequest, res: Response) {
+  let uploadedUrl: string | null = null
+  try {
+    const momentId = req.params.momentId
+    if (!req.file) return badRequest(res, 'Photo required')
+    if (!req.file.mimetype.startsWith('image/')) {
+      fs.unlink(req.file.path, () => {})
+      return badRequest(res, 'Photo must be an image')
+    }
+    // Quem não pode pedir fica à porta antes de pagar o upload. O serviço volta
+    // a verificar tudo depois, dentro da transacção.
+    await moment.assertCanRequestJoin(req.user!.userId, momentId)
+    const uploaded = await uploadToCloudinaryWithMeta(req.file, 'luxe/circle')
+    uploadedUrl = uploaded.url
+    const request = await moment.requestToJoin(req.user!.userId, momentId, {
+      url: uploaded.url,
+      width: uploaded.width ?? null,
+      height: uploaded.height ?? null,
+    })
+    uploadedUrl = null
+    return created(res, request)
+  } catch (err) {
+    if (!uploadedUrl && req.file) fs.unlink(req.file.path, () => {})
+    if (uploadedUrl) deleteFromCloudinary(uploadedUrl).catch(() => {})
+    return handleError(res, err, 'circle.requestJoin')
+  }
+}
+
+export async function cancelJoin(req: AuthRequest, res: Response) {
+  try {
+    const result = await moment.cancelJoinRequest(req.user!.userId, req.params.requestId)
+    cleanupCircleUrls([result.discardedPhotoUrl])
+    return ok(res, { ok: true })
+  } catch (err) { return handleError(res, err, 'circle.cancelJoin') }
+}
+
+export async function incomingJoins(req: AuthRequest, res: Response) {
+  try {
+    return ok(res, await moment.incomingJoinRequests(req.user!.userId))
+  } catch (err) { return handleError(res, err, 'circle.incomingJoins') }
+}
+
+export async function myJoins(req: AuthRequest, res: Response) {
+  try {
+    return ok(res, await moment.myPendingJoinRequests(req.user!.userId))
+  } catch (err) { return handleError(res, err, 'circle.myJoins') }
+}
+
+export async function decideJoin(req: AuthRequest, res: Response) {
+  try {
+    const { accept } = req.body ?? {}
+    if (typeof accept !== 'boolean') return badRequest(res, 'accept must be a boolean')
+    const result = await moment.decideJoinRequest(req.user!.userId, req.params.requestId, accept)
+    if (result.discardedPhotoUrl) cleanupCircleUrls([result.discardedPhotoUrl])
+    return ok(res, { accepted: result.accepted })
+  } catch (err) { return handleError(res, err, 'circle.decideJoin') }
+}
+
+export async function removeMomentPhotos(req: AuthRequest, res: Response) {
+  try {
+    const { captureId } = req.body ?? {}
+    if (captureId != null && typeof captureId !== 'string') return badRequest(res, 'captureId must be a string')
+    const result = await moment.removeMomentPhotos(req.user!.userId, req.params.momentId, captureId || undefined)
+    // Só sai do armazenamento o que nenhum post, captura ou pedido ainda usa.
+    cleanupCircleUrls(await session.unreferencedCirclePhotos(result.removedUrls))
+    return ok(res, { removedCaptureIds: result.removedCaptureIds, removedPostIds: result.removedPostIds })
+  } catch (err) { return handleError(res, err, 'circle.removeMomentPhotos') }
 }

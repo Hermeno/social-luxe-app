@@ -11,6 +11,8 @@ interface Props {
   style?: ViewStyle
   borderColor?: string
   borderWidth?: number
+  /** A fotografia não carregou — quem chama decide o que pôr no lugar dela. */
+  onError?: () => void
 }
 
 function initials(name?: string | null): string {
@@ -20,7 +22,7 @@ function initials(name?: string | null): string {
   return (words[0][0] + words[1][0]).toUpperCase()
 }
 
-export default function AvatarImage({ uri, name, size = 44, style, borderColor, borderWidth = 0 }: Props) {
+export default function AvatarImage({ uri, name, size = 44, style, borderColor, borderWidth = 0, onError }: Props) {
   const radius = size / 2
   const resolvedUri = uri
     ? uri.startsWith('http') || uri.startsWith('file') ? uri : `${API_BASE}${uri}`
@@ -47,6 +49,7 @@ export default function AvatarImage({ uri, name, size = 44, style, borderColor, 
         cachePolicy="disk"
         recyclingKey={resolvedUri}
         transition={80}
+        onError={onError}
       />
     )
   }

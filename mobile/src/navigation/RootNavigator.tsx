@@ -3,6 +3,9 @@ import { AppState, AppStateStatus, Platform, Text, StyleSheet, View } from 'reac
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native'
 import Toast, { BaseToastProps } from 'react-native-toast-message'
 import { ConfirmHost } from '../components/confirm'
+import CircleJoinHost from '../components/CircleJoin'
+import { useCircleJoinStore } from '../store/circleJoin.store'
+import { toast } from '../utils/toast'
 import { Ionicons } from '@expo/vector-icons'
 import * as Notifications from 'expo-notifications'
 import Constants from 'expo-constants'
@@ -20,9 +23,8 @@ import { getIncoming as getCircleIncoming } from '../services/circle.service'
 import type { CircleMember, CircleRound } from '../services/circle.service'
 import { isCircleScreenActive } from '../screens/CircleScreen/presence'
 import { strings } from '../i18n'
-import AuthNavigator from './AuthNavigator'
 import AppNavigator from './AppNavigator'
-import OnboardingScreen from '../screens/OnboardingScreen'
+import AuthNextExperience from '../experiences/auth-next'
 import GuestFeedScreen from '../screens/GuestFeedScreen'
 import { useGuestStore } from '../store/guest.store'
 import { api } from '../services/api'
@@ -183,6 +185,8 @@ export default function RootNavigator({ onboardingDone, setOnboardingDone, defau
   useSync()
   const guestMode  = useGuestStore((g) => g.mode)
   const leaveGuest = useGuestStore((g) => g.leaveGuest)
+  const returnToGuest = useGuestStore((g) => g.returnToGuest)
+  const hasGuestShowcase = useGuestStore((g) => g.posts.length > 0)
   const { setTotalUnread, increment } = useMessageBadgeStore()
   const setCircleInvite = useNotificationStore((s) => s.setCircleInvite)
   const addNotification = useNotificationStore((s) => s.addNotification)
@@ -331,6 +335,21 @@ export default function RootNavigator({ onboardingDone, setOnboardingDone, defau
       if (item) addNotification(item)
     }
 
+    // ── Entrar num Círculo depois ──────────────────────────────────────────
+    // Chegou um pedido (ou alguém desistiu do seu): a lista do anfitrião vem
+    // do servidor, que é quem sabe o que ainda está à espera.
+    const onCircleJoinRequest = () => {
+      useCircleJoinStore.getState().loadIncoming().catch(() => {})
+    }
+    // O anfitrião decidiu o meu pedido. Aceite, a fotografia chega à feed pelo
+    // `post:updated`; aqui só se diz o que aconteceu e se liberta o botão.
+    const onCircleJoinDecided = ({ momentId, accepted }: { momentId: string; accepted: boolean }) => {
+      useCircleJoinStore.getState().resolveMine(momentId)
+      const t = strings()
+      if (accepted) toast.success(t.circleJoin_decidedAccepted)
+      else toast.info(t.circleJoin_decidedDeclined)
+    }
+
     const onUnionTogetherLive = ({ unionName, label, memberAName, memberBName }: TogetherLivePayload) => {
       Toast.show({
         type:            'success',
@@ -350,6 +369,10 @@ export default function RootNavigator({ onboardingDone, setOnboardingDone, defau
     socket.on('notification:new', onNotification)
     socket.on('notification', onNotification)
     socket.on('union:together:live', onUnionTogetherLive)
+    socket.on('circle:join-request', onCircleJoinRequest)
+    socket.on('circle:join-decided', onCircleJoinDecided)
+    // O estado dos pedidos à entrada: os que me esperam e os meus por decidir.
+    useCircleJoinStore.getState().load().catch(() => {})
 
     return () => {
       socket.off('users:online:snapshot', onOnlineSnapshot)
@@ -361,23 +384,55 @@ export default function RootNavigator({ onboardingDone, setOnboardingDone, defau
       socket.off('notification:new', onNotification)
       socket.off('notification', onNotification)
       socket.off('union:together:live', onUnionTogetherLive)
+      socket.off('circle:join-request', onCircleJoinRequest)
+      socket.off('circle:join-decided', onCircleJoinDecided)
     }
   }, [isAuthenticated, token, setTotalUnread, increment, setCircleInvite, addNotification])
 
+  // ── A porta de entrada ────────────────────────────────────────────────────
+  //
+  // Uma só experiência cobre a autenticação e o onboarding: são o mesmo percurso
+  // para quem chega, e tê-los em dois componentes obrigava a Home a existir no
+  // meio deles. O `AuthNavigator` e o `OnboardingScreen` continuam no disco,
+  // intactos; deixaram de ser montados.
+  const showingGuest = !isAuthenticated && guestMode === 'guest'
+  const showEntry = !showingGuest && (!isAuthenticated || !onboardingDone)
+
+  // Lido uma só vez, quando a experiência monta — é a isso que o `initialStep`
+  // serve. Depois disso quem manda é o estado interno dela: registar uma conta
+  // faz `isAuthenticated` virar, e se este valor voltasse a entrar o percurso
+  // saltava para trás no meio do caminho.
+  //
+  // O arranque do módulo é saltado de propósito: o `App.tsx` já restaurou a
+  // sessão antes de nos montar, e repeti-lo seria uma segunda chamada à API por
+  // trás de um ecrã branco.
+  const entryStep = isAuthenticated ? 'photo' : 'phone'
+
   return (
     <NavigationContainer theme={{ ...DefaultTheme, colors: { ...DefaultTheme.colors, background: '#0A0A0A' } }}>
-      {!isAuthenticated
-        ? guestMode === 'guest'
-          // Vitrina pública: vê-se sem conta, participa-se com ela.
-          ? <GuestFeedScreen />
-          // 'checking' passa direto para a entrada normal — sem ecrã de espera:
-          // se houver acervo, a troca é quase imediata; se não houver, não se
-          // perdeu tempo nenhum a olhar para um spinner.
-          : <AuthNavigator />
-        : !onboardingDone
-          ? <OnboardingScreen onDone={() => setOnboardingDone(true)} />
+      {showingGuest
+        // Vitrina pública: vê-se sem conta, participa-se com ela.
+        // 'checking' passa direto para a entrada normal — sem ecrã de espera:
+        // se houver acervo, a troca é quase imediata; se não houver, não se
+        // perdeu tempo nenhum a olhar para um spinner.
+        ? <GuestFeedScreen />
+        : showEntry
+          ? (
+            <AuthNextExperience
+              initialStep={entryStep}
+              // Só há para onde voltar se a vitrina tiver mesmo conteúdo. Depois
+              // de terminar sessão o acervo já não está em memória, e o botão
+              // levaria a um ecrã vazio.
+              onExitToGuest={hasGuestShowcase ? returnToGuest : undefined}
+              // A experiência só chega aqui com o onboarding mesmo concluído:
+              // é o passo dos interesses que grava a marca, e os passos
+              // opcionais a seguir podem ser saltados sem a desfazer.
+              onComplete={() => setOnboardingDone(true)}
+            />
+          )
           : <AppNavigator defaultTab={defaultTab} />
       }
+      {isAuthenticated && !showEntry && <CircleJoinHost />}
       <Toast config={toastConfig} position="bottom" bottomOffset={110} />
       <ConfirmHost />
     </NavigationContainer>

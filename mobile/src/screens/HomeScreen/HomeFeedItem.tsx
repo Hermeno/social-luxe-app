@@ -1,45 +1,77 @@
-import React, { memo, useMemo, useState } from 'react'
+import React, { memo, useCallback, useMemo, useState } from 'react'
 import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import type { TextLayoutEventData, NativeSyntheticEvent } from 'react-native'
 import { Image } from 'expo-image'
 import { LinearGradient } from 'expo-linear-gradient'
 
 import AvatarImage from '../../components/AvatarImage'
+import AvatarStack from '../../components/AvatarStack'
+import CircleMediaComposition from '../../components/CircleMediaComposition'
 import Icon from '../../components/Icon'
-import PostActionIcon from '../../components/PostActionIcon'
 import VerifiedBadge from '../../components/VerifiedBadge'
 import { useT } from '../../i18n'
 import type { Post } from '../../types'
 import { resolveMediaUrl } from '../../utils/media'
-import { readPost, type HomePostShape } from './homePostShape'
-import { colors, fonts, gradients, spacing, typography } from '../../theme'
-import { FRAME_BORDER, FRAME_INK, FRAME_RADIUS } from './homeFrame'
-import { ACTION_INK, feedIcon, feedTextShadow } from '../FeedScreen/tokens'
+import { colors, postGradientColors, spacing } from '../../theme'
+import { parsePostFontKey, postFontStyle } from '../../theme/postFonts'
+import { usePostFontsReady } from '../../store/postFonts.store'
+import {
+  actionInkRest, FEED_GLYPH_INK_INSET, feedIcon, feedInk, homeType,
+  pageDanger, pageInk, pageLine, pageSkeleton,
+} from '../FeedScreen/tokens'
 import PostOptionsMenu from '../FeedScreen/PostOptionsMenu'
-import CirclePhotoComposition from './CirclePhotoComposition'
+import { readPost } from './homePostShape'
+import { CIRCLE_STAGE_WIDTH } from './circleCluster'
+import HomeAlbumGallery from './HomeAlbumGallery'
+import HomeCircleJoin from './HomeCircleJoin'
+import HomePostAction from './HomePostAction'
 import HomeVideo from './HomeVideo'
 
-/**
- * O avatar do autor.
- *
- * Numa página branca a linha do autor é cabeçalho, não conteúdo: o que a pessoa
- * veio ver está por baixo. 32 continua a dar um rosto reconhecível e devolve
- * peso à fotografia, que é quem manda no ecrã.
- */
-const AVATAR = 32
-const ACTION_ICON = feedIcon.action
+/** A régua da página: tudo o que é texto começa aqui, dos dois lados. */
 const SIDE = spacing.md
 
-// A moldura e a regra dos cantos vivem no `homeFrame`, que a fila horizontal
-// também usa. Aqui só se lê o afastamento: o anel de discos não deve encostar
-// ao traço, por isso o conteúdo recua SIDE e o raio interior sai de `innerRadius`.
-const CARD_BORDER = FRAME_BORDER
-const CARD_RADIUS = FRAME_RADIUS
+/**
+ * A linha de quem publicou.
+ *
+ * 34 de identidade dentro de uma linha de 50 — os dois números do Feed System —
+ * deixam 8 de ar acima e abaixo do rosto. O alvo de toque continua nos 44
+ * mínimos porque se estende para lá da fotografia, até ao fim do nome.
+ */
+const AVATAR = 34
+const HEAD_HEIGHT = 50
 
-function metric(value: number): string {
-  if (value >= 1_000_000) return `${+(value / 1_000_000).toFixed(1)}M`
-  if (value >= 1_000) return `${+(value / 1_000).toFixed(1)}K`
-  return String(Math.max(0, value))
-}
+/** Alvo do menu da publicação, no cabeçalho. */
+const OPTION_TARGET = 48
+
+/**
+ * O disco que marca um vídeo parado, e o glifo lá dentro.
+ *
+ * 48 é uma vez e meia a caixa de uma acção (32); o triângulo fica no degrau
+ * `control` da escada de ícones e ocupa 42% do disco — a proporção que um botão
+ * de leitura pede para se ler como marca e não como botão a premir.
+ */
+const PLAY_DISC = 48
+
+/** Avatares empilhados fora da linha do autor: dois terços do avatar do autor. */
+const STACK_AVATAR = 24
+
+/**
+ * A fotografia mais alta que a Home desenha inteira.
+ *
+ * Um retrato 9:16 ocupava duas dobras e empurrava a legenda e as acções para
+ * fora do ecrã — a publicação deixava de se poder ler sem scroll. 4:5 é o
+ * limite: acima disso a Home mostra a fotografia enquadrada e a imersiva, que
+ * existe precisamente para isso, mostra-a inteira.
+ */
+const MIN_ASPECT = 0.8
+
+/** A altura do palco do Círculo, na base 390 — ver `circleCluster`. */
+const CIRCLE_STAGE_RATIO = 316 / CIRCLE_STAGE_WIDTH
+
+/** Quantas linhas a legenda mostra antes de `mais`. */
+const CAPTION_LINES = 3
+/** E quantas um post de texto mostra antes de abrir na imersiva. */
+const TEXT_POST_LINES = 6
 
 function timeAgo(iso: string, nowLabel: string): string {
   const minutes = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000)
@@ -50,15 +82,9 @@ function timeAgo(iso: string, nowLabel: string): string {
   return `${Math.floor(hours / 24)}d`
 }
 
-
 interface Props {
   post: Post
   width: number
-  /**
-   * Esta é a publicação à vista. Só ela toca — um feed com vários vídeos a
-   * correr ao mesmo tempo gasta rede e bateria por conteúdo que ninguém está a
-   * ver.
-   */
   active: boolean
   liked: boolean
   likeCount: number
@@ -66,6 +92,7 @@ interface Props {
   repostCount: number
   commentCount: number
   shareCount: number
+  reduceMotion?: boolean
   onOpenAuthor: (post: Post) => void
   onOpenMedia: (post: Post) => void
   onLike: (post: Post) => void
@@ -77,314 +104,315 @@ interface Props {
 }
 
 /**
- * Uma publicação da Home.
+ * Uma publicação na Home.
  *
- * Não é um cartão. Não tem fundo próprio, contorno nem sombra: assenta no branco
- * da página e o que a separa da seguinte é espaço, não uma caixa. Foi essa a
- * decisão que o documento de referência repete mais vezes, e é ela que faz a
- * fotografia ser o post em vez de estar dentro de um.
- *
- * Três formas de conteúdo, uma altura de linguagem só:
- * — **Círculo**: a composição de discos, a assinatura da Luxey.
- * — **Imagem**: a fotografia de ponta a ponta, sem moldura nem raio.
- * — **Vídeo**: a mesma largura total, com um alvo de reprodução ao centro;
- *   tocar leva ao ecrã inteiro, porque um vídeo dentro de uma lista é uma
- *   miniatura a fingir que é um leitor.
+ * Página branca, sem cartões: o que separa duas publicações é espaço e um fio
+ * de uma unidade. As quatro anatomias são parentes, não gémeas — Círculo é uma
+ * composição de discos, álbum é uma galeria horizontal, foto e vídeo são mídia
+ * directa, texto é um bloco tipográfico — mas todas partilham a mesma linha de
+ * autoria em cima, a mesma fila de acções por baixo e a mesma régua lateral.
  */
 function HomeFeedItem({
   post, width, active, liked, likeCount, reposted, repostCount, commentCount, shareCount,
-  onOpenAuthor, onOpenMedia, onLike, onRepost, onComment, onShare, onDeleted, onEdited,
+  reduceMotion = false, onOpenAuthor, onOpenMedia, onLike, onRepost, onComment, onShare,
+  onDeleted, onEdited,
 }: Props) {
   const t = useT()
   const shape = useMemo(() => readPost(post), [post])
+  const fontsReady = usePostFontsReady()
   const [loadedMedia, setLoadedMedia] = useState<{ postId: string; aspect: number } | null>(null)
-  const authorInsideMedia = shape.kind !== 'circle' && post.mediaType !== 'TEXT'
-  // Fotografia e vídeo ocupam a largura inteira da Home. O Círculo conserva a
-  // composição e as margens próprias que já tinha.
-  const contentWidth = authorInsideMedia ? width : width - SIDE * 2
-  // Dentro da moldura do Círculo sobra menos: o contorno come CARD_BORDER de
-  // cada lado e o `contentInset` já lá punha SIDE. A composição tem de saber a
-  // largura real, senão o anel sai maior que a caixa e encosta ao traço.
-  const circleWidth = contentWidth - CARD_BORDER * 2 - SIDE * 2
-  const serverAspect = post.mediaWidth && post.mediaHeight
-    ? post.mediaWidth / post.mediaHeight
-    : null
-  const measuredAspect = loadedMedia?.postId === post.id ? loadedMedia.aspect : null
-  const fallbackAspect = shape.kind === 'video' ? 16 / 9 : 4 / 5
+  const [optionsOpen, setOptionsOpen] = useState(false)
+  const [captionExpanded, setCaptionExpanded] = useState(false)
+  const [captionClamped, setCaptionClamped] = useState(false)
+  // Falha de mídia: a autoria e a legenda ficam, só o quadro é substituído. O
+  // contador de tentativas entra na chave da imagem — é o que a faz recarregar
+  // em vez de servir o erro que já tem em cache.
+  const [mediaFailed, setMediaFailed] = useState(false)
+  const [attempt, setAttempt] = useState(0)
 
-  /**
-   * Cada publicação tem a altura que a sua mídia pedir. A ordem por onde se
-   * chega à proporção é que importa, e estava ao contrário.
-   *
-   * O que o servidor guarda são as dimensões que o Cloudinary devolveu no
-   * upload — as do ficheiro CODIFICADO. Num vídeo de telemóvel isso é quase
-   * sempre 1920×1080 com uma marca de rotação à parte: o ficheiro é deitado, a
-   * imagem que se vê é ao alto. Quem confia nesse número desenha todos os vídeos
-   * na mesma moldura de 16:9, que é exactamente o que estava a acontecer.
-   *
-   * O cartaz não mente. É um JPEG derivado pelo Cloudinary com `c_limit`, que
-   * preserva a proporção e aplica a rotação — o que ele mede é o que vai ser
-   * pintado. Por isso os pixels ganham às medidas.
-   *
-   * O servidor continua a servir para alguma coisa, e para a coisa certa: dá a
-   * altura do PRIMEIRO desenho, antes de a mídia chegar, para a lista não saltar.
-   * Quando os pixels chegam, corrigem-no — e se os dois concordarem, como
-   * acontece na maioria das fotografias, o número não muda e não há salto nenhum.
-   */
+  const isText = shape.kind === 'text'
+  const isVideo = shape.kind === 'video'
+  const isCircle = shape.kind === 'circle'
+  const isAlbum = shape.kind === 'album'
+
+  const serverAspect = post.mediaWidth && post.mediaHeight ? post.mediaWidth / post.mediaHeight : null
+  const measuredAspect = loadedMedia?.postId === post.id ? loadedMedia.aspect : null
+  // A capa já tem a rotação do vídeo aplicada; prevalece sobre as dimensões codificadas.
   const mediaAspect = measuredAspect
     ?? (serverAspect && Number.isFinite(serverAspect) && serverAspect > 0 ? serverAspect : null)
-    ?? fallbackAspect
-  const frameHeight = Math.round(contentWidth / mediaAspect)
+    ?? (isVideo ? 16 / 9 : 4 / 5)
+  const frameHeight = Math.round(width / Math.max(mediaAspect, MIN_ASPECT))
 
   const peopleLabel = shape.people === 1
     ? t.home_people_one
     : t.home_people_many.replace('{count}', String(shape.people))
+  const participants = post.collectiveMoment?.participants ?? []
+  const commenters = post.recentCommenters ?? []
 
-  const actionsRow = (onVideo: boolean) => {
-    // A geometria é idêntica nas duas superfícies; a tinta adapta-se ao fundo
-    // para nunca desaparecer no branco nem numa fotografia clara.
-    // A mesma tinta sobre papel e sobre vídeo: o véu por baixo das acções já
-    // garante o contraste, e trocar de cor com o fundo era o que fazia o mesmo
-    // gesto ter dois aspectos no mesmo ecrã.
-    const neutralInk = ACTION_INK
-    const likeInk = liked ? colors.heart : neutralInk
+  /**
+   * O contexto da publicação: o que ela é, e há quanto tempo.
+   *
+   * O modelo não guarda local, por isso a linha do Feed System fica em duas
+   * partes das três. O tipo à cabeça é o que muda em relação ao @handle que
+   * aqui estava: um handle repete o nome que está mesmo por cima; o tipo diz
+   * algo que a linha de autoria não diz.
+   */
+  const kindLabel = isCircle ? t.home_circle
+    : isAlbum ? t.home_kind_album
+    : isVideo ? t.home_kind_video
+    : isText ? t.home_kind_text
+    : t.home_kind_photo
 
-    return (
-      <View
-        style={[s.actions, onVideo && s.actionsOnVideo]}
-        pointerEvents={onVideo ? 'box-none' : 'auto'}
-      >
-        <TouchableOpacity
-          style={s.actionHit}
-          onPress={() => onLike(post)}
-          activeOpacity={0.6}
-          accessibilityRole="button"
-          accessibilityLabel={t.nf_likes}
-          accessibilityState={{ selected: liked }}
-        >
-          <PostActionIcon
-            name="like"
-            size={ACTION_ICON}
-            color={likeInk}
-            selected={liked}
-          />
-          <Text style={[
-            s.actionMetric,
-            onVideo && s.actionMetricOnVideo,
-          ]}>
-            {metric(likeCount)}
-          </Text>
-        </TouchableOpacity>
+  const openLabel = post.caption || `${t.home_open_moment} · ${post.user.name}`
+  const mediaLabel = isCircle
+    ? `${t.home_captured_together} · ${peopleLabel}`
+    : `${kindLabel} · ${openLabel}`
 
-        <TouchableOpacity
-          style={s.actionHit}
-          onPress={() => onComment(post)}
-          activeOpacity={0.6}
-          accessibilityRole="button"
-          accessibilityLabel={`${commentCount} ${commentCount === 1 ? t.comment_one : t.comment_many}`}
-        >
-          <PostActionIcon name="comment" size={ACTION_ICON} color={neutralInk} />
-          <Text style={[s.actionMetric, onVideo && s.actionMetricOnVideo]}>{metric(commentCount)}</Text>
-        </TouchableOpacity>
+  const retry = useCallback(() => {
+    setMediaFailed(false)
+    setAttempt((value) => value + 1)
+  }, [])
 
-        <TouchableOpacity
-          style={s.actionHit}
-          onPress={() => onRepost(post)}
-          activeOpacity={0.6}
-          accessibilityRole="button"
-          accessibilityLabel={t.feed_repost}
-          accessibilityState={{ selected: reposted }}
-        >
-          <PostActionIcon
-            name="repost"
-            size={ACTION_ICON}
-            color={reposted ? colors.accent : neutralInk}
-          />
-          <Text style={[
-            s.actionMetric,
-            onVideo && s.actionMetricOnVideo,
-          ]}>
-            {metric(repostCount)}
-          </Text>
-        </TouchableOpacity>
+  /**
+   * Contar as linhas da legenda.
+   *
+   * Não se pode contar na própria legenda: com `numberOfLines` posto, o
+   * `onTextLayout` devolve as linhas DEPOIS do corte — nunca mais do que três, e
+   * a condição para mostrar `mais` nunca seria verdadeira. Mede-se uma cópia
+   * invisível sem corte, que é o que a feed imersiva já faz com a descrição.
+   */
+  const measureCaption = useCallback((event: NativeSyntheticEvent<TextLayoutEventData>) => {
+    const clamped = event.nativeEvent.lines.length > CAPTION_LINES
+    setCaptionClamped((current) => current === clamped ? current : clamped)
+  }, [])
 
-        <TouchableOpacity
-          style={s.actionHit}
-          onPress={() => onShare(post)}
-          activeOpacity={0.6}
-          accessibilityRole="button"
-          accessibilityLabel={`${shareCount} ${t.mo_share}`}
-        >
-          <PostActionIcon name="share" size={ACTION_ICON} color={neutralInk} />
-          <Text style={[s.actionMetric, onVideo && s.actionMetricOnVideo]}>{metric(shareCount)}</Text>
-        </TouchableOpacity>
-      </View>
-    )
-  }
-
-  const authorRow = (insideMedia: boolean) => (
-    // `box-none`: a linha do autor não é um alvo, os botões dentro dela é que
-    // são. Sobre a mídia ela é uma camada absoluta por cima do `Pressable` que
-    // abre a imersiva — sem isto, tocar em qualquer ponto da faixa do autor (o
-    // topo inteiro da foto ou do vídeo) não fazia rigorosamente nada, porque o
-    // toque morria nesta View e nunca chegava ao que está por baixo.
-    <View style={[s.author, insideMedia && s.authorOverlay]} pointerEvents="box-none">
+  // ── Cabeçalho ─────────────────────────────────────────────────────────────
+  const header = (
+    <View style={s.head}>
       <TouchableOpacity
-        style={s.authorLeft}
+        style={s.headLeft}
         onPress={() => onOpenAuthor(post)}
-        activeOpacity={0.72}
+        activeOpacity={0.7}
         accessibilityRole="button"
         accessibilityLabel={post.user.name}
       >
         <AvatarImage uri={resolveMediaUrl(post.user.avatar)} name={post.user.name} size={AVATAR} />
-        <View style={s.authorText}>
+        <View style={s.headText}>
           <View style={s.nameLine}>
-            <Text style={[s.name, insideMedia && s.nameOnMedia]} numberOfLines={1}>{post.user.name}</Text>
-            {post.user.isVerified && <VerifiedBadge color={insideMedia ? colors.white : undefined} />}
+            <Text style={s.name} numberOfLines={1}>{post.user.name}</Text>
+            {post.user.isVerified && <VerifiedBadge />}
           </View>
-          <Text style={[s.time, insideMedia && s.timeOnMedia]}>{timeAgo(post.createdAt, t.time_now)}</Text>
+          {/* Uma linha em tamanho normal; com fonte ampliada pode ir a duas, que
+              é o que a spec permite em vez de encolher o texto para caber. */}
+          <Text style={s.context} numberOfLines={2}>
+            {kindLabel} · {timeAgo(post.createdAt, t.time_now)}
+          </Text>
         </View>
       </TouchableOpacity>
-
-      <View style={s.optionsHit}>
+      <View style={s.option}>
         <PostOptionsMenu
-          post={post}
-          onDeleted={onDeleted}
-          onEdited={onEdited}
-          triggerSize={ACTION_ICON}
-          triggerColor={ACTION_INK}
+          post={post} onDeleted={onDeleted} onEdited={onEdited}
+          onBlockingChange={setOptionsOpen} triggerSize={OPTION_TARGET}
+          triggerColor={actionInkRest.page}
         />
       </View>
     </View>
   )
 
-  const body = (
-    <>
-      {/* Imagem e vídeo levam o autor por dentro, no topo. O Círculo mantém a
-          sua estrutura exterior sem qualquer mudança de composição. */}
-      {!authorInsideMedia && authorRow(false)}
-
-      {/* ── Conteúdo ──────────────────────────────────────────────────────── */}
-      <View style={[s.content, !authorInsideMedia && s.contentInset]}>
-        {shape.kind === 'circle' ? (
-          <CirclePhotoComposition urls={shape.urls} width={circleWidth} postId={post.id} />
-        ) : (
-          <View style={[s.frame, { width: contentWidth, height: frameHeight }]}>
-            <View style={s.mediaStack}>
-              {!!shape.urls[0] && (
-                <Image
-                  source={{ uri: shape.urls[0] }}
-                  style={s.media}
-                  contentFit="cover"
-                  cachePolicy="disk"
-                  recyclingKey={`${post.id}:home-media`}
-                  transition={100}
-                  onLoad={(event) => {
-                    // Mede sempre, mesmo com dimensões do servidor: são elas que
-                    // podem estar erradas, e o que aqui carregou é o que se vê.
-                    const { width: sourceWidth, height: sourceHeight } = event.source ?? {}
-                    if (!sourceWidth || !sourceHeight) return
-                    const aspect = sourceWidth / sourceHeight
-                    if (!Number.isFinite(aspect) || aspect <= 0) return
-                    // Só escreve se mudar mesmo: a altura da moldura muda com
-                    // isto, e reescrever o mesmo número volta a desenhar a
-                    // célula sem nada para mostrar de novo.
-                    setLoadedMedia((prev) => (
-                      prev?.postId === post.id && Math.abs(prev.aspect - aspect) < 0.001
-                        ? prev
-                        : { postId: post.id, aspect }
-                    ))
-                  }}
-                />
-              )}
-              {/* O leitor entra por cima do cartaz e nunca o substitui: assim
-                  não há um frame em branco entre o cartaz sair e o vídeo pintar,
-                  e ao sair de vista o cartaz já lá está por baixo. */}
-              {shape.kind === 'video' && active && !!shape.videoUri && (
-                <HomeVideo uri={shape.videoUri} active={active} />
-              )}
-              {shape.kind === 'video' && !active && (
-                <View style={s.playMark} pointerEvents="none">
-                  <Icon name="play" size={26} color={ACTION_INK} />
-                </View>
-              )}
-            </View>
-
-            {/* O alvo do toque é uma camada POR CIMA da mídia, e não a caixa que
-                a contém.
-                
-                Por baixo, quem decidia se o toque chegava cá era o que estivesse
-                em cima: a superfície do vídeo, uma imagem, o que fosse. Um único
-                filho que não deixe passar `pointerEvents` e a publicação inteira
-                deixa de abrir — sem erro nenhum, só não acontece nada.
-                
-                Por cima, o alvo é o alvo. As camadas que vêm a seguir têm
-                `box-none` e continuam a apanhar os seus próprios botões. */}
-            <Pressable
-              style={s.mediaTap}
-              onPress={() => onOpenMedia(post)}
-              accessibilityRole="button"
-              accessibilityLabel={post.caption || post.user.name}
-            />
-            {shape.kind === 'video' && (
-              <View style={s.videoActionLayer} pointerEvents="box-none">
-                <LinearGradient
-                  colors={gradients.feedBottom}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 0, y: 1 }}
-                  style={s.videoActionGradient}
-                  pointerEvents="none"
-                />
-                {actionsRow(true)}
-              </View>
-            )}
-            {authorInsideMedia && authorRow(true)}
-          </View>
-        )}
-      </View>
-
-      {/* No vídeo as acções vivem dentro do véu neutro; a imagem conserva a
-          linha neutra imediatamente abaixo da mídia. O Círculo é a excepção: as
-          dele saem da moldura — ver o `return`. */}
-      {shape.kind !== 'video' && shape.kind !== 'circle' && actionsRow(false)}
-
-      {!!post.caption && (
-        <Text style={[s.caption, shape.kind === 'video' && s.captionAfterVideo]} numberOfLines={3}>
-          {post.caption}
-        </Text>
-      )}
-
-      {shape.kind === 'circle' && (
-        <View style={s.together}>
-          <Icon name="users" size={22} color={colors.gray800} />
-          <View>
-            <Text style={s.togetherTitle}>{t.home_captured_together}</Text>
-            <Text style={s.togetherSub}>{peopleLabel}</Text>
-          </View>
-        </View>
-      )}
-    </>
+  // ── Mídia ─────────────────────────────────────────────────────────────────
+  const failure = (
+    <View style={[s.failure, { width, height: frameHeight }]}>
+      <Icon name="image" size={feedIcon.control} color={pageInk.muted} />
+      <Text style={s.failureText}>{t.home_media_failed}</Text>
+      <TouchableOpacity
+        style={s.retry}
+        onPress={retry}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={t.home_retry}
+      >
+        <Text style={s.retryText}>{t.home_retry}</Text>
+      </TouchableOpacity>
+    </View>
   )
 
-  // O Círculo é o único que se fecha numa moldura. Uma fotografia e um vídeo
-  // trazem a sua própria borda — a mídia acaba onde acaba, e a página branca
-  // faz o resto. Um Círculo não tem bordo nenhum: é um anel de discos com quatro
-  // cantos vazios à volta, e sem nada a fechá-lo não se lê como um objecto, lê-se
-  // como discos soltos sobre a página.
-  //
-  // As acções ficam DE FORA, logo por baixo. O que a moldura fecha é o momento —
-  // quem o fez, os rostos, a legenda; gostar e comentar não pertencem ao momento,
-  // pertencem a quem o está a ver. Lá dentro o traço da moldura passava a ser um
-  // botão à volta deles; cá fora o objecto fica inteiro e a fila alinha com a
-  // borda, porque as duas margens são a mesma.
+  let media: React.ReactNode = null
+  if (isText) {
+    media = (
+      <Pressable onPress={() => onOpenMedia(post)} accessibilityRole="button" accessibilityLabel={openLabel}>
+        <LinearGradient
+          colors={postGradientColors(post.bgColor)}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          style={s.textStage}
+        >
+          <Text
+            style={[
+              s.textPost,
+              postFontStyle(parsePostFontKey(post.fontKey), homeType.textPost.fontSize, homeType.textPost.lineHeight, fontsReady),
+            ]}
+            numberOfLines={TEXT_POST_LINES}
+          >
+            {post.caption}
+          </Text>
+        </LinearGradient>
+      </Pressable>
+    )
+  } else if (isCircle) {
+    media = (
+      <Pressable
+        style={[s.circleStage, { minHeight: width * CIRCLE_STAGE_RATIO }]}
+        onPress={() => onOpenMedia(post)}
+        accessibilityRole="button"
+        accessibilityLabel={mediaLabel}
+      >
+        {/* O palco é a largura toda da página: os 362 de área útil de que a
+            spec fala já estão dentro da tabela de posições — o disco mais
+            exterior de qualquer composição para a 17 da borda. Descontar aqui
+            outra margem encolhia a figura duas vezes. */}
+        <CircleMediaComposition
+          slots={shape.slots}
+          people={shape.people}
+          width={width}
+          postId={post.id}
+          perspectiveLabel={(name) => t.home_perspective_of.replace('{name}', name)}
+          lateLabel={t.circleJoin_lateA11y}
+        />
+      </Pressable>
+    )
+  } else if (isAlbum) {
+    // Uma fotografia partida não apaga o álbum inteiro: cada slide fica com o
+    // seu lugar reservado e as restantes continuam a ver-se.
+    media = (
+      <HomeAlbumGallery
+        urls={shape.urls}
+        width={width}
+        postId={post.id}
+        reduceMotion={reduceMotion}
+        label={mediaLabel}
+        counter={(index, total) => `${index} / ${total}`}
+        onOpen={() => onOpenMedia(post)}
+      />
+    )
+  } else if (mediaFailed) {
+    media = failure
+  } else {
+    media = (
+      <View style={[s.frame, { width, height: frameHeight }]}>
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          {!!shape.urls[0] && (
+            <Image
+              source={{ uri: shape.urls[0] }} style={s.media} contentFit="cover" cachePolicy="disk"
+              recyclingKey={`${post.id}:home-media:${attempt}`} transition={reduceMotion ? 0 : 160}
+              onError={() => setMediaFailed(true)}
+              onLoad={(event) => {
+                const { width: w, height: h } = event.source ?? {}
+                if (!w || !h) return
+                const aspect = w / h
+                if (!Number.isFinite(aspect) || aspect <= 0) return
+                setLoadedMedia((prev) => prev?.postId === post.id && Math.abs(prev.aspect - aspect) < 0.001
+                  ? prev : { postId: post.id, aspect })
+              }}
+            />
+          )}
+          {isVideo && active && !optionsOpen && !!shape.videoUri && <HomeVideo uri={shape.videoUri} active />}
+          {isVideo && !active && (
+            <View style={s.playMark}><Icon name="play" size={feedIcon.control} color={feedInk.primary} /></View>
+          )}
+        </View>
+        {/* O alvo fica sobre a surface nativa; os controles seguintes recebem os próprios toques. */}
+        <Pressable style={s.mediaTap} onPress={() => onOpenMedia(post)}
+          accessibilityRole="button" accessibilityLabel={mediaLabel} />
+      </View>
+    )
+  }
+
+  // ── Acções ────────────────────────────────────────────────────────────────
+  const actions = (
+    <View style={s.actions} pointerEvents="box-none">
+      <HomePostAction name="like" label={liked ? t.home_unlike : t.nf_likes} count={likeCount}
+        selected={liked} onPress={() => onLike(post)} reduceMotion={reduceMotion} />
+      <HomePostAction name="comment" label={t.comment_many} count={commentCount}
+        onPress={() => onComment(post)} reduceMotion={reduceMotion} />
+      <HomePostAction name="repost" label={t.feed_repost} count={repostCount} selected={reposted}
+        onPress={() => onRepost(post)} reduceMotion={reduceMotion} />
+      <HomePostAction name="share" label={t.mo_share} count={shareCount} trailing
+        onPress={() => onShare(post)} reduceMotion={reduceMotion} />
+    </View>
+  )
+
+  const commentsLabel = commentCount === 1
+    ? t.home_see_comment
+    : t.home_see_comments.replace('{count}', String(commentCount))
+
   return (
     <View style={s.item}>
-      {shape.kind === 'circle' ? (
-        <>
-          <View style={s.circleCard}>{body}</View>
-          {actionsRow(false)}
-        </>
-      ) : body}
+      {header}
+      {media}
+      {actions}
+
+      {/* A legenda do Feed System começa por quem escreveu. Sem caption não há
+          linha nenhuma: a publicação fecha na fila de acções. */}
+      {!isText && !!post.caption && (
+        <View style={s.captionWrap}>
+          <Text
+            style={s.caption}
+            numberOfLines={captionExpanded ? undefined : CAPTION_LINES}
+          >
+            <Text style={s.captionAuthor} onPress={() => onOpenAuthor(post)}>{post.user.name}</Text>
+            {'  '}{post.caption}
+          </Text>
+          {/* O medidor. Tem de viver dentro de uma <View> com `pointerEvents`
+              desligado: em <Text> essa prop não é respeitada e a cópia invisível
+              ficava a comer o toque da legenda por baixo. */}
+          <View style={s.captionMeasure} pointerEvents="none">
+            <Text
+              style={s.caption}
+              onTextLayout={measureCaption}
+              accessible={false}
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+            >
+              <Text style={s.captionAuthor}>{post.user.name}</Text>
+              {'  '}{post.caption}
+            </Text>
+          </View>
+          {captionClamped && !captionExpanded && (
+            <Text
+              style={s.captionMore}
+              onPress={() => setCaptionExpanded(true)}
+              accessibilityRole="button"
+            >
+              {t.home_caption_more}
+            </Text>
+          )}
+        </View>
+      )}
+
+      {commentCount > 0 && (
+        <TouchableOpacity style={s.conversation} onPress={() => onComment(post)} activeOpacity={0.7}
+          accessibilityRole="button" accessibilityLabel={commentsLabel}>
+          {commenters.length > 0 && (
+            <View pointerEvents="none">
+              <AvatarStack users={commenters} size={STACK_AVATAR} max={3} overlap={spacing.sm} />
+            </View>
+          )}
+          <Text style={s.conversationText}>{commentsLabel}</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* O Círculo é a única publicação que traz uma segunda linha de autoria:
+          o cabeçalho diz quem publicou, esta diz quem lá esteve. */}
+      {isCircle && participants.length > 0 && (
+        <View style={s.together}>
+          <AvatarStack users={participants} size={STACK_AVATAR} max={3} overlap={spacing.sm} />
+          <Text style={s.togetherText} numberOfLines={1}>
+            {t.home_captured_together} · {peopleLabel}
+          </Text>
+          <HomeCircleJoin post={post} />
+        </View>
+      )}
+
+      <View style={s.separator} />
     </View>
   )
 }
@@ -392,187 +420,93 @@ function HomeFeedItem({
 export default memo(HomeFeedItem)
 
 const s = StyleSheet.create({
-  // Sem fundo, sem contorno, sem sombra: o que separa uma publicação da seguinte
-  // é espaço. Um cartão aqui transformava a página numa lista de caixas.
-  item: { paddingBottom: spacing.lg },
+  // O fim de uma publicação: 12 de ar depois da última linha e o fio. É a única
+  // separação que a página usa — não há cartão, sombra nem fundo alternado.
+  item: { paddingBottom: spacing.sm2 },
+  separator: { marginTop: spacing.sm2, height: StyleSheet.hairlineWidth, backgroundColor: pageLine },
 
-  author: {
-    // Acompanha o avatar em vez de reservar altura própria: com 56 fixos sobrava
-    // ar em cima e em baixo da linha inteira, e era esse ar que empurrava tudo.
-    minHeight: AVATAR + spacing.sm2,
-    paddingHorizontal: SIDE,
+  // ── Cabeçalho da publicação ───────────────────────────────────────────────
+  head: {
+    minHeight: HEAD_HEIGHT,
+    paddingLeft: SIDE,
+    // O menu tem um alvo de 48 à direita; encostá-lo a 16 punha a tinta muito
+    // para dentro. O recuo devolve o glifo à régua da página.
+    paddingRight: SIDE - FEED_GLYPH_INK_INSET,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: spacing.sm,
   },
-  authorOverlay: {
-    position: 'absolute',
-    zIndex: 3,
-    top: 0,
-    left: 0,
-    right: 0,
-    // Folga por `paddingTop` e não por `minHeight`. Com 64 de altura para 38 de
-    // conteúdo, o centro da linha caía 13px e levava os três pontos com ele —
-    // uma altura a mais move o centro, um padding move o bloco inteiro.
-    paddingTop: spacing.sm,
-  },
-  authorLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm2 },
-  authorText: { flex: 1, minWidth: 0 },
-  nameLine:   { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  name: {
-    flexShrink: 1,
-    color: colors.gray800,
-    fontFamily: fonts.semiBold,
-    fontSize: typography.body,
-    lineHeight: 20,
-    letterSpacing: -0.2,
-  },
-  // A sombra é a `feedTextShadow` do projecto, não uma segunda receita inventada
-  // aqui. Estava em 0.72 — um halo que se lia como mancha à volta das letras em
-  // vez de as separar da fotografia.
-  nameOnMedia: {
-    color: colors.white,
-    ...feedTextShadow,
-  },
-  time: {
-    marginTop: 1,
-    color: colors.gray500,
-    fontFamily: fonts.regular,
-    fontSize: typography.secondary,
-    lineHeight: 17,
-  },
-  timeOnMedia: {
-    color: 'rgba(255,255,255,0.88)',
-    ...feedTextShadow,
-  },
-  // Sem caixa de 44. O gatilho do menu já traz `hitSlop` de 9 — a área tátil
-  // estava garantida — e a caixa a mais só criava vazio: a tinta do `option` tem
-  // 18.5 de 32 de altura, portanto numa caixa de 44 sobravam 14px acima e abaixo,
-  // e mais 8 de cada lado. Era isso que o fazia parecer baixo e afastado da borda.
-  //
-  // A margem negativa alinha os três pontos com a régua de 16 do ecrã: sem ela o
-  // gatilho encosta a 16 mas a tinta fica 4px mais para dentro.
-  /**
-   * Os três pontos alinham com o NOME, não com o centro da linha.
-   *
-   * O bloco da esquerda tem duas linhas — nome (20) e hora (17) — e o menu tem
-   * 34. Centrados um contra o outro, os pontos aterram entre as duas linhas, uns
-   * 9px abaixo do nome. Lê-se como se estivessem caídos, porque o olho compara-os
-   * com o nome e não com o miolo do bloco.
-   *
-   * `flex-start` mais um recuo de 4: o menu deixa de acompanhar o centro e passa
-   * a acompanhar a primeira linha, nas duas variantes — sobre branco e sobre a
-   * fotografia — porque agora as duas têm a mesma geometria.
-   */
-  optionsHit: { alignSelf: 'flex-start', marginTop: -4, marginRight: -4 },
+  headLeft: { flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.sm2 },
+  headText: { flex: 1, minWidth: 0 },
+  nameLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  name: { flexShrink: 1, color: pageInk.primary, letterSpacing: -0.2, ...homeType.username },
+  context: { color: pageInk.secondary, marginTop: 1, ...homeType.context },
+  option: { width: OPTION_TARGET, alignItems: 'flex-end', justifyContent: 'center' },
 
-  // O contorno é fino e cinzento: fecha o objecto sem o transformar num botão.
-  // A cor é a mesma dos controlos — na página branca não há duas famílias de
-  // cinzento, há uma.
-  circleCard: {
-    marginHorizontal: SIDE,
-    paddingVertical: spacing.sm2,
-    borderWidth: CARD_BORDER,
-    borderColor: FRAME_INK,
-    borderRadius: CARD_RADIUS,
-  },
-  content: { width: '100%', alignItems: 'center' },
-  contentInset: { marginTop: spacing.xs2, paddingHorizontal: SIDE },
-  mediaStack: { ...StyleSheet.absoluteFillObject },
-  // zIndex 1: por cima da mídia, por baixo das acções (2) e do autor (3).
-  mediaTap: { ...StyleSheet.absoluteFillObject, zIndex: 1 },
-  frame: {
-    position: 'relative',
-    backgroundColor: colors.gray100,
-  },
+  // ── Mídia ─────────────────────────────────────────────────────────────────
+  frame: { position: 'relative', backgroundColor: pageSkeleton },
   media: { width: '100%', height: '100%' },
-  videoActionLayer: {
-    position: 'absolute',
-    zIndex: 2,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 52,
-    justifyContent: 'flex-end',
-  },
-  videoActionGradient: {
-    ...StyleSheet.absoluteFillObject,
-    opacity: 0.78,
-  },
-  // A marca de reprodução é um disco escuro translúcido e não um botão: diz que
-  // há vídeo sem reclamar o lugar do conteúdo.
+  mediaTap: { ...StyleSheet.absoluteFillObject, zIndex: 1 },
   playMark: {
-    position: 'absolute',
-    alignSelf: 'center',
-    top: '50%',
-    marginTop: -26,
-    width: 52,
-    height: 52,
+    position: 'absolute', left: '50%', top: '50%',
+    marginLeft: -PLAY_DISC / 2, marginTop: -PLAY_DISC / 2,
+    width: PLAY_DISC, height: PLAY_DISC, borderRadius: PLAY_DISC / 2,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.28)',
+  },
+  circleStage: { alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.sm },
+  textStage: { minHeight: 260, paddingHorizontal: spacing.xl, paddingVertical: spacing.xl, justifyContent: 'center' },
+  textPost: { color: feedInk.primary, letterSpacing: -0.44 },
+
+  // ── Falha de mídia ────────────────────────────────────────────────────────
+  // A publicação não desaparece: quem escreveu e o que escreveu continuam lá, e
+  // só o quadro troca por um lugar de recuperação.
+  failure: {
+    backgroundColor: pageSkeleton,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 26,
-    backgroundColor: 'rgba(0,0,0,0.42)',
+    gap: spacing.sm,
   },
-
-  caption: {
-    paddingHorizontal: SIDE,
-    color: colors.gray800,
-    fontFamily: fonts.regular,
-    fontSize: typography.secondary,
-    lineHeight: 19,
+  failureText: { color: pageInk.secondary, textAlign: 'center', ...homeType.caption },
+  retry: {
+    minHeight: 44, justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    borderRadius: 11,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: pageLine,
+    backgroundColor: colors.white,
   },
-  captionAfterVideo: { marginTop: spacing.sm },
+  retryText: { color: pageDanger, ...homeType.username },
 
+  // ── Acções ────────────────────────────────────────────────────────────────
+  // A caixa de 32 traz 5,5 de vazio à volta do desenho: descontá-lo à margem põe
+  // a TINTA do primeiro glifo na mesma régua do nome e da legenda, em vez da
+  // borda invisível da caixa.
   actions: {
-    paddingHorizontal: SIDE,
-    minHeight: 44,
+    paddingHorizontal: SIDE - FEED_GLYPH_INK_INSET,
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm2,
   },
-  actionsOnVideo: {
-    minHeight: 44,
+
+  // ── Legenda e conversa ────────────────────────────────────────────────────
+  captionWrap: { paddingHorizontal: SIDE },
+  // 0/0 e não SIDE/SIDE: o Yoga posiciona um filho absoluto dentro da caixa
+  // de conteúdo do pai, por isso a margem lateral já está descontada. Medir
+  // numa largura menor que a real dava linhas a mais e um `mais` a mentir.
+  captionMeasure: { position: 'absolute', left: 0, right: 0, opacity: 0 },
+  caption: { color: pageInk.primary, ...homeType.caption },
+  captionAuthor: { color: pageInk.primary, ...homeType.captionAuthor },
+  captionMore: { marginTop: 2, color: pageInk.muted, ...homeType.caption },
+  conversation: {
+    marginHorizontal: SIDE, minHeight: 44,
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
   },
+  conversationText: { flexShrink: 1, color: pageInk.secondary, ...homeType.caption },
   together: {
-    marginTop: spacing.sm,
-    paddingHorizontal: SIDE,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm2,
+    marginHorizontal: SIDE, minHeight: 32,
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm2,
   },
-  togetherTitle: {
-    color: colors.gray800,
-    fontFamily: fonts.semiBold,
-    fontSize: typography.body,
-    lineHeight: 20,
-    letterSpacing: -0.2,
-  },
-  togetherSub: {
-    color: colors.gray500,
-    fontFamily: fonts.regular,
-    fontSize: typography.secondary,
-    lineHeight: 17,
-  },
-  actionHit: {
-    minWidth: 48,
-    height: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    gap: spacing.xs2,
-  },
-  actionMetric: {
-    color: colors.gray600,
-    fontFamily: fonts.medium,
-    fontSize: typography.secondary,
-    lineHeight: 17,
-    fontVariant: ['tabular-nums'],
-  },
-  actionMetricOnVideo: {
-    color: colors.white,
-    textShadowColor: 'rgba(0,0,0,0.34)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
+  togetherText: { flex: 1, color: pageInk.secondary, ...homeType.context },
 })

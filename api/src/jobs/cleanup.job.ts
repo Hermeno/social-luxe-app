@@ -5,6 +5,7 @@ import { deleteFromCloudinary } from '../utils/cloudinary.util'
 import { deleteFromR2, isR2Url } from '../utils/r2.util'
 import { expireStaleHalves } from '../services/half.service'
 import { closeStaleSessions } from '../services/circleSession.service'
+import { sweepJoinRequests } from '../services/circleMoment.service'
 
 async function deleteMediaUrl(url: string | null): Promise<void> {
   if (!url) return
@@ -151,11 +152,21 @@ async function processStaleCircles() {
   }
 }
 
+// Pedidos para entrar num Círculo que o anfitrião nunca decidiu: a fotografia
+// não chegou a entrar em nenhum post e pode sair.
+async function processStaleJoinRequests() {
+  const urls = await sweepJoinRequests()
+  for (const url of urls) {
+    await deleteMediaUrl(url).catch(() => {})
+  }
+}
+
 async function runCleanup() {
   await processExpiredPosts().catch((err) => console.error('[Cron] post cleanup failed:', err))
   await processExpiredStories().catch((err) => console.error('[Cron] story cleanup failed:', err))
   await expireStaleHalves().catch((err) => console.error('[Cron] half cleanup failed:', err))
   await processStaleCircles().catch((err) => console.error('[Cron] circle cleanup failed:', err))
+  await processStaleJoinRequests().catch((err) => console.error('[Cron] circle join cleanup failed:', err))
 }
 
 export function startCleanupJob() {

@@ -12,6 +12,7 @@ import { useSocialPreviewStore } from './socialPreview.store'
 import { useMessagesStore } from './messages.store'
 import { useProfileUiStore } from './profileUi.store'
 import { useMessageBadgeStore } from './messageBadge.store'
+import { useCircleJoinStore } from './circleJoin.store'
 import { clearAllLocalData } from '../db/database'
 import { nukeMediaCache } from '../db/mediaCache'
 
@@ -41,6 +42,7 @@ function resetSessionStores(nextOwnerId: string | null = null): void {
   useMessagesStore.getState().reset()
   useProfileUiStore.getState().reset()
   useMessageBadgeStore.getState().setTotalUnread(0)
+  useCircleJoinStore.getState().reset()
 }
 
 async function clearAccountCaches(): Promise<void> {

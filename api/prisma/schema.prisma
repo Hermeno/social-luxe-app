@@ -133,6 +133,8 @@ model User {
   circleMemberships    CircleSessionMember[]  @relation("CircleMember")
   circleRoundsOwned    CircleSessionRound[]   @relation("CircleRoundOwner")
   circleCaptures       CircleSessionCapture[] @relation("CircleCaptureAuthor")
+  circleJoinsRequested CircleJoinRequest[]    @relation("CircleJoinRequester")
+  circleJoinsToReview  CircleJoinRequest[]    @relation("CircleJoinHost")
 }
 
 // ─── Post ────────────────────────────────────────────────────────────────────
@@ -157,6 +159,10 @@ model Post {
   // Idempotência da publicação do Círculo: publisher + ronda. Reposts não
   // copiam esta chave, pois são outra operação.
   circlePublicationKey String?   @unique
+  // O Círculo a que este post pertence (= collectiveMoment.id). Cada
+  // participante publica a sua cópia; é por aqui que se encontram todas quando
+  // alguém entra depois ou retira a própria fotografia. Reposts levam-no também.
+  circleMomentId       String?
   mediaType            MediaType
   caption              String?
   bgColor              String?
@@ -182,6 +188,8 @@ model Post {
   reactions   Reaction[]
   extendVotes PostExtendVote[]
   half        Half?
+
+  @@index([circleMomentId])
 }
 
 // ─── Metade ───────────────────────────────────────────────────────────────────
@@ -785,6 +793,8 @@ model CircleSessionCapture {
   photoWidth  Int?
   photoHeight Int?
   overlays    Json?
+  // Entrou depois do disparo, por pedido aceite pelo anfitrião.
+  late        Boolean  @default(false)
   createdAt   DateTime @default(now())
 
   round CircleSessionRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
@@ -793,6 +803,36 @@ model CircleSessionCapture {
   @@unique([roundId, userId, slot])
   @@index([userId, createdAt])
   @@index([mediaUrl])
+}
+
+enum CircleJoinStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+// Alguém que não esteve no disparo pede para pôr uma fotografia num Círculo já
+// publicado. A fotografia fica aqui, fora do Círculo, até o anfitrião decidir;
+// aceite, entra em todos os posts do momento marcada como tardia.
+model CircleJoinRequest {
+  id          String           @id @default(cuid())
+  // = collectiveMoment.id dos posts do Círculo (o id da ronda).
+  momentId    String
+  hostId      String
+  requesterId String
+  mediaUrl    String
+  photoWidth  Int?
+  photoHeight Int?
+  status      CircleJoinStatus @default(PENDING)
+  createdAt   DateTime         @default(now())
+  decidedAt   DateTime?
+
+  host      User @relation("CircleJoinHost", fields: [hostId], references: [id], onDelete: Cascade)
+  requester User @relation("CircleJoinRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+
+  @@index([hostId, status])
+  @@index([requesterId, status])
+  @@index([momentId, requesterId])
 }
 
 // ─── PasswordReset ────────────────────────────────────────────────────────────
