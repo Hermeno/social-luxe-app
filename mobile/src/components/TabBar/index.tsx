@@ -1,9 +1,8 @@
 import React, { memo, useRef, useEffect, useLayoutEffect, useState } from 'react'
 import { View, TouchableOpacity, StyleSheet, Text, Animated, Easing } from 'react-native'
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
-import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { brandPalette, colors, gradients, radius, spacing } from '../../theme'
+import { colors, radius, spacing } from '../../theme'
 import {
   actionInkRest, FEED_CONTENT_MAX_WIDTH, feedIcon, feedInk, feedType, pageInk,
 } from '../../screens/FeedScreen/tokens'
@@ -24,7 +23,6 @@ import {
   tabBarBottomInset,
 } from './layout'
 import useReducedMotionPreference from '../../hooks/useReducedMotionPreference'
-import useComposerReveal from './useComposerReveal'
 import useNavSkin from './useNavSkin'
 
 // Os separadores partilham a caixa de 26px. O desenho em 24×24 guarda
@@ -36,30 +34,27 @@ type NavGlyphSpec =
 const NAV_ICON_SIZE = 26
 
 /**
- * As três formas que uma célula da barra pode tomar.
- *
- * Uma barra de navegação bem desenhada não é cinco cópias do mesmo botão. São
- * três papéis diferentes, e cada um diz "estás aqui" da maneira que a sua forma
- * permite — é isso que a separa de um modelo comprado feito:
+ * As duas formas que uma célula da barra pode tomar.
  *
  *   glifo     um desenho de traço. Muda de tinta e acende um ponto por baixo.
- *   disco     o Círculo, ao meio. É a única cor da barra e não precisa de mais
- *             nada: nada mais no ecrã é colorido, por isso já se vê sempre.
  *   retrato   a fotografia de quem está a usar a app. Acende um anel à volta —
  *             um ponto por baixo de um anel diria a mesma coisa duas vezes.
  *
- * As três medidas abaixo são o que mantém os três papéis à mesma escala óptica:
- * um traço de 26 tem cerca de 19 de tinta, e um disco cheio pesa muito mais por
- * ponto do que um contorno. Por isso o retrato é menor que o glifo, e o disco,
- * que é o único que se quer que salte, é maior que ambos.
+ * O Círculo esteve aqui como um terceiro papel: um disco de 42 com o gradiente
+ * da marca, o único objecto colorido da barra. Saiu a pedido. A fila passa a ser
+ * uma só família de traços, e o Círculo distingue-se pelo desenho do próprio
+ * glifo — um círculo com um `+` — e não pela cor.
+ *
+ * As medidas abaixo são o que mantém os dois papéis à mesma escala óptica: um
+ * traço de 26 tem cerca de 19 de tinta, e uma fotografia cheia pesa mais por
+ * ponto do que um contorno. Por isso o retrato é menor que o glifo.
  */
-const NAV_DISC = 42
-const NAV_DISC_GLYPH = 22
+/** A caixa que se move ao toque, igual em todas as células. */
+const NAV_TOUCH_BOX = 38
+
 const NAV_AVATAR = 24
 const NAV_AVATAR_RING = 1.5
 const NAV_AVATAR_GAP = 2
-/** A caixa da célula do meio; as outras ficam na de 38. */
-const NAV_DISC_BOX = 44
 
 const NAV_GLYPHS: Record<string, NavGlyphSpec> = {
   home:    { family: 'ui', icon: 'home' },
@@ -132,38 +127,6 @@ const NavigationGlyph = memo(function NavigationGlyph({
 })
 
 /**
- * O Círculo, ao meio, dentro do disco da marca.
- *
- * É o único sítio da app onde a assinatura cromática aparece cheia, e é
- * deliberado: a barra inteira é preta, branca e cinzenta, por isso um só objecto
- * colorido não compete com nada — puxa o olho para a única coisa da Luxey que
- * não existe em mais lado nenhum, e que precisa de outra pessoa para acontecer.
- *
- * Não leva marca de selecção. Já é o objecto mais visível da fila em qualquer
- * estado, e acrescentar-lhe um ponto seria dizer duas vezes o que a cor diz.
- * Para quem lê o ecrã com o leitor de voz nada se perde: o estado continua a ser
- * anunciado pelo botão que o embrulha.
- */
-const NavigationDisc = memo(function NavigationDisc({ glyph }: { glyph: NavGlyph }) {
-  return (
-    // Duas caixas e não uma: no iOS um `overflow: hidden` recorta também a
-    // sombra, e o disco perdia o halo. De fora fica quem a projecta, de dentro
-    // quem recorta o gradiente.
-    <View style={s.navDiscWell} pointerEvents="none">
-      <View style={s.navDisc}>
-        <LinearGradient
-          colors={gradients.brand}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <NavIconArt glyph={glyph} size={NAV_DISC_GLYPH} color={colors.white} />
-      </View>
-    </View>
-  )
-})
-
-/**
  * A última célula: quem está a usar a app.
  *
  * Com fotografia, é a fotografia — a barra deixa de ter um boneco genérico onde
@@ -226,15 +189,9 @@ const NavigationPortrait = memo(function NavigationPortrait({
  */
 const NAV_EDGE = 'rgba(17,17,17,0.07)'
 
-/** Largura que o compositor cede por cada atalho revelado. */
-const REVEAL_SLOT = 46
-// Mantém as caixas existentes dos atalhos do compositor.
-const SZ_REVEAL_CIRCLE = 21.39
-const SZ_REVEAL_PLUS = 24.86
-
 function MotionTabButton({
   children, selected, onPress, label, valueText,
-  pulseSignal = 0, reduceMotion, role = 'tab', box = 38,
+  pulseSignal = 0, reduceMotion, role = 'tab',
 }: {
   children: React.ReactNode
   selected: boolean
@@ -244,8 +201,6 @@ function MotionTabButton({
   pulseSignal?: number
   reduceMotion: boolean
   role?: 'tab' | 'button'
-  /** Lado da caixa que se move ao toque. Só o disco do meio pede mais que 38. */
-  box?: number
 }) {
   const scale = useRef(new Animated.Value(1)).current
   const pulse = useRef(new Animated.Value(0)).current
@@ -303,9 +258,9 @@ function MotionTabButton({
         style={[
           s.navIconMotion,
           {
-            width: box,
-            height: box,
-            borderRadius: box / 2,
+            width: NAV_TOUCH_BOX,
+            height: NAV_TOUCH_BOX,
+            borderRadius: NAV_TOUCH_BOX / 2,
             opacity: pulse.interpolate({ inputRange: [0, 0.42, 1], outputRange: [1, 0.78, 1] }),
             transform: [
               { scale },
@@ -391,19 +346,11 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
   const bumpHomeTap   = useFeedStore((s) => s.bumpHomeTap)
   const homeTap       = useFeedStore((s) => s.homeTap)
   const commentTarget = useFeedStore((s) => s.activeCommentTarget)
-  // Só vale na feed: nenhum outro separador recolhe a navegação.
-  const immersive = useFeedStore((s) => s.immersive)
   const feedInviteActive = useFeedStore((s) => s.feedInviteActive)
   const requestComments = useFeedStore((s) => s.requestComments)
   const clearFocusedPost = useFeedStore((s) => s.clearFocusedPost)
   const currentUser   = useAuthStore((s) => s.user)
   const barVisibility = useRef(new Animated.Value(1)).current
-  const commentScale = useRef(new Animated.Value(1)).current
-  // 0 = barra normal · 1 = só o campo de comentar, de margem a margem.
-  const collapse = useRef(new Animated.Value(0)).current
-  // A face clicável muda apenas no fim do crossfade. Assim nunca há um
-  // controlo quase invisível a receber o toque destinado ao que ainda se vê.
-  const [interactiveFace, setInteractiveFace] = useState<'navigation' | 'composer'>('navigation')
 
   const activeRoute = state.routes[state.index]
   const activeTab  = activeRoute.name
@@ -478,87 +425,8 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
     ? `${totalUnread} ${totalUnread === 1 ? t.nav_unread_message : t.nav_unread_messages}`
     : undefined
 
-  // A Feed mantém uma stage de altura fixa: cinco controlos iguais dão lugar ao
-  // compositor sem alterar a geometria reservada pela mídia e pelo scrubber.
-  // Na imersiva a barra é sempre o campo — nunca navegação, nem no primeiro vídeo
-  // aberto. Antes dependia de `immersive`, que só ligava depois de a pessoa
-  // deslizar, e por isso o primeiro post abria com os separadores por baixo.
-  // A saída dali é o `←` do cabeçalho, não a barra.
-  //
-  // A pausa do Círculo não passa por aqui: tem a sua própria face
-  // (`showFeedInviteCta`) que substitui a barra inteira.
-  const collapsed = onFeed
-  useEffect(() => {
-    // Outra aba nunca herda um frame transparente/recolhido da Feed.
-    if (!onFeed) {
-      collapse.stopAnimation()
-      collapse.setValue(0)
-      setInteractiveFace('navigation')
-      return
-    }
-    if (reduceMotion) {
-      collapse.stopAnimation()
-      collapse.setValue(collapsed ? 1 : 0)
-      setInteractiveFace(collapsed ? 'composer' : 'navigation')
-      return
-    }
-    collapse.stopAnimation()
-    Animated.timing(collapse, {
-      toValue: collapsed ? 1 : 0,
-      duration: 220,
-      easing: Easing.out(Easing.cubic),
-      // A cor da barra e a margem do compositor acompanham esta transição.
-      useNativeDriver: false,
-    }).start(({ finished }) => {
-      if (finished) setInteractiveFace(collapsed ? 'composer' : 'navigation')
-    })
-  }, [collapsed, collapse, onFeed, reduceMotion])
-
-  // ── Atalhos que o compositor revela de tempos a tempos ────────────────────
-  // A largura é o produto de um só valor animado, para os dois níveis usarem a
-  // mesma curva: abrir para um atalho e abrir para dois é o mesmo gesto, com
-  // amplitude diferente.
-  const [composerBusy, setComposerBusy] = useState(false)
-  const revealLevel = useComposerReveal({
-    active: onFeed && interactiveFace === 'composer',
-    busy: composerBusy,
-    reduceMotion,
-  })
-  const revealWidth = useRef(new Animated.Value(0)).current
-
-  useEffect(() => {
-    const target = revealLevel * REVEAL_SLOT
-    revealWidth.stopAnimation()
-    if (reduceMotion) { revealWidth.setValue(target); return }
-    Animated.timing(revealWidth, {
-      toValue: target,
-      // Longo de propósito. A abertura não responde a nenhum toque — ninguém
-      // está à espera dela — por isso pode demorar o tempo de se ler como
-      // movimento em vez de aparecer como um salto.
-      duration: revealLevel === 0 ? 340 : 420,
-      easing: revealLevel === 0 ? Easing.inOut(Easing.cubic) : Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start()
-  }, [revealLevel, reduceMotion, revealWidth])
-
-  const navigationInteractive = !onFeed || interactiveFace === 'navigation'
-  const composerInteractive = onFeed && interactiveFace === 'composer'
-
-  function animateCommentField(pressed: boolean) {
-    if (reduceMotion) return
-    Animated.spring(commentScale, {
-      toValue: pressed ? 0.975 : 1,
-      speed: pressed ? 38 : 24,
-      bounciness: pressed ? 2 : 7,
-      useNativeDriver: true,
-    }).start()
-  }
-
-  useEffect(() => {
-    if (!reduceMotion) return
-    commentScale.stopAnimation()
-    commentScale.setValue(1)
-  }, [commentScale, reduceMotion])
+  // Na imersiva a barra mantém apenas o campo. A pausa do Círculo continua a
+  // usar a sua própria chamada para ação, sem alterar os outros separadores.
 
   function goToOwnProfile() {
     const route = state.routes.find((item) => item.name === 'Profile')
@@ -662,9 +530,14 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
       label={t.feed_top_circle}
       selected={onCircle}
       reduceMotion={reduceMotion}
-      box={NAV_DISC_BOX}
     >
-      <NavigationDisc glyph="circle" />
+      <NavigationGlyph
+        glyph="circle"
+        selected={onCircle}
+        activeColor={iconActive}
+        inactiveColor={iconInactv}
+        reduceMotion={reduceMotion}
+      />
     </MotionTabButton>
   )
 
@@ -703,11 +576,16 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
         style={[
           s.bar,
           {
+            paddingTop: onFeed ? 0 : TAB_BAR_TOP_GAP,
             paddingBottom: tabBarBottomInset(bottom),
             // Faixa de margem a margem. O `paddingBottom` da safe area entra
             // dentro dela, por isso a altura toda — do topo da linha até ao
             // fundo do ecrã — toma a cor da pele.
-            backgroundColor: showFeedInviteCta || clear ? 'transparent' : '#FFFFFF',
+            // Na imersiva a faixa inteira é o campo de comentar, safe area
+            // incluída: a cor vem do token e de mais nenhum sítio.
+            backgroundColor: onFeed && !showFeedInviteCta
+              ? colors.commentField
+              : showFeedInviteCta || clear ? 'transparent' : '#FFFFFF',
             // O fio que separa a barra do conteúdo.
             //
             // Uma faixa branca sobre uma página branca não tem contorno nenhum:
@@ -716,7 +594,7 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
             // objecto pousado por cima. Uma linha de meio pixel a 7% chega — mais
             // do que isso vira régua, e a régua é que faz uma app parecer um
             // modelo. Sobre fundo escuro não existe: lá o contraste já separa.
-            borderTopWidth: showFeedInviteCta || clear ? 0 : StyleSheet.hairlineWidth,
+            borderTopWidth: onFeed || showFeedInviteCta || clear ? 0 : StyleSheet.hairlineWidth,
             borderTopColor: NAV_EDGE,
           },
         ]}
@@ -742,130 +620,17 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
           </View>
         ) : onFeed ? (
           <View style={s.feedStage}>
-            {/* Uma única fila, cinco células iguais. Nenhum subgrupo pode
-                introduzir uma largura mínima ou um intervalo diferente. */}
-            <Animated.View
-              style={[
-                s.feedNavigationFace,
-                {
-                  opacity: collapse.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
-                  transform: [{
-                    translateY: collapse.interpolate({ inputRange: [0, 1], outputRange: [0, 8] }),
-                  }],
-                },
-              ]}
-              pointerEvents={navigationInteractive ? 'auto' : 'none'}
-              accessibilityElementsHidden={!navigationInteractive}
-              importantForAccessibility={navigationInteractive ? 'auto' : 'no-hide-descendants'}
+            <TouchableOpacity
+              style={s.commentField}
+              onPress={() => commentTarget && requestComments(commentTarget.postId)}
+              activeOpacity={0.86}
+              disabled={!commentTarget}
+              accessibilityRole="button"
+              accessibilityLabel={commentLabel}
+              accessibilityState={{ disabled: !commentTarget }}
             >
-              {/* A cápsula ocupa exactamente o rectângulo do campo de comentar:
-                  mesma altura, mesmo raio, mesma margem. No crossfade lê-se como
-                  um só objecto a trocar de conteúdo, não como duas barras. */}
-              <View style={[s.navShell, !clear && s.navShellPaper]}>
-                {primaryTabs}
-              </View>
-            </Animated.View>
-
-            <Animated.View
-              style={[
-                s.feedComposerFace,
-                {
-                  opacity: collapse,
-                  paddingHorizontal: collapse.interpolate({ inputRange: [0, 1], outputRange: [0, 14] }),
-                  transform: [{
-                    translateY: collapse.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }),
-                  }],
-                },
-              ]}
-              pointerEvents={composerInteractive ? 'auto' : 'none'}
-              accessibilityElementsHidden={!composerInteractive}
-              importantForAccessibility={composerInteractive ? 'auto' : 'no-hide-descendants'}
-            >
-              <Animated.View style={[s.composerMotion, { transform: [{ scale: commentScale }] }]}>
-                <TouchableOpacity
-                  style={[s.commentField, !commentTarget && s.commentFieldDisabled]}
-                  onPress={() => commentTarget && requestComments(commentTarget.postId)}
-                  onPressIn={() => { setComposerBusy(true); animateCommentField(true) }}
-                  onPressOut={() => { setComposerBusy(false); animateCommentField(false) }}
-                  activeOpacity={0.9}
-                  disabled={!commentTarget}
-                  accessibilityRole="button"
-                  accessibilityLabel={commentLabel}
-                  accessibilityState={{ disabled: !commentTarget }}
-                >
-                  <Text style={s.commentText} numberOfLines={1}>{commentLabel}</Text>
-                </TouchableOpacity>
-
-                {/* Os atalhos vivem numa caixa que abre da direita para a
-                    esquerda. `overflow: hidden` corta-os enquanto o espaço
-                    ainda não existe, por isso não há um instante em que
-                    apareçam esmagados — é o que evita o piscar. */}
-                <Animated.View style={[s.revealSlot, { width: revealWidth }]}>
-                  <View style={s.revealRow}>
-                    {/* O segundo atalho é o que fica mais longe do campo: no
-                        nível 1 é ele que está fora da janela, e no nível 2
-                        entra sem o primeiro se mexer. */}
-                    <TouchableOpacity
-                      style={s.revealBtn}
-                      onPress={() => goTo('Create')}
-                      onPressIn={() => setComposerBusy(true)}
-                      onPressOut={() => setComposerBusy(false)}
-                      activeOpacity={0.7}
-                      accessibilityRole="button"
-                      accessibilityLabel={t.feed_create}
-                    >
-                      <Animated.View
-                        style={{
-                          opacity: revealWidth.interpolate({
-                            inputRange: [REVEAL_SLOT + 8, REVEAL_SLOT * 2 - 8],
-                            outputRange: [0, 1],
-                            extrapolate: 'clamp',
-                          }),
-                          transform: [{
-                            translateX: revealWidth.interpolate({
-                              inputRange: [REVEAL_SLOT, REVEAL_SLOT * 2],
-                              outputRange: [10, 0],
-                              extrapolate: 'clamp',
-                            }),
-                          }],
-                        }}
-                      >
-                        <Icon name="plus" size={SZ_REVEAL_PLUS} color={iconActive} />
-                      </Animated.View>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={s.revealBtn}
-                      onPress={() => goTo('Circle')}
-                      onPressIn={() => setComposerBusy(true)}
-                      onPressOut={() => setComposerBusy(false)}
-                      activeOpacity={0.7}
-                      accessibilityRole="button"
-                      accessibilityLabel={t.feed_top_circle}
-                    >
-                      <Animated.View
-                        style={{
-                          opacity: revealWidth.interpolate({
-                            inputRange: [8, REVEAL_SLOT - 8],
-                            outputRange: [0, 1],
-                            extrapolate: 'clamp',
-                          }),
-                          transform: [{
-                            translateX: revealWidth.interpolate({
-                              inputRange: [0, REVEAL_SLOT],
-                              outputRange: [10, 0],
-                              extrapolate: 'clamp',
-                            }),
-                          }],
-                        }}
-                      >
-                        <Icon name="circle-add" size={SZ_REVEAL_CIRCLE} color={iconActive} />
-                      </Animated.View>
-                    </TouchableOpacity>
-                  </View>
-                </Animated.View>
-              </Animated.View>
-            </Animated.View>
+              <Text style={s.commentText} numberOfLines={1}>{commentLabel}</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <View style={[s.navShell, !clear && s.navShellPaper]}>{primaryTabs}</View>
@@ -874,8 +639,6 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
     </Animated.View>
   )
 }
-
-/** Um degrau acima do fundo da Feed — lê-se como campo sem virar cartão. */
 
 const s = StyleSheet.create({
   root: {
@@ -887,10 +650,11 @@ const s = StyleSheet.create({
     alignItems: 'center',
     paddingTop: TAB_BAR_TOP_GAP,
   },
+  // A única fila da imersiva preenche a faixa branca até às bordas do ecrã.
   feedStage: {
     flex: 1,
-    height: TAB_BAR_STAGE_HEIGHT,
-    position: 'relative',
+    height: FEED_COMPOSER_HEIGHT,
+    alignItems: 'stretch',
   },
   feedInviteStage: {
     flex: 1,
@@ -923,11 +687,6 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  feedNavigationFace: {
-    ...StyleSheet.absoluteFillObject,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   // A navegação deixou de ser uma cápsula: é a própria faixa branca, de margem
   // a margem. Sem raio, sem borda e sem sombra.
   // Uma só geometria, em todos os ecrãs.
@@ -948,67 +707,19 @@ const s = StyleSheet.create({
     alignItems: 'stretch',
   },
   navShellPaper: { backgroundColor: '#FFFFFF' },
-  feedComposerFace: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  // 5:4 — a mesma proporção de sempre entre o bloco social e as três tabs, só
-  // que agora dentro da mesma borda em vez de dois campos encostados.
-  composerMotion: {
-    width: '100%',
-    height: FEED_COMPOSER_HEIGHT,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  // A janela que abre. Alinhada à direita para o conteúdo entrar por aí: com
-  // `flex-start` os atalhos deslizariam a partir do campo, que é o contrário do
-  // que se quer — quem cede espaço é o campo, quem chega vem da borda.
-  revealSlot: {
-    height: '100%',
-    overflow: 'hidden',
-  },
-  // Absoluto e encostado à direita: assim mantém sempre a largura dos dois
-  // atalhos e é a janela que decide quanto se vê. Em fluxo normal o Yoga
-  // comprimia-o à largura do pai e os ícones encolhiam em vez de serem cortados.
-  revealRow: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: REVEAL_SLOT * 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  revealBtn: {
-    width: REVEAL_SLOT,
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  // O campo não pinta nada: a cor é da faixa que o embrulha, e assim a safe
+  // area por baixo dele nunca fica de outra cor. Aqui vive só o alvo do toque.
   commentField: {
     flex: 1,
     height: '100%',
-    flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.md2,
-    borderRadius: radius.full,
-    // Sem contorno e sem sombra: o campo é uma forma cheia e nada mais.
-    //
-    // Teve os dois. A sombra saiu primeiro — descolava o campo da barra como um
-    // cartão a flutuar, e o campo de resposta é a última coisa da Feed que deve
-    // chamar atenção. O contorno ficou a segurar sozinho, mas um fio branco a
-    // 18% sobre um preenchimento quase preto não desenha uma borda: desenha uma
-    // sujidade clara à volta dos cantos, que é exactamente o que se via.
-    //
-    // O preenchimento a 96% já se separa do gradiente da barra sem ajuda.
-    backgroundColor: colors.commentField,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
   },
-  commentFieldDisabled: { opacity: 0.54 },
   commentText: {
-    flex: 1,
     ...feedType.primary,
-    color: feedInk.muted,
+    color: colors.gray600,
+    alignSelf: 'stretch',
   },
   btn: {
     flex: 1,
@@ -1045,39 +756,6 @@ const s = StyleSheet.create({
     width: 3,
     height: 3,
     borderRadius: radius.full,
-  },
-  /**
-   * O halo por baixo do disco.
-   *
-   * Não é uma sombra de cartão — é a cor do próprio objecto a espalhar-se um
-   * pouco por baixo dele, com o desfoque largo e a opacidade baixa. Sobre papel
-   * branco é o que impede o disco de parecer um autocolante colado à faixa; a
-   * cor sólida por trás existe para o Android ter o que elevar, e nunca chega a
-   * ver-se porque o gradiente cobre-a por inteiro.
-   */
-  navDiscWell: {
-    // O mesmo ponto acima do centro geométrico onde a tinta dos glifos assenta:
-    // os cinco centros ficam numa linha só, e não quatro numa e um noutra.
-    transform: [{ translateY: -1 }],
-    width: NAV_DISC,
-    height: NAV_DISC,
-    borderRadius: NAV_DISC / 2,
-    backgroundColor: brandPalette.violet,
-    shadowColor: brandPalette.violet,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.26,
-    shadowRadius: 10,
-    elevation: 5,
-  },
-  // O disco recorta o gradiente; sem `overflow` ele pintava o quadrado inteiro
-  // por baixo do raio, e o que se via era um quadrado colorido de cantos moles.
-  navDisc: {
-    width: NAV_DISC,
-    height: NAV_DISC,
-    borderRadius: NAV_DISC / 2,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   // Caixa de borda: o anel come para dentro, por isso o vão entre ele e a
   // fotografia é exactamente `NAV_AVATAR_GAP` e não muda com o estado.

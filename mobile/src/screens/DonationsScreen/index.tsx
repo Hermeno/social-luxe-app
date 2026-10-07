@@ -4,9 +4,10 @@ import {
   ActivityIndicator, RefreshControl, Image,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import Icon from '../../components/Icon'
 import { useNavigation, useFocusEffect } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
-import { Ionicons, Feather } from '@expo/vector-icons'
+import { Ionicons } from '@expo/vector-icons'
 import { LinearGradient } from 'expo-linear-gradient'
 import * as Location from 'expo-location'
 import { brandPalette, colors, fonts, gradients } from '../../theme'
@@ -152,7 +153,9 @@ export default function DonationsScreen() {
     return (
       <View style={s.empty}>
         <LinearGradient colors={gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.emptyIcon}>
-          <Feather name="heart" size={30} color="#fff" />
+          {/* O mesmo coração do resto da app. A 30 a tinta sai igual à do
+              ícone de fora que aqui estava, por isso o tamanho não muda. */}
+          <Icon name="heart" size={30} color="#fff" />
         </LinearGradient>
         <Text style={s.emptyTitle}>
           {tab === 'mine' ? t.dn_empty_mine : t.dn_empty_nearby}

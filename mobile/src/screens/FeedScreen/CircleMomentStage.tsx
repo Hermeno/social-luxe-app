@@ -36,7 +36,7 @@ import { useCircleJoinStore } from '../../store/circleJoin.store'
 import { colors, radius, spacing } from '../../theme'
 import type { Post } from '../../types'
 import { toast } from '../../utils/toast'
-import { CIRCLE_MAX_SLOTS, CIRCLE_STAGE_WIDTH, circleClusterLayout } from '../HomeScreen/circleCluster'
+import { CIRCLE_MAX_SLOTS, circleClusterLayout } from '../HomeScreen/circleCluster'
 import {
   circlePerspectives, circleRelation, readPost, type CirclePerspective,
 } from '../HomeScreen/homePostShape'
@@ -363,20 +363,29 @@ function CircleMomentStage({
   }, [])
 
   // ── Onde a figura assenta ───────────────────────────────────────────────────
-  // A largura manda, como na Home: a figura ocupa a largura do ecrã e a altura
-  // sai da composição. Só num ecrã baixo, em que ela e o convite não caberiam
-  // entre o voltar e a coluna de acções, é que encolhe — inteira, pelo mesmo
-  // factor, sem se reorganizar.
-  const ratio = useMemo(() => (
-    shown > 0 ? circleClusterLayout(shown, CIRCLE_STAGE_WIDTH).height / CIRCLE_STAGE_WIDTH : 1
-  ), [shown])
+  // Aqui a publicação é o ecrã inteiro, e a figura enche-o: a altura livre entre
+  // o cromado do topo e a coluna de acções é o palco, e os discos espalham-se
+  // por ela. Na Home é o contrário — lá a figura fica na sua proporção natural,
+  // porque a publicação é uma entre muitas e não pode comer a página.
   const free = Math.max(0, box.height - topInset - bottomInset)
   const inviteSpace = onCreateCircle ? INVITE_GAP + INVITE_HEIGHT : 0
-  const figureWidth = Math.max(0, Math.min(box.width, (free - inviteSpace) / ratio))
-  const figureHeight = figureWidth * ratio
+  const figureWidth = box.width
+  const figureBoxHeight = Math.max(0, free - inviteSpace)
+  const layout = useMemo(
+    () => (shown > 0 && figureWidth > 0 && figureBoxHeight > 0
+      ? circleClusterLayout({
+        count: shown,
+        width: figureWidth,
+        height: figureBoxHeight,
+        seed: post.id,
+      })
+      : null),
+    [figureBoxHeight, figureWidth, post.id, shown],
+  )
+  const figureHeight = layout?.height ?? 0
   const groupTop = topInset + Math.max(0, free - figureHeight - inviteSpace) * OPTICAL_CENTRE
-  const figureLeft = (box.width - figureWidth) / 2
-  const ready = count > 0 && box.width > 0 && figureWidth > 0
+  const figureLeft = 0
+  const ready = count > 0 && box.width > 0 && figureHeight > 0
 
   const perspectiveLabel = useCallback(
     (name: string) => t.home_perspective_of.replace('{name}', name),
@@ -518,14 +527,23 @@ function CircleMomentStage({
   const origin = useMemo(() => {
     const fallback = { x: 0, y: 0, scale: 0.4 }
     if (openIndex === null || !ready) return fallback
-    const disc = circleDiscRect(count, figureWidth, openIndex)
+    const disc = circleDiscRect({
+      count,
+      width: figureWidth,
+      height: figureBoxHeight,
+      seed: post.id,
+      index: openIndex,
+    })
     if (!disc) return fallback
     return {
       x: figureLeft + disc.x + disc.d / 2 - box.width / 2,
       y: groupTop + disc.y + disc.d / 2 - box.height / 2,
       scale: disc.d / Math.max(1, Math.min(box.width, box.height)),
     }
-  }, [box.height, box.width, count, figureLeft, figureWidth, groupTop, openIndex, ready])
+  }, [
+    box.height, box.width, count, figureBoxHeight, figureLeft, figureWidth,
+    groupTop, openIndex, post.id, ready,
+  ])
 
   // O fundo não cresce: escurece no lugar, e a figura apaga-se por baixo
   // enquanto a fotografia sai do disco.
@@ -620,6 +638,7 @@ function CircleMomentStage({
             slots={shape.slots}
             people={shape.people}
             width={figureWidth}
+            height={figureBoxHeight}
             postId={post.id}
             onDark
             onSelect={open}

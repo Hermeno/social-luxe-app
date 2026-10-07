@@ -31,13 +31,19 @@ export const colors = {
   white:        '#FFFFFF',
   offWhite:     '#FAF8F6',
 
-  // Campo de comentário embutido na navigation.
+  // A faixa do campo de comentário da imersiva — e é esta linha, só esta, que
+  // lhe dá a cor.
   //
-  // É a segunda superfície da imersiva: um degrau acima de `feedSurface`, para
-  // o campo se ler como objecto pousado sobre o fundo em vez de um buraco nele.
-  // O tom é o do Feed System (#101B21); a transparência de 4% fica porque a
-  // barra atravessa mídia e um sólido cortava a fotografia a direito.
-  commentField: 'rgba(16,27,33,0.96)',
+  // Na imersiva a faixa de baixo é toda o campo, safe area incluída, por isso a
+  // barra e o campo leem os dois daqui: mudar aqui muda tudo de uma vez. Já
+  // esteve escrita à mão no estilo da barra (`#ffffff`), e aí mexer neste valor
+  // não fazia nada — o token estava órfão.
+  //
+  // Dois cuidados ao trocar: o texto do campo é cinzento escuro (`gray600`),
+  // por isso a cor tem de ficar clara o suficiente para ele se ler; e a
+  // transparência vale a pena manter, porque a faixa atravessa a fotografia e
+  // um sólido corta-a a direito.
+  commentField: 'rgba(226, 233, 237, 0.92)',
 
   // Fundo da feed principal — e SÓ da feed. É o que se vê por trás dos posts,
   // nas faixas acima e abaixo de imagens que não enchem a altura, e na tab bar

@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react'
 import {
-  View, Pressable, StyleSheet, Share, Modal, Animated, Easing, TouchableOpacity
+  View, Text, Pressable, StyleSheet, Share, Modal, Animated, Easing, TouchableOpacity, useWindowDimensions
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { colors } from '../../theme'
 import PostActionIcon from '../../components/PostActionIcon'
+import AvatarImage from '../../components/AvatarImage'
 import {
   actionInkActive, actionInkRest, feedGlyphShadow, feedIcon, feedInk, feedRail, feedTextShadow, feedType,
 } from './tokens'
@@ -12,16 +14,18 @@ import { Post, type RepostResult } from '../../types'
 import * as postService from '../../services/post.service'
 import { updateCachedPost, queueLike, enqueueSyncOp } from '../../db/database'
 import { isConnected } from '../../services/netinfo.service'
-import { formatCountOrNone } from '../../utils/count'
+import { formatCount, formatCountOrNone } from '../../utils/count'
 import ReactionPicker from '../../components/ReactionPicker'
 import SharePostSheet from '../../components/SharePostSheet'
 import { useT } from '../../i18n'
 import AuthorPostsModal from './AuthorPostsModal'
 import PostOptionsMenu from './PostOptionsMenu'
+import { FEED_ACTION_ROW_HEIGHT } from '../../components/TabBar/layout'
 
 interface Props {
   post: Post
   onCommentPress: () => void
+  onAuthorPress?: () => void
   liked?: boolean
   onLikeChange?: (liked: boolean) => void
   onRepostChange?: (result: RepostResult) => void
@@ -33,8 +37,10 @@ interface Props {
   onOptionsBlockingChange?: (open: boolean) => void
   isActive?: boolean
   reduceMotion?: boolean
-  /** Caixa dos ícones; o desenho é limitado a 28px, como na Home. */
+  /** Caixa dos ícones; a linha da imersiva ajusta o glifo separadamente. */
   iconSize?: number
+  /** Só a célula da Feed imersiva usa a fila inferior. O visualizador mantém a coluna. */
+  horizontal?: boolean
   /**
    * Post do Círculo. A coluna encolhe: fica o gosto, o comentário e o menu.
    *
@@ -44,24 +50,16 @@ interface Props {
    * discordar.
    */
   isCircle?: boolean
-  /** Distância ao fundo da coluna de ações. Sobrepõe o valor por defeito para
-   *  a coluna assentar sobre o vídeo (que não vai até ao fundo do ecrã). */
+  /** Distância ao fundo: vídeo no visualizador, compositor na imersiva. */
   bottomOffset?: number
 }
 
 /**
  * A caixa de 32px mantém os centros e contadores na mesma grelha da Home.
- * PostActionIcon centra o desenho de 28px; os SVGs definem as proporções entre ícones.
+ * PostActionIcon centra o desenho de 28px na coluna e de 26px na linha da imersiva.
  */
 const DEFAULT_RAIL_ICON_SIZE = feedIcon.action
-
-/**
- * Quantas acções a coluna tem num Círculo: gostar, comentar e o menu.
- *
- * Exportado para a figura do Círculo saber até onde a coluna sobe. Se uma
- * acção voltar a entrar ou sair do ramo `isCircle` abaixo, é aqui que muda.
- */
-export const CIRCLE_RAIL_ITEMS = 3
+const IMMERSIVE_GLYPH_SIZE = 26
 
 type HeartP = {
   id:  number
@@ -74,11 +72,8 @@ type HeartP = {
 /**
  * O contador de uma acção — ou nada, quando ainda não há nada para contar.
  *
- * Um "0" por baixo de cada ícone não informa: diz que a contagem existe e está
- * vazia, o que o próprio ícone apagado já dizia. Quatro zeros em coluna num post
- * acabado de publicar leem-se como um formulário por preencher. Devolvendo
- * `undefined`, a `RailAction` não desenha texto nenhum — e o `metricSlot`
- * mantém a altura, para os ícones não saltarem quando o primeiro número chega.
+ * A coluna do visualizador continua a ocultar zeros e a reservar a caixa abaixo
+ * do glifo. Na linha da imersiva, o total aparece sempre ao lado direito.
  */
 interface RailActionProps {
   label: string
@@ -92,11 +87,15 @@ interface RailActionProps {
   reduceMotion: boolean
   /** Desliga o encolher do toque. Só o gosto o usa — ver `burstHearts`. */
   noPressScale?: boolean
+  horizontal?: boolean
+  compact?: boolean
+  circle?: boolean
 }
 
 function RailAction({
   label, count, selected, onPress, onLongPress, children,
-  entry, order, reduceMotion, noPressScale
+  entry, order, reduceMotion, noPressScale,
+  horizontal = false, compact = false, circle = false
 }: RailActionProps) {
   const scale = useRef(new Animated.Value(1)).current
   const metricY = useRef(new Animated.Value(0)).current
@@ -145,6 +144,9 @@ function RailAction({
     <Animated.View
       style={[
         s.actionSlot,
+        horizontal && s.actionSlotHorizontal,
+        circle && s.circleActionSlot,
+        circle && compact && s.circleActionCompact,
         !reduceMotion && {
           opacity: entry.interpolate({ inputRange: [start, end], outputRange: [0, 1], extrapolate: 'clamp' }),
           transform: [{ translateX: entry.interpolate({ inputRange: [start, end], outputRange: [16, 0], extrapolate: 'clamp' }) }]
@@ -152,7 +154,7 @@ function RailAction({
       ]}
     >
       <Pressable
-        style={s.actionHit}
+        style={[s.actionHit, horizontal && s.actionHitHorizontal]}
         onPress={onPress}
         onLongPress={onLongPress}
         onPressIn={pressIn}
@@ -162,20 +164,22 @@ function RailAction({
         accessibilityValue={count !== undefined ? { text: count } : undefined}
         accessibilityState={selected !== undefined ? { selected } : undefined}
       >
-        <Animated.View style={[s.actionVisual, { transform: [{ scale }] }]}>
-          <View style={s.iconStage}>
+        <Animated.View style={[s.actionVisual, horizontal && s.actionVisualHorizontal, compact && s.actionVisualCompact, { transform: [{ scale }] }]}>
+          <View style={[s.iconStage, horizontal && s.iconStageHorizontal, compact && s.iconStageCompact]}>
             {children}
           </View>
-          <View style={s.metricSlot}>
+          {(!horizontal || count !== undefined) && <View style={[s.metricSlot, horizontal && s.metricSlotHorizontal]}>
             {count !== undefined && (
               <Animated.Text
-                style={[s.railN, { opacity: metricOpacity, transform: [{ translateY: metricY }] }]}
+                style={[s.railN, horizontal && s.railNHorizontal, circle && s.railNCircle, compact && s.railNCompact, { opacity: metricOpacity, transform: [{ translateY: metricY }] }]}
                 maxFontSizeMultiplier={1.3}
+                numberOfLines={1}
+                adjustsFontSizeToFit={horizontal}
               >
                 {count}
               </Animated.Text>
             )}
-          </View>
+          </View>}
         </Animated.View>
       </Pressable>
     </Animated.View>
@@ -183,14 +187,18 @@ function RailAction({
 }
 
 export default React.memo(function ActionBar({
-  post, onCommentPress, liked: likedProp = false,
+  post, onCommentPress, onAuthorPress, liked: likedProp = false,
   onLikeChange, onRepostChange, commentCount: commentCountProp, bottomOffset,
   onDeleted, onEdited, onProfileBlocked, onAuthorMuted, onOptionsBlockingChange,
-  isActive = true, isCircle = false, reduceMotion = false,
+  isActive = true, isCircle = false, reduceMotion = false, horizontal = false,
   iconSize = DEFAULT_RAIL_ICON_SIZE,
 }: Props) {
   const { bottom: safeBottom } = useSafeAreaInsets()
+  const { width: windowWidth } = useWindowDimensions()
   const t          = useT()
+  const compact = horizontal && windowWidth < 360
+  const rowIconSize = compact ? 28 : iconSize
+  const rowGlyphSize = compact ? 24 : IMMERSIVE_GLYPH_SIZE
 
   const [liked,      setLiked]      = useState(likedProp)
   const [likeCount,  setLikeCount]  = useState(post._count?.likes ?? 0)
@@ -200,6 +208,7 @@ export default React.memo(function ActionBar({
   const [showReactions, setShowReactions] = useState(false)
   const [showShare, setShowShare] = useState(false)
   const [showAuthorPosts, setShowAuthorPosts] = useState(false)
+  const [failedAvatarUri, setFailedAvatarUri] = useState<string | null>(null)
   const [optionsBlocking, setOptionsBlocking] = useState(false)
   const [hearts,    setHearts]    = useState<HeartP[]>([])
   const heartIdRef = useRef(0)
@@ -495,17 +504,55 @@ export default React.memo(function ActionBar({
   }
 
   const isAnnouncement = post.isAnnouncement ?? false
+  const optionsMenu = (
+    <PostOptionsMenu
+      post={post}
+      onDeleted={onDeleted}
+      onEdited={onEdited}
+      onProfileBlocked={onProfileBlocked}
+      onAuthorMuted={onAuthorMuted}
+      onBlockingChange={setOptionsBlocking}
+      rail={!horizontal}
+      horizontalRail={horizontal}
+      triggerSize={rowIconSize}
+      triggerGlyphSize={horizontal ? rowGlyphSize : undefined}
+      triggerColor={actionInkRest.media}
+    />
+  )
 
   return (
     <>
-      {/* Mesma linguagem do topo: ícones livres, traço leve e microinteração. */}
-      <Animated.View style={[s.rail, { bottom: bottomOffset ?? safeBottom + 96 }]} pointerEvents="box-none">
+      {/* A imersiva usa uma linha escura; o visualizador conserva a coluna. */}
+      <Animated.View style={[s.rail, horizontal && s.railHorizontal, { bottom: bottomOffset ?? safeBottom + 96 }]} pointerEvents="box-none">
+        {horizontal && isCircle && (
+          <TouchableOpacity
+            style={s.circleIdentityHit}
+            onPress={onAuthorPress}
+            disabled={!onAuthorPress}
+            activeOpacity={0.78}
+            accessibilityRole="button"
+            accessibilityLabel={post.user.name}
+            accessibilityState={{ disabled: !onAuthorPress }}
+          >
+            <AvatarImage
+              uri={post.user.avatar === failedAvatarUri ? null : post.user.avatar}
+              name={post.user.name}
+              size={34}
+              borderColor="rgba(255,255,255,0.62)"
+              borderWidth={1}
+              onError={() => setFailedAvatarUri(post.user.avatar ?? null)}
+            />
+            <Text style={[s.circleName, compact && s.circleNameCompact]} numberOfLines={1}>
+              {post.user.name}
+            </Text>
+          </TouchableOpacity>
+        )}
         {!isAnnouncement && (
           <>
             {/* Like */}
             <RailAction
               label={t.nf_likes}
-              count={formatCountOrNone(likeCount)}
+              count={horizontal ? formatCount(likeCount) : formatCountOrNone(likeCount)}
               selected={liked}
               onPress={handleLike}
               onLongPress={() => setShowReactions(true)}
@@ -513,13 +560,17 @@ export default React.memo(function ActionBar({
               order={0}
               reduceMotion={reduceMotion}
               noPressScale
+              horizontal={horizontal}
+              compact={compact}
+              circle={horizontal && isCircle}
             >
               {/* Gostado troca de desenho, não apenas de pintura: o contorno enche-se.
                   A tinta sobe do cinzento dos comandos para o branco do conteúdo — a
                   confirmação está na forma, e a cor só a sublinha. */}
               <PostActionIcon
                 name="like"
-                size={iconSize}
+                size={rowIconSize}
+                glyphSize={horizontal ? rowGlyphSize : undefined}
                 color={liked ? actionInkActive.media : actionInkRest.media}
                 selected={liked}
               />
@@ -538,14 +589,19 @@ export default React.memo(function ActionBar({
             {/* Comentar */}
             <RailAction
               label={t.nf_comments}
-              count={formatCountOrNone(commentCountProp ?? post._count?.comments ?? 0)}
+              count={horizontal
+                ? formatCount(commentCountProp ?? post._count?.comments ?? 0)
+                : formatCountOrNone(commentCountProp ?? post._count?.comments ?? 0)}
               onPress={onCommentPress}
               entry={railEntry}
               order={1}
               reduceMotion={reduceMotion}
+              horizontal={horizontal}
+              compact={compact}
+              circle={horizontal && isCircle}
             >
               {/* Já nasce com a cauda à direita — dispensa o espelho que aqui estava. */}
-              <PostActionIcon name="comment" size={iconSize} color={actionInkRest.media} />
+              <PostActionIcon name="comment" size={rowIconSize} glyphSize={horizontal ? rowGlyphSize : undefined} color={actionInkRest.media} />
             </RailAction>
 
             {/* Repost e partilha não valem num post do Círculo: o que lá está
@@ -557,14 +613,16 @@ export default React.memo(function ActionBar({
                 O número vive fora da camada rodada para permanecer direito. */}
             <RailAction
               label={t.feed_repost}
-              count={formatCountOrNone(repostCount)}
+              count={horizontal ? formatCount(repostCount) : formatCountOrNone(repostCount)}
               selected={reposted}
               onPress={handleRepost}
               entry={railEntry}
               order={2}
               reduceMotion={reduceMotion}
+              horizontal={horizontal}
+              compact={compact}
             >
-              <View style={{ width: iconSize, height: iconSize }}>
+              <View style={{ width: rowIconSize, height: rowIconSize }}>
                 <Animated.View
                   style={{
                     transform: [{
@@ -576,8 +634,9 @@ export default React.memo(function ActionBar({
                   }}
                 >
                   <PostActionIcon
-                    name="repost"
-                    size={iconSize}
+                    name={horizontal ? 'repost-spaced' : 'repost'}
+                    size={rowIconSize}
+                    glyphSize={horizontal ? rowGlyphSize : undefined}
                     color={reposted ? actionInkActive.media : actionInkRest.media}
                   />
                 </Animated.View>
@@ -596,10 +655,11 @@ export default React.memo(function ActionBar({
               </View>
             </RailAction>
 
-            {/* Partilhar */}
-            <RailAction label={t.mo_share} count={formatCountOrNone(shareCount)} onPress={handleShare} onLongPress={handleShareExternal} entry={railEntry} order={3} reduceMotion={reduceMotion}>
-              <PostActionIcon name="share" size={iconSize} color={actionInkRest.media} />
-            </RailAction>
+            {!horizontal && (
+              <RailAction label={t.mo_share} count={formatCountOrNone(shareCount)} onPress={handleShare} onLongPress={handleShareExternal} entry={railEntry} order={3} reduceMotion={reduceMotion}>
+                <PostActionIcon name="share" size={iconSize} color={actionInkRest.media} />
+              </RailAction>
+            )}
             </>
             )}
           </>
@@ -610,6 +670,8 @@ export default React.memo(function ActionBar({
         <Animated.View
           style={[
             s.utilityCluster,
+            horizontal && s.utilityClusterHorizontal,
+            horizontal && (isCircle ? [s.circleUtilityCluster, compact && s.circleUtilityCompact] : s.standardUtilityCluster),
             !reduceMotion && {
               opacity: railEntry.interpolate({
                 inputRange: [0.3, 0.72],
@@ -626,37 +688,28 @@ export default React.memo(function ActionBar({
             },
           ]}
         >
-          <PostOptionsMenu
-            post={post}
-            onDeleted={onDeleted}
-            onEdited={onEdited}
-            onProfileBlocked={onProfileBlocked}
-            onAuthorMuted={onAuthorMuted}
-            onBlockingChange={setOptionsBlocking}
-            rail
-            triggerSize={iconSize}
-            triggerColor={actionInkRest.media}
-          />
+          {horizontal ? <View style={s.horizontalUtilityCell}>{optionsMenu}</View> : optionsMenu}
           {/* Também sai: um momento colectivo não é a obra de um autor, e o
               atalho para "as publicações desta pessoa" pergunta a coisa errada
               sobre uma fotografia que várias pessoas tiraram juntas. */}
           {!isCircle && (
           <TouchableOpacity
-            style={s.utilityHit}
+            style={[s.utilityHit, horizontal && s.utilityHitHorizontal]}
             onPress={() => setShowAuthorPosts(true)}
             activeOpacity={0.68}
             accessibilityRole="button"
             accessibilityLabel={t.feed_author_posts.replace('{name}', post.user.name.split(' ')[0])}
           >
-            <View style={s.utilityVisual}>
-              <View style={s.utilityIconStage}>
+            <View style={[s.utilityVisual, horizontal && s.utilityVisualHorizontal]}>
+              <View style={[s.utilityIconStage, horizontal && s.iconStageHorizontal, compact && s.iconStageCompact]}>
                 <PostActionIcon
                   name="author-posts"
-                  size={iconSize}
+                  size={rowIconSize}
+                  glyphSize={horizontal ? rowGlyphSize : undefined}
                   color={actionInkRest.media}
                 />
               </View>
-              <View style={s.metricSlot} pointerEvents="none" />
+              {!horizontal && <View style={s.metricSlot} pointerEvents="none" />}
             </View>
           </TouchableOpacity>
           )}
@@ -695,29 +748,82 @@ const s = StyleSheet.create({
     gap: feedRail.itemGap,
     zIndex: 20
   },
+  railHorizontal: {
+    left: 0,
+    right: 0,
+    width: '100%',
+    height: FEED_ACTION_ROW_HEIGHT,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 0,
+    backgroundColor: colors.feedSurface,
+  },
+  circleIdentityHit: {
+    flex: 1,
+    minWidth: 0,
+    height: FEED_ACTION_ROW_HEIGHT,
+    marginLeft: 16,
+    marginRight: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  circleName: {
+    flexShrink: 1,
+    color: feedInk.primary,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  circleNameCompact: { fontSize: 12 },
   actionHit: {
     width: feedRail.width,
     height: feedRail.itemHeight,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  actionHitHorizontal: {
+    width: '100%',
+    height: FEED_ACTION_ROW_HEIGHT,
+  },
   actionSlot: { width: feedRail.width, height: feedRail.itemHeight },
+  actionSlotHorizontal: { flex: 1, width: undefined, height: FEED_ACTION_ROW_HEIGHT },
+  circleActionSlot: { flex: 0, width: 72 },
+  circleActionCompact: { width: 64 },
   utilityCluster: {
     width: feedRail.width,
     alignItems: 'center',
     gap: feedRail.itemGap,
   },
+  utilityClusterHorizontal: {
+    width: undefined,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 0,
+  },
+  standardUtilityCluster: { flex: 2 },
+  circleUtilityCluster: { flex: 0, width: 72 },
+  circleUtilityCompact: { width: 64 },
+  horizontalUtilityCell: { flex: 1, height: FEED_ACTION_ROW_HEIGHT },
   utilityHit: {
     width: feedRail.width,
     height: feedRail.itemHeight,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  utilityHitHorizontal: {
+    flex: 1,
+    width: undefined,
+    height: FEED_ACTION_ROW_HEIGHT,
+  },
   utilityVisual: {
     height: feedRail.itemHeight,
     alignItems: 'center',
     justifyContent: 'center',
     gap: feedRail.iconToMetricGap,
+  },
+  utilityVisualHorizontal: {
+    height: FEED_ACTION_ROW_HEIGHT,
+    flexDirection: 'row',
   },
   utilityIconStage: {
     width: feedRail.iconStageWidth,
@@ -732,6 +838,12 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     gap: feedRail.iconToMetricGap,
   },
+  actionVisualHorizontal: {
+    height: FEED_ACTION_ROW_HEIGHT,
+    flexDirection: 'row',
+    gap: 5,
+  },
+  actionVisualCompact: { gap: 2 },
   iconStage: {
     width: feedRail.iconStageWidth,
     height: feedRail.iconStageHeight,
@@ -740,17 +852,27 @@ const s = StyleSheet.create({
     overflow: 'visible',
     ...feedGlyphShadow,
   },
+  iconStageHorizontal: {
+    width: 32,
+    height: 32,
+    shadowOpacity: 0,
+  },
+  iconStageCompact: { width: 28 },
   metricSlot: {
     height: feedRail.metricSlotHeight,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  metricSlotHorizontal: { height: 32 },
   railN: {
     ...feedTextShadow,
     ...feedType.meta,
     color: feedInk.secondary,
     fontVariant: ['tabular-nums'],
   },
+  railNHorizontal: { maxWidth: 48 },
+  railNCircle: { maxWidth: 32 },
+  railNCompact: { maxWidth: 31 },
   repostOneWrap: {
     position: 'absolute',
     top: 0,

@@ -6,7 +6,8 @@ import BrandAvatarRing from './BrandAvatarRing'
 import { colors, fonts } from '../theme'
 import { feedInk, feedSkeleton, pageSkeleton } from '../screens/FeedScreen/tokens'
 import {
-  CIRCLE_MAX_SLOTS, circleClusterLayout, circleHasCentre, type ClusterDisc,
+  CIRCLE_MAX_SLOTS, circleClusterLayout, circleHasCentre,
+  type ClusterDisc, type ClusterRequest,
 } from '../screens/HomeScreen/circleCluster'
 
 export interface CircleSlot {
@@ -23,8 +24,14 @@ interface Props {
   slots: CircleSlot[]
   /** Total de participantes do momento — pode ser maior que `slots`. */
   people?: number
-  /** Largura disponível; a altura sai da composição. */
+  /** Largura disponível. */
   width: number
+  /**
+   * Altura a encher. Sem ela a figura fica na sua proporção natural — é o que a
+   * Home quer, onde a publicação é uma entre muitas. A imersiva passa a altura
+   * livre do ecrã e a figura espalha-se por ela.
+   */
+  height?: number
   /** Identidade da publicação: entra nas chaves de reciclagem das imagens. */
   postId: string
   /**
@@ -98,16 +105,13 @@ function arrangement(count: number, activeIndex: number): number[] {
  * Uma perspetiva para lá do último disco cai nele, que é o que carrega o `+N`.
  */
 export function circleDiscRect(
-  slots: number,
-  width: number,
-  index: number,
-  activeIndex = 0,
+  request: ClusterRequest & { index: number; activeIndex?: number },
 ): ClusterDisc | undefined {
-  const shown = Math.min(slots, CIRCLE_MAX_SLOTS)
+  const shown = Math.min(request.count, CIRCLE_MAX_SLOTS)
   if (shown <= 0) return undefined
-  const layout = circleClusterLayout(shown, width)
-  const discOf = arrangement(shown, activeIndex)
-  return layout.discs[discOf[Math.min(Math.max(0, index), shown - 1)]]
+  const layout = circleClusterLayout({ ...request, count: shown })
+  const discOf = arrangement(shown, request.activeIndex ?? 0)
+  return layout.discs[discOf[Math.min(Math.max(0, request.index), shown - 1)]]
 }
 
 /**
@@ -123,7 +127,7 @@ export function circleDiscRect(
  * verificável contra o documento sem montar nada.
  */
 function CircleMediaComposition({
-  slots, people, width, postId, activeIndex = 0, onSelect, onDark = false,
+  slots, people, width, height, postId, activeIndex = 0, onSelect, onDark = false,
   showLabels, perspectiveLabel, lateLabel,
 }: Props) {
   // A figura desenha-se com as fotografias que existem — nunca com o número de
@@ -134,8 +138,39 @@ function CircleMediaComposition({
   const total = Math.max(people ?? shown.length, slots.length)
   const extra = Math.max(0, total - shown.length)
 
-  const layout = useMemo(() => circleClusterLayout(shown.length, width), [shown.length, width])
+  // `postId` é a semente: a mesma publicação desenha a mesma figura sempre, e
+  // duas publicações diferentes nunca se desenham iguais.
+  const layout = useMemo(
+    () => circleClusterLayout({ count: shown.length, width, height, seed: postId }),
+    [height, postId, shown.length, width],
+  )
   const discOf = useMemo(() => arrangement(shown.length, activeIndex), [shown.length, activeIndex])
+
+  /**
+   * Qual fotografia o dedo tocou mesmo.
+   *
+   * Cada disco é um círculo à vista e um rectângulo ao toque — e com os discos
+   * sobrepostos, o canto vazio de um fica por cima da fotografia do outro.
+   * Tocar lá abria a fotografia errada, e com a figura espalhada isso acontece
+   * em quase todos os encontros entre dois discos.
+   *
+   * O toque passa a ser resolvido pela geometria: ganha o disco mais à frente
+   * que contenha mesmo o ponto. Fora de todos, não abre nada — um canto vazio
+   * não é uma fotografia.
+   */
+  const hitTest = (x: number, y: number): number | null => {
+    let found: number | null = null
+    let frontmost = -Infinity
+    for (let index = 0; index < shown.length; index++) {
+      const disc = layout.discs[discOf[index]]
+      if (!disc || disc.z <= frontmost) continue
+      const radius = disc.d / 2
+      if (Math.hypot(x - (disc.x + radius), y - (disc.y + radius)) > radius) continue
+      found = index
+      frontmost = disc.z
+    }
+    return found
+  }
 
   const labels = showLabels ?? shown.length >= 3
   const cut = onDark ? colors.feedSurface : colors.white
@@ -210,7 +245,13 @@ function CircleMediaComposition({
           <Pressable
             key={`${postId}:${index}`}
             style={[s.disc, box]}
-            onPress={() => onSelect(index)}
+            onPress={(event) => {
+              // `locationX/Y` vem relativo a este disco; a figura precisa dele
+              // na sua própria caixa para saber quem está debaixo do dedo.
+              const { locationX, locationY } = event.nativeEvent
+              const target = hitTest(disc.x + locationX, disc.y + locationY)
+              if (target !== null) onSelect(target)
+            }}
             accessibilityRole="button"
             accessibilityLabel={a11y || undefined}
             accessibilityState={{ selected: discOf[index] === 0 }}

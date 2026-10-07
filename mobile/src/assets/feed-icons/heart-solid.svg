@@ -1,3 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M12 7.05c.625-3.125 5.429-3.321 7.5-1.25 2.004 2.004 1.875 5.418 0 7.5L12 20.8l-7.5-7.5a5.303 5.303 0 0 1 0-7.5c1.938-1.938 6.875-1.875 7.5 1.25Z" fill="currentColor"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+  <!-- O estado gostado do mesmo coração: é o contorno exterior do `heart.svg`,
+       preenchido. O desenho é literalmente o mesmo — só falta o subpath de
+       dentro, que é o que abria o vazio.
+
+       Tem de ser assim: a medição do projeto exige que o contorno e o
+       preenchido partilhem a silhueta exterior, senão o ícone mudava de forma
+       ao tocar em gostar. Partilhando o mesmo contorno, é idêntica por
+       construção. -->
+  <path fill="currentColor" d="M 18.5043 4.539 c 0.3292 0.158 0.632 0.3423 0.9217 0.553 c 2.6597 1.9223 3.239 5.6353 1.3167 8.295 c -0.1448 0.1975 -0.3028 0.3818 -0.474 0.5662 L 14.4095 20.2073 c -1.2508 1.3298 -3.3312 1.3957 -4.7137 0.1053 l -0.1053 -0.1053 l -5.8592 -6.2542 c -2.2383 -2.3963 -2.1198 -6.1488 0.316 -8.4398 l 0.2765 -0.237 l 0.1975 -0.158 l 0.0527 -0.0263 a 5.6801 5.6801 0 0 1 7.3733 0.5925 l 0.0527 0.0527 l 0.0395 -0.0527 a 5.7012 5.7012 0 0 1 6.4648 -1.1455"/>
 </svg>

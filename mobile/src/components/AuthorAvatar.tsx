@@ -15,6 +15,15 @@ interface Props {
   gap?: number
   /** Mantém a mesma caixa quando o estado não pede anel. */
   ringVisible?: boolean
+  /**
+   * A cor da superfície que está por baixo.
+   *
+   * O vão entre o anel e a fotografia é um recorte, não um disco: leva a cor do
+   * que está atrás, como o recorte entre os discos de um Círculo. Numa folha
+   * branca é branco, numa folha escura é a cor dela — e sobre mídia é
+   * transparente, porque atrás não há cor nenhuma, há a fotografia. Aí quem
+   * separa o rosto do que está por baixo é a sombra do `elevated`.
+   */
   wellColor?: string
   elevated?: boolean
   style?: StyleProp<ViewStyle>
@@ -33,7 +42,7 @@ export default function AuthorAvatar({
   ringWidth = 2,
   gap = 2,
   ringVisible = true,
-  wellColor = colors.feedSurface,
+  wellColor = 'transparent',
   elevated = false,
   style,
 }: Props) {

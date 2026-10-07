@@ -15,14 +15,14 @@ import { Post, type RepostResult } from '../../types'
 import { colors, fonts, leading, postGradientColors, radius, spacing, typography } from '../../theme'
 import { parsePostFontKey, postFontStyle } from '../../theme/postFonts'
 import Icon from '../../components/Icon'
-import { actionInkRest, RAIL_CLEARANCE, feedFill, feedIcon, feedInk, feedLine, feedRailHeight, feedRailTailInset, feedTextShadow, feedType } from './tokens'
+import { actionInkRest, feedFill, feedIcon, feedInk, feedLine, feedTextShadow, feedType } from './tokens'
 import { usePostFontsReady } from '../../store/postFonts.store'
 import * as postService from '../../services/post.service'
 import type { TasteSignal } from '../../services/post.service'
 import AuthorAvatar from '../../components/AuthorAvatar'
 import FeedIcon from '../../components/FeedIcon'
 import VerifiedBadge from '../../components/VerifiedBadge'
-import ActionBar, { CIRCLE_RAIL_ITEMS } from './ActionBar'
+import ActionBar from './ActionBar'
 import { FEED_CHROME_HEIGHT, FEED_CHROME_ROW } from './FeedHeader'
 import TasteCard from './TasteCard'
 import {
@@ -33,7 +33,7 @@ import PostAlbumCarousel from './PostAlbumCarousel'
 import CircleMomentStage from './CircleMomentStage'
 import { useAuthStore } from '../../store/auth.store'
 import { useFollowStore } from '../../store/follow.store'
-import { tabBarOccupiedHeight } from '../../components/TabBar/layout'
+import { FEED_ACTION_ROW_HEIGHT, feedBarOccupiedHeight } from '../../components/TabBar/layout'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { useT } from '../../i18n'
 import { displayHandle } from '../../utils/handle'
@@ -66,12 +66,8 @@ const DESCRIPTION_MAX_LINES = 1
 // pena gastar dados com ela. Curto para quem pára não notar, longo para quem
 // está a rolar não pagar nada.
 const VIDEO_ARM_DELAY = 260
-/**
- * O que a figura do Círculo deixa livre em baixo: a coluna de acções inteira e
- * um degrau de ar. Num Círculo é a coluna que sobe mais alto — três acções
- * chegam aos 174, enquanto o autor e a legenda ficam pelos 110.
- */
-const CIRCLE_BOTTOM_CLEARANCE = feedRailHeight(CIRCLE_RAIL_ITEMS) + spacing.lg
+/** Reserva para autor, legenda e convite dentro da mídia coletiva. */
+const CIRCLE_BOTTOM_CLEARANCE = 120
 type Nav = StackNavigationProp<AppStackParams>
 
 interface Props {
@@ -98,7 +94,7 @@ interface Props {
 }
 
 // ─── Uma célula do pager: um momento por ecrã ───────────────────────────────
-// Pilha: status bar livre · mídia · scrubber · navegação. O campo de comentário
+// Pilha: status bar livre · mídia · scrubber · ações · campo. O campo de comentário
 // vive dentro da TabBar e fica ligado a este post pelo store.
 // A célula é a única dona do seu leitor — a FlatList monta/desmonta, sem player
 // partilhado.
@@ -135,33 +131,23 @@ function FeedItem({
   }, [nav])
 
   // ── Geometria da pilha ──────────────────────────────────────────────────────
-  // A mídia respeita a status bar. Em baixo, o scrubber tem uma faixa própria
-  // entre o fim do post e o início da navegação.
+  // A mídia respeita a status bar e termina à mesma altura em vídeo e texto.
+  // No vídeo, o scrubber pousa sobre os últimos pixels da mídia.
   const TRACK_H    = 3
   // A faixa que apanha o toque do scrubber. O traço fica centrado nela, e é por
   // isso que a caixa desce metade da diferença: sem a conta, a linha assentava
   // 2pt acima do sítio onde a pilha a manda estar.
   const SCRUB_HIT  = 22
-  // O traço do tempo precisa de respirar, não de uma faixa: com 8 de cada lado
-  // sobravam 19pt de vazio entre o fim do vídeo e o topo da navegação, e era
-  // essa faixa — não a altura da barra — que afastava um do outro.
-  const GAP        = 5
-  const navTop        = tabBarOccupiedHeight(safeBottom)
-  const trackBottom   = navTop + GAP                         // traço, acima da navegação
-  const videoBottom   = trackBottom + TRACK_H + GAP          // post termina antes do traço
-  // A linha onde as duas colunas de baixo acabam — a tinta, não a caixa.
-  //
-  // A coluna de acções fica ancorada em `videoBottom`, encostada ao palco do post
-  // sem invadir o traço do tempo. Mas o último ícone dela não está no fundo da
-  // sua caixa: como todos os itens da coluna, reserva por baixo o espaço do
-  // contador, e a tinta acaba `feedRailTailInset` acima. À esquerda não há nada
-  // disso — a última linha de texto acaba onde a caixa acaba.
-  //
-  // Por isso é o bloco do autor que sobe até à coluna, e não o contrário: descer
-  // a coluna esses 22pt punha o alvo do último ícone dentro da faixa do scrubber,
-  // que atravessa a largura toda e ficaria a disputar o mesmo toque.
-  const overlayBottom = videoBottom + feedRailTailInset
-  const videoFrame = { top: safeTop, bottom: videoBottom }
+  // A área tocável do scrubber termina antes das ações; o traço fica perto delas.
+  const TRACK_ROW_GAP = 10
+  const MEDIA_TRACK_GAP = 5
+  const navTop        = feedBarOccupiedHeight(safeBottom)
+  const actionRowTop = navTop + FEED_ACTION_ROW_HEIGHT
+  const trackBottom = actionRowTop + TRACK_ROW_GAP
+  const mediaBottom = actionRowTop + MEDIA_TRACK_GAP
+  // A legenda do vídeo conserva distância da área tocável do scrubber.
+  const overlayBottom = (isVideo ? trackBottom + TRACK_H + MEDIA_TRACK_GAP : mediaBottom) + spacing.md
+  const videoFrame = { top: safeTop, bottom: mediaBottom }
   // A largura útil do traço — a mesma margem que o resto da coluna esquerda usa.
   // Esteve escrita à mão como `width - 28` enquanto o estilo abria 16 de cada
   // lado: o dedo aterrava 4pt à frente do sítio onde a imagem saltava, e o erro
@@ -172,7 +158,7 @@ function FeedItem({
   // A largura é sempre a do ecrã; a altura é que vem da proporção da imagem.
   // Por isso a moldura da foto NÃO é a `videoFrame` (que estica de cima a baixo):
   // é calculada a partir do que a imagem mede, e centrada no espaço disponível.
-  const mediaSpace = Math.max(0, cellHeight - safeTop - videoBottom)
+  const mediaSpace = Math.max(0, cellHeight - safeTop - mediaBottom)
 
   // A imagem deve continuar visível enquanto as dimensões chegam. Medidas
   // carregadas pertencem ao URI; callbacks do cache não disputam um reset em efeito.
@@ -598,7 +584,7 @@ function FeedItem({
         { height: cellHeight },
       ]}
     >
-      {/* ── Mídia: começa depois da status bar e termina antes do scrubber.
+      {/* ── Mídia: começa depois da status bar; no vídeo, o scrubber fica sobre ela.
              Permanece filha direta da célula para o leitor nativo assentar. ── */}
       {isText ? (
         <LinearGradient colors={textGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[s.media, videoFrame]}>
@@ -606,8 +592,8 @@ function FeedItem({
         </LinearGradient>
       ) : isCollective ? (
         <View style={[s.media, videoFrame]}>
-          {/* O cromado e a coluna flutuam por cima da mídia sem lhe roubar
-              altura; a figura desconta-os para não ficar por baixo de nenhum. */}
+          {/* O cromado e a identidade flutuam sobre a mídia; a figura reserva
+              a altura deles para continuar inteira. */}
           <CircleMomentStage
             post={post}
             reduceMotion={reduceMotion}
@@ -624,7 +610,7 @@ function FeedItem({
             urls={post.mediaUrls ?? []}
             sizes={post.mediaSizes}
             overlays={post.albumOverlays}
-            dotsBottom={(overlayBottom - videoBottom) + 46 + (post.caption ? 38 : 0)}
+            dotsBottom={(overlayBottom - mediaBottom) + 46 + (post.caption ? 38 : 0)}
           />
         </View>
       ) : isVideo ? (
@@ -741,24 +727,29 @@ function FeedItem({
         )}
 
         <View style={s.authorRow}>
-          <TouchableOpacity
-            style={s.authorAvatarHit}
-            onPress={() => nav.navigate('Profile', { userId: post.user.id })}
-            activeOpacity={0.82}
-            accessibilityRole="button"
-            accessibilityLabel={post.user.name}
-          >
-            <AuthorAvatar
-              uri={resolveUrl(post.user.avatar)}
-              name={post.user.name}
-              avatarSize={34}
-              ringWidth={2}
-              gap={2}
-              ringVisible={isFresh}
-              wellColor="rgba(11,20,26,0.84)"
-              elevated
-            />
-          </TouchableOpacity>
+          {!isCollective && (
+            <TouchableOpacity
+              style={s.authorAvatarHit}
+              onPress={() => nav.navigate('Profile', { userId: post.user.id })}
+              activeOpacity={0.82}
+              accessibilityRole="button"
+              accessibilityLabel={post.user.name}
+            >
+              <AuthorAvatar
+                uri={resolveUrl(post.user.avatar)}
+                name={post.user.name}
+                avatarSize={34}
+                ringWidth={2}
+                gap={2}
+                ringVisible={isFresh}
+                // Sobre a mídia o vão é um recorte, e atrás dele está a própria
+                // fotografia: um disco escuro ali lia-se como uma mancha preta à
+                // volta do rosto. Quem separa o avatar da mídia é a sombra.
+                wellColor="transparent"
+                elevated
+              />
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             style={s.authorText}
@@ -867,7 +858,7 @@ function FeedItem({
         )}
       </Animated.View>
 
-      {/* ── Ações — coluna direita sobre o vídeo, com contadores ── */}
+      {/* ── Ações em linha, entre o progresso e o compositor branco ── */}
       <ActionBar
         post={post}
         liked={liked}
@@ -875,18 +866,18 @@ function FeedItem({
         onRepostChange={onRepostChange}
         commentCount={commentCount}
         onCommentPress={() => onCommentPress(post)}
+        onAuthorPress={() => nav.navigate('Profile', { userId: post.user.id })}
         onDeleted={isSelf ? onDeleted : undefined}
         onEdited={isSelf ? onEdited : undefined}
         onProfileBlocked={onProfileBlocked}
         onAuthorMuted={onAuthorMuted}
         onOptionsBlockingChange={handleMenuBlocking}
-        // A coluna termina no palco do post e não invade o scrubber. Quem se
-        // alinha por ela é o bloco do autor, via `feedRailTailInset`.
-        bottomOffset={videoBottom}
+        bottomOffset={navTop}
+        horizontal
         isActive={isActive}
         isCircle={isCollective}
         reduceMotion={reduceMotion}
-        iconSize={feedIcon.action}
+        iconSize={32}
       />
 
       {/* ── Traço do tempo — scrubber: tocar/arrastar salta no vídeo ── */}
@@ -927,7 +918,7 @@ const s = StyleSheet.create({
   },
 
   // Autor + descrição
-  meta:       { position: 'absolute', left: spacing.md, right: RAIL_CLEARANCE, gap: spacing.xs2 },
+  meta:       { position: 'absolute', left: spacing.md, right: spacing.md, gap: spacing.xs2 },
   authorAvatarHit: { marginLeft: -AUTHOR_RING_INSET },
   authorRow:  { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   // `flexShrink` e não `flex: 1`: com `flex: 1` o bloco do nome esticava para

@@ -233,7 +233,9 @@ export default function PostInfo({
                 avatarSize={30}
                 ringWidth={1.75}
                 gap={2.25}
-                wellColor={light ? sheet.surface : colors.feedSurface}
+                // Na folha clara o recorte toma a cor dela. Sobre a mídia não há
+                // cor por baixo — há a fotografia — e o vão fica transparente.
+                wellColor={light ? sheet.surface : 'transparent'}
               />
             </TouchableOpacity>
             {post.partnerUser && post.partnerAccepted && (
@@ -250,7 +252,7 @@ export default function PostInfo({
                   avatarSize={24}
                   ringWidth={1.5}
                   gap={0.5}
-                  wellColor={light ? sheet.surface : colors.feedSurface}
+                  wellColor={light ? sheet.surface : 'transparent'}
                 />
               </TouchableOpacity>
             )}

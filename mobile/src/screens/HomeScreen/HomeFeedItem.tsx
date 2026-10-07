@@ -24,6 +24,7 @@ import { readPost } from './homePostShape'
 import { CIRCLE_STAGE_WIDTH } from './circleCluster'
 import HomeAlbumGallery from './HomeAlbumGallery'
 import HomeCircleJoin from './HomeCircleJoin'
+import HomeFollow from './HomeFollow'
 import HomePostAction from './HomePostAction'
 import HomeVideo from './HomeVideo'
 
@@ -209,6 +210,7 @@ function HomeFeedItem({
           </Text>
         </View>
       </TouchableOpacity>
+      <HomeFollow post={post} />
       <View style={s.option}>
         <PostOptionsMenu
           post={post} onDeleted={onDeleted} onEdited={onEdited}

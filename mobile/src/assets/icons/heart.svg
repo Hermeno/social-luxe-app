@@ -1,6 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-  <!-- O mesmo coração da feed, reescalado da caixa de 21 para a grelha 24 e
-       encostado à área viva 2..22. Escala uniforme: as curvas relativas só
-       multiplicam e no arco só os raios e o ponto final mudam. -->
-  <path d="M12.049 6.40202c0.62821 -3.14105 5.45664 -3.33831 7.53853 -1.25642c2.01404 2.01404 1.88463 5.44533 0 7.53853l-7.53853 7.53853l-7.53853 -7.53853a5.33099 5.33099 0 0 1 0 -7.53853c1.94745 -1.94745 6.91032 -1.88463 7.53853 1.25642"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="none">
+  <!-- O mesmo coração da feed, para o sistema de ícones da interface (Criar,
+       Notificações, pré-visualização da entrada). Mesmo desenho, mesma grelha e
+       mesma régua — ver `src/assets/feed-icons/heart.svg`.
+
+       `stroke="none"` é obrigatório aqui: o <Icon> traça tudo o que não diga o
+       contrário, e um traço por cima deste desenho engrossava-o. O contorno já
+       é a forma. -->
+  <path fill="currentColor" stroke="none" d="M 18.5043 4.539 c 0.3292 0.158 0.632 0.3423 0.9217 0.553 c 2.6597 1.9223 3.239 5.6353 1.3167 8.295 c -0.1448 0.1975 -0.3028 0.3818 -0.474 0.5662 L 14.4095 20.2073 c -1.2508 1.3298 -3.3312 1.3957 -4.7137 0.1053 l -0.1053 -0.1053 l -5.8592 -6.2542 c -2.2383 -2.3963 -2.1198 -6.1488 0.316 -8.4398 l 0.2765 -0.237 l 0.1975 -0.158 l 0.0527 -0.0263 a 5.6801 5.6801 0 0 1 7.3733 0.5925 l 0.0527 0.0527 l 0.0395 -0.0527 a 5.7012 5.7012 0 0 1 6.4648 -1.1455 m -0.8427 1.7907 a 3.713 3.713 0 0 0 -4.9375 1.7775 L 12 9.6608 l -0.7242 -1.5537 c -0.1053 -0.2107 -0.2238 -0.4082 -0.3555 -0.6057 a 3.7091 3.7091 0 0 0 -5.1877 -0.8163 l -0.1975 0.1448 l -0.1843 0.1712 a 3.9671 3.9671 0 0 0 -0.1843 5.5958 l 5.8723 6.2542 l 0.0527 0.0658 a 1.3167 1.3167 0 0 0 1.8697 -0.0658 l 5.8723 -6.2542 c 0.1053 -0.1185 0.2107 -0.2502 0.3028 -0.3818 c 1.2903 -1.7643 0.8953 -4.2397 -0.869 -5.53 c -0.1843 -0.1317 -0.395 -0.2633 -0.6057 -0.3555"/>
 </svg>

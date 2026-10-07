@@ -19,6 +19,7 @@ import type { Post, User } from '../../types'
 import type { AppStackParams } from '../../navigation/AppNavigator'
 import { colors, fonts, gradients, postGradientColors } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
+import FeedIcon from '../../components/FeedIcon'
 import AvatarStack from '../../components/AvatarStack'
 import SegmentedRing from '../../components/SegmentedRing'
 import FollowersSheet from './FollowersSheet'
@@ -953,7 +954,11 @@ export default function ProfileScreen() {
           )}
           {hasUnion && otherMember && (
             <LinearGradient colors={gradients.brand} style={m.partnerPill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-              <Ionicons name="heart" size={11} color="#fff" />
+              {/* O coração da plataforma, preenchido — a 11pt um contorno
+                  fecha-se numa mancha. Vai a 12 porque a tinta desta família
+                  ocupa 19.75 dos 24 da caixa: 12 dá a mesma tinta que os 11 do
+                  ícone de fora que aqui estava. */}
+              <FeedIcon name="heart-solid" size={12} color="#fff" />
               <Text style={m.partnerTxt}>Parceiro · {otherMember.name}</Text>
             </LinearGradient>
           )}
