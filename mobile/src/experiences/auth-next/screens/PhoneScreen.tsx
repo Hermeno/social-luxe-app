@@ -10,7 +10,7 @@ import { useI18n, useT } from '../i18n'
 import { useTheme } from '../theme/ThemeProvider'
 import { checkPhone } from '../adapters/auth.adapter'
 import { classify, type Failure } from '../adapters/errors'
-import { detectCountry, type Country } from '../data/countries'
+import { type Country } from '../data/countries'
 import { MIN_LOCAL_DIGITS, e164 } from '../state/flow'
 import { control, space } from '../theme/tokens'
 
@@ -181,9 +181,6 @@ export default function PhoneScreen({
     </>
   )
 }
-
-/** O país de arranque, quando ainda não há rascunho nenhum. */
-export const initialCountry = detectCountry
 
 const s = StyleSheet.create({
   field: { paddingBottom: space.lg },

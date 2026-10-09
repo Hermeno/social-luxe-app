@@ -24,20 +24,6 @@ export interface LoginBody {
   password: string
 }
 
-export interface CreatePostBody {
-  caption?: string
-}
-
-export interface FriendshipBody {
-  targetUserId: string
-  duration: FriendshipDuration
-}
-
-export interface SendMessageBody {
-  receiverId: string
-  content?: string
-}
-
 export const FRIENDSHIP_DURATION_DAYS: Record<FriendshipDuration, number | null> = {
   ONE_DAY: 1,
   THREE_DAYS: 3,
@@ -48,4 +34,3 @@ export const FRIENDSHIP_DURATION_DAYS: Record<FriendshipDuration, number | null>
 
 export const POST_EXTENSION_THRESHOLD = 0.5
 export const POST_INITIAL_HOURS = 24
-export const POST_EXTENDED_HOURS = 48

@@ -1,7 +1,6 @@
 import { Response } from 'express'
 import * as notificationService from '../services/notification.service'
-import { ok, badRequest, serverError, notFound, forbidden, created } from '../utils/response'
-import { handleError } from '../utils/errors'
+import { ok, badRequest, serverError } from '../utils/response'
 import { AuthRequest } from '../types'
 
 export async function registerToken(req: AuthRequest, res: Response) {

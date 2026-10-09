@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
 import {
   View, Text, FlatList, StyleSheet, TouchableOpacity,
-  TextInput, Platform, ActivityIndicator,
-  Animated, Alert, Modal, Switch,
+  TextInput, ActivityIndicator,
+  Alert, Modal, Switch,
 } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { Image } from 'expo-image'
@@ -33,28 +33,6 @@ function formatTime(iso: string) {
 function sameDay(a: string, b: string) {
   const da = new Date(a), db = new Date(b)
   return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate()
-}
-
-// ─── Typing Bubble ────────────────────────────────────────────────────────────
-function TypingBubble() {
-  const dots = [useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current]
-  useEffect(() => {
-    const anims = dots.map((dot, i) => Animated.loop(Animated.sequence([
-      Animated.delay(i * 160),
-      Animated.timing(dot, { toValue: -5, duration: 260, useNativeDriver: true }),
-      Animated.timing(dot, { toValue: 0,  duration: 260, useNativeDriver: true }),
-      Animated.delay(320),
-    ])))
-    anims.forEach((a) => a.start())
-    return () => anims.forEach((a) => a.stop())
-  }, [])
-  return (
-    <View style={t.wrap}>
-      {dots.map((dot, i) => (
-        <Animated.View key={i} style={[t.dot, { transform: [{ translateY: dot }] }]} />
-      ))}
-    </View>
-  )
 }
 
 // ─── Dual Avatar header ───────────────────────────────────────────────────────
@@ -561,11 +539,6 @@ const s = StyleSheet.create({
   input:     { fontFamily: fonts.regular, fontSize: 15, color: colors.black, maxHeight: 100, padding: 0 },
   sendBtn:   { width: 42, height: 42, borderRadius: 21, backgroundColor: MINE_COLOR, alignItems: 'center', justifyContent: 'center' },
   sendBtnOff: { opacity: 0.35 },
-})
-
-const t = StyleSheet.create({
-  wrap: { flexDirection: 'row', gap: 4, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: THEIRS_COLOR, borderRadius: 18, borderBottomLeftRadius: 4, alignSelf: 'flex-start', marginLeft: 12 },
-  dot:  { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.gray400 },
 })
 
 // ── Modo Juntos styles ─────────────────────────────────────────────────────────

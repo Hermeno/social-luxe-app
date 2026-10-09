@@ -59,7 +59,7 @@ const DOT = 34
  * toque, não no botão.
  */
 export default function AppearanceScreen({ onDone, onSkip, onBack }: Props) {
-  const { palette, text, accent, accentKey, prefs, setMode, setTextLevel, setAccent } = useTheme()
+  const { palette, text, accentKey, prefs, setMode, setTextLevel, setAccent } = useTheme()
   const t = useT()
 
   return (

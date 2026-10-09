@@ -1,6 +1,6 @@
 import { Response } from 'express'
 import * as unionService from '../services/union.service'
-import { ok, created, badRequest, serverError, notFound, forbidden } from '../utils/response'
+import { ok, created, badRequest, notFound, forbidden } from '../utils/response'
 import { handleError } from '../utils/errors'
 import { AuthRequest } from '../types'
 import { emitToUser } from '../socket'

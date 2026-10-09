@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import {
   View, Text, FlatList, StyleSheet, ActivityIndicator,
-  Keyboard, Platform, Animated, Pressable, TouchableOpacity, Modal, StatusBar, AppState,
-  ScrollView, Alert, TextInput,
+  Keyboard, Platform, Animated, Pressable, TouchableOpacity, Modal, AppState,
+  Alert, TextInput,
 } from 'react-native'
 // Do keyboard-controller, não do react-native: este lê o inset real do teclado
 // (WindowInsets IME) e funciona em edge-to-edge, onde o do RN falha.
@@ -22,7 +22,7 @@ import { api } from '../../services/api'
 import { useMessageBadgeStore } from '../../store/messageBadge.store'
 import { getSocket } from '../../socket'
 import { AppStackParams } from '../../navigation/AppNavigator'
-import { colors, spacing, radius, fonts } from '../../theme'
+import { colors, fonts } from '../../theme'
 import ChatHeader from './ChatHeader'
 import ChatInputBar from './ChatInputBar'
 import ScheduleMessageModal from './ScheduleMessageModal'
@@ -200,8 +200,6 @@ function AudioPlayer({ uri, mine, pending }: { uri: string; mine: boolean; pendi
   const buffering = (status as any).isBuffering ?? (status as any).buffering ?? false
   const progress  = duration > 0 ? Math.min(1, pos / duration) : 0
   const filled    = Math.floor(progress * WAVE_BARS)
-  const isLoading = !playing && duration === 0 && !pending
-
   const waveform = useMemo(() => getWaveform(uri), [uri])
 
   function handlePlayPause() {
@@ -427,7 +425,7 @@ export default function ChatScreen() {
   const { user }   = useAuthStore()
   const route      = useRoute<Route>()
   const nav        = useNavigation<NavProp>()
-  const { userId, userName, userAvatar, partnerHasPosts = false } = route.params
+  const { userId, userName, userAvatar } = route.params
 
   const [messages, setMessages]         = useState<LocalMessage[]>([])
   const [text, setText]                 = useState('')

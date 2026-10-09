@@ -38,20 +38,3 @@ export function onConnectivityChange(fn: Listener): () => void {
   return () => listeners.delete(fn)
 }
 
-// Wait until connected (used by sync queue before processing)
-export function waitForConnection(timeoutMs = 30000): Promise<void> {
-  if (_isConnected) return Promise.resolve()
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      off()
-      reject(new Error('Timeout waiting for connection'))
-    }, timeoutMs)
-    const off = onConnectivityChange((connected) => {
-      if (connected) {
-        clearTimeout(timer)
-        off()
-        resolve()
-      }
-    })
-  })
-}

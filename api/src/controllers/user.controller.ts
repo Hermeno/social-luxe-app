@@ -1,10 +1,9 @@
 import { Response } from 'express'
 import * as userService from '../services/user.service'
-import { ok, badRequest, serverError, notFound, forbidden, created, unauthorized } from '../utils/response'
+import { ok, badRequest, unauthorized } from '../utils/response'
 import { handleError, isSelfRecordNotFound } from '../utils/errors'
 import { AuthRequest } from '../types'
 import { prisma } from '../config/database'
-import { Prisma } from '@prisma/client'
 import { uploadToCloudinary } from '../utils/cloudinary.util'
 
 export async function getAllUsers(req: AuthRequest, res: Response) {

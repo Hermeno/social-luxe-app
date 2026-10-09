@@ -24,11 +24,6 @@ export function storyUrl(s: Story) {
   return s.mediaUrl.startsWith('http') ? s.mediaUrl : `${API_BASE}${s.mediaUrl}`
 }
 
-export async function getFriendsStories(): Promise<StoryGroup[]> {
-  const res = await api.get<ApiResponse<StoryGroup[]>>('/stories')
-  return res.data.data
-}
-
 export async function createStory(uri: string, type: 'image' | 'video'): Promise<Story> {
   const form = new FormData()
   form.append('media', {
@@ -46,6 +41,3 @@ export async function viewStory(storyId: string): Promise<void> {
   await api.post(`/stories/${storyId}/view`)
 }
 
-export async function deleteStory(storyId: string): Promise<void> {
-  await api.delete(`/stories/${storyId}`)
-}

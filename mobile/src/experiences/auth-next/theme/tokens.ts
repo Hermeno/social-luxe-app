@@ -81,13 +81,6 @@ export const control = {
   target: 48,
 } as const
 
-/** Duração das transições. Curtas: nada aqui é espectáculo. */
-export const motion = {
-  fast: 150,
-  base: 200,
-  slow: 220,
-} as const
-
 /**
  * A escada tipográfica.
  *

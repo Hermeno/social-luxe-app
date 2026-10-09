@@ -393,8 +393,9 @@ export default function RootNavigator({ onboardingDone, setOnboardingDone, defau
   //
   // Uma só experiência cobre a autenticação e o onboarding: são o mesmo percurso
   // para quem chega, e tê-los em dois componentes obrigava a Home a existir no
-  // meio deles. O `AuthNavigator` e o `OnboardingScreen` continuam no disco,
-  // intactos; deixaram de ser montados.
+  // meio deles. O `AuthNavigator` e o `OnboardingScreen` que cobriam este
+  // percurso foram removidos; do segundo ficou só o catálogo de interesses, em
+  // `data/interests`, que o editar de perfil também lê.
   const showingGuest = !isAuthenticated && guestMode === 'guest'
   const showEntry = !showingGuest && (!isAuthenticated || !onboardingDone)
 

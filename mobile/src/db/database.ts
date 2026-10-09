@@ -281,31 +281,7 @@ export async function cacheUser(user: object): Promise<void> {
   )
 }
 
-export async function getCachedUser(userId: string): Promise<any | null> {
-  const database = await getDb()
-  const row = await database.getFirstAsync<{ data: string }>(
-    'SELECT data FROM users_cache WHERE id = ?', [userId],
-  )
-  return row ? JSON.parse(row.data) : null
-}
-
 // ── Media file cache ───────────────────────────────────────────────────────────
-
-export async function getMediaCacheEntry(url: string): Promise<string | null> {
-  const database = await getDb()
-  const row = await database.getFirstAsync<{ local_path: string }>(
-    'SELECT local_path FROM media_cache WHERE url = ?', [url],
-  )
-  return row?.local_path ?? null
-}
-
-export async function saveMediaCacheEntry(url: string, localPath: string, sizeBytes = 0): Promise<void> {
-  const database = await getDb()
-  await database.runAsync(
-    'INSERT OR REPLACE INTO media_cache (url, local_path, size_bytes, cached_at) VALUES (?, ?, ?, ?)',
-    [url, localPath, sizeBytes, Date.now()],
-  )
-}
 
 export async function deleteMediaCacheEntry(url: string): Promise<void> {
   const database = await getDb()

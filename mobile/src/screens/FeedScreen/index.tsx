@@ -10,7 +10,6 @@ import { StackNavigationProp } from '@react-navigation/stack'
 import { Post, type RepostResult } from '../../types'
 import { useFeed } from '../../hooks/useFeed'
 import { useFeedStore } from '../../store/feed.store'
-import { useNotificationStore } from '../../store/notification.store'
 import { AppStackParams } from '../../navigation/AppNavigator'
 import { markPostViewed, getViewedPostIds, getCache, setCache, enqueueSyncOp } from '../../db/database'
 import * as postService from '../../services/post.service'
@@ -18,7 +17,6 @@ import type { TasteSignal } from '../../services/post.service'
 import { isConnected } from '../../services/netinfo.service'
 import { useT } from '../../i18n'
 import { resolveMediaUrl } from '../../utils/media'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors, spacing } from '../../theme'
 import FeedHeader, { FeedUserGroup as UserGroup } from './FeedHeader'
 import FeedInvite from './FeedInvite'
@@ -86,7 +84,7 @@ const isInvite = (row: FeedRow): row is InviteRow => (
 // comentários. O deslize suave vem da própria FlatList.
 export default function FeedScreen() {
   const {
-    posts, loading, refresh, loadMore, prependPost, removePost, updatePost,
+    posts, refresh, loadMore, prependPost, removePost, updatePost,
     incrementView, updatePostCounts, updateRepostState,
   } = useFeed()
   const t   = useT()
@@ -106,14 +104,10 @@ export default function FeedScreen() {
   const setSearchVisible = useFeedStore((s) => s.setSearchVisible)
   const homeTap          = useFeedStore((s) => s.homeTap)
   const setActiveCommentTarget = useFeedStore((s) => s.setActiveCommentTarget)
-  const immersive        = useFeedStore((s) => s.immersive)
-  const setImmersive     = useFeedStore((s) => s.setImmersive)
   const setFeedInviteActive = useFeedStore((s) => s.setFeedInviteActive)
   const requestedCommentPostId = useFeedStore((s) => s.requestedCommentPostId)
   const clearCommentRequest    = useFeedStore((s) => s.clearCommentRequest)
-  const circleInvite           = useNotificationStore((s) => s.circleInvite)
 
-  const { top: safeTop } = useSafeAreaInsets()
   const [currentPostId, setCurrentPostId] = useState<string | null>(null)
   const [commentPost,   setCommentPost]   = useState<Post | null>(null)
   const [viewedIds,     setViewedIds]     = useState<Set<string>>(new Set())
@@ -371,10 +365,6 @@ export default function FeedScreen() {
   // guarda, um regresso ao topo recolhia a navegação sozinho.
   const draggingRef = useRef(false)
   const lastOffsetRef = useRef(0)
-  const setImmersiveIfChanged = useCallback((value: boolean) => {
-    if (useFeedStore.getState().immersive !== value) setImmersive(value)
-  }, [setImmersive])
-
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offset = event.nativeEvent.contentOffset.y
     const delta = offset - lastOffsetRef.current
@@ -383,14 +373,6 @@ export default function FeedScreen() {
     // estiver à frente. O offset continua a ser seguido porque outras contas o
     // usam.
     void delta
-  }, [])
-
-  const scrollToIndex = useCallback((idx: number) => {
-    // Conta linhas e não posts: com as pausas pelo meio, `flatPosts.length` é
-    // menor que a lista e o clamp cortava os índices do fim.
-    const source = rowsRef.current
-    const clamped = Math.max(0, Math.min(idx, source.length - 1))
-    if (source[clamped]) listRef.current?.scrollToIndex({ index: clamped, animated: true })
   }, [])
 
   // ── Célula visível → post ativo (é o que decide qual vídeo toca) ───────────

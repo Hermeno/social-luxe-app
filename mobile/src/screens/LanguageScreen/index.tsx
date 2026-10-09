@@ -9,7 +9,6 @@ import { useI18n, useT } from '../../i18n'
 import { colors, fonts } from '../../theme'
 
 const T_C = '#1A1A1A'
-const S   = '#6E6E73'
 const M   = '#ABABAB'
 const B   = colors.black
 const BD  = '#E5E5EA'

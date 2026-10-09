@@ -2,8 +2,6 @@ import { ApiResponse } from '../types'
 import { api } from './api'
 
 export const MUTED_USER_IDS_CACHE_KEY = 'moderation:muted_user_ids'
-export const MUTED_USERS_CACHE_KEY = 'moderation:muted_users'
-
 export type MuteDuration = 'ONE_MONTH' | 'FOREVER'
 
 export interface MutedUser {
@@ -26,6 +24,3 @@ export async function muteUser(userId: string, duration: MuteDuration): Promise<
   return res.data.data
 }
 
-export async function unmuteUser(userId: string): Promise<void> {
-  await api.delete(`/mutes/${userId}`)
-}

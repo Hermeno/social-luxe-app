@@ -1,7 +1,7 @@
 import React from 'react'
 import { NavigatorScreenParams } from '@react-navigation/native'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
-import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack'
+import { createStackNavigator } from '@react-navigation/stack'
 import FeedScreen from '../screens/FeedScreen'
 import HomeScreen from '../screens/HomeScreen'
 import MessagesScreen from '../screens/MessagesScreen'

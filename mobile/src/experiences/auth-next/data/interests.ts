@@ -1,4 +1,4 @@
-import { INTERESTS as CATALOGUE } from '../../../screens/OnboardingScreen'
+import { INTERESTS as CATALOGUE } from '../../../data/interests'
 import type { Lang } from '../i18n'
 
 /**

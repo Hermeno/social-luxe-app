@@ -1,6 +1,6 @@
 import { Response } from 'express'
 import * as messageService from '../services/message.service'
-import { ok, created, badRequest, serverError, notFound, forbidden } from '../utils/response'
+import { ok, created, badRequest, notFound, forbidden } from '../utils/response'
 import { handleError } from '../utils/errors'
 import { AuthRequest } from '../types'
 import { emitToUser } from '../socket'

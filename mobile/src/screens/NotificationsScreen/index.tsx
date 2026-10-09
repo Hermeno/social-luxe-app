@@ -218,8 +218,6 @@ export default function NotificationsScreen() {
     setRespondingId(null)
   }
 
-  const totalBadge = badge + unionInvites.length
-
   return (
     <View style={[s.container, { paddingTop: top }]}>
       {/* Header */}

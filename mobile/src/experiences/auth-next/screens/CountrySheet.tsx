@@ -9,7 +9,7 @@ import { FieldFrame } from '../components/Field'
 import { Radio } from '../components/choice'
 import { useI18n, useT } from '../i18n'
 import { useTheme, hairline } from '../theme/ThemeProvider'
-import { COUNTRIES, countryName, searchCountries, type Country } from '../data/countries'
+import { countryName, searchCountries, type Country } from '../data/countries'
 import { control, GUTTER, radius, space } from '../theme/tokens'
 
 const ROW_HEIGHT = 68
@@ -170,9 +170,6 @@ export default function CountrySheet({
     </Modal>
   )
 }
-
-/** Quantos países há, para quem precise de saber sem importar a lista toda. */
-export const COUNTRY_COUNT = COUNTRIES.length
 
 const s = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end' },

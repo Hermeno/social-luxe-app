@@ -1,7 +1,6 @@
 import { Response } from 'express'
 import * as reportService from '../services/report.service'
 import { created, badRequest, serverError } from '../utils/response'
-import { handleError } from '../utils/errors'
 import { AuthRequest } from '../types'
 import { ReportTarget } from '@prisma/client'
 

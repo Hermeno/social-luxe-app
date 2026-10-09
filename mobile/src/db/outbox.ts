@@ -57,10 +57,6 @@ export function makeTempPostId(): string {
   return `${LOCAL_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
-export function isTempPostId(id: string): boolean {
-  return id.startsWith(LOCAL_PREFIX)
-}
-
 /**
  * Constrói o post que a feed mostra enquanto o verdadeiro não existe.
  * Os contadores começam a zero e o prazo é o mesmo que o servidor aplicaria.

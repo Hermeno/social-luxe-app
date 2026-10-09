@@ -18,7 +18,7 @@ import { api } from '../../services/api'
 import { enqueueSyncOp, cacheUser } from '../../db/database'
 import { isConnected } from '../../services/netinfo.service'
 import { useT, useI18n } from '../../i18n'
-import { INTERESTS } from '../OnboardingScreen'
+import { INTERESTS } from '../../data/interests'
 import BusinessSection from './BusinessSection'
 import SocialSection from './SocialSection'
 import {

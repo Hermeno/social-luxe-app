@@ -19,7 +19,7 @@ import { StoryGroup, Story, storyUrl, viewStory } from '../../services/story.ser
 import { colors, fonts } from '../../theme'
 import { configureVideoPlayer, videoSource as buildVideoSource } from '../../utils/video'
 
-const { width, height } = Dimensions.get('window')
+const { width } = Dimensions.get('window')
 const STORY_DURATION = 4000
 
 type Route = RouteProp<AppStackParams, 'StoryViewer'>

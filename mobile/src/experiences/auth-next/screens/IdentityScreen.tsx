@@ -5,7 +5,7 @@ import Icon from '../../../components/Icon'
 import AuthScreen from '../components/AuthScreen'
 import Field from '../components/Field'
 import { Notice, PrimaryButton, QuietAction, SectionLabel } from '../components/primitives'
-import { useT, fill } from '../i18n'
+import { useT } from '../i18n'
 import { useTheme } from '../theme/ThemeProvider'
 import { createAccount, suggestHandles } from '../adapters/auth.adapter'
 import { classify, type Failure } from '../adapters/errors'
@@ -249,11 +249,6 @@ export default function IdentityScreen({
       </View>
     </AuthScreen>
   )
-}
-
-/** A frase que diz que o servidor escolheu outro identificador. */
-export function reassignedMessage(t: ReturnType<typeof useT>, assigned: string): string {
-  return fill(t.handleReassigned, { handle: assigned })
 }
 
 const s = StyleSheet.create({

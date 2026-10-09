@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import {
-  Animated, View, Text, TouchableOpacity, StyleSheet, Image,
+  Animated, View, Text, TouchableOpacity, StyleSheet,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -9,51 +9,21 @@ import { StackNavigationProp } from '@react-navigation/stack'
 import { Post, Pairing } from '../../types'
 import { brandPalette, colors, radius, sheet, spacing } from '../../theme'
 import Icon from '../../components/Icon'
-import { feedIcon, feedInk, feedLine, feedTextShadow, feedType, RAIL_CLEARANCE } from './tokens'
+import { feedIcon, feedInk, feedTextShadow, feedType, RAIL_CLEARANCE } from './tokens'
 import { useT } from '../../i18n'
 import { useAuthStore } from '../../store/auth.store'
 import { useFollowStore } from '../../store/follow.store'
 import { getUserFollowers, FollowUser } from '../../services/follow.service'
-import { getCache, setCache } from '../../db/database'
 import { toast } from '../../utils/toast'
-import * as postService from '../../services/post.service'
 import * as pairingService from '../../services/pairing.service'
-import { API_BASE } from '../../config'
 import AvatarImage from '../../components/AvatarImage'
 import VerifiedBadge from '../../components/VerifiedBadge'
 import AuthorAvatar from '../../components/AuthorAvatar'
 import FollowSplitButton, { FollowDuration } from '../../components/FollowSplitButton'
 import { AppStackParams } from '../../navigation/AppNavigator'
 
-const MAX_COMMENTERS = 4
-
-type CommenterThumb = { id: string; name: string; avatar: string | null }
-
-function uniqueCommenters(
-  comments: Array<{ user: CommenterThumb }>,
-  post: { user: { id: string } },
-): CommenterThumb[] {
-  const seen = new Set<string>()
-  seen.add(post.user.id) // exclui o autor do post
-  const result: CommenterThumb[] = []
-  for (const c of comments) {
-    if (!c.user?.id || seen.has(c.user.id)) continue
-    seen.add(c.user.id)
-    result.push(c.user)
-    if (result.length >= MAX_COMMENTERS) break
-  }
-  return result
-}
-
-function resolveAvatar(uri: string | null | undefined): string | null {
-  if (!uri) return null
-  if (uri.startsWith('http') || uri.startsWith('file://')) return uri
-  return `${API_BASE}${uri}`
-}
-
 type Nav = StackNavigationProp<AppStackParams>
 
-const FULL_LIFE_MS  = 24 * 60 * 60 * 1000   // 24h baseline
 const DYING_THRESH  =  2 * 60 * 60 * 1000   // <2h = dying
 
 interface Props {
@@ -80,7 +50,6 @@ export default function PostInfo({
   const [expanded, setExpanded]           = useState(false)
   const [loadingFollow, setLoadingFollow] = useState(false)
   const [now, setNow]                     = useState(Date.now)
-  const [extraCommenters, setExtraCommenters] = useState<CommenterThumb[]>([])
   const [authorPairing, setAuthorPairing] = useState<Pairing | null>(null)
   // Seguidores do postador — aparecem enquanto sigo, somem se deixar de seguir
   const [followers, setFollowers] = useState<FollowUser[]>([])
@@ -124,7 +93,6 @@ export default function PostInfo({
   // Reset state on post change
   useEffect(() => {
     setExpanded(false)
-    setExtraCommenters([])
   }, [post.id])
 
   // Pairing badge — only fetched for the post currently on screen, not the whole feed
@@ -136,34 +104,6 @@ export default function PostInfo({
     return () => { cancelled = true }
   }, [post.user.id, isActive])
 
-  // Load extra commenters only when recentCommenters is absent (old cached posts)
-  useEffect(() => {
-    if (post._count.comments === 0) return
-    if (post.recentCommenters && post.recentCommenters.length > 0) return
-    let cancelled = false
-
-    async function load() {
-      // SQLite generic cache (populated when CommentSheet opens)
-      const cached = await getCache<Array<{ user: CommenterThumb }>>(`comments:${post.id}`)
-        .catch(() => null)
-      if (!cancelled && cached && cached.length > 0) {
-        setExtraCommenters(uniqueCommenters(cached, post))
-        return
-      }
-      // Fallback: fetch from API and save to cache for next time
-      try {
-        const fresh = await postService.getComments(post.id)
-        if (fresh.length > 0) {
-          setCache(`comments:${post.id}`, fresh).catch(() => {})
-          if (!cancelled) setExtraCommenters(uniqueCommenters(fresh as any, post))
-        }
-      } catch {}
-    }
-
-    load()
-    return () => { cancelled = true }
-  }, [post.id])
-
   async function handleFollow(duration: FollowDuration = 'forever') {
     if (loadingFollow) return
     setLoadingFollow(true)
@@ -174,13 +114,6 @@ export default function PostInfo({
     }
     setLoadingFollow(false)
   }
-
-  // Prefer recentCommenters from the feed response (cached with post, works offline).
-  // Fall back to extraCommenters fetched separately for old cached posts.
-  const commenters = useMemo<CommenterThumb[]>(() => {
-    if (post.recentCommenters && post.recentCommenters.length > 0) return post.recentCommenters
-    return extraCommenters
-  }, [post.recentCommenters, extraCommenters])
 
   // ── Energy calculations ─────────────────────────────────────────────────────
   const expiresMs   = post.expiresAt ? new Date(post.expiresAt).getTime() : 0

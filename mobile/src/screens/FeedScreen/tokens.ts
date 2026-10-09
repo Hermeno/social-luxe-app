@@ -100,39 +100,6 @@ export const feedRail = {
 } as const
 
 /**
- * O vazio entre o fundo da caixa do último item da coluna e a tinta do ícone.
- *
- * Todos os itens da coluna medem o mesmo: o ícone em cima, uma folga e o espaço
- * do contador por baixo — reservado mesmo nas acções que não têm número, senão
- * os ícones deixavam de assentar na mesma grelha. O efeito é que a tinta do
- * último ícone fica bem acima do fundo da sua caixa.
- *
- * À esquerda não há nada disto: a última linha de texto acaba onde a caixa
- * acaba. Encostar as duas caixas ao mesmo fundo, como se fez antes, punha os
- * ícones 22pt acima do texto — que é precisamente a distância que este valor
- * mede, e que agora o bloco do autor usa para subir até à mesma linha.
- *
- * Derivado e não escrito à mão: se um dos degraus da coluna mudar, esta conta
- * muda com ele e o alinhamento não se desfaz em silêncio.
- */
-export const feedRailTailInset = (
-  (feedRail.itemHeight - (feedRail.iconStageHeight + feedRail.iconToMetricGap + feedRail.metricSlotHeight)) / 2
-  + feedRail.iconToMetricGap
-  + feedRail.metricSlotHeight
-)
-
-/**
- * A altura da coluna com `items` acções, do fundo da caixa do último ao topo
- * do primeiro.
- *
- * Para quem desenha por baixo da coluna e precisa de saber até onde ela sobe
- * sem a medir: a cadência é fixa, por isso a conta é exacta.
- */
-export function feedRailHeight(items: number): number {
-  return items * feedRail.itemHeight + Math.max(0, items - 1) * feedRail.itemGap
-}
-
-/**
  * Largura máxima da coluna editorial da pausa do Círculo e do CTA que a fecha.
  * Partilhar a medida mantém as duas margens na mesma régua também em ecrãs
  * largos; no telemóvel, ambas continuam simplesmente a 16px das bordas.
@@ -241,9 +208,6 @@ export const homeType = {
    */
   textPost:      { fontSize: 22, lineHeight: 29 },
 } as const
-
-/** Traço base em unidades da grelha 24×24; escala junto com o ícone. */
-export const FEED_STROKE = 1.75
 
 /**
  * Tinta de um controlo em repouso — gostar, comentar, repostar, partilhar, o

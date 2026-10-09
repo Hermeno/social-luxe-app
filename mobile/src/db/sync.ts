@@ -16,7 +16,6 @@ import {
   clearStaleCache,
   purgeSyncedDeletes,
   purgeExpiredPosts,
-  getSyncMeta,
   setSyncMeta,
   getPendingLocalPostIds,
 } from './database'

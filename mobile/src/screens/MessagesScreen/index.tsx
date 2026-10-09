@@ -30,7 +30,6 @@ import {
   updateCachedConnection,
   getCache,
   setCache,
-  getSyncMeta,
   setSyncMeta,
 } from '../../db/database'
 import type { FollowUser } from '../../services/follow.service'
@@ -222,7 +221,6 @@ function ConvoRow({ item, viewedIds, onPress, index, myUserId, isQuickOpen, onTo
   const isOnline    = useOnlineStore((st) => st.isOnline(item.user.id))
   const hasMsg      = !!item.lastMessage
   const unread      = item.unreadCount > 0
-  const viewedCount = item.postIds.filter((id) => viewedIds.has(id)).length
   const iMine       = hasMsg && item.lastMessage!.senderId === myUserId
   const showReply   = unread && !iMine
 
@@ -426,7 +424,7 @@ export default function MessagesScreen() {
   const [connsError,     setConnsError]     = useState(false)
   const [viewedIds,      setViewedIds]      = useState<Set<string>>(new Set())
   const [quickReplyId,   setQuickReplyId]   = useState<string | null>(null)
-  const [myHasPosts,     setMyHasPosts]     = useState(false)
+  const [, setMyHasPosts] = useState(false)
 
   const [query,          setQuery]          = useState('')
   const [isSearchMode,   setIsSearchMode]   = useState(false)

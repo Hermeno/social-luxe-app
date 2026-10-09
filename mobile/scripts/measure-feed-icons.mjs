@@ -14,12 +14,27 @@ const start = source.indexOf('export const feedIcons = ') + 'export const feedIc
 const end = source.indexOf('\n} satisfies', start)
 const icons = new Function(`return ${source.slice(start, end + 2)}`)()
 const kebab = (s) => s.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase())
+// Pares contorno/preenchido: a silhueta externa tem de ser a mesma nos dois
+// estados, senão o ícone "salta" ao ser seleccionado. A lista esteve escrita à
+// mão e quebrava o script sempre que um ícone saía do conjunto; agora sai dos
+// nomes que existem — `X-solid`/`X-fill` procura o seu contorno em `X`,
+// `X-outline` ou `X-light`.
+function parDoEstadoCheio(nome, existe) {
+  const base = nome.replace(/-(solid|fill)$/, '')
+  if (base === nome) return null
+  return [base, base + '-outline', base + '-light'].find((c) => existe.has(c)) ?? null
+}
 const jobs = readdirSync(SRC).filter((f) => f.endsWith('.svg')).sort().map((file) => {
   const name = file.slice(0, -4)
   const def = icons[name]
   const shapes = def.shapes.map(([tag, attrs]) => `<${tag} ${Object.entries(attrs).map(([k, v]) => `${kebab(k)}="${v}"`).join(' ')}/>`).join('')
   return { name, svg: readFileSync(join(SRC, file), 'utf8'), runtime: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="${def.viewBox}" fill="none">${shapes}</svg>` }
 })
+const nomesExistentes = new Set(jobs.map((j) => j.name))
+const pares = jobs.map((j) => j.name)
+  .map((nome) => { const contorno = parDoEstadoCheio(nome, nomesExistentes); return contorno && [contorno, nome] })
+  .filter(Boolean)
+
 const page = `<!doctype html><html><body><script>
 const jobs = ${JSON.stringify(jobs)};
 const scale = 16, size = 24 * scale;
@@ -49,7 +64,7 @@ async function raster(svg) {
     if (mismatch) failures.push(job.name + ': SVG e runtime divergem em ' + mismatch + ' pixels');
     if (x0 < 32 || y0 < 32 || x1 >= 352 || y1 >= 352) failures.push(job.name + ': tinta fora da margem de 2 unidades');
   }
-  for (const [outline, solid] of [['heart','heart-solid'],['chat-outline','chat-solid'],['chat-teardrop-light','chat-teardrop-fill'],['play-list-4','play-list-4-solid']]) {
+  for (const [outline, solid] of ${JSON.stringify(pares)}) {
     if (JSON.stringify(result[outline].ink) !== JSON.stringify(result[solid].ink)) failures.push(outline + ': silhueta externa muda no estado preenchido');
   }
   document.body.innerHTML = '<pre id="result"></pre>';

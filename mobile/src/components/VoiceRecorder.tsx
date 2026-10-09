@@ -4,7 +4,7 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
-import { colors, fonts, gradients } from '../theme'
+import { colors, fonts } from '../theme'
 import { useT } from '../i18n'
 import { useVoiceRecorder } from './VoiceMessage/useVoiceRecorder'
 import { VoicePhase } from './VoiceMessage/types'
@@ -15,7 +15,6 @@ const REC_BARS  = 28
 const PREV_BARS = 36
 const BAR_H     = 22
 const BAR_W     = 3
-const GRAD      = gradients.brand
 
 function fmtMs(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000))

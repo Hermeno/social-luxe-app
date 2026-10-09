@@ -75,7 +75,7 @@ Tudo passa por `adapters/`. Nenhum ecrã importa um serviço antigo directamente
 - `services/netinfo.service` — `isConnected`
 - `utils/handle` — `displayHandle`
 - `components/Icon`, `components/AvatarImage`
-- `screens/OnboardingScreen` — só a constante `INTERESTS` (os ids persistidos)
+- `data/interests` — só a constante `INTERESTS` (os ids persistidos)
 
 Assets reutilizados: `assets/files/luxee-wordmark.png`,
 `assets/files/luxee-L-symbol.png`, `assets/Plus_Jakarta_Sans/static/*`.

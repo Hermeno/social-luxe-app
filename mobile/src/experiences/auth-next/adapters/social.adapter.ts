@@ -38,10 +38,6 @@ export async function followAll(
   await useFollowStore.getState().followMany(users)
 }
 
-export function isFollowing(userId: string): boolean {
-  return useFollowStore.getState().followingIds.has(userId)
-}
-
 /**
  * Quem está a ser seguido, de forma reactiva.
  *

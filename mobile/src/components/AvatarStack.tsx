@@ -7,8 +7,7 @@ export type StackedUser = { id: string; name: string; avatar: string | null }
 /**
  * Fila de avatares sobrepostos.
  *
- * Diferente do `CommenterStack` da feed: aquele é um detalhe de 22px ao lado da
- * legenda, com regras próprias. Este é um elemento de cabeçalho, maior e com
+ * Elemento de cabeçalho: maior que os avatares que acompanham uma legenda, com
  * contagem configurável, para as folhas brancas e o perfil.
  *
  * O primeiro fica por cima e lê-se da esquerda para a direita.

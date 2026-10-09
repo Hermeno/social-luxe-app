@@ -1,6 +1,6 @@
 import { Response } from 'express'
 import * as blockService from '../services/block.service'
-import { ok, badRequest, serverError, notFound, forbidden, created } from '../utils/response'
+import { ok, badRequest } from '../utils/response'
 import { handleError } from '../utils/errors'
 import { AuthRequest } from '../types'
 

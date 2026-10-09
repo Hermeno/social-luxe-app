@@ -17,7 +17,7 @@ import { createStory } from '../../services/story.service'
 import { colors, fonts, spacing, radius } from '../../theme'
 import { useT } from '../../i18n'
 
-const { width, height } = Dimensions.get('window')
+const { width } = Dimensions.get('window')
 
 export default function CreateStoryScreen() {
   const nav = useNavigation()

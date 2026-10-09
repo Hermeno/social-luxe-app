@@ -1,6 +1,6 @@
 import React from 'react'
 import {
-  View, Text, TouchableOpacity, StyleSheet, ScrollView, Linking, Alert,
+  Text, TouchableOpacity, StyleSheet, ScrollView, Linking, Alert,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { fonts } from '../../theme'

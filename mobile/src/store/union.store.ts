@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { Union, UnionInvite, UnionMessage } from '../types'
+import { Union, UnionInvite } from '../types'
 import { getCache, setCache } from '../db/database'
 
 const CACHE_UNIONS  = 'union_my_unions'

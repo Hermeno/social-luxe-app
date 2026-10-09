@@ -1,7 +1,6 @@
 import { prisma } from '../config/database'
 import { MediaType, Prisma } from '@prisma/client'
-import { POST_INITIAL_HOURS, POST_EXTENDED_HOURS } from '../types'
-import { sendPush } from './notification.service'
+import { POST_INITIAL_HOURS } from '../types'
 import { withThumbnail, withThumbnails } from '../utils/cloudinary.util'
 import { emitToUser } from '../socket'
 import {

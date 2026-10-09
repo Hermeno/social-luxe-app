@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client'
 import { Response } from 'express'
-import { badRequest, notFound, serverError } from './response'
+import { badRequest, serverError } from './response'
 
 // Known business errors thrown by services — safe to show to the client
 const SAFE_MESSAGES = new Set([

@@ -45,11 +45,6 @@ export async function getIncomingHalves(): Promise<Half[]> {
   return res.data.data ?? []
 }
 
-export async function getHalf(id: string): Promise<Half> {
-  const res = await api.get<ApiResponse<Half>>(`/halves/${id}`)
-  return res.data.data
-}
-
 // Completar devolve o Post já nascido — dos dois.
 export async function completeHalf(id: string, uri: string): Promise<Post> {
   const res = await uploadApi.post<ApiResponse<Post>>(`/halves/${id}/complete`, mediaForm(uri), {

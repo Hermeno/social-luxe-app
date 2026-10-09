@@ -1,6 +1,6 @@
 import { Response } from 'express'
 import * as reactionService from '../services/reaction.service'
-import { ok, badRequest, serverError, notFound, forbidden, created } from '../utils/response'
+import { ok, badRequest, serverError } from '../utils/response'
 import { handleError } from '../utils/errors'
 import { AuthRequest } from '../types'
 import { ReactionType } from '@prisma/client'

@@ -61,10 +61,6 @@ export function e164(draft: Pick<Draft, 'country' | 'localNumber'>): string {
  */
 export const MIN_LOCAL_DIGITS = 7
 
-export function phoneReady(draft: Pick<Draft, 'localNumber'>): boolean {
-  return draft.localNumber.replace(/\D/g, '').length >= MIN_LOCAL_DIGITS
-}
-
 /** Máscara de leitura do número já conhecido, no A03. */
 export function maskedPhone(value: string): string {
   const digits = value.replace(/[^\d+]/g, '')

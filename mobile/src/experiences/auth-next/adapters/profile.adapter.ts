@@ -42,16 +42,6 @@ export async function saveInterests(ids: string[]): Promise<void> {
   await useAuthStore.getState().refreshUser().catch(() => {})
 }
 
-export async function readSavedInterests(): Promise<string[]> {
-  try {
-    const raw = await AsyncStorage.getItem(KEY_INTERESTS)
-    const parsed = raw ? JSON.parse(raw) : null
-    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string') : []
-  } catch {
-    return []
-  }
-}
-
 /**
  * A marca de onboarding concluído.
  *

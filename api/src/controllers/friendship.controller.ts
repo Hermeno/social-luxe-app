@@ -1,6 +1,6 @@
 import { Response } from 'express'
 import * as friendshipService from '../services/friendship.service'
-import { ok, created, badRequest, serverError, notFound, forbidden } from '../utils/response'
+import { ok, created, badRequest } from '../utils/response'
 import { handleError } from '../utils/errors'
 import { AuthRequest } from '../types'
 import { FriendshipDuration } from '@prisma/client'

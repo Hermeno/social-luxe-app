@@ -1,5 +1,3 @@
-export type MediaType = 'IMAGE' | 'VIDEO'
-
 export interface User {
   id: string
   name: string
@@ -277,25 +275,3 @@ export interface UnionMessage {
   createdAt:   string
 }
 
-export interface UnionConversation {
-  otherUnion:  Union
-  myUnion:     Union
-  lastMessage: UnionMessage | null
-  unreadCount: number
-}
-
-export type FriendshipDuration = 'ONE_DAY' | 'THREE_DAYS' | 'SEVEN_DAYS' | 'THIRTY_DAYS' | 'PERMANENT'
-
-export interface Friendship {
-  id: string
-  friendshipId: string
-  userAId: string
-  userBId: string
-  duration: FriendshipDuration
-  expiresAt: string | null
-  renewedAt: string | null
-  createdAt: string
-  friend: Pick<User, 'id' | 'name' | 'username' | 'avatar'>
-  userA?: Pick<User, 'id' | 'name' | 'avatar'>
-  userB?: Pick<User, 'id' | 'name' | 'avatar'>
-}
