@@ -15,7 +15,6 @@ import FeedIcon from '../../components/FeedIcon'
 import Icon, { type IconName } from '../../components/Icon'
 import PostActionIcon from '../../components/PostActionIcon'
 import { feedGlyphShadow, feedIcon, feedInk, feedRail } from './tokens'
-import { FEED_ACTION_ROW_HEIGHT } from '../../components/TabBar/layout'
 import { confirm } from '../../components/confirm'
 import { API_BASE } from '../../config'
 import { deleteCachedPostsByUser } from '../../db/database'
@@ -40,7 +39,6 @@ interface Props {
   onAuthorMuted?: (userId: string) => void
   onBlockingChange?: (open: boolean) => void
   rail?: boolean
-  horizontalRail?: boolean
   triggerSize?: number
   triggerGlyphSize?: number
   /** Tinta do gatilho; branca sobre mídia, escura sobre superfícies claras. */
@@ -167,7 +165,7 @@ function resolveMedia(url: string): string {
 
 export default function PostOptionsMenu({
   post, onDeleted, onEdited, onProfileBlocked, onAuthorMuted, onBlockingChange,
-  rail = false, horizontalRail = false, onMedia = false,
+  rail = false, onMedia = false,
   triggerSize = 25, triggerGlyphSize, triggerColor = '#fff',
 }: Props) {
   const { bottom: safeBottom } = useSafeAreaInsets()
@@ -387,19 +385,18 @@ export default function PostOptionsMenu({
   return (
     <>
       <TouchableOpacity
-        style={[s.trigger, (rail || onMedia) && s.triggerOnMedia, rail && s.triggerRail, horizontalRail && s.triggerHorizontal]}
+        style={[s.trigger, (rail || onMedia) && s.triggerOnMedia, rail && s.triggerRail]}
         onPress={openOptionsMenu}
         activeOpacity={0.75}
         // Na rail, a caixa já mede 64×54. Aumentá-la mais 9pt invadia os
         // alvos vizinhos e fazia duas acções disputarem o mesmo toque.
-        hitSlop={rail || horizontalRail ? undefined : { top: 9, bottom: 9, left: 9, right: 9 }}
+        hitSlop={rail ? undefined : { top: 9, bottom: 9, left: 9, right: 9 }}
         accessibilityRole="button"
         accessibilityLabel={t.feed_options_title}
       >
         <View style={[
           s.triggerIconStage,
           rail && s.triggerIconStageRail,
-          horizontalRail && [s.triggerIconStageHorizontal, { width: triggerSize }],
         ]}>
           <PostActionIcon
             name="options"
@@ -649,12 +646,6 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     gap: feedRail.iconToMetricGap,
   },
-  triggerHorizontal: {
-    width: '100%',
-    height: FEED_ACTION_ROW_HEIGHT,
-    borderRadius: 0,
-    gap: 0,
-  },
   triggerIconStage: {
     width: feedIcon.action,
     height: feedIcon.action,
@@ -665,7 +656,6 @@ const s = StyleSheet.create({
     width: feedRail.iconStageWidth,
     height: feedRail.iconStageHeight,
   },
-  triggerIconStageHorizontal: { width: 32, height: 32 },
   triggerMetricSlot: { height: feedRail.metricSlotHeight },
   backdrop: {
     flex: 1,

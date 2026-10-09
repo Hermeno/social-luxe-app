@@ -49,6 +49,14 @@ interface Props {
   perspectiveLabel?: (name: string) => string
   /** Acrescentado ao rótulo de uma perspetiva tardia — ", chegou depois". */
   lateLabel?: string
+  /**
+   * Desenhar o anel cromático à volta de cada fotografia.
+   *
+   * `false` tira-o e devolve o espaço dele à fotografia, que passa a encher o
+   * disco até ao corte. Não é só esconder: um anel invisível deixava um halo
+   * de ar sem explicação à volta de cada rosto.
+   */
+  rings?: boolean
 }
 
 /**
@@ -127,7 +135,7 @@ export function circleDiscRect(
  * verificável contra o documento sem montar nada.
  */
 function CircleMediaComposition({
-  slots, people, width, height, postId, activeIndex = 0, onSelect, onDark = false,
+  slots, people, width, height, postId, activeIndex = 0, onSelect, onDark = false, rings = true,
   showLabels, perspectiveLabel, lateLabel,
 }: Props) {
   // A figura desenha-se com as fotografias que existem — nunca com o número de
@@ -182,7 +190,8 @@ function CircleMediaComposition({
         const disc = layout.discs[discOf[index]]
         if (!disc) return null
 
-        const ring = Math.max(RING_MIN, disc.d * RING_RATIO)
+        const ring = rings ? Math.max(RING_MIN, disc.d * RING_RATIO) : 0
+        // Sem anel o corte continua: é ele que separa dois discos sobrepostos.
         const inset = ring + CUT
         const photo = disc.d - inset * 2
         const label = labels ? firstName(slot.name) : ''
@@ -222,7 +231,9 @@ function CircleMediaComposition({
                 </View>
               )}
             </View>
-            <BrandAvatarRing size={disc.d} strokeWidth={ring} dashed={late} style={StyleSheet.absoluteFill} />
+            {rings && (
+              <BrandAvatarRing size={disc.d} strokeWidth={ring} dashed={late} style={StyleSheet.absoluteFill} />
+            )}
             {!!label && !overflow && disc.d >= LABEL_MIN_DIAMETER && (
               <View style={[s.labelWrap, { bottom: inset + disc.d * 0.04 }]} pointerEvents="none">
                 <Text style={s.label} numberOfLines={1} maxFontSizeMultiplier={1.2}>{label}</Text>

@@ -3,12 +3,14 @@ import { ActivityIndicator, Animated, Easing, StyleSheet, Text, TouchableOpacity
 
 import Icon from '../../components/Icon'
 import { useT } from '../../i18n'
-import { colors, fonts, spacing, typography } from '../../theme'
+import { colors, elevation, fonts, radius, spacing, typography } from '../../theme'
 import {
   actionInkRest, feedIcon, homeType, pageDanger, pageInk, pageLine, pageSkeleton,
 } from '../FeedScreen/tokens'
 
 const SIDE = spacing.md
+const SKELETON_SIDE = spacing.sm2
+const SKELETON_KEYLINE = 1
 
 /**
  * Os estados da Home — o que a página mostra quando ainda não há publicações,
@@ -34,6 +36,8 @@ interface SkeletonProps {
 export function HomeSkeleton({ width, reduceMotion }: SkeletonProps) {
   const t = useT()
   const opacity = useRef(new Animated.Value(0.65)).current
+  const mediaWidth = Math.max(0, width - (SKELETON_SIDE + SKELETON_KEYLINE) * 2)
+  const captionWidth = Math.max(0, mediaWidth - SKELETON_SIDE * 2)
 
   useEffect(() => {
     opacity.setValue(reduceMotion ? 1 : 0.65)
@@ -55,6 +59,7 @@ export function HomeSkeleton({ width, reduceMotion }: SkeletonProps) {
 
   return (
     <View
+      style={s.skeletonCard}
       accessible
       accessibilityRole="progressbar"
       accessibilityLabel={t.home_loading}
@@ -72,12 +77,12 @@ export function HomeSkeleton({ width, reduceMotion }: SkeletonProps) {
             <View style={[s.block, s.context]} />
           </View>
         </View>
-        <View style={[s.media, { width, height: Math.round(width / 0.8) * 0.62 }]} />
+        <View style={[s.media, { width: mediaWidth, height: Math.round(mediaWidth / 0.8 * 0.62) }]} />
         <View style={s.actions}>
           {[0, 1, 2].map((key) => <View key={key} style={[s.block, s.action]} />)}
         </View>
-        <View style={[s.block, s.caption]} />
-        <View style={[s.block, s.captionShort]} />
+        <View style={[s.block, s.caption, { width: Math.round(captionWidth * 0.84) }]} />
+        <View style={[s.block, s.captionShort, { width: Math.round(captionWidth * 0.56) }]} />
       </Animated.View>
     </View>
   )
@@ -164,21 +169,31 @@ export function HomeFooter({ loading, failed, onRetry }: FooterProps) {
 
 const s = StyleSheet.create({
   block: { backgroundColor: pageSkeleton, borderRadius: 4 },
+  skeletonCard: {
+    marginHorizontal: SKELETON_SIDE,
+    marginTop: spacing.sm2,
+    paddingBottom: spacing.md,
+    backgroundColor: colors.white,
+    borderRadius: radius.lg,
+    borderWidth: SKELETON_KEYLINE,
+    borderColor: '#E7EAEE',
+    ...elevation.card,
+  },
 
   head: {
-    minHeight: 50,
+    minHeight: 56,
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm2,
-    paddingHorizontal: SIDE,
+    paddingHorizontal: SKELETON_SIDE,
   },
   avatar: { width: 34, height: 34, borderRadius: 17 },
-  headText: { gap: spacing.xs2 },
-  name: { width: 122, height: 10 },
-  context: { width: 82, height: 8 },
+  headText: { flex: 1, minWidth: 0, gap: spacing.xs2 },
+  name: { width: 122, maxWidth: '100%', height: 10 },
+  context: { width: 82, maxWidth: '100%', height: 8 },
   media: { backgroundColor: pageSkeleton },
-  actions: { flexDirection: 'row', gap: spacing.sm2, paddingHorizontal: SIDE, minHeight: 48, alignItems: 'center' },
-  action: { width: 62, height: 32, borderRadius: 8 },
-  caption: { marginHorizontal: SIDE, width: '84%', height: 10 },
-  captionShort: { marginTop: spacing.xs2, marginHorizontal: SIDE, width: '56%', height: 10, marginBottom: spacing.xl },
+  actions: { flexDirection: 'row', gap: spacing.sm2, paddingHorizontal: SKELETON_SIDE, minHeight: 56, alignItems: 'center' },
+  action: { flex: 1, maxWidth: 62, height: 32, borderRadius: 8 },
+  caption: { marginHorizontal: SKELETON_SIDE, height: 10 },
+  captionShort: { marginTop: spacing.xs2, marginHorizontal: SKELETON_SIDE, height: 10 },
 
   empty: { paddingHorizontal: SIDE, paddingTop: spacing.xxl, paddingBottom: spacing.xl },
   emptyTitle: {

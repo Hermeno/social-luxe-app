@@ -21,7 +21,8 @@ import { colors, spacing } from '../../theme'
 import FeedHeader, { FeedUserGroup as UserGroup } from './FeedHeader'
 import FeedInvite from './FeedInvite'
 import FeedItem from './FeedItem'
-import { feedType } from './tokens'
+import PostOptionsMenu from './PostOptionsMenu'
+import { feedIcon, feedInk, feedType, FEED_IMMERSIVE_GLYPH } from './tokens'
 import { hydrateTastePolicy, noteTastePostSeen } from './tastePolicy'
 import CommentSheet from '../../components/CommentSheet'
 import useReducedMotionPreference from '../../hooks/useReducedMotionPreference'
@@ -713,6 +714,33 @@ export default function FeedScreen() {
     { length: listH, offset: listH * index, index }
   ), [listH])
 
+  // ── O menu do post, no topo ───────────────────────────────────────────────
+  //
+  // Vive aqui e não na linha de acções porque é do post que se está a ver, e
+  // quem sabe qual é somos nós — a célula só sabe de si. Uma instância serve
+  // toda a feed: o menu repõe-se sozinho quando o post muda (o efeito dele
+  // depende de `post.id`), por isso não precisa de remontar a cada deslize.
+  //
+  // Sem post activo não há menu: no arranque, e enquanto a lista não assenta
+  // num item, um menu sem dono abria um ecrã de opções sobre nada.
+  const postOptions = activePost ? (
+    <PostOptionsMenu
+      post={activePost}
+      onDeleted={handlePostDeleted}
+      onEdited={updatePost}
+      onProfileBlocked={handleProfileBlocked}
+      onAuthorMuted={handleAuthorMuted}
+      // Sobre a mídia, com a mesma sombra do voltar: é o que os torna legíveis
+      // por cima de uma fotografia clara.
+      onMedia
+      // A caixa e o desenho que tinha na fila de acções: o mesmo ícone não pode
+      // mudar de tamanho por mudar de sítio.
+      triggerSize={feedIcon.action}
+      triggerGlyphSize={FEED_IMMERSIVE_GLYPH}
+      triggerColor={feedInk.primary}
+    />
+  ) : null
+
   return (
     <View
       style={s.container}
@@ -781,6 +809,7 @@ export default function FeedScreen() {
         onSearchChange={handleSearchChange}
         onBubblePress={handleBubblePress}
         onRestoreNavigation={handleRestoreNavigation}
+        trailing={postOptions}
       />
       </Animated.View>
 

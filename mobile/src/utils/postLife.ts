@@ -28,6 +28,28 @@ export function lifeTier(post: { createdAt?: string | null; expiresAt?: string |
   return TIERS.find((t) => days >= t.minDays)?.tier ?? 'base'
 }
 
+/**
+ * A publicação ainda está dentro do primeiro dia?
+ *
+ * É a pergunta que decide se um Círculo ainda acende. Os anéis cromáticos à
+ * volta das fotografias dizem "isto é agora"; passadas 24 horas deixa de ser
+ * verdade — o momento fechou — e a cor de marca a toda a volta passaria a ser
+ * decoração. A partir daí as fotografias ficam sem anel.
+ *
+ * 24h e não outro número: é a vida com que todo o post nasce (ver o topo deste
+ * ficheiro). O Círculo apaga-se exactamente quando a publicação deixa de ser
+ * nova, e não numa contagem própria inventada ao lado.
+ *
+ * Sem data assume-se que sim: um post acabado de criar no telemóvel ainda não
+ * tem `createdAt` do servidor, e esse é novo por definição.
+ */
+export function withinFirstDay(post: { createdAt?: string | null }, now = Date.now()): boolean {
+  if (!post.createdAt) return true
+  const born = new Date(post.createdAt).getTime()
+  if (!Number.isFinite(born)) return true
+  return now - born < DAY_MS
+}
+
 // Etiqueta curta para a grelha. `yearLabel` vem do i18n (1a / 1y).
 export function lifeLabel(tier: LifeTier, yearLabel: string): string | null {
   switch (tier) {

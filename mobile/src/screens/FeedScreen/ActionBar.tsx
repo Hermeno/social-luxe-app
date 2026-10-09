@@ -8,19 +8,20 @@ import PostActionIcon from '../../components/PostActionIcon'
 import AvatarImage from '../../components/AvatarImage'
 import {
   actionInkActive, actionInkRest, feedGlyphShadow, feedIcon, feedInk, feedRail, feedTextShadow, feedType,
+  FEED_IMMERSIVE_GLYPH,
 } from './tokens'
 
 import { Post, type RepostResult } from '../../types'
 import * as postService from '../../services/post.service'
 import { updateCachedPost, queueLike, enqueueSyncOp } from '../../db/database'
 import { isConnected } from '../../services/netinfo.service'
-import { formatCount, formatCountOrNone } from '../../utils/count'
+import { formatCountOrNone } from '../../utils/count'
 import ReactionPicker from '../../components/ReactionPicker'
 import SharePostSheet from '../../components/SharePostSheet'
 import { useT } from '../../i18n'
 import AuthorPostsModal from './AuthorPostsModal'
 import PostOptionsMenu from './PostOptionsMenu'
-import { FEED_ACTION_ROW_HEIGHT } from '../../components/TabBar/layout'
+import { FEED_ACTION_ROW_HEIGHT, FEED_ACTION_TOUCH_SLOP } from '../../components/TabBar/layout'
 
 interface Props {
   post: Post
@@ -59,7 +60,6 @@ interface Props {
  * PostActionIcon centra o desenho de 28px na coluna e de 26px na linha da imersiva.
  */
 const DEFAULT_RAIL_ICON_SIZE = feedIcon.action
-const IMMERSIVE_GLYPH_SIZE = 26
 
 type HeartP = {
   id:  number
@@ -155,6 +155,8 @@ function RailAction({
     >
       <Pressable
         style={[s.actionHit, horizontal && s.actionHitHorizontal]}
+        // A fila desenha 44 mas o dedo continua a ter 48 — ver a constante.
+        hitSlop={horizontal ? { top: FEED_ACTION_TOUCH_SLOP, bottom: FEED_ACTION_TOUCH_SLOP } : undefined}
         onPress={onPress}
         onLongPress={onLongPress}
         onPressIn={pressIn}
@@ -198,7 +200,7 @@ export default React.memo(function ActionBar({
   const t          = useT()
   const compact = horizontal && windowWidth < 360
   const rowIconSize = compact ? 28 : iconSize
-  const rowGlyphSize = compact ? 24 : IMMERSIVE_GLYPH_SIZE
+  const rowGlyphSize = compact ? 24 : FEED_IMMERSIVE_GLYPH
 
   const [liked,      setLiked]      = useState(likedProp)
   const [likeCount,  setLikeCount]  = useState(post._count?.likes ?? 0)
@@ -504,6 +506,14 @@ export default React.memo(function ActionBar({
   }
 
   const isAnnouncement = post.isAnnouncement ?? false
+
+  /**
+   * O menu do post só vive na coluna.
+   *
+   * Na imersiva subiu para o topo, à direita do voltar: lá está sempre no mesmo
+   * sítio, enquanto na fila de baixo competia pelo mesmo espaço das acções. O
+   * lugar que deixou na fila é agora o da partilha.
+   */
   const optionsMenu = (
     <PostOptionsMenu
       post={post}
@@ -512,13 +522,12 @@ export default React.memo(function ActionBar({
       onProfileBlocked={onProfileBlocked}
       onAuthorMuted={onAuthorMuted}
       onBlockingChange={setOptionsBlocking}
-      rail={!horizontal}
-      horizontalRail={horizontal}
-      triggerSize={rowIconSize}
-      triggerGlyphSize={horizontal ? rowGlyphSize : undefined}
+      rail
+      triggerSize={iconSize}
       triggerColor={actionInkRest.media}
     />
   )
+
 
   return (
     <>
@@ -552,7 +561,7 @@ export default React.memo(function ActionBar({
             {/* Like */}
             <RailAction
               label={t.nf_likes}
-              count={horizontal ? formatCount(likeCount) : formatCountOrNone(likeCount)}
+              count={formatCountOrNone(likeCount)}
               selected={liked}
               onPress={handleLike}
               onLongPress={() => setShowReactions(true)}
@@ -589,9 +598,7 @@ export default React.memo(function ActionBar({
             {/* Comentar */}
             <RailAction
               label={t.nf_comments}
-              count={horizontal
-                ? formatCount(commentCountProp ?? post._count?.comments ?? 0)
-                : formatCountOrNone(commentCountProp ?? post._count?.comments ?? 0)}
+              count={formatCountOrNone(commentCountProp ?? post._count?.comments ?? 0)}
               onPress={onCommentPress}
               entry={railEntry}
               order={1}
@@ -613,7 +620,7 @@ export default React.memo(function ActionBar({
                 O número vive fora da camada rodada para permanecer direito. */}
             <RailAction
               label={t.feed_repost}
-              count={horizontal ? formatCount(repostCount) : formatCountOrNone(repostCount)}
+              count={formatCountOrNone(repostCount)}
               selected={reposted}
               onPress={handleRepost}
               entry={railEntry}
@@ -634,7 +641,7 @@ export default React.memo(function ActionBar({
                   }}
                 >
                   <PostActionIcon
-                    name={horizontal ? 'repost-spaced' : 'repost'}
+                    name="repost"
                     size={rowIconSize}
                     glyphSize={horizontal ? rowGlyphSize : undefined}
                     color={reposted ? actionInkActive.media : actionInkRest.media}
@@ -655,18 +662,33 @@ export default React.memo(function ActionBar({
               </View>
             </RailAction>
 
-            {!horizontal && (
-              <RailAction label={t.mo_share} count={formatCountOrNone(shareCount)} onPress={handleShare} onLongPress={handleShareExternal} entry={railEntry} order={3} reduceMotion={reduceMotion}>
-                <PostActionIcon name="share" size={iconSize} color={actionInkRest.media} />
-              </RailAction>
-            )}
+            {/* Partilha. Toque abre a folha da Luxey; manter premido abre a
+                partilha do sistema — era assim na coluna e continua a ser. */}
+            <RailAction
+              label={t.feed_share_action}
+              count={formatCountOrNone(shareCount)}
+              onPress={handleShare}
+              onLongPress={handleShareExternal}
+              entry={railEntry}
+              order={3}
+              reduceMotion={reduceMotion}
+              horizontal={horizontal}
+              compact={compact}
+            >
+              <PostActionIcon
+                name="share"
+                size={rowIconSize}
+                glyphSize={horizontal ? rowGlyphSize : undefined}
+                color={actionInkRest.media}
+              />
+            </RailAction>
             </>
             )}
           </>
         )}
 
         {/* As utilidades não têm contador, mas reservam a mesma caixa vazia.
-            Assim menu, autor e acções mantêm exactamente a mesma cadência. */}
+            Assim autor e acções mantêm exactamente a mesma cadência. */}
         <Animated.View
           style={[
             s.utilityCluster,
@@ -688,13 +710,16 @@ export default React.memo(function ActionBar({
             },
           ]}
         >
-          {horizontal ? <View style={s.horizontalUtilityCell}>{optionsMenu}</View> : optionsMenu}
-          {/* Também sai: um momento colectivo não é a obra de um autor, e o
-              atalho para "as publicações desta pessoa" pergunta a coisa errada
-              sobre uma fotografia que várias pessoas tiraram juntas. */}
-          {!isCircle && (
+          {!horizontal && optionsMenu}
+          {/* Num Círculo da imersiva este atalho é a terceira acção: gosto,
+              comentar, e as publicações de quem abriu o Círculo. Na coluna do
+              visualizador continua a sair — ali a leitura é de uma fotografia
+              que várias pessoas tiraram juntas, e perguntar pelas publicações
+              de um autor é a pergunta errada. */}
+          {(horizontal || !isCircle) && (
           <TouchableOpacity
             style={[s.utilityHit, horizontal && s.utilityHitHorizontal]}
+            hitSlop={horizontal ? { top: FEED_ACTION_TOUCH_SLOP, bottom: FEED_ACTION_TOUCH_SLOP } : undefined}
             onPress={() => setShowAuthorPosts(true)}
             activeOpacity={0.68}
             accessibilityRole="button"
@@ -800,10 +825,12 @@ const s = StyleSheet.create({
     alignItems: 'stretch',
     gap: 0,
   },
-  standardUtilityCluster: { flex: 2 },
+  // Uma célula, não duas: o menu saiu da fila e sobrou o atalho do autor. Com
+  // `flex: 1` as cinco — gosto, comentar, repost, partilha e autor — repartem a
+  // largura em partes iguais, que é a cadência que a fila sempre teve.
+  standardUtilityCluster: { flex: 1 },
   circleUtilityCluster: { flex: 0, width: 72 },
   circleUtilityCompact: { width: 64 },
-  horizontalUtilityCell: { flex: 1, height: FEED_ACTION_ROW_HEIGHT },
   utilityHit: {
     width: feedRail.width,
     height: feedRail.itemHeight,

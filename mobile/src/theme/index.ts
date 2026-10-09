@@ -54,6 +54,17 @@ export const radius = {
   full: 999,
 }
 
+/** Sombra ambiente mínima; o contorno discreto define o cartão branco. */
+export const elevation = {
+  card: {
+    shadowColor: '#0F1115',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.035,
+    shadowRadius: 10,
+    elevation: 1,
+  },
+} as const
+
 /**
  * A escada de texto da app.
  *

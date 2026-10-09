@@ -16,6 +16,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import { Ionicons } from '@expo/vector-icons'
 import { colors, fonts, radius, spacing } from '../../theme'
 import AvatarImage from '../../components/AvatarImage'
+import Icon, { type IconName } from '../../components/Icon'
 import * as circle from '../../services/circle.service'
 import { setCircleScreenActive } from './presence'
 import useShotQueue, { type LocalShot, type ShotUploadResult } from './useShotQueue'
@@ -56,7 +57,20 @@ const DOCK_SIDE_MARGIN = 12
 const THUMB_H = 58
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name']
-type ButtonTone = 'primary' | 'glass' | 'soft' | 'danger'
+/**
+ * Os tons dos controlos do Círculo.
+ *
+ * `primary` é a acção que a página quer — fundo branco cheio, sem contorno.
+ * `glass` e `soft` são superfícies neutras sobre a câmara: vidro escuro e
+ * vidro claro, ambos com um fio branco. Nenhum deles traz cor: num ecrã que é
+ * uma câmara ao vivo, a cor que entra compete com a fotografia.
+ *
+ * Havia um `danger` em violeta, com fundo e contorno coloridos, que nenhum
+ * botão chegou a usar.
+ */
+type ButtonTone = 'primary' | 'glass' | 'soft'
+/** O botão de ícone só existe em vidro: não há ícone solto como acção principal. */
+type IconButtonTone = 'glass' | 'soft'
 
 function resolveMediaUrl(url: string) {
   if (!url) return ''
@@ -65,6 +79,7 @@ function resolveMediaUrl(url: string) {
 
 function CircleButton({
   label,
+  glyph,
   icon,
   onPress,
   tone = 'glass',
@@ -75,6 +90,9 @@ function CircleButton({
   accessibilityLabel,
 }: {
   label: string
+  /** Ícone da família Luxey. É por aqui que os botões novos passam. */
+  glyph?: IconName
+  /** Ionicons — o que resta da família antiga, ainda sem equivalente cortado. */
   icon?: IoniconName
   onPress: () => void
   tone?: ButtonTone
@@ -85,6 +103,9 @@ function CircleButton({
   accessibilityLabel?: string
 }) {
   const inactive = disabled || loading
+  // O primário é branco cheio, por isso a tinta inverte: um rótulo branco
+  // dentro dele era um botão vazio.
+  const ink = tone === 'primary' ? colors.black : colors.white
   return (
     <Pressable
       onPress={onPress}
@@ -98,16 +119,16 @@ function CircleButton({
         compact && s.controlButtonCompact,
         tone === 'primary' && s.controlButtonPrimary,
         tone === 'soft' && s.controlButtonSoft,
-        tone === 'danger' && s.controlButtonDanger,
         inactive && s.controlButtonDisabled,
         pressed && !inactive && s.controlButtonPressed,
         style,
       ]}
     >
       {loading
-        ? <ActivityIndicator size="small" color="#fff" />
-        : icon ? <Ionicons name={icon} size={compact ? 15 : 18} color="#fff" /> : null}
-      {!loading && <Text style={[s.controlButtonText, compact && s.controlButtonTextCompact]}>{label}</Text>}
+        ? <ActivityIndicator size="small" color={ink} />
+        : glyph ? <Icon name={glyph} size={compact ? 15 : 18} color={ink} />
+        : icon ? <Ionicons name={icon} size={compact ? 15 : 18} color={ink} /> : null}
+      {!loading && <Text style={[s.controlButtonText, compact && s.controlButtonTextCompact, { color: ink }]}>{label}</Text>}
     </Pressable>
   )
 }
@@ -124,7 +145,7 @@ function CircleIconButton({
   icon: IoniconName
   label: string
   onPress: () => void
-  tone?: ButtonTone
+  tone?: IconButtonTone
   disabled?: boolean
   loading?: boolean
   style?: StyleProp<ViewStyle>
@@ -140,9 +161,7 @@ function CircleIconButton({
       hitSlop={6}
       style={({ pressed }) => [
         s.iconButton,
-        tone === 'primary' && s.iconButtonPrimary,
         tone === 'soft' && s.iconButtonSoft,
-        tone === 'danger' && s.iconButtonDanger,
         inactive && s.controlButtonDisabled,
         pressed && !inactive && s.controlButtonPressed,
         style,
@@ -1142,7 +1161,7 @@ export default function CircleScreen() {
                   </View>
                 )}
                 {canRemove && (
-                  <View style={s.memberRemove}><Ionicons name="close" size={9} color="#fff" /></View>
+                  <View style={s.memberRemove}><Ionicons name="close" size={9} color={colors.black} /></View>
                 )}
               </Pressable>
             )
@@ -1261,7 +1280,7 @@ export default function CircleScreen() {
                   <CircleButton
                     style={s.cardAction}
                     label={called ? t.circle_called : t.circle_call}
-                    icon={called ? 'checkmark' : 'radio-outline'}
+                    glyph={called ? 'check' : 'plus'}
                     tone={called ? 'soft' : 'primary'}
                     onPress={() => handleCall(u)}
                     disabled={called}
@@ -1516,7 +1535,7 @@ export default function CircleScreen() {
                       <Text style={s.fsName} numberOfLines={1}>{f.name}</Text>
                       <CircleButton
                         label={called ? t.circle_called : t.circle_call}
-                        icon={called ? 'checkmark' : 'radio-outline'}
+                        glyph={called ? 'check' : 'plus'}
                         tone={called ? 'soft' : 'primary'}
                         style={s.sheetCallAction}
                         onPress={() => handleCall(f)}
@@ -1556,15 +1575,14 @@ const s = StyleSheet.create({
     gap: 7,
   },
   controlButtonCompact: { minHeight: 36, paddingHorizontal: 12, paddingVertical: 7 },
+  // Branco cheio e sem fio. Era preto com um anel magenta: o anel fazia todo o
+  // trabalho de o destacar, e punha cor de marca à volta de um botão — que é
+  // exactamente o que esta app não faz. Um fundo cheio não precisa de contorno.
   controlButtonPrimary: {
-    backgroundColor: colors.primary,
-    borderColor: 'rgba(194,70,230,0.72)',
+    backgroundColor: colors.white,
+    borderWidth: 0,
   },
   controlButtonSoft: { backgroundColor: 'rgba(255,255,255,0.14)' },
-  controlButtonDanger: {
-    backgroundColor: 'rgba(156,69,238,0.2)',
-    borderColor: 'rgba(156,69,238,0.58)',
-  },
   controlButtonDisabled: { opacity: 0.44 },
   controlButtonPressed: { opacity: 0.76, transform: [{ scale: 0.98 }] },
   controlButtonText: { color: colors.white, fontFamily: fonts.bold, fontSize: 14, letterSpacing: -0.15 },
@@ -1579,9 +1597,7 @@ const s = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.2)',
     backgroundColor: 'rgba(11,20,26,0.72)',
   },
-  iconButtonPrimary: { backgroundColor: colors.primary, borderColor: colors.primaryLight },
   iconButtonSoft: { backgroundColor: 'rgba(255,255,255,0.14)' },
-  iconButtonDanger: { backgroundColor: 'rgba(156,69,238,0.24)', borderColor: 'rgba(156,69,238,0.58)' },
 
   // O clarão do obturador: branco por cima da câmara, abaixo de todo o resto.
   shutterFlash: { backgroundColor: colors.white, zIndex: 6 },
@@ -1638,7 +1654,7 @@ const s = StyleSheet.create({
   memberCaptureCountText: { color: '#fff', fontFamily: fonts.bold, fontSize: 9 },
   memberRemove: {
     position: 'absolute', top: -3, right: -3,
-    width: 17, height: 17, borderRadius: radius.full, backgroundColor: colors.error,
+    width: 17, height: 17, borderRadius: radius.full, backgroundColor: colors.white,
     alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: colors.feedSurface,
   },
   memberCount: {
@@ -1795,8 +1811,10 @@ const s = StyleSheet.create({
   roundTimer: {
     height: 30, paddingHorizontal: 10, borderRadius: radius.full,
     flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: 'rgba(47,73,253,0.2)',
-    borderWidth: 1, borderColor: 'rgba(194,70,230,0.38)',
+    // O mesmo vidro dos controlos: tinha fundo azul e fio magenta, duas cores
+    // de marca num indicador que só conta segundos.
+    backgroundColor: 'rgba(11,20,26,0.72)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
   },
   roundTimerText: { color: '#fff', fontFamily: fonts.bold, fontSize: 12 },
   dockMainRow: { flexDirection: 'row', alignItems: 'center', minHeight: 92 },
@@ -1808,9 +1826,10 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.08)',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.32)',
   },
-  // Uma que não chegou ao servidor: o traço passa à tinta de erro e o toque
-  // no meio tenta outra vez.
-  thumbFailed: { borderColor: colors.error, borderWidth: 1.5 },
+  // Uma que não chegou ao servidor. O fio era violeta — cor de marca a fazer
+  // de erro, que nem lê como erro. Agora é branco forte contra o branco a 32%
+  // das outras, e quem diz o que aconteceu é a camada de repetir por cima.
+  thumbFailed: { borderColor: 'rgba(255,255,255,0.9)', borderWidth: 1.5 },
   thumbRetry: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center', justifyContent: 'center',
@@ -1851,8 +1870,8 @@ const s = StyleSheet.create({
   },
   publishedPill: {
     minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
-    borderRadius: radius.full, backgroundColor: 'rgba(47,73,253,0.18)',
-    borderWidth: 1, borderColor: 'rgba(47,73,253,0.4)',
+    borderRadius: radius.full, backgroundColor: 'rgba(11,20,26,0.72)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
   },
   publishedPillText: { color: '#fff', fontFamily: fonts.bold, fontSize: 13 },
 

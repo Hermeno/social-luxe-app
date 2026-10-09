@@ -1,3 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-  <path d="m21 11.5-6.75-6.75v3.9C7.5 9.62 4.6 14.4 3 19.25c2.75-3.3 6.45-4.85 11.25-4.85v3.85L21 11.5Z"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Reconstruído do `plane-3-outline.svg` enviado. O original é um contorno
+       cheio de parede 1.6 e tinta 21×21 — mais fino que a família e a
+       transbordar a caixa de 20. Guarda-se a curva exterior dele, à escala
+       18/21, e desenha-se com o traço 2: a forma é a mesma, ao ponto, e o peso
+       passa a ser o do conjunto.
+
+       O vinco era uma cápsula de 1.54 de espessura; aqui é o eixo dela, que são
+       os meios dos dois arcos das pontas, com o mesmo traço. -->
+  <path d="M 17.4639 3.1011 C 18.5801 2.9026 19.5854 2.9481 20.3187 3.6814 C 21.0519 4.4146 21.0975 5.4199 20.8989 6.5361 C 20.7015 7.6455 20.2203 9.0893 19.6109 10.9172 L 18.1496 15.3013 C 17.6537 16.7888 17.2684 17.9446 16.9131 18.78 C 16.5705 19.5857 16.1899 20.2677 15.6119 20.6037 C 14.7032 21.1321 13.5807 21.1321 12.672 20.6037 C 12.0939 20.2677 11.7135 19.5857 11.3707 18.78 C 11.0154 17.9446 10.6301 16.7888 10.1343 15.3013 L 10.1238 15.2696 C 9.95 14.7484 9.8971 14.6071 9.8221 14.4951 C 9.7381 14.3697 9.6304 14.2619 9.505 14.1779 C 9.3929 14.1029 9.2516 14.0499 8.7304 13.8763 L 8.6987 13.8657 C 7.2112 13.3699 6.0554 12.9846 5.22 12.6293 C 4.4143 12.2865 3.7323 11.9061 3.3962 11.328 C 2.8679 10.4193 2.8679 9.2969 3.3962 8.3881 C 3.7323 7.8101 4.4143 7.4296 5.22 7.0868 C 6.0554 6.7315 7.2112 6.3463 8.6987 5.8504 L 13.0828 4.3891 C 14.9108 3.7797 16.3545 3.2985 17.4639 3.1011 Z"/>
+  <path d="M17.295 7.173L13.315 11.11"/>
 </svg>

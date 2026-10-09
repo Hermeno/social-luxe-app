@@ -102,6 +102,21 @@ export interface Post {
   user: Pick<User, 'id' | 'name' | 'username' | 'avatar' | 'viewsPublic' | 'showDevice' | 'statusLabel' | 'lastSeen' | 'isVerified'>
   _count: { likes: number; comments: number; shares: number; reposts: number; views: number }
   recentCommenters?: Array<{ id: string; name: string; avatar: string | null }>
+  /**
+   * Os últimos comentários da publicação, com texto, em ordem de leitura.
+   *
+   * Vêm já cortados pela API (`COMMENT_PREVIEW`) e do mais antigo para o mais
+   * novo dos escolhidos, porque o cartão lê-se de cima para baixo. É o que
+   * permite à feed mostrar conversa em vez de um contador — sem uma chamada
+   * por publicação.
+   */
+  recentComments?: Array<{
+    id: string
+    content: string
+    createdAt: string
+    edited: boolean
+    user: { id: string; name: string; username: string | null; avatar: string | null }
+  }>
   hasVotedExtend?: boolean
   userLiked?: boolean
   userReposted?: boolean

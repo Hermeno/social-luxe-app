@@ -80,6 +80,22 @@ type PostWriteClient = Pick<Prisma.TransactionClient, 'post'>
 
 // O que um post de álbum leva ao sair do servidor — o mesmo ao criar, ao
 // republicar e quando um Círculo muda depois de publicado.
+/**
+ * Quantos comentários de raiz se leem por publicação ao montar a feed.
+ *
+ * 20 é o tecto da janela, não o que se mostra. Dentro dela saem duas coisas: os
+ * até cinco autores distintos da pilha de avatares e os últimos comentários com
+ * texto que a publicação mostra no cartão. Antes não havia tecto nenhum.
+ *
+ * Consequência honesta de pôr um: se as últimas 20 mensagens forem todas da
+ * mesma pessoa, a pilha mostra uma cara em vez de cinco. É o preço de não ler
+ * uma conversa inteira para desenhar cinco círculos — e, na prática, a pilha
+ * diz "quem está a falar agora", que é o que essas 20 respondem.
+ */
+const COMMENT_WINDOW = 20
+/** Quantos aparecem no cartão da feed, com texto. O resto fica atrás do toque. */
+const COMMENT_PREVIEW = 3
+
 export const ALBUM_POST_INCLUDE = {
   user:        { select: { id: true, name: true, username: true, avatar: true, viewsPublic: true, showDevice: true, statusLabel: true } },
   partnerUser: { select: { id: true, name: true, username: true, avatar: true, isVerified: true } },
@@ -410,14 +426,49 @@ export async function attachPostMeta(posts: any[], userId?: string): Promise<any
   const originalPostIds = [...new Set(allPostIds.map((id) => originalByDisplayed.get(id) ?? id))]
 
   // ── Comments ────────────────────────────────────────────────────────────────
-  const byPost = new Map<string, any[]>()
+  //
+  // Janela por publicação, e não a tabela toda. A consulta anterior trazia
+  // TODOS os comentários de raiz de todas as publicações da página só para
+  // encontrar cinco autores distintos em cada uma: numa publicação com dez mil
+  // comentários eram dez mil linhas por página de feed. Com `ROW_NUMBER` cada
+  // publicação entrega no máximo `COMMENT_WINDOW` linhas, e é dentro dessa
+  // janela que se escolhem os autores e os comentários a mostrar.
+  //
+  // Também passa a excluir os apagados. O `deletedAt` existe desde sempre e
+  // esta consulta ignorava-o — quem apagava um comentário continuava na pilha
+  // de avatares da publicação. Com o texto à vista isso deixaria de ser um
+  // detalhe.
+  type RawComment = {
+    id: string
+    postId: string
+    content: string
+    createdAt: Date
+    editedAt: Date | null
+    userId: string
+    name: string
+    username: string | null
+    avatar: string | null
+  }
+
+  const byPost = new Map<string, RawComment[]>()
   if (commentPostIds.length > 0) {
-    const comments = await prisma.comment.findMany({
-      where:   { postId: { in: commentPostIds }, parentId: null },
-      select:  { postId: true, userId: true, user: { select: { id: true, name: true, username: true, avatar: true } } },
-      orderBy: { createdAt: 'desc' },
-    })
-    for (const c of comments) {
+    const rows = await prisma.$queryRaw<RawComment[]>`
+      SELECT c.id, c."postId", c.content, c."createdAt", c."editedAt",
+             u.id AS "userId", u.name, u.username, u.avatar
+      FROM (
+        SELECT *, ROW_NUMBER() OVER (
+                    PARTITION BY "postId" ORDER BY "createdAt" DESC
+                  ) AS rn
+        FROM "Comment"
+        WHERE "postId" IN (${Prisma.join(commentPostIds)})
+          AND "parentId" IS NULL
+          AND "deletedAt" IS NULL
+      ) c
+      JOIN "User" u ON u.id = c."userId"
+      WHERE c.rn <= ${COMMENT_WINDOW}
+      ORDER BY c."postId", c."createdAt" DESC
+    `
+    for (const c of rows) {
       if (!byPost.has(c.postId)) byPost.set(c.postId, [])
       byPost.get(c.postId)!.push(c)
     }
@@ -479,17 +530,30 @@ export async function attachPostMeta(posts: any[], userId?: string): Promise<any
     // por mérito próprio. `userReposted` continua a olhar para o original — é
     // lá que vive o vínculo que impede repostar duas vezes o mesmo conteúdo.
     const repostCount = repostCountByPost.get(p.id) ?? 0
+    // A janela vem do mais novo para o mais velho. A pilha de avatares tira dela
+    // os autores distintos; o cartão tira os últimos, com texto.
+    const janela = byPost.get(p.id) ?? []
     const seen = new Set<string>([p.userId])
-    const recentCommenters: Array<{ id: string; name: string; avatar: string | null }> = []
-    for (const c of byPost.get(p.id) ?? []) {
+    const recentCommenters: Array<{ id: string; name: string; username: string | null; avatar: string | null }> = []
+    for (const c of janela) {
       if (seen.has(c.userId)) continue
       seen.add(c.userId)
-      recentCommenters.push(c.user)
+      recentCommenters.push({ id: c.userId, name: c.name, username: c.username, avatar: c.avatar })
       if (recentCommenters.length >= 5) break
     }
+    // Em ordem de leitura: o cartão lê-se de cima para baixo, por isso o mais
+    // antigo dos escolhidos vai à frente.
+    const recentComments = janela.slice(0, COMMENT_PREVIEW).reverse().map((c) => ({
+      id:        c.id,
+      content:   c.content,
+      createdAt: c.createdAt,
+      edited:    c.editedAt !== null,
+      user: { id: c.userId, name: c.name, username: c.username, avatar: c.avatar },
+    }))
     return {
       ...p,
       recentCommenters,
+      recentComments,
       hasVotedExtend: votedPostIds.has(p.id),
       userLiked:      likedPostIds.has(p.id),
       repostOfId:     isCopy ? originalPostId : null,

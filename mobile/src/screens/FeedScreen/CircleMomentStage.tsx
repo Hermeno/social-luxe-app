@@ -24,7 +24,6 @@ import Animated, {
 } from 'react-native-reanimated'
 
 import AvatarImage from '../../components/AvatarImage'
-import BrandAvatarRing from '../../components/BrandAvatarRing'
 import CircleMediaComposition, { circleDiscRect } from '../../components/CircleMediaComposition'
 import Icon from '../../components/Icon'
 import { confirm } from '../../components/confirm'
@@ -32,15 +31,15 @@ import useCircleJoinAction, { performCircleJoinAction } from '../../hooks/useCir
 import { useT } from '../../i18n'
 import * as circle from '../../services/circle.service'
 import { useAuthStore } from '../../store/auth.store'
-import { useCircleJoinStore } from '../../store/circleJoin.store'
 import { colors, radius, spacing } from '../../theme'
 import type { Post } from '../../types'
 import { toast } from '../../utils/toast'
+import { withinFirstDay } from '../../utils/postLife'
 import { CIRCLE_MAX_SLOTS, circleClusterLayout } from '../HomeScreen/circleCluster'
 import {
   circlePerspectives, circleRelation, readPost, type CirclePerspective,
 } from '../HomeScreen/homePostShape'
-import { feedFill, feedIcon, feedInk, feedLine, feedType } from './tokens'
+import { feedIcon, feedInk, feedLine, feedType } from './tokens'
 
 /**
  * Onde o grupo assenta no espaço livre, de cima para baixo.
@@ -54,15 +53,6 @@ const OPTICAL_CENTRE = 0.44
 /** O convite: a altura do botão e o ar entre ele e a figura. */
 const INVITE_HEIGHT = 40
 const INVITE_GAP = spacing.md2
-/**
- * O rosto de quem vê, dentro do convite. É um disco da figura em ponto pequeno —
- * o mesmo anel, o mesmo recorte — para se ler como o lugar que falta preencher.
- */
-const INVITE_FACE = 30
-const INVITE_RING = 1.5
-const INVITE_CUT = 2
-const INVITE_BORDER = 1
-
 /** A etiqueta de quem tirou a fotografia aberta. */
 const TAG_HEIGHT = 30
 const TAG_FACE = 22
@@ -129,17 +119,15 @@ function firstName(name: string | null | undefined): string {
 /**
  * O convite por baixo da figura.
  *
- * Vivia como o último cartão do carrossel. Sem carrossel, passa a ser o que a
- * figura deixa em aberto: um rosto num disco igual aos de cima, ao lado de uma
- * frase. Não é mais um disco dentro da figura de propósito — a figura é de quem
- * lá esteve, e acrescentar-lhe alguém mudava-lhe a forma.
+ * Vivia como o último cartão do carrossel. Sem carrossel, passa a ser um
+ * convite curto por baixo da figura, em botão transparente com contorno ou,
+ * para começar um círculo, em botão sólido.
  *
  * O que diz depende de quem está a ver (ver `useCircleJoinAction`):
  *
- *   · não esteve lá mas segue alguém que esteve — "Juntar-me a este círculo",
- *     com o próprio rosto no anel tracejado de quem chega depois;
+ *   · não esteve lá mas segue alguém que esteve — "Juntar-me";
  *   · já pediu — "Pedido enviado"; tocar deixa desistir;
- *   · é o anfitrião e há pedidos — quantos, com o rosto de quem pediu primeiro;
+ *   · é o anfitrião e há pedidos — quantos;
  *   · de resto — "Começa um círculo", o convite a fazer o seu.
  */
 const CircleInvite = memo(function CircleInvite({
@@ -150,17 +138,8 @@ const CircleInvite = memo(function CircleInvite({
   onCreateCircle?: () => void
 }) {
   const t = useT()
-  const me = useAuthStore((state) => state.user)
   const action = useCircleJoinAction(post)
-  const momentId = action.relation?.momentId ?? ''
-  const firstRequester = useCircleJoinStore((state) => (
-    action.kind === 'review'
-      ? state.incoming.find((request) => request.momentId === momentId)?.requester
-      : undefined
-  ))
-  const photo = INVITE_FACE - (INVITE_RING + INVITE_CUT) * 2
 
-  let face: { uri: string | null | undefined; name: string | null | undefined } = { uri: me?.avatar, name: me?.name }
   let label: string
   let hint: string | undefined
   let muted = false
@@ -170,13 +149,12 @@ const CircleInvite = memo(function CircleInvite({
 
   switch (action.kind) {
     case 'review':
-      face = { uri: firstRequester?.avatar, name: firstRequester?.name }
       label = action.count === 1
         ? t.circleJoin_review_one
         : t.circleJoin_review_many.replace('{count}', String(action.count))
       break
     case 'join':
-      label = t.circleJoin_join
+      label = t.circleJoin_joinShort
       hint = t.circleJoin_cameraHint
       break
     case 'pending':
@@ -189,26 +167,19 @@ const CircleInvite = memo(function CircleInvite({
       hint = t.circle_feedCtaSub
       onPress = onCreateCircle
   }
-
-  // O anel tracejado é o lugar de quem chega depois — é isso que se oferece,
-  // pede ou decide nos três casos em que ele aparece.
-  const dashed = action.kind !== 'none'
+  const isCreate = action.kind === 'none'
 
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [s.invite, pressed && s.invitePressed]}
+      style={({ pressed }) => [s.invite, muted && s.inviteMuted, isCreate && s.inviteCreate, pressed && s.invitePressed]}
       // 40 de altura à vista, 48 ao dedo.
       hitSlop={{ top: 4, bottom: 4 }}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={action.kind === 'join' ? t.circleJoin_join : label}
       accessibilityHint={hint}
     >
-      <View style={s.inviteFace}>
-        <AvatarImage uri={face.uri} name={face.name} size={photo} />
-        <BrandAvatarRing size={INVITE_FACE} strokeWidth={INVITE_RING} dashed={dashed} style={StyleSheet.absoluteFill} />
-      </View>
-      <Text style={[s.inviteText, muted && s.inviteTextMuted]} numberOfLines={1} maxFontSizeMultiplier={1.3}>
+      <Text style={[s.inviteText, muted && s.inviteTextMuted, isCreate && s.inviteTextCreate]} numberOfLines={1} maxFontSizeMultiplier={1.3}>
         {label}
       </Text>
     </Pressable>
@@ -640,6 +611,8 @@ function CircleMomentStage({
             width={figureWidth}
             height={figureBoxHeight}
             postId={post.id}
+            // A mesma regra da Home: o Círculo só acende no primeiro dia.
+            rings={withinFirstDay(post)}
             onDark
             onSelect={open}
             perspectiveLabel={perspectiveLabel}
@@ -744,35 +717,31 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
 
-  // Convite — o contorno é o dos botões da imersiva, um degrau abaixo do de
-  // seguir: está sobre o fundo liso, não sobre uma fotografia, e não precisa de
-  // gritar para se ver.
+  // Join, Pending e Review são contorno sobre a mídia — não competem com a
+  // fotografia. Criar um Círculo é a acção que a página quer: fundo cheio,
+  // branco, sem contorno. Branco e não cor de marca, porque a cor de marca
+  // está reservada aos anéis de identidade e aqui leria como decoração.
   inviteSlot: { marginTop: INVITE_GAP },
   invite: {
     height: INVITE_HEIGHT,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    // O rosto fica concêntrico com a ponta redonda do botão.
-    paddingLeft: (INVITE_HEIGHT - INVITE_BORDER * 2 - INVITE_FACE) / 2,
-    paddingRight: spacing.md,
-    borderRadius: radius.full,
-    borderWidth: INVITE_BORDER,
-    borderColor: feedLine.medium,
-  },
-  invitePressed: { backgroundColor: feedFill.press },
-  inviteFace: {
-    width: INVITE_FACE,
-    height: INVITE_FACE,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: feedLine.strong,
+    backgroundColor: colors.transparent,
   },
+  inviteMuted: { borderColor: feedLine.medium },
+  inviteCreate: { borderWidth: 0, backgroundColor: colors.white },
+  invitePressed: { opacity: 0.72 },
   inviteText: {
     ...feedType.primary,
     flexShrink: 1,
     color: feedInk.secondary,
   },
   inviteTextMuted: { color: feedInk.muted },
+  inviteTextCreate: { color: colors.black },
 
   // Fotografia aberta — por baixo do autor e das acções, que continuam a ler-se
   // por cima dela como em qualquer fotografia da feed.

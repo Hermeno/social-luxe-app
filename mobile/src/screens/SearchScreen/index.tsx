@@ -278,7 +278,7 @@ export default function SearchScreen() {
 
       <View style={s.header}>
         <View style={s.searchBar}>
-          <Icon name="search" size={17} color={colors.gray500} strokeWidth={1.9} />
+          <Icon name="search" size={17} color={colors.gray500} />
           <TextInput
             ref={inputRef}
             style={s.searchInput}
@@ -295,7 +295,7 @@ export default function SearchScreen() {
               onPress={() => { setQuery(''); inputRef.current?.focus() }}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Icon name="close-circle" size={17} color={colors.gray400} strokeWidth={1.9} />
+              <Icon name="close-circle" size={17} color={colors.gray400} />
             </TouchableOpacity>
           )}
         </View>
@@ -355,7 +355,7 @@ export default function SearchScreen() {
       {onPeople && !isLoading && isSearching && results.length === 0 && (
         <View style={s.emptyWrap}>
           <View style={s.emptyIcon}>
-            <Icon name="search" size={26} color={colors.gray500} strokeWidth={1.6} />
+            <Icon name="search" size={26} color={colors.gray500} />
           </View>
           <Text style={s.emptyTitle}>{t.search_no_results}</Text>
           <Text style={s.emptySub}>{t.search_no_results_sub}</Text>
@@ -389,7 +389,7 @@ export default function SearchScreen() {
       {!onPeople && !isLoading && !isSearching && discover.length === 0 && (
         <View style={s.emptyWrap}>
           <View style={s.emptyIcon}>
-            <Icon name="image" size={26} color={colors.gray500} strokeWidth={1.6} />
+            <Icon name="image" size={26} color={colors.gray500} />
           </View>
           <Text style={s.emptyTitle}>{t.search_no_discover}</Text>
           <Text style={s.emptySub}>{t.search_no_discover_sub}</Text>
@@ -399,7 +399,7 @@ export default function SearchScreen() {
       {!onPeople && !isLoading && isSearching && posts.length === 0 && (
         <View style={s.emptyWrap}>
           <View style={s.emptyIcon}>
-            <Icon name="image" size={26} color={colors.gray500} strokeWidth={1.6} />
+            <Icon name="image" size={26} color={colors.gray500} />
           </View>
           <Text style={s.emptyTitle}>{t.search_no_posts}</Text>
           <Text style={s.emptySub}>{t.search_no_posts_sub}</Text>

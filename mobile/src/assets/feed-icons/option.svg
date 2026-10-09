@@ -1,3 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M3 6.8h18M3 12h10.9M3 17.2h5.05"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Reconstruído por medição do PNG de 200px enviado: a barra de cima entra
+       pela esquerda, corta na diagonal lida (dx/dy = 0.506) e sai à direita em
+       baixo; a segunda barra fica solta no canto, alinhada com a primeira.
+       Substituiu três tracinhos de comprimento decrescente.
+
+       O esqueleto é o do original; a espessura é a da família (2). O original
+       era 43% mais pesado, e por isso o vão entre as duas barras de cima abre
+       um pouco — a mesma distância entre eixos com menos traço a comê-la. -->
+  <path d="M3 5.23H8.18L15.03 18.77H21"/>
+  <path d="M14.56 5.23H21"/>
 </svg>

@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native'
 import FeedIcon, { type FeedIconName } from './FeedIcon'
 import { FEED_GLYPH } from '../screens/FeedScreen/tokens'
 
-export type PostActionIconName = 'like' | 'comment' | 'repost' | 'repost-spaced' | 'share' | 'options' | 'author-posts'
+export type PostActionIconName = 'like' | 'comment' | 'repost' | 'share' | 'options' | 'author-posts'
 
 interface Props {
   name: PostActionIconName
@@ -19,7 +19,6 @@ const GLYPH = {
   like: 'heart',
   comment: 'chat-outline',
   repost: 'repost',
-  'repost-spaced': 'repost-spaced',
   share: 'share',
   options: 'option',
   'author-posts': 'author-posts',

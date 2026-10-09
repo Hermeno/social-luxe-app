@@ -243,6 +243,7 @@ export const EN: { [K in keyof typeof import('./pt').PT]: string } = {
   feed_caption_ph: 'Caption...',
   feed_add_comment: 'Add a comment…',
   feed_share_msg: 'Check it on luxee before it expires! 🔥',
+  feed_share_action: 'Share',
   feed_published: 'Published!',
   feed_published_sub: 'Visible for 24 hours',
   feed_repost: 'Repost',
@@ -422,7 +423,6 @@ export const EN: { [K in keyof typeof import('./pt').PT]: string } = {
   ob_perm_gallery: 'We need gallery access.',
 
   // ── Momento ──
-  mo_share: 'Share Moment',
 
   // ── Donations (Piedade) ──
   dn_title: 'Kindness',

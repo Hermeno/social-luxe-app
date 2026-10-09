@@ -21,7 +21,6 @@ export const colors = {
   // (`accent`, `heart`, estado semântico ou gradiente), nunca um botão genérico.
   primary:      '#000000',
   primaryMid:   '#1A1A1A',
-  primaryLight: '#D1D1D6',
   secondary:    '#555555',
   // Violeta é o ponto sólido da assinatura usado por controlos; a progressão
   // completa pertence aos anéis.
@@ -31,23 +30,14 @@ export const colors = {
   white:        '#FFFFFF',
   offWhite:     '#FAF8F6',
 
-  // A faixa do campo de comentário da imersiva — e é esta linha, só esta, que
-  // lhe dá a cor.
-  //
-  // Na imersiva a faixa de baixo é toda o campo, safe area incluída, por isso a
-  // barra e o campo leem os dois daqui: mudar aqui muda tudo de uma vez. Já
-  // esteve escrita à mão no estilo da barra (`#ffffff`), e aí mexer neste valor
-  // não fazia nada — o token estava órfão.
-  //
-  // Dois cuidados ao trocar: o texto do campo é cinzento escuro (`gray600`),
-  // por isso a cor tem de ficar clara o suficiente para ele se ler; e a
-  // transparência vale a pena manter, porque a faixa atravessa a fotografia e
-  // um sólido corta-a a direito.
+  // Cor da cápsula de comentário da imersiva. Altere somente este valor para
+  // personalizar a cor do campo; a barra em volta permanece branca.
+  // O texto é cinzento escuro (`gray600`): mantenha contraste suficiente.
   commentField: 'rgba(226, 233, 237, 0.92)',
 
   // Fundo da feed principal — e SÓ da feed. É o que se vê por trás dos posts,
-  // nas faixas acima e abaixo de imagens que não enchem a altura, e na tab bar
-  // enquanto a feed está aberta. O resto da app continua branco.
+  // nas faixas acima e abaixo de imagens que não enchem a altura. A barra de
+  // comentário da imersiva e o resto da app continuam brancos.
   //
   // Ponto único: toda a feed lê daqui (célula, media, álbum, ecrã vazio e tab
   // bar). É uma das duas excepções cromáticas mantidas por decisão de produto.

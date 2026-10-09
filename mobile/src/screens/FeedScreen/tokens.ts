@@ -67,6 +67,20 @@ export const feedIcon = {
 export const FEED_GLYPH = 28
 
 /**
+ * O desenho dos comandos da imersiva — um só número para todos.
+ *
+ * A fila de acções (gosto, comentar, repost, partilha, autor) e os dois
+ * comandos do topo (voltar e o menu do post) são a mesma família de ícones no
+ * mesmo ecrã: se cada sítio escolhesse o seu tamanho, o mesmo desenho ficava
+ * grande em baixo e pequeno em cima. Viveu como constante privada da
+ * `ActionBar` enquanto só a fila o usava; agora o topo lê daqui.
+ *
+ * Abaixo de 360pt de largura a fila aperta para 24 — ver `compact` na
+ * `ActionBar`. O topo não aperta: lá há sempre espaço para dois comandos.
+ */
+export const FEED_IMMERSIVE_GLYPH = 26
+
+/**
  * O vazio entre a borda da caixa da acção e a tinta do glifo.
  *
  * Os SVG vivem numa grelha 24×24 com margem 3 de cada lado: a tinta ocupa

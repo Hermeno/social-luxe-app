@@ -147,7 +147,7 @@ function GuestItem({
 
       {/* Porque é que este post está aqui. Sem isto, a vitrina não se explica. */}
       <View style={[s.kept, { top: safeTop + 14 }]}>
-        <Icon name="shield-check" size={13} color="rgba(255,255,255,0.9)" strokeWidth={2} />
+        <Icon name="shield-check" size={13} color="rgba(255,255,255,0.9)" />
         <Text style={s.keptTxt}>{t.guest_kept}</Text>
       </View>
 

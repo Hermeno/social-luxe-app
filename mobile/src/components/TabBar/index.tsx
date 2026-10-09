@@ -4,7 +4,7 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors, radius, spacing } from '../../theme'
 import {
-  actionInkRest, FEED_CONTENT_MAX_WIDTH, feedIcon, feedInk, feedType, pageInk,
+  actionInkRest, FEED_CONTENT_MAX_WIDTH, feedIcon, feedInk, feedLine, feedType, pageInk,
 } from '../../screens/FeedScreen/tokens'
 import { useFeedStore } from '../../store/feed.store'
 import { useAuthStore } from '../../store/auth.store'
@@ -15,6 +15,7 @@ import AvatarImage from '../AvatarImage'
 import FeedIcon, { type FeedIconName } from '../FeedIcon'
 import Icon from '../Icon'
 import type { IconName } from '../Icon/paths'
+import { FEED_IMMERSIVE_GLYPH } from '../../screens/FeedScreen/tokens'
 import {
   FEED_COMPOSER_HEIGHT,
   TAB_BAR_ICON_LIFT,
@@ -28,10 +29,31 @@ import useNavSkin from './useNavSkin'
 // Os separadores partilham a caixa de 26px. O desenho em 24×24 guarda
 // a compensação óptica e o traço de 1.75 escala com a caixa.
 type NavGlyphSpec =
-  | { family: 'ui'; icon: IconName }
-  | { family: 'feed'; icon: FeedIconName }
+  | { family: 'ui'; icon: IconName; size?: number }
+  | { family: 'feed'; icon: FeedIconName; size?: number }
 
-const NAV_ICON_SIZE = 26
+/**
+ * O desenho dos glifos da navegação.
+ *
+ * É o mesmo número dos comandos da imersiva, e lê daí em vez de o repetir: a
+ * navegação, a fila de acções e o topo da imersiva são a mesma família no mesmo
+ * ecrã, e dois 26 escritos à mão em dois ficheiros divergem no dia em que um
+ * deles mudar.
+ */
+const NAV_ICON_SIZE = FEED_IMMERSIVE_GLYPH
+
+/**
+ * O obturador do Círculo desenha-se maior que os vizinhos.
+ *
+ * É a acção que a barra existe para oferecer, e o desenho dela — um anel com um
+ * disco suave lá dentro — tem três bandas a ler-se em vez de uma silhueta só.
+ * À medida dos outros ficava a parecer um ponto; +4 dão-lhe a presença sem
+ * passar a dominar.
+ *
+ * Não mexe na altura da barra: a caixa de toque mede 38 e isto cabe lá com 4 de
+ * ar de cada lado.
+ */
+const CIRCLE_GLYPH_SIZE = NAV_ICON_SIZE + 4
 
 /**
  * As duas formas que uma célula da barra pode tomar.
@@ -59,7 +81,7 @@ const NAV_AVATAR_GAP = 2
 const NAV_GLYPHS: Record<string, NavGlyphSpec> = {
   home:    { family: 'ui', icon: 'home' },
   search:  { family: 'ui', icon: 'search' },
-  circle:  { family: 'ui', icon: 'circle-add' },
+  circle:  { family: 'ui', icon: 'circle-shutter', size: CIRCLE_GLYPH_SIZE },
   message: { family: 'feed', icon: 'chat-outline' },
   profile: { family: 'ui', icon: 'user' },
 }
@@ -68,9 +90,11 @@ type NavGlyph = keyof typeof NAV_GLYPHS
 
 function NavIconArt({ glyph, size, color }: { glyph: NavGlyph; size: number; color: string }) {
   const metric = NAV_GLYPHS[glyph]
+  // Um glifo pode pedir medida própria; os outros ficam na do conjunto.
+  const desenho = metric.size ?? size
   return metric.family === 'feed'
-    ? <FeedIcon name={metric.icon} size={size} color={color} />
-    : <Icon name={metric.icon} size={size} color={color} />
+    ? <FeedIcon name={metric.icon} size={desenho} color={color} />
+    : <Icon name={metric.icon} size={desenho} color={color} />
 }
 
 const NavigationGlyph = memo(function NavigationGlyph({
@@ -355,9 +379,8 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
   const activeRoute = state.routes[state.index]
   const activeTab  = activeRoute.name
   // A Feed imersiva — mídia a ocupar o ecrã, fundo escuro, campo de comentário
-  // em baixo. Deixou de ser o separador `Feed`, que agora é a Home branca: tudo
-  // o que esta constante governa (barra escura, campo de comentário, CTA da
-  // pausa) pertence à imersiva e ficaria errado sobre uma página branca.
+  // em baixo. Deixou de ser o separador `Feed`, que agora é a Home branca: o
+  // campo de comentário e o CTA da pausa pertencem à imersiva.
   const onFeed     = activeTab === 'Immersive'
   const onCircle   = activeTab === 'Circle'
   const onSearch   = activeTab === 'Search'
@@ -382,7 +405,7 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
   // O apagado é o mesmo cinzento dos comandos das duas feeds. Um só cinzento em
   // toda a app para tudo o que está lá sem pedir nada.
   const iconActive = clear ? feedInk.primary : pageInk.primary
-  const iconInactv = clear ? 'rgba(255,255,255,0.68)' : actionInkRest.page
+  const iconInactv = clear ? 'rgba(201, 54, 54, 0.82)' : actionInkRest.page
 
   useLayoutEffect(() => {
     barVisibility.stopAnimation()
@@ -578,14 +601,11 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
           {
             paddingTop: onFeed ? 0 : TAB_BAR_TOP_GAP,
             paddingBottom: tabBarBottomInset(bottom),
-            // Faixa de margem a margem. O `paddingBottom` da safe area entra
-            // dentro dela, por isso a altura toda — do topo da linha até ao
-            // fundo do ecrã — toma a cor da pele.
-            // Na imersiva a faixa inteira é o campo de comentar, safe area
-            // incluída: a cor vem do token e de mais nenhum sítio.
-            backgroundColor: onFeed && !showFeedInviteCta
-              ? colors.commentField
-              : showFeedInviteCta || clear ? 'transparent' : '#FFFFFF',
+            // Na imersiva, a faixa inteira e a safe area voltam a ser brancas;
+            // a cápsula de comentário tem a sua própria cor por cima delas.
+            backgroundColor: onFeed
+              ? (showFeedInviteCta ? 'transparent' : colors.white)
+              : (clear ? 'transparent' : colors.white),
             // O fio que separa a barra do conteúdo.
             //
             // Uma faixa branca sobre uma página branca não tem contorno nenhum:
@@ -613,7 +633,7 @@ export default function TabBar({ state, navigation }: BottomTabBarProps) {
                 <Icon
                   name="arrow-right"
                   size={feedIcon.control}
-                  color={colors.black}
+                  color={feedInk.primary}
                 />
               </View>
             </TouchableOpacity>
@@ -650,11 +670,13 @@ const s = StyleSheet.create({
     alignItems: 'center',
     paddingTop: TAB_BAR_TOP_GAP,
   },
-  // A única fila da imersiva preenche a faixa branca até às bordas do ecrã.
+  // A fila ocupa a largura da tela; o campo fica centrado, com 5% de margem
+  // de cada lado.
   feedStage: {
     flex: 1,
     height: FEED_COMPOSER_HEIGHT,
-    alignItems: 'stretch',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   feedInviteStage: {
     flex: 1,
@@ -672,11 +694,13 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radius.full,
-    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: feedLine.strong,
+    backgroundColor: colors.transparent,
   },
   getStartedText: {
     ...feedType.primary,
-    color: colors.black,
+    color: feedInk.primary,
     textAlign: 'center',
   },
   getStartedArrow: {
@@ -707,11 +731,12 @@ const s = StyleSheet.create({
     alignItems: 'stretch',
   },
   navShellPaper: { backgroundColor: '#FFFFFF' },
-  // O campo não pinta nada: a cor é da faixa que o embrulha, e assim a safe
-  // area por baixo dele nunca fica de outra cor. Aqui vive só o alvo do toque.
+  // O token de cor pertence apenas à superfície do campo, sem contorno.
   commentField: {
-    flex: 1,
-    height: '100%',
+    width: '90%',
+    height: 48,
+    borderRadius: radius.full,
+    backgroundColor: colors.commentField,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,

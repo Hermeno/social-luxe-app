@@ -255,6 +255,7 @@ export const PT = {
   feed_caption_ph: 'Legenda...',
   feed_add_comment: 'Adiciona um comentário…',
   feed_share_msg: 'Vê no luxee antes que expire! 🔥',
+  feed_share_action: 'Partilhar',
   feed_published: 'Publicado!',
   feed_published_sub: 'Visível por 24 horas',
   feed_repost: 'Repostar',
@@ -441,7 +442,6 @@ export const PT = {
   ob_perm_gallery: 'Precisamos acesso à galeria.',
 
   // ── Momento ──
-  mo_share: 'Compartilhar Momento',
 
   // ── Donations (Piedade) ──
   dn_title: 'Piedade',

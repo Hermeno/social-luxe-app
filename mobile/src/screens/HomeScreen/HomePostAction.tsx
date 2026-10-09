@@ -3,7 +3,21 @@ import { Animated, Pressable, StyleSheet, Text } from 'react-native'
 import PostActionIcon, { type PostActionIconName } from '../../components/PostActionIcon'
 import { spacing } from '../../theme'
 import { formatCount } from '../../utils/count'
-import { actionInkActive, actionInkRest, feedIcon, homeType, pageInk } from '../FeedScreen/tokens'
+import { actionInkActive, actionInkRest, feedIcon, homeType, pageInk, FEED_GLYPH } from '../FeedScreen/tokens'
+
+/**
+ * A correcção ótica da bolha do comentar — nesta fila e só nesta.
+ *
+ * Medida, não estimada: a bolha é a única forma da família que enche a caixa
+ * nos dois eixos (20 × 20 de tinta, contra 19.75 do repost, 17.5 do coração e
+ * 16.5 da partilha) e, sendo uma forma fechada, pesa mais que os vizinhos à
+ * mesma medida. Aqui desenha-se 0.3 mais pequena.
+ *
+ * Fica no sítio onde se desenha a fila, e não no SVG, de propósito: mexer no
+ * desenho encolhia-a também na imersiva e na navegação, onde ela está certa.
+ * A espessura do traço não se toca — o que muda é a caixa do desenho.
+ */
+const COMMENT_GLYPH = FEED_GLYPH - 0.3
 
 interface Props {
   name: PostActionIconName
@@ -59,7 +73,13 @@ export default function HomePostAction({
         style={[s.content, trailing && s.contentTrailing, { transform: [{ scale }] }]}
         pointerEvents="none"
       >
-        <PostActionIcon name={name} size={feedIcon.action} color={ink} selected={selected} />
+        <PostActionIcon
+          name={name}
+          size={feedIcon.action}
+          glyphSize={name === 'comment' ? COMMENT_GLYPH : undefined}
+          color={ink}
+          selected={selected}
+        />
         {count > 0 && (
           <Text style={s.metric} maxFontSizeMultiplier={1.3} numberOfLines={1}>
             {formatCount(count)}

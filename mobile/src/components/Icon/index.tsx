@@ -38,7 +38,7 @@ export default function Icon({
   name,
   size = 24,
   color = '#000000',
-  strokeWidth = 1.75,
+  strokeWidth = 2,
   fill = 'none',
   absoluteStrokeWidth = false,
   opacity,

@@ -37,8 +37,8 @@ type Nav = StackNavigationProp<AppStackParams>
 /**
  * A Home da Luxey.
  *
- * Página branca, scroll vertical, sem cartões. O que a distingue de qualquer
- * outra rede não é o cromado — é o que ocupa o meio da página: a composição
+ * Página e cartões brancos, com um contorno discreto a definir cada publicação.
+ * O que a distingue de outra rede é o que ocupa o meio da página: a composição
  * circular de um Círculo, várias pessoas no mesmo momento, desenhada como uma só
  * figura em vez de uma grelha de fotografias.
  *
@@ -119,8 +119,10 @@ export default function HomeScreen() {
   }, [refresh])
 
   // ── Acções ────────────────────────────────────────────────────────────────
-  const openAuthor = useCallback((post: Post) => {
-    nav.navigate('Profile', { userId: post.user.id })
+  // Recebe o id e não o post: serve o autor da publicação e também quem
+  // comentou nela, que aparece no cartão e não tem post nenhum por trás.
+  const openAuthor = useCallback((userId: string) => {
+    nav.navigate('Profile', { userId })
   }, [nav])
 
   /**
@@ -257,7 +259,7 @@ export default function HomeScreen() {
       {offline && <HomeOffline />}
 
       {posts.length === 0 && loading ? (
-        <View>
+        <View style={s.feedCanvas}>
           {Array.from({ length: SKELETONS }, (_, index) => (
             <HomeSkeleton key={index} width={width} reduceMotion={reduceMotion} />
           ))}
@@ -270,6 +272,7 @@ export default function HomeScreen() {
       ) : (
         <FlatList
           ref={listRef}
+          style={s.feedCanvas}
           data={posts}
           keyExtractor={(post) => post.id}
           renderItem={renderItem}
@@ -317,4 +320,5 @@ export default function HomeScreen() {
 
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.white },
+  feedCanvas: { flex: 1, backgroundColor: colors.white },
 })

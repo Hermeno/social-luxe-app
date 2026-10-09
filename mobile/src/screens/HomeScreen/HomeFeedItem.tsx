@@ -12,9 +12,10 @@ import VerifiedBadge from '../../components/VerifiedBadge'
 import { useT } from '../../i18n'
 import type { Post } from '../../types'
 import { resolveMediaUrl } from '../../utils/media'
-import { colors, postGradientColors, spacing } from '../../theme'
+import { colors, elevation, postGradientColors, radius, spacing } from '../../theme'
 import { parsePostFontKey, postFontStyle } from '../../theme/postFonts'
 import { usePostFontsReady } from '../../store/postFonts.store'
+import { withinFirstDay } from '../../utils/postLife'
 import {
   actionInkRest, FEED_GLYPH_INK_INSET, feedIcon, feedInk, homeType,
   pageDanger, pageInk, pageLine, pageSkeleton,
@@ -24,22 +25,37 @@ import { readPost } from './homePostShape'
 import { CIRCLE_STAGE_WIDTH } from './circleCluster'
 import HomeAlbumGallery from './HomeAlbumGallery'
 import HomeCircleJoin from './HomeCircleJoin'
+import HomeCommentThread from './HomeCommentThread'
 import HomeFollow from './HomeFollow'
 import HomePostAction from './HomePostAction'
 import HomeVideo from './HomeVideo'
 
-/** A régua da página: tudo o que é texto começa aqui, dos dois lados. */
-const SIDE = spacing.md
+/** Mantém a opção de recuperar a antiga coluna contínua. */
+const CARD_LAYOUT = true
+
+/** A margem devolve largura à mídia; o contorno discreto define o cartão. */
+const CARD_SIDE = spacing.sm2
+const CARD_GAP = spacing.sm2
+const CARD_RADIUS = radius.xl
+const CARD_BORDER = 1
+
+/**
+ * A régua da página: tudo o que é texto começa aqui, dos dois lados.
+ *
+ * Os 12 internos somam-se aos 12 do cartão: texto e tinta dos ícones assentam
+ * na mesma origem, 24 da borda do ecrã.
+ */
+const SIDE = CARD_LAYOUT ? spacing.sm2 : spacing.md
 
 /**
  * A linha de quem publicou.
  *
- * 34 de identidade dentro de uma linha de 50 — os dois números do Feed System —
- * deixam 8 de ar acima e abaixo do rosto. O alvo de toque continua nos 44
+ * 34 de identidade dentro de uma linha de 56 deixam 11 de ar acima e abaixo
+ * do rosto. O alvo de toque continua nos 44
  * mínimos porque se estende para lá da fotografia, até ao fim do nome.
  */
 const AVATAR = 34
-const HEAD_HEIGHT = 50
+const HEAD_HEIGHT = 56
 
 /** Alvo do menu da publicação, no cabeçalho. */
 const OPTION_TARGET = 48
@@ -94,7 +110,7 @@ interface Props {
   commentCount: number
   shareCount: number
   reduceMotion?: boolean
-  onOpenAuthor: (post: Post) => void
+  onOpenAuthor: (userId: string) => void
   onOpenMedia: (post: Post) => void
   onLike: (post: Post) => void
   onRepost: (post: Post) => void
@@ -107,8 +123,8 @@ interface Props {
 /**
  * Uma publicação na Home.
  *
- * Página branca, sem cartões: o que separa duas publicações é espaço e um fio
- * de uma unidade. As quatro anatomias são parentes, não gémeas — Círculo é uma
+ * Cartões brancos sobre página branca: o contorno e o espaço entre eles
+ * separam as publicações. As quatro anatomias são parentes, não gémeas — Círculo é uma
  * composição de discos, álbum é uma galeria horizontal, foto e vídeo são mídia
  * directa, texto é um bloco tipográfico — mas todas partilham a mesma linha de
  * autoria em cima, a mesma fila de acções por baixo e a mesma régua lateral.
@@ -142,7 +158,10 @@ function HomeFeedItem({
   const mediaAspect = measuredAspect
     ?? (serverAspect && Number.isFinite(serverAspect) && serverAspect > 0 ? serverAspect : null)
     ?? (isVideo ? 16 / 9 : 4 / 5)
-  const frameHeight = Math.round(width / Math.max(mediaAspect, MIN_ASPECT))
+  // A mídia ocupa a largura interna do cartão; descontar o contorno evita
+  // que foto, vídeo, álbum e Círculo avancem um ponto além dele.
+  const stage = CARD_LAYOUT ? width - (CARD_SIDE + CARD_BORDER) * 2 : width
+  const frameHeight = Math.round(stage / Math.max(mediaAspect, MIN_ASPECT))
 
   const peopleLabel = shape.people === 1
     ? t.home_people_one
@@ -192,7 +211,7 @@ function HomeFeedItem({
     <View style={s.head}>
       <TouchableOpacity
         style={s.headLeft}
-        onPress={() => onOpenAuthor(post)}
+        onPress={() => onOpenAuthor(post.user.id)}
         activeOpacity={0.7}
         accessibilityRole="button"
         accessibilityLabel={post.user.name}
@@ -223,7 +242,7 @@ function HomeFeedItem({
 
   // ── Mídia ─────────────────────────────────────────────────────────────────
   const failure = (
-    <View style={[s.failure, { width, height: frameHeight }]}>
+    <View style={[s.failure, { width: stage, height: frameHeight }]}>
       <Icon name="image" size={feedIcon.control} color={pageInk.muted} />
       <Text style={s.failureText}>{t.home_media_failed}</Text>
       <TouchableOpacity
@@ -262,20 +281,20 @@ function HomeFeedItem({
   } else if (isCircle) {
     media = (
       <Pressable
-        style={[s.circleStage, { minHeight: width * CIRCLE_STAGE_RATIO }]}
+        style={[s.circleStage, { minHeight: stage * CIRCLE_STAGE_RATIO }]}
         onPress={() => onOpenMedia(post)}
         accessibilityRole="button"
         accessibilityLabel={mediaLabel}
       >
-        {/* O palco é a largura toda da página: os 362 de área útil de que a
-            spec fala já estão dentro da tabela de posições — o disco mais
-            exterior de qualquer composição para a 17 da borda. Descontar aqui
-            outra margem encolhia a figura duas vezes. */}
+        {/* A composição recebe a largura útil do cartão uma única vez. */}
         <CircleMediaComposition
           slots={shape.slots}
           people={shape.people}
-          width={width}
+          width={stage}
           postId={post.id}
+          // Passado o primeiro dia o Círculo deixa de acender: os anéis saem e
+          // as fotografias enchem o disco.
+          rings={withinFirstDay(post)}
           perspectiveLabel={(name) => t.home_perspective_of.replace('{name}', name)}
           lateLabel={t.circleJoin_lateA11y}
         />
@@ -287,7 +306,7 @@ function HomeFeedItem({
     media = (
       <HomeAlbumGallery
         urls={shape.urls}
-        width={width}
+        width={stage}
         postId={post.id}
         reduceMotion={reduceMotion}
         label={mediaLabel}
@@ -299,7 +318,7 @@ function HomeFeedItem({
     media = failure
   } else {
     media = (
-      <View style={[s.frame, { width, height: frameHeight }]}>
+      <View style={[s.frame, { width: stage, height: frameHeight }]}>
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
           {!!shape.urls[0] && (
             <Image
@@ -337,7 +356,7 @@ function HomeFeedItem({
         onPress={() => onComment(post)} reduceMotion={reduceMotion} />
       <HomePostAction name="repost" label={t.feed_repost} count={repostCount} selected={reposted}
         onPress={() => onRepost(post)} reduceMotion={reduceMotion} />
-      <HomePostAction name="share" label={t.mo_share} count={shareCount} trailing
+      <HomePostAction name="share" label={t.feed_share_action} count={shareCount} trailing
         onPress={() => onShare(post)} reduceMotion={reduceMotion} />
     </View>
   )
@@ -347,7 +366,7 @@ function HomeFeedItem({
     : t.home_see_comments.replace('{count}', String(commentCount))
 
   return (
-    <View style={s.item}>
+    <View style={[s.item, CARD_LAYOUT && s.card]}>
       {header}
       {media}
       {actions}
@@ -360,7 +379,7 @@ function HomeFeedItem({
             style={s.caption}
             numberOfLines={captionExpanded ? undefined : CAPTION_LINES}
           >
-            <Text style={s.captionAuthor} onPress={() => onOpenAuthor(post)}>{post.user.name}</Text>
+            <Text style={s.captionAuthor} onPress={() => onOpenAuthor(post.user.id)}>{post.user.name}</Text>
             {'  '}{post.caption}
           </Text>
           {/* O medidor. Tem de viver dentro de uma <View> com `pointerEvents`
@@ -390,7 +409,20 @@ function HomeFeedItem({
         </View>
       )}
 
-      {commentCount > 0 && (
+      {/* A conversa dentro do cartão, quando a publicação a traz.
+          O contador com a pilha de rostos fica para as publicações que vieram
+          da cache antes desta mudança, e para quando a API ainda não enviou os
+          comentários — nessas, uma feed sem nada por baixo da legenda seria
+          pior do que o contador que lá estava. */}
+      {(post.recentComments?.length ?? 0) > 0 ? (
+        <View style={s.thread}>
+          <HomeCommentThread
+            post={post}
+            onOpenAll={() => onComment(post)}
+            onOpenAuthor={onOpenAuthor}
+          />
+        </View>
+      ) : commentCount > 0 && (
         <TouchableOpacity style={s.conversation} onPress={() => onComment(post)} activeOpacity={0.7}
           accessibilityRole="button" accessibilityLabel={commentsLabel}>
           {commenters.length > 0 && (
@@ -414,7 +446,9 @@ function HomeFeedItem({
         </View>
       )}
 
-      <View style={s.separator} />
+      {/* A coluna contínua antiga conserva o separador. O cartão usa o seu
+          contorno e o espaço exterior para marcar o fim da publicação. */}
+      {!CARD_LAYOUT && <View style={s.separator} />}
     </View>
   )
 }
@@ -422,9 +456,20 @@ function HomeFeedItem({
 export default memo(HomeFeedItem)
 
 const s = StyleSheet.create({
-  // O fim de uma publicação: 12 de ar depois da última linha e o fio. É a única
-  // separação que a página usa — não há cartão, sombra nem fundo alternado.
+  // O modo de coluna contínua conserva a separação antiga.
   item: { paddingBottom: spacing.sm2 },
+  // Branco sobre branco: um fio frio marca a forma e uma sombra curta apenas
+  // a separa do fundo. A mídia ocupa a largura interna entre cabeçalho e ações.
+  card: {
+    marginHorizontal: CARD_SIDE,
+    marginTop: CARD_GAP,
+    paddingBottom: spacing.md,
+    backgroundColor: colors.white,
+    borderRadius: CARD_RADIUS,
+    borderWidth: CARD_BORDER,
+    borderColor: '#E7EAEE',
+    ...elevation.card,
+  },
   separator: { marginTop: spacing.sm2, height: StyleSheet.hairlineWidth, backgroundColor: pageLine },
 
   // ── Cabeçalho da publicação ───────────────────────────────────────────────
@@ -486,14 +531,15 @@ const s = StyleSheet.create({
   // borda invisível da caixa.
   actions: {
     paddingHorizontal: SIDE - FEED_GLYPH_INK_INSET,
-    minHeight: 48,
+    minHeight: 56,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm2,
   },
 
   // ── Legenda e conversa ────────────────────────────────────────────────────
-  captionWrap: { paddingHorizontal: SIDE },
+  captionWrap: { paddingHorizontal: SIDE, paddingTop: spacing.xxs },
+  thread: { paddingHorizontal: SIDE },
   // 0/0 e não SIDE/SIDE: o Yoga posiciona um filho absoluto dentro da caixa
   // de conteúdo do pai, por isso a margem lateral já está descontada. Medir
   // numa largura menor que a real dava linhas a mais e um `mais` a mentir.
@@ -507,7 +553,7 @@ const s = StyleSheet.create({
   },
   conversationText: { flexShrink: 1, color: pageInk.secondary, ...homeType.caption },
   together: {
-    marginHorizontal: SIDE, minHeight: 32,
+    marginHorizontal: SIDE, minHeight: 40,
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm2,
   },
   togetherText: { flex: 1, color: pageInk.secondary, ...homeType.context },

@@ -6,15 +6,13 @@ import { useAuthStore } from '../../store/auth.store'
 import { useFollowStore } from '../../store/follow.store'
 import type { Post } from '../../types'
 import { fonts, radius, spacing } from '../../theme'
-import { homeType, pageInk, pageLine } from '../FeedScreen/tokens'
+import { homeType, pageInk } from '../FeedScreen/tokens'
 
 /**
  * Seguir quem publicou, na linha de identidade da Home.
  *
- * A mesma cápsula do convite do Círculo — a página só tem esta forma de botão —
- * e a mesma leitura da imersiva: seguir é tinta cheia, já seguir é tinta
- * apagada. Nunca cor de marca: aqui ela está reservada aos anéis de identidade,
- * e um botão colorido na lista puxava mais o olho do que a fotografia.
+ * A mesma cápsula do convite do Círculo: ambos os estados têm preenchimento,
+ * com o estado de seguir mais forte e o de já seguir mais discreto.
  *
  * Não aparece nas minhas publicações, nos anúncios, nem antes de se saber quem
  * eu sigo — um rótulo errado por meio segundo é pior do que nenhum botão.
@@ -36,7 +34,7 @@ function HomeFollow({ post }: { post: Post }) {
       }}
       // 30 de altura à vista, 44 ao dedo.
       hitSlop={{ top: 7, bottom: 7 }}
-      style={({ pressed }) => [s.button, pressed && s.pressed]}
+      style={({ pressed }) => [s.button, following && s.buttonFollowing, pressed && s.pressed]}
       accessibilityRole="button"
       accessibilityLabel={`${following ? t.following : t.follow} ${post.user.name}`}
       accessibilityState={{ selected: following }}
@@ -62,12 +60,12 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: pageLine,
+    backgroundColor: pageInk.primary,
   },
+  buttonFollowing: { backgroundColor: '#4D545C' },
   pressed: { opacity: 0.7 },
   // A família traz o peso: um `fontWeight` por cima de uma fonte própria não
   // engrossa nada no Android.
-  label: { ...homeType.caption, fontFamily: fonts.bold, color: pageInk.primary },
-  labelFollowing: { fontFamily: fonts.medium, color: pageInk.muted },
+  label: { ...homeType.caption, fontFamily: fonts.bold, color: '#FFFFFF' },
+  labelFollowing: { fontFamily: fonts.medium, color: '#FFFFFF' },
 })

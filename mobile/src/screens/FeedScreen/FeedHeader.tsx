@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Icon from '../../components/Icon'
 import AvatarImage from '../../components/AvatarImage'
 import { colors, radius, sheet, spacing } from '../../theme'
-import { feedGlyphShadow, feedIcon, feedInk, feedType } from './tokens'
+import { feedGlyphShadow, feedIcon, feedInk, feedType, FEED_IMMERSIVE_GLYPH } from './tokens'
 import { useT } from '../../i18n'
 import { Post } from '../../types'
 
@@ -48,6 +48,14 @@ export interface FeedHeaderProps {
   onSearchChange: (query: string) => void
   onBubblePress: (group: FeedUserGroup) => void
   onRestoreNavigation: () => void
+  /**
+   * O que se encosta à direita da fila do voltar.
+   *
+   * O topo não sabe o que é: quem o monta é que tem o post à mão e decide o
+   * que lá põe — hoje o menu do post activo. Assim a fila continua a ser só
+   * geometria, e o header não precisa de conhecer posts nem de os receber.
+   */
+  trailing?: React.ReactNode
 }
 
 export default memo(function FeedHeader({
@@ -59,6 +67,7 @@ export default memo(function FeedHeader({
   onSearchChange,
   onBubblePress,
   onRestoreNavigation,
+  trailing,
 }: FeedHeaderProps) {
   const { top } = useSafeAreaInsets()
   const t = useT()
@@ -157,9 +166,11 @@ export default memo(function FeedHeader({
 
   return (
     <View style={[s.topRoot, { height: top + FEED_CHROME_HEIGHT }]} pointerEvents="box-none">
-      {/* Só o voltar. A assinatura e o Criar viviam aqui quando esta era a
-          primeira página da app; agora a primeira página é a Home e isto é um
-          ecrã de visualização — o que a pessoa precisa aqui é de sair. */}
+      {/* Sair à esquerda, e à direita o que quem monta o topo lá puser. A
+          assinatura e o Criar viviam aqui quando esta era a primeira página da
+          app; agora a primeira página é a Home e isto é um ecrã de
+          visualização — o que a pessoa precisa aqui é de sair, e de mexer no
+          post que está a ver. */}
       <View style={[s.topRow, { marginTop: top + FEED_CHROME_ROW.top }]} pointerEvents="box-none">
         <TouchableOpacity
           style={s.restoreButton}
@@ -168,8 +179,9 @@ export default memo(function FeedHeader({
           accessibilityRole="button"
           accessibilityLabel={t.feed_show_navigation}
         >
-          <Icon name="arrow-left" size={feedIcon.control} color={feedInk.primary} />
+          <Icon name="arrow-left" size={FEED_IMMERSIVE_GLYPH} color={feedInk.primary} />
         </TouchableOpacity>
+        {trailing ? <View style={s.trailing}>{trailing}</View> : null}
       </View>
     </View>
   )
@@ -196,13 +208,21 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  trailing: {
+    marginLeft: 'auto',
+    // O mesmo acerto do voltar, do outro lado. O alvo é maior que o glifo, e é
+    // o glifo — não a sua caixa — que tem de assentar na régua da página; sem
+    // isto o desenho da direita recuava uns píxeis em relação ao da esquerda.
+    // A caixa do menu é `feedIcon.action`, não `BACK_TARGET`: a conta é a dele.
+    marginRight: -(feedIcon.action - FEED_IMMERSIVE_GLYPH) / 2,
+  },
   restoreButton: {
     width: BACK_TARGET,
     height: BACK_TARGET,
     // O alvo é a caixa, não um `hitSlop` por cima de um botão de 36: com slop,
     // o que a pessoa vê e o que responde ao dedo são dois rectângulos
     // diferentes, e só um deles está alinhado com a régua da página.
-    marginLeft: -(BACK_TARGET - feedIcon.control) / 2,
+    marginLeft: -(BACK_TARGET - FEED_IMMERSIVE_GLYPH) / 2,
     alignItems: 'center',
     justifyContent: 'center',
     ...feedGlyphShadow,

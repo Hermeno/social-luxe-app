@@ -41,8 +41,8 @@ function parse(svg, file) {
     }
     const merged = { ...Object.assign({}, ...stack), ...own }
     if (merged.stroke && merged.stroke !== 'none') {
-      if (merged['stroke-width'] !== '1.75' || merged['stroke-linecap'] !== 'round' || merged['stroke-linejoin'] !== 'round') {
-        throw new Error(`${file}: traço deve ser 1.75 com terminais e junções round`)
+      if (merged['stroke-width'] !== '2' || merged['stroke-linecap'] !== 'round' || merged['stroke-linejoin'] !== 'round') {
+        throw new Error(`${file}: traço deve ser 2 com terminais e junções round`)
       }
     }
     shapes.push([tag, Object.fromEntries(Object.entries(merged).map(([k, v]) => [camel(k), v]))])
@@ -71,4 +71,4 @@ ${entries.join('\n')}
 
 export type FeedIconName = keyof typeof feedIcons
 `)
-console.log(`paths.ts: ${files.length} ícones · 24×24 · traço 1.75`)
+console.log(`paths.ts: ${files.length} ícones · 24×24 · traço 2`)
